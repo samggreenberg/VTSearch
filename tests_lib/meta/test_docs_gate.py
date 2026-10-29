@@ -1,4 +1,4 @@
-"""The documentation drift gate itself: `scripts/check-docs.py`.
+"""The documentation drift gate itself: `scripts/gates/check-docs.py`.
 
 The gate's job is to notice when a doc points at something that is no longer
 there. A gate that stops noticing is worse than no gate, because the repo now
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "check-docs.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "check-docs.py"
 
 
 def _load_gate():
@@ -377,8 +377,8 @@ class TestStudyDirCheck:
 # from the lane's, and a table after the section that must not be read.
 GATE_SCRIPT = """\
 # Stage 1: the stale-tree check, alone.
-# See scripts/check-phantom-base.py for both signals.
-if ! python scripts/check-phantom-base.py ; then
+# See scripts/gates/check-phantom-base.py for both signals.
+if ! python scripts/gates/check-phantom-base.py ; then
     _blocked "stale tree"
 fi
 # Stage 2: the cheap gates.
@@ -401,20 +401,20 @@ GATE_DOC = """\
 
 | Gate | Command it runs | Notes |
 |------|-----------------|-------|
-| Stale tree | `scripts/check-phantom-base.py` | |
+| Stale tree | `scripts/gates/check-phantom-base.py` | |
 
 **Stage 2 — cheap gates, concurrently:**
 
 | Gate | Command it runs | Notes |
 |------|-----------------|-------|
 | ruff check | `ruff check .` | |
-| Documentation | `scripts/check-docs.py` | |
+| Documentation | `scripts/gates/check-docs.py` | |
 
 **Stage 3 — heavy gates:**
 
 | Gate | Command it runs | Lane | When | Notes |
 |------|-----------------|------|------|-------|
-| pyright (N thread(s)) | `scripts/pyright-incremental.py --threads N` | gating | Full run | |
+| pyright (N thread(s)) | `scripts/gates/pyright-incremental.py --threads N` | gating | Full run | |
 | pip-audit | `pip-audit` | free, collected after pytest | As pyright | |
 
 **Stage 4 — pytest, alone.**
@@ -496,10 +496,10 @@ class TestGateTableCheck:
         assert failure.startswith("run-tests.sh:") and "scripts/check-something-new.py" in failure
 
     def test_stage1_row_the_script_does_not_run_fires(self):
-        doc = GATE_DOC.replace("`scripts/check-phantom-base.py`", "`scripts/check-retired.py`")
+        doc = GATE_DOC.replace("`scripts/gates/check-phantom-base.py`", "`scripts/check-retired.py`")
         failures = gate_failures(doc=doc)
         assert any(f.startswith("TESTING.md:") and "scripts/check-retired.py" in f for f in failures)
-        assert any(f.startswith("run-tests.sh:") and "scripts/check-phantom-base.py" in f for f in failures)
+        assert any(f.startswith("run-tests.sh:") and "scripts/gates/check-phantom-base.py" in f for f in failures)
 
     def test_missing_stages_section_fails_loudly(self):
         # A renamed heading must not read as "no rows, so nothing to compare".

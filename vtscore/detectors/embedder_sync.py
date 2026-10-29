@@ -8,7 +8,7 @@ CLIP-embedded one).  It schedules a progress-tracked background re-embed so
 the work is visible to the user instead of running lazily inside the next
 vote / learned-sort request.
 
-This logic lived inline in ``vtsearch/routes/detectors/registry.py`` until it
+This logic lived inline in ``vtsearch/routes/detectors/registry/loading.py`` until it
 grew its own mismatch-detection + task-orchestration branches.  Everything it
 touches except the thread-spawn helper already lives in the library tier, so
 it belongs here where it can be exercised without a Flask client.  The one app-tier dependency —

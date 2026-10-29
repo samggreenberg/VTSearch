@@ -140,16 +140,16 @@ enforced by `./run-tests.sh` gates:
 
 - **Every top-level module and sub-package of `vtscore/` maps to a
   `packages/` doc that names it.** Add one, and
-  `scripts/check-vtscore-docs.py` fails until a doc covers it. The gate
+  `scripts/gates/check-vtscore-docs.py` fails until a doc covers it. The gate
   does not look inside a package, so a new module in an existing package
   is yours to add to that doc's Contents table: the tables are the
   inventory; write them from the tree, not from memory.
 - **Never cite a line number.** A `path.py` plus a colon plus a number,
   or a parenthesised "line" plus a number, is wrong by the next edit, so
-  `scripts/check-docs.py` rejects both patterns outright, here and in
+  `scripts/gates/check-docs.py` rejects both patterns outright, here and in
   every other tracked doc but the experiment reports (including in this
   sentence). Reference the module and the symbol instead
-  (``` `pool_box_from_media` in `vtscore/detectors/training.py` ```): it
+  (``` `pool_box_from_media` in `vtscore/detectors/training_votes.py` ```): it
   is stable under any edit that doesn't move the symbol, and it is
   greppable, which a line number never was.
 

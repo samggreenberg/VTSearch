@@ -24,7 +24,7 @@ The repo's own front door is
 `EXTENDING-*.md` guides cover the same ABCs plus the app-tier wiring
 (routes, forms, the pickers the frontend renders) that an in-repo
 contributor needs. Every page here names its app-side counterpart, and
-`scripts/check-extension-docs.py` holds both sets to the code so they
+`scripts/gates/check-extension-docs.py` holds both sets to the code so they
 cannot drift apart unnoticed.
 
 If you're contributing a plugin to the `vtscore` source tree, drop it

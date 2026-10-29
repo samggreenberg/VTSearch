@@ -116,7 +116,7 @@ CHECK_PHASES = frozenset({"prompt", "check"})
 
 
 def _npdf(x: np.ndarray, mu: float, sd: float) -> np.ndarray:
-    from vtscore.training.thresholds.labels_line import _norm_pdf
+    from vtscore.training.thresholds.class_model import _norm_pdf
 
     return _norm_pdf(x, mu, sd)
 

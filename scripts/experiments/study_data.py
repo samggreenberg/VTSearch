@@ -49,7 +49,7 @@ history. An uploaded batch has no copy in git, so the release is its only home.
 - ``viewer*.html`` and ``report*.html``, the study's interactive record, and
   the two tables ``compare_paths.py`` reads from a State of the App review;
 - any file a tracked markdown file links to or embeds, anywhere in the repo, or
-  names by its full repo path in backticks (``scripts/check-docs.py`` checks
+  names by its full repo path in backticks (``scripts/gates/check-docs.py`` checks
   those), and any file a kept page links to;
 - any file live code reads: code outside ``docs/experiments/`` and
   ``scripts/experiments/`` (tests, slide figure sources, the app) that names

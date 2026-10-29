@@ -48,7 +48,7 @@ from vtsearch.routes._context import require_dataset_header
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.load import (
     DatasetClearResponseSchema,
     DatasetLoadDemoRequestSchema,
     DatasetLoadSourceRequestSchema,
