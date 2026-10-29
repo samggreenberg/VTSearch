@@ -83,7 +83,7 @@ def reset_load_gates_for_tests() -> None:
 # The library remembers the user's per-media-type embedder pick by calling
 # whatever the app installs here.  Default is a no-op so this module doesn't
 # need to import ``vtsearch.settings`` (the Settings seam in
-# ``../docs/architecture.md``).  ``vtsearch/shim/`` registers the
+# ``../docs/architecture.md``).  ``vtsearch/seam_wiring.py`` registers the
 # real implementation; ``vtsearch.settings.set_last_embedder_for_media_type``
 # is wired at app startup.
 _last_embedder_persistence_hook: Callable[[str, str], None] | None = None

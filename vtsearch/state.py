@@ -1,11 +1,11 @@
 """App-tier ``vtsearch.state`` shim - re-exports library state + adds proxies.
 
 The library state lives in :mod:`vtscore.state` (no Flask, no settings).
-This package keeps ``from vtsearch.state import medias`` working for app
+This module keeps ``from vtsearch.state import medias`` working for app
 code by re-exporting every library name and adding the app-side proxy
 view (``medias``, ``good_votes``, …) from :mod:`vtsearch.state_proxies`.
 
-See the Global state seam in ``../../vtscore/docs/architecture.md`` - this
+See the Global state seam in ``../vtscore/docs/architecture.md`` - this
 file is the canonical example of an "app-tier shim that re-exports the
 library names alongside the proxies".
 """

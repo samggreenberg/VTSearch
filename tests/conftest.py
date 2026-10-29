@@ -213,7 +213,7 @@ def reset_state():
     # at app startup.  Re-register defensively so any later test that reads
     # a setting through ``get_setting()`` (e.g. via ``get_beta()``) still has
     # the app's getters behind it.
-    from vtsearch.shim import register_app_setting_getters
+    from vtsearch.seam_wiring import register_app_setting_getters
 
     register_app_setting_getters()
 

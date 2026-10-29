@@ -87,7 +87,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.training.thresholds.gmm import gmm_fit_array, scored_ordering
+from vtscore.training.thresholds.gmm_core import gmm_fit_array, scored_ordering
 from vtscore.utils.scores import scored_only
 
 #: Positives among the calibration folds' held-out votes below which no promise

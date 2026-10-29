@@ -149,7 +149,7 @@ _CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 # pure cutoff knob, so its setter keeps the head and only re-derives the
 # threshold from the cached ranking (``recompute_detector_thresholds``). All
 # three persist back to :mod:`vtsearch.settings` through the shim's
-# setting-persister hook (:func:`vtsearch.shim.register_app_persistence_hooks`),
+# setting-persister hook (:func:`vtsearch.seam_wiring.register_app_persistence_hooks`),
 # which is why the state-tier setter is the whole write and no
 # ``settings.set_<key>`` call belongs beside it.
 #
@@ -176,7 +176,7 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
 #: ``PUT /api/settings`` because they are persisted through other paths:
 #:
 #: * ``last_embedder_per_media_type`` - written by the load-pipeline
-#:   "last embedder" hook (see :mod:`vtsearch.shim`), keyed per media type,
+#:   "last embedder" hook (see :mod:`vtsearch.seam_wiring`), keyed per media type,
 #:   not by the settings form.
 #:
 #: (``dataset_max_age_days`` is a server-tier retention policy set via the

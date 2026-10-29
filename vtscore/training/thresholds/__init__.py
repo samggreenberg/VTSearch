@@ -7,7 +7,7 @@ return a single float threshold. Detector-specific glue (sourcing ``X_list`` / `
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across seventeen submodules, layered so that each one
+The implementation is split across these submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -15,8 +15,19 @@ only reads from those above it:
 * :mod:`~vtscore.training.thresholds.costs` - what a cut *costs* on a labelled
   sample, under the weights the knob names.  Numpy only; the one definition the
   shipped Smart indicator and the eval harness both score through.
-* :mod:`~vtscore.training.thresholds.gmm` - the 1-D two-component mixture, its
-  anchored variant, and the rules that read a cut off a fit.  Self-contained.
+* The 1-D two-component mixture, in four layers that read nothing else in
+  the package (#5424), with :mod:`~vtscore.training.thresholds.gmm` a
+  re-export facade over all four:
+
+  * :mod:`~vtscore.training.thresholds.gmm_core` - the fit type, the
+    density-crossing solvers that read a cut off a fit, and the sample
+    handling every fit shares.
+  * :mod:`~vtscore.training.thresholds.gmm_em` - the plain and
+    label-anchored EM fits, and their stopping rules.
+  * :mod:`~vtscore.training.thresholds.gmm_threshold` - the named cut rules
+    and :func:`calculate_gmm_threshold`.
+  * :mod:`~vtscore.training.thresholds.text_sort` - the typed-query sort's
+    display and acquisition lines.
 * :mod:`~vtscore.training.thresholds.anchored` - the fold-anchored cut, the
   line with no balance and the fallback under one where the labels support no
   class model: per-fold anchored mixtures combined in quantile space, plus the
@@ -33,7 +44,7 @@ only reads from those above it:
   cut (#4224): the largest top-k whose estimated precision clears a floor, from
   the calibration folds' held-out votes, and :func:`reporting_line`, which
   decides whether a detector's line is the floor's or the Inclusion knob's.
-  Reads :mod:`~vtscore.training.thresholds.gmm` for its sampling and
+  Reads :mod:`~vtscore.training.thresholds.gmm_core` for its sampling and
   sentinel filtering; otherwise numpy and scikit-learn.
 * :mod:`~vtscore.training.thresholds.labels_line` - the line under a balance
   (#4452): the class model the calibration folds' held-out votes imply, cut
@@ -93,6 +104,11 @@ name up, and the split moved some of those lookups:
   module's public names, but the fold code reads its own globals: the per-fold
   clock (``time``) and the split sizing (``_split_train_counts``) are patched
   on ``thresholds.fold_orderings``.
+* The same holds for the :mod:`~vtscore.training.thresholds.gmm` facade: an
+  EM stopping rule is patched on ``thresholds.gmm_em``, the sort's
+  ``TEXT_SORT_CUT_RULE`` on ``thresholds.text_sort`` and the fit's
+  ``_GMM_MAX_SAMPLES`` on ``thresholds.gmm_core`` - the modules whose
+  functions read them.
 """
 
 from __future__ import annotations
@@ -150,28 +166,51 @@ from vtscore.training.thresholds.fold_orderings import (
     compute_grouped_fold_node_scores,
     nearest_holdout,
 )
-from vtscore.training.thresholds.gmm import (
+from vtscore.training.thresholds.gmm_core import (
+    _GMM_MAX_SAMPLES,
+    CUT_KIND_CONTINUED,
+    CUT_KIND_DEGENERATE_MIDPOINT,
+    CUT_KIND_INTERIOR,
+    GmmFit1D,
+    _quadratic_roots,
+    _rate_cut,
+    _weighted_gaussian_crossing,
+    gmm_fit_array,
+    scored_ordering,
+    snap_cut_to_sample,
+)
+from vtscore.training.thresholds.gmm_em import (
     _ANCHOR_MIN_WEIGHT,
     _ANCHOR_VAR_FLOOR_FRAC,
     _ANCHORED_EM_LOGLIK_TOL,
     _ANCHORED_EM_MAX_ITER,
     _ANCHORED_EM_TOL,
-    _GMM_MAX_SAMPLES,
     ANCHOR_WEIGHT_DEFAULT,
-    CUT_KIND_CONTINUED,
-    CUT_KIND_DEGENERATE_MIDPOINT,
-    CUT_KIND_INTERIOR,
-    GmmFit1D,
     _anchor_loglik_terms,
     _anchored_em,
-    _quadratic_roots,
     _record_stopping,
-    _rate_cut,
-    _weighted_gaussian_crossing,
+    anchored_gmm_fit,
+    fit_anchored_score_gmm,
+    _EM_LOGLIK_TOL,
+    _EM_MAX_ITER,
+    _EM_TOL,
+    _KMEANS_MAX_ITER,
+    _NO_ANCHORS,
+    _plain_em,
+    _two_means_init,
+    fit_score_gmm,
+    fit_score_gmm_sklearn,
+)
+from vtscore.training.thresholds.gmm_threshold import (
+    calculate_gmm_threshold,
+    _fit_gmm_threshold_with_array,
+    fit_gmm_threshold,
+    gmm_cut_from_fit,
+)
+from vtscore.training.thresholds.text_sort import (
     _count_estimate,
     _count_keep_line,
     _count_line,
-    anchored_gmm_fit,
     TEXT_SORT_COUNT_EXPONENT,
     TEXT_SORT_COUNT_MAX_BETA,
     TEXT_SORT_COUNT_MIN_SCORES,
@@ -184,7 +223,6 @@ from vtscore.training.thresholds.gmm import (
     TextSortCuts,
     ashman_d,
     bulk_location_scale,
-    calculate_gmm_threshold,
     converge_score_gmm,
     resolve_text_sort_cut_rule,
     _guarded_line_from_fit,
@@ -192,24 +230,8 @@ from vtscore.training.thresholds.gmm import (
     text_sort_acquisition_threshold,
     text_sort_cuts,
     text_sort_threshold,
-    fit_anchored_score_gmm,
-    _fit_gmm_threshold_with_array,
-    fit_gmm_threshold,
-    _EM_LOGLIK_TOL,
-    _EM_MAX_ITER,
-    _EM_TOL,
     _TEXT_SORT_CONVERGED_MAX_ITER,
     _TEXT_SORT_CONVERGED_TOL,
-    _KMEANS_MAX_ITER,
-    _NO_ANCHORS,
-    _plain_em,
-    _two_means_init,
-    fit_score_gmm,
-    fit_score_gmm_sklearn,
-    gmm_cut_from_fit,
-    gmm_fit_array,
-    scored_ordering,
-    snap_cut_to_sample,
 )
 from vtscore.training.thresholds.costs import weighted_error_cost
 
