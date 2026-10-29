@@ -22,6 +22,12 @@ any image-specific assumption (keypoints are just ``(x, y, scale, orientation)``
 rows in normalised coordinates) so an audio constellation-fingerprint backend -
 the next media target - drops in without reshaping the interface.
 
+The package's other modules build on this core:
+:mod:`~vtscore.media.structural.structural_geometry` (parametrised verification
+models), :mod:`~vtscore.media.structural.structural_splg` (the SuperPoint +
+LightGlue backend) and :mod:`~vtscore.media.structural.structural_tiles` (tiled
+VLAD, the Stage 1 for document pages).
+
 No Flask, no app-tier imports: this module lives under ``vtscore`` and stays
 import-clean.  Heavy optional deps (``cv2``) are imported lazily inside the
 functions that need them so the dataclasses/protocol import without OpenCV.
