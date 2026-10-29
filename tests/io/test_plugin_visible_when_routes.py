@@ -1,6 +1,6 @@
 """``visible_when`` on the HTTP upload path (issue #5343).
 
-``tests_lib/core/test_plugin_field_visible_when.py`` covers the evaluator and
+``tests_lib/plugins/test_plugin_field_visible_when.py`` covers the evaluator and
 every library-tier check.  What lives here is the one app-tier piece:
 :func:`vtsearch.routes._plugins.validate_plugin_args` reads file uploads off
 the request itself, outside the marshmallow schema, so a required file field

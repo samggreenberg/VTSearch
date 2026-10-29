@@ -80,7 +80,7 @@ say which result is more accurate; the probed values are random.*
 | fix | 2048 (`gridenv.sh`'s default) | **0** | 16,728, to the end | 16,646 | 26 |
 
 - **Every segfault is the same call:** `np.linalg.svd` in `vtscore/media/structural/structural_tiles.py:fit_projection`,
-  reached from the `projection` fixture of `tests_lib/detectors/test_structural_stage1.py` (10) and from
+  reached from the `projection` fixture of `tests_lib/training/test_structural_stage1.py` (10) and from
   `test_structural_tiles.py` (1). Each one killed an xdist worker, and after the eleventh pytest stopped.
 - **The 8 tests that failed only in the bug arm** are the Stage-1 tests whose worker crashed, plus pytest's
   internal error.

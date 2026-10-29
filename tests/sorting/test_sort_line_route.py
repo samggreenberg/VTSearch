@@ -4,7 +4,7 @@ A typed query's display line moves with the balance (#4603), and an example
 sort's does too (#4732), but neither ranking does.  So the client hands back the
 ``sort_token`` of the sort on screen after a balance change and the server
 redraws the line over the ranking it already holds.  That the redraw is the
-sort's own rule, bit for bit, is pinned in ``tests_lib/sorting/test_sort_line.py``;
+sort's own rule, bit for bit, is pinned in ``tests_lib/training/test_sort_line.py``;
 these pin the route: it reads the balance now set, counts over the whole
 ranking, answers only for a sort with a line to redraw, and every example route
 registers one.

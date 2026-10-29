@@ -367,13 +367,12 @@ registry key is the derived name, not the entry-point name).
 ## Testing pattern
 
 Converter tests live in `tests/converters/` (app-tier) and
-`tests_lib/` doesn't currently have a converters folder - most
-converter tests are app-tier because they exercise the
+Most converter tests are app-tier because they exercise the
 post-load-conversion pipeline. For library-only smoke tests, drop a
-file in `tests_lib/core/` or `tests_lib/datasets/`:
+file in `tests_lib/converters/`:
 
 ```python
-# tests_lib/core/test_video2text_whisper.py
+# tests_lib/converters/test_video2text_whisper.py
 import importlib.util
 
 import pytest

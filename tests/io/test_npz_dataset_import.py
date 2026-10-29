@@ -163,7 +163,7 @@ def _col(embedder_name: str, n_rows: int, offset: float = 0.0) -> np.ndarray:
 
     Manifest reads reject a column whose width contradicts the embedder its key
     names - that combination is the mislabelled-archive case the guard exists to
-    catch (see ``tests_lib/io/test_precomputed_vector_validation.py``).  So a
+    catch (see ``tests_lib/datasets/test_precomputed_vector_validation.py``).  So a
     fixture that wants a *valid* trio archive has to use the real width; *offset*
     keeps each column's values distinguishable.
     """

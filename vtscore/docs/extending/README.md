@@ -301,15 +301,20 @@ of the rest.
 
 The library-tier test suite (`tests_lib/`) exercises plugins through
 the library API only - no Flask, no `vtsearch.settings`, no
-`vtsearch.routes`. New plugin tests belong in:
+`vtsearch.routes`. Its folders mirror `vtscore`'s packages, so a
+plugin's test goes in the folder named for the package its contract
+lives in:
 
-- `tests_lib/io/` for importers, exporters, label importers, sources
-- `tests_lib/datasets/` for synthesis / load behaviour
-- `tests_lib/detectors/` for embedders and clippers (converters: see [converters.md](converters.md#testing-pattern))
-- `tests_lib/core/` for media types, registry behaviour
+- `tests_lib/datasets/` for dataset importers, media sources and load behaviour
+- `tests_lib/exporters/` for results exporters
+- `tests_lib/labels/` for label importers and labelset sources
+- `tests_lib/media/` for media types, embedders and clippers
+- `tests_lib/converters/` for converters (see [converters.md](converters.md#testing-pattern))
+- `tests_lib/plugins/` for registry behaviour
 
-Drop a file in the matching folder and pytest picks it up via the
-folder-as-marker convention. See [`tests_lib/datasets/test_synthetic_importer.py`](../../../tests_lib/datasets/test_synthetic_importer.py)
+Drop a file in the matching folder and pytest picks it up, with the
+`./run-tests.sh` group that folder maps to (the table is in
+[`docs/TESTING.md`](../../../docs/TESTING.md#test-groups)). See [`tests_lib/datasets/test_synthetic_importer.py`](../../../tests_lib/datasets/test_synthetic_importer.py)
 for a complete importer-registration + run-behaviour test that does
 not touch any app code, and [`tests_lib/conftest.py`](../../../tests_lib/conftest.py)
 for the autouse fixtures every test inherits (`reset_contexts`,

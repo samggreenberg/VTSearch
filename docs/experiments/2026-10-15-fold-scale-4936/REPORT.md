@@ -333,7 +333,7 @@ could pay is a joint one, and it belongs with #4937.
 | analysis | `scripts/experiments/state_of_app/fold_scale_4936.py` (`measure`, `report`, `examples`); its tables in `tables/`, its figures in `figures/` |
 | results | Binary `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-binary-b1` (snapshots about 2.6 MB a cell), per-snapshot table `/expscratch/sgreenberg/fold-scale-4936/final/snapshots.csv.gz`; Region `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-region-b1`, table `/expscratch/sgreenberg/fold-scale-4936/region-final/snapshots.csv.gz` |
 | Region's schedule | 13 cells 2026-10-15 19:41–20:02, then held for the State of the App run; the other 131 released 2026-10-16 07:03 by a job that waited for no `sota*` job for 15 minutes after 07:00. 4 V100 packs (24 cells each, the GPU hidden) and 9 cpu packs (4 cells, 2 threads each). The first 9 cpu packs, submitted by mistake without a hold at 20:04 on 10-15, ran under a minute before they were cancelled and wrote nothing |
-| tests | `tests_lib/detectors/test_fold_scales.py`: the session unchanged, the arrays on exactly the snapshots `run_cells.py` keeps, each held-out score equal to its fold model's score of that vote in the sim pass, and the quantile transfer on the replayed haystacks equal to the run's own |
+| tests | `tests_lib/eval/test_fold_scales.py`: the session unchanged, the arrays on exactly the snapshots `run_cells.py` keeps, each held-out score equal to its fold model's score of that vote in the sim pass, and the quantile transfer on the replayed haystacks equal to the run's own |
 
 ## Reproduce
 

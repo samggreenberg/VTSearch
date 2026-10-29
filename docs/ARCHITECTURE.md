@@ -212,7 +212,8 @@ VTSearch/
 ├── frontend/               Angular SPA source (see docs/FRONTEND.md)
 ├── static/                 Angular build output (gitignored; only the favicons and logo art are tracked)
 ├── tests/                  App-tier test suite (Flask client, vtsearch.*)
-├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*)
+├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*); one folder
+│                           per vtscore package (docs/TESTING.md#test-groups)
 ├── tests_shared/           Conftest machinery both suites import
 ├── typings/               Local stubs pyright reads in place of an installed package
 │                           (transformers; see docs/TESTING.md). At the root because it
@@ -254,6 +255,17 @@ Flask-free).
 re-runs the whole `tests_lib/` suite with a meta-path hook that makes `flask`,
 `werkzeug`, and `flask_smorest` unimportable, so a Flask import anywhere in the
 library tier fails the gate rather than merely being frowned upon.
+
+**`vtsearch/schemas/` is one package, not a module beside each route.** Its
+file names repeat those of `vtsearch/routes/`, which invites co-locating each
+schema with its blueprint, but the schemas are a shared type layer rather than
+per-route detail: `schemas/detectors.py` builds on seven sibling modules, and
+`schemas/datasets.py` serves four route packages. Moved into `routes/`, those
+imports would run through each route package's `__init__`, which imports every
+blueprint in it, and invite import cycles for no gain. The move would not
+change the OpenAPI document (`frontend/openapi.json` sorts its keys, and names
+each component by its class, not its module), so the layout is the only thing
+at stake, and it stays (#5403).
 
 ---
 

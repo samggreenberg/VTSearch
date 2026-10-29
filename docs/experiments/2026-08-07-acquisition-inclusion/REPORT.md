@@ -228,7 +228,7 @@ CALIB_N_SEEDS=8 bash launch_acq_incl.sh   # 7 arms x 152 cells, ~23 min, no GPU
 python analyze_acq.py                     # once all seven drain
 ```
 
-16 unit tests in `tests_lib/detectors/test_acq_inclusion.py` pin the direction
+16 unit tests in `tests_lib/training/test_acq_inclusion.py` pin the direction
 in both directions, the nesting contract, the blend-fallback behaviour and the
 argument guards. The analyzer's self-test plants a stuck lever (must be reported
 as having measured nothing) and a failed falsification arm (must withhold the

@@ -205,7 +205,7 @@ select = ["E4", "E7", "E9", "F", "S", "C901"]
 # S101 (assert): used for type narrowing where pyright needs help; the
 #   project never runs under `python -O`.
 # S104 (bind 0.0.0.0): intentional for `python app.py --host 0.0.0.0`,
-#   and tests_lib/core/test_ssrf_validation.py uses the literal as a fixture.
+#   and tests_lib/security/test_ssrf_validation.py uses the literal as a fixture.
 # S105 (hardcoded password): false-positive-prone on env-var name strings.
 # S110/S112 (silent except): used as best-effort fallbacks for optional
 #   imports, logging setup, and progress-tracker teardown.
@@ -416,12 +416,12 @@ testpaths = ["tests", "tests_lib"]
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
     "slow: long-running tests (a CLI subprocess run of app.py, the real-toponymy fit tests)",
-    "core: basic app functionality (audio, medias, votes, inclusion, settings, frontend)",
+    "core: basic app functionality (media types and embedders, votes, state, settings, plugins, security, frontend)",
     "api: API contracts, error handling, dashboard",
-    "sorting: text sort, learned sort, diversity, safe thresholds",
-    "datasets: dataset loading, splitting, combining, origins, dedup",
-    "io: importers, exporters, labels",
-    "detectors: detectors, clippers, eval",
+    "sorting: training and safe thresholds, text sort, learned sort, diversity",
+    "datasets: dataset importers and loading, splitting, combining, origins, dedup, the clipper chain",
+    "io: exporters, label I/O, datasource and seed importers, settings I/O, sync sources",
+    "detectors: detectors and the eval harness",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",

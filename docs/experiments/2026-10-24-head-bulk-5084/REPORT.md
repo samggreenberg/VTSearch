@@ -256,7 +256,7 @@ From `tables/offline_examples.csv`, the head at the median of today's kept / pos
 - Code: `scripts/experiments/state_of_app/head_bulk_5084.py` (extract, price, tables), `head_bulk_5084.sh` (closed
   loop), `head_bulk_5084_ab.py` (closed-loop reader, on `head_count_5039_ab.py`), the knob in
   `vtscore/training/thresholds/labels_line.py` and `vtscore/eval/live_threshold_rules.py`
-  (`head_count_precision`), tests in `tests_lib/sorting/test_head_count_line.py`.
+  (`head_count_precision`), tests in `tests_lib/training/test_head_count_line.py`.
 - Snapshots on dev f92a75558; closed loop on 6863aa637 (dev f92a75558 + the knob, default off).
 - Data under `/expscratch/sgreenberg/`: `head-bulk-5084/` (extracts, priced pickles `pr_*.pkl`, text baseline),
   `state-of-the-app/2026-10-23-fscale4936-hb5084-binary-b*` and `2026-10-23-headbulk5084-<arm>-<path>-b*`,

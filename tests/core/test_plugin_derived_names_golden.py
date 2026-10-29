@@ -23,9 +23,9 @@ Adding a plugin is expected to add a row here; **changing** a row means you
 renamed a registry key, and that is a breaking change for anyone whose
 config names the old value.
 
-See also ``tests_lib/core/test_plugin_metadata_defaults.py`` (unit tests for
+See also ``tests_lib/plugins/test_plugin_metadata_defaults.py`` (unit tests for
 the derivation rules) and
-``tests_lib/core/test_plugin_name_suffix_contract.py`` (the out-of-tree
+``tests_lib/plugins/test_plugin_name_suffix_contract.py`` (the out-of-tree
 half: the derivation's behaviour on class names this repo does not ship).
 """
 

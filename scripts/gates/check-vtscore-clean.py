@@ -68,7 +68,7 @@ def main() -> int:
         # speed: the real-UMAP fits pay umap-learn's ~30s numba JIT compile once
         # per worker that draws one instead of once per run, and the eval-sweep
         # modules recompute their memoized sweeps on every worker they land on
-        # (tests_lib/detectors/sweep_cache.py) rather than simulating once.
+        # (tests_lib/eval/sweep_cache.py) rather than simulating once.
         "--dist",
         "loadgroup",
         "-m",

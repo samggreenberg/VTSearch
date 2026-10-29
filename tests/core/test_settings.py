@@ -150,7 +150,7 @@ class TestSettingsModule:
         """The default mirrors the hardware-derived value and is not persisted.
 
         The concrete scaling (CPU cores, total RAM) is unit-tested in
-        ``tests_lib/datasets/test_concurrency_defaults.py``; here we only assert
+        ``tests_lib/embedding/test_concurrency_defaults.py``; here we only assert
         the settings layer surfaces that value and doesn't write it to disk.
         """
         from vtscore.embedding.loader import default_concurrent_embeddings

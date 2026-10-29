@@ -77,27 +77,32 @@ Both let a later run skip work an earlier run on the *same inputs* already did, 
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` / `downloads` / `meta` / `gpu` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
+A test's group comes from the folder it lives in, so a new test inherits its group from where it is added, and `./run-tests.sh <group>` runs that group's tests from both trees. The two trees derive it differently:
 
-| Group | Tier | Description |
-|-------|------|-------------|
-| `core` | both | Basic app functionality (audio, medias, votes, settings, frontend, torch config) |
-| `api` | app only | API contracts, error handling, security, dashboard, embed |
-| `sorting` | both | Sort algorithms, diversity, safe thresholds, enriched text sort |
-| `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
-| `io` | both | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
-| `detectors` | both | Detectors, embedders, clippers, eval, training |
-| `downloads` | lib only | Demo dataset downloads, one file per source, plus the shared download-and-extract helper and the demo-cache script |
-| `integration` | both | End-to-end workflows, thread safety, async jobs |
-| `cli` | both | CLI autodetect, load sort window, progress bars |
-| `converters` | both | Media converters (document, video, image); the library side holds the `image2face` provider seam |
-| `projection` | lib only | VTSBrowse UMAP projection + hex-tile pyramid |
-| `imagekit` | lib only | The `imagekit` face package: the ONNX detector and embedder run on hand-built synthetic graphs (no weights), alignment, the records and their CSV/NPZ forms, the provider registry and the `ext` wrapper against a fake backend module, and the two CLIs. Real-weights tests skip unless `IMAGEKIT_TEST_MODEL_DIR` names a directory holding the models |
-| `meta` | lib only | Repo/tooling meta-tests: packaging and requirements files, Dockerfiles, docs, the frontend's SCSS text, `scripts/`, `.claude/hooks/`, the `run-tests.sh` gates themselves, and the test harness in `tests_shared/`. Nothing here tests shipped `vtsearch`/`vtscore` behaviour — see the note below the table. |
-| `frontend` | n/a | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest and closes with `RUN PASSED (frontend-only; no Python tests in the 'frontend' group)`, naming the whole-repo gates it skipped beneath it: not a pre-push gate. The same three gates run inside a full `./run-tests.sh` when the branch touches `frontend/` (see "Frontend gates and the diff" above), and a full run on a branch that touches *nothing else* narrows itself to the frontend-only fast path below, whose `RUN PASSED (frontend-only; this is the full gate …)` verdict *is* a pre-push gate. |
-| `slides` | n/a | Slide-deck gate — see the note below the table. |
-| `docs` | n/a | Markdown-only gate — see the note below the table. Auto-engages on a bare run. The frontend-only fast path (no group name; see the note below the `docs` one) is its mirror. |
-| `gpu` | lib only | CUDA-only tests (excluded by default) |
+- **`tests/`: the folder is the group.** Every file at `tests/<group>/test_*.py` is marked `<group>`.
+- **`tests_lib/`: the folders mirror `vtscore`'s packages**, so "where is the test for X" has one answer. A test of `vtscore/eval/` lives in `tests_lib/eval/`, a test of `vtscore/datasets/downloader/` in `tests_lib/datasets/downloader/`, and a test of a top-level module such as `vtscore/host_seams.py` at the root of `tests_lib/`. The folders with no `vtscore` package behind them (`meta`, `gpu`, `integration`, and `imagekit` for the top-level `imagekit/` package) are groups of their own. `LIB_GROUPS` in [`tests_shared/pytest_plumbing.py`](../tests_shared/pytest_plumbing.py) maps each folder to its group, and a test in a folder the map lacks stops the run with a usage error naming the folder. [`tests_lib/meta/test_lib_layout.py`](../tests_lib/meta/test_lib_layout.py) checks the map against the tree, against the registered markers and against `vtscore/`.
+
+**File a library test by what it exercises, not by the group you want it in.** A test of `vtscore/media/` goes in `tests_lib/media/` and runs under `core`, even when a detector is what led you to it. The table below lists which folders feed each group. A group with no folder in one tree is by design, not a gap.
+
+| Group | `tests/` | `tests_lib/` | Description |
+|-------|----------|--------------|-------------|
+| `core` | `core` | the root, `concurrency`, `config`, `embedding`, `media`, `plugins`, `security`, `state`, `timing`, `utils` | Basic app functionality: media types and embedders, medias, votes, state, settings, plugins, security, torch config, frontend |
+| `api` | `api` | — | API contracts, error handling, security, dashboard, embed |
+| `sorting` | `sorting` | `training`, `coverage` | Training and safe thresholds, sort algorithms, diversity, enriched text sort |
+| `datasets` | `datasets` | `datasets` | Dataset importers and loading, splitting, dedup, parallel/chunked/thin loading, the clipper chain, multi-dataset context |
+| `io` | `io` | `exporters`, `labels`, `datasource_importers`, `seed_importers` | Exporters, label I/O, datasource and seed importers; on the app side also sync sources, the dataset-import flow, settings I/O and NPZ import |
+| `detectors` | `detectors` | `detectors`, `eval` | Detectors and the eval harness |
+| `downloads` | — | `datasets/downloader` | Demo dataset downloads, one file per source, plus the shared download-and-extract helper |
+| `integration` | `integration` | `integration` | End-to-end workflows, thread safety, async jobs |
+| `cli` | `cli` | `cli` | CLI autodetect, load sort window, progress bars |
+| `converters` | `converters` | `converters` | Media converters (document, video, image); the library side holds the `image2face` provider seam |
+| `projection` | — | `projection` | VTSBrowse UMAP projection + hex-tile pyramid |
+| `imagekit` | — | `imagekit` | The `imagekit` face package: the ONNX detector and embedder run on hand-built synthetic graphs (no weights), alignment, the records and their CSV/NPZ forms, the provider registry and the `ext` wrapper against a fake backend module, and the two CLIs. Real-weights tests skip unless `IMAGEKIT_TEST_MODEL_DIR` names a directory holding the models |
+| `meta` | — | `meta` | Repo/tooling meta-tests: packaging and requirements files, Dockerfiles, docs, the frontend's SCSS text, `scripts/` (the experiment tooling under `scripts/experiments/` included), `.claude/hooks/`, the `run-tests.sh` gates themselves, and the test harness in `tests_shared/`. Nothing here tests shipped `vtsearch`/`vtscore` behaviour — see the note below the table. |
+| `frontend` | n/a | n/a | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest and closes with `RUN PASSED (frontend-only; no Python tests in the 'frontend' group)`, naming the whole-repo gates it skipped beneath it: not a pre-push gate. The same three gates run inside a full `./run-tests.sh` when the branch touches `frontend/` (see "Frontend gates and the diff" above), and a full run on a branch that touches *nothing else* narrows itself to the frontend-only fast path below, whose `RUN PASSED (frontend-only; this is the full gate …)` verdict *is* a pre-push gate. |
+| `slides` | n/a | n/a | Slide-deck gate — see the note below the table. |
+| `docs` | n/a | n/a | Markdown-only gate — see the note below the table. Auto-engages on a bare run. The frontend-only fast path (no group name; see the note below the `docs` one) is its mirror. |
+| `gpu` | — | `gpu` | CUDA-only tests (excluded by default) |
 
 The `meta` group is the one whose subject is *this repository* rather than the product: a reader asking "what does VTSearch do?" would never open a file in it, and a reader asking "how is this repo built and checked?" would. That is the whole membership test — packaging and requirements files, Dockerfiles, docs and their anchors, SCSS text, `scripts/` (including the experiment tooling under `scripts/experiments/`), `.claude/hooks/`, the `run-tests.sh` gates' own self-tests, and the shared test harness. It exists because those tests had silted into `core` (#3421). It lives under `tests_lib/` because every member satisfies the library tier's contract trivially (it imports no product code at all), which keeps `./run-tests.sh vtscore-clean` proving it. **Do not put a test here just because it is slow, awkward, or hard to file** — that is how `core` became a junk drawer in the first place.
 
@@ -111,7 +116,7 @@ The **frontend-only fast path** is the `docs` narrowing's mirror, and like it en
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite. The full run does not repeat what the group run just passed: the pass cache (see "What `run-tests.sh` gates") deselects every test that passed on this identical working tree, so the two together cost about what the full run alone used to.
 
-`tests/` is the app-tier suite (uses `client`, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, etc.). `tests_lib/` mirrors the same layout but every file must be import-clean of Flask **and of `vtsearch` entirely** — not just `vtsearch.routes` / `settings` / `auth` / `shim` / `settings_io`, but `vtsearch.state` and every other app-tier module too. Two gates enforce that, and they see different things: `./run-tests.sh vtscore-clean` bans Flask at import time (it cannot ban `vtsearch`, which ships in the same distribution and must stay importable), while `tests_lib/meta/test_library_layering.py` statically scans `tests_lib/` for `vtsearch` imports **and for `mock.patch("vtsearch…")` targets**, which are imports the AST cannot otherwise see. Add a new test to `tests_lib/` if it doesn't touch any app-tier module; otherwise add it to `tests/`.
+`tests/` is the app-tier suite (uses `client`, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, etc.). `tests_lib/` is the library-tier suite, laid out as above, and every file must be import-clean of Flask **and of `vtsearch` entirely** — not just `vtsearch.routes` / `settings` / `auth` / `shim` / `settings_io`, but `vtsearch.state` and every other app-tier module too. Two gates enforce that, and they see different things: `./run-tests.sh vtscore-clean` bans Flask at import time (it cannot ban `vtsearch`, which ships in the same distribution and must stay importable), while `tests_lib/meta/test_library_layering.py` statically scans `tests_lib/` for `vtsearch` imports **and for `mock.patch("vtsearch…")` targets**, which are imports the AST cannot otherwise see. Add a new test to `tests_lib/` if it doesn't touch any app-tier module; otherwise add it to `tests/`.
 
 **When the library has no seam, add one — don't reach across the tier.** The library-tier equivalent of the `vtsearch.state` proxies is `get_active_context().medias` and friends; the library-tier equivalent of patching `vtsearch.runtime.logging_config.install_transformers_logging_bridge` is patching `vtscore.embedding.loader._install_transformers_logging_bridge`, which exists precisely so `tests_lib/` need not. Note that the proxies' laziness is load-bearing where it is used: `reset_shared_state()` re-registers the default context *before* refilling medias, so a mapping resolved before the call would refill the previous test's context. That is why it resolves the mapping itself rather than accepting one.
 

@@ -66,7 +66,7 @@ they define the library's interface boundary.
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
 | 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | `safe_pickle_load`'s allowlist admits only plain Python containers and numpy arrays, so no saved artefact can reference an app class. |
-| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
+| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` holds one folder per `vtscore` package, with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
 The one-way dependency is enforced by a test; see

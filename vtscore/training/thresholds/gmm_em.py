@@ -206,7 +206,7 @@ def fit_score_gmm_sklearn(arr: np.ndarray) -> GmmFit1D | None:
     admitted-set comparison over real fold haystacks
     (``scripts/experiments/gmm_init/``), and a gate whose baseline lives only in
     a git history cannot be re-run against the next candidate.
-    ``tests_lib/sorting/test_gmm_native_fit.py`` holds the standing form of it.
+    ``tests_lib/training/test_gmm_native_fit.py`` holds the standing form of it.
     """
     if arr.shape[0] < 2:
         return None
@@ -422,7 +422,7 @@ def _anchored_em(
     equivalence is the point - a faster fit that moved the threshold would be
     a calibration change needing a study, not an optimisation - and it is
     pinned by ``TestAnchoredEmEquivalence`` in
-    ``tests_lib/sorting/test_anchored_gmm.py``, which runs the pre-#3558
+    ``tests_lib/training/test_anchored_gmm.py``, which runs the pre-#3558
     two-column loop side by side and asserts exact equality of all six
     parameters.  **Keep that test passing rather than "tidying" this body**;
     the readable form is right there in the test to diff against.

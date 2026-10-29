@@ -93,7 +93,7 @@ is exactly what `recompute_detector_thresholds_for_inclusion` does when a user
 drags the slider: no EM, no scoring pass, arithmetic on a cached fit. The two
 eval-only candidates (`cross_tilt`, `q_tilt`) are arms *on the production
 estimator*, added inside `gmm_cut_from_fit`, so the sweep cannot drift from what
-ships. `tests_lib/detectors/test_cut_inclusion_sweep.py` pins the identity that
+ships. `tests_lib/eval/test_cut_inclusion_sweep.py` pins the identity that
 licenses the rest of the table: `mid_tilt` and `q_tilt` reproduce the measured
 `mid` arm bit-for-bit at inclusion 0.
 

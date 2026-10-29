@@ -15,7 +15,7 @@ import pytest
 # ``patch.dict(sys.modules, ...)``: ``convert`` resolves the device, which
 # imports torch, and ``patch.dict`` restores the whole table on exit. When the
 # test was the first to import torch, that evicts it, and the next
-# ``import torch`` re-initialises ``torch._C`` and crashes (see tests_lib/detectors/test_face.py).
+# ``import torch`` re-initialises ``torch._C`` and crashes (see tests_lib/converters/test_face.py).
 
 # ---------------------------------------------------------------------------
 # Helpers

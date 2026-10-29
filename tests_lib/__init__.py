@@ -18,7 +18,14 @@ gates now hold it, and they see different things:
   ``vtsearch`` imports *and* for ``mock.patch("vtsearch…")`` targets — an
   import in every sense that matters, and the one the AST scan alone misses.
 
-``tests_lib/meta/`` is a deliberate lodger rather than a library group: its
+The folders mirror ``vtscore``'s packages (#5403): a test of
+``vtscore/eval/`` lives in ``eval/``, a test of a top-level module such as
+``vtscore/host_seams.py`` at this package's root.  A folder is therefore not
+a ``./run-tests.sh`` group by name, and
+``tests_shared.pytest_plumbing.LIB_GROUPS`` maps each one to the group it runs
+under (the table is in ``docs/TESTING.md``).
+
+``tests_lib/meta/`` is a deliberate lodger rather than a library package: its
 subject is the repository's own tooling, which satisfies the tier's contract
 trivially.  See its ``__init__`` for why it is not a third top-level tree.
 """

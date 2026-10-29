@@ -464,7 +464,7 @@ def schedule_only(monkeypatch):
     F-beta argmax; on a fixture corpus of a few dozen synthetic items the
     argmax is whatever the fit says that day.  For tests whose subject is the
     cap, the walk or a carrier of the state, not the mixture - that rule is
-    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
+    pinned in ``tests_lib/training/test_balance.py``.  Both seams: the package
     name the app's local imports read, and the harness's module binding.
     """
     import vtscore.eval.voting_iterations as harness

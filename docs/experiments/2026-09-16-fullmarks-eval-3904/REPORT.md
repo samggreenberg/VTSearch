@@ -63,7 +63,7 @@ s / m / l were eligible negatives for all ten Tobacco800 classes.**
 
 `eligible_pages` now takes `industry_of` and puts each page to
 `fullmarks_config.eligible_distractor`. Tested in
-`tests_lib/datasets/test_fullmarks_eval.py`.
+`tests_lib/meta/test_fullmarks_eval.py`.
 
 **The pages it removes are real positives, not a precaution.** SigLIP's
 highest-ranked excluded pages for each Tobacco800 class, beside its query crop:

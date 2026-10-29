@@ -21,10 +21,12 @@
 #                   docs (markdown-only: every cheap gate, plus the few tests
 #                   that read a doc — see the note below), gpu
 #
-# Each group is a folder under tests/, tests_lib/, or both. Marker assignment is
-# automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
-# by the respective conftest.  tests_lib/ holds Flask-free library tests
-# (see vtscore/docs/architecture.md).
+# Marker assignment is automatic, by the respective conftest. In tests/ a group
+# is a folder: any file at tests/<group>/test_*.py gets marked <group>.
+# tests_lib/ holds Flask-free library tests (see vtscore/docs/architecture.md)
+# in one folder per vtscore package, and LIB_GROUPS in
+# tests_shared/pytest_plumbing.py maps each folder to its group (the table is
+# in docs/TESTING.md).
 #
 # NOTE: naming a group puts `-m <group>` on the pytest command line, which
 # REPLACES the `-m 'not gpu and not slow'` default in pyproject.toml's
@@ -1155,7 +1157,7 @@ if $_run_pytest; then
     #       worker (tests_lib/projection/test_umap_projection.py), and to keep
     #       each eval-sweep module together so its memoized sweeps hit the cache
     #       instead of being recomputed on every worker that draws one
-    #       (tests_lib/detectors/sweep_cache.py).
+    #       (tests_lib/eval/sweep_cache.py).
     #
     # Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
     # The two trees have independent conftests; pytest's auto-merge picks

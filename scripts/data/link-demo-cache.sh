@@ -36,7 +36,7 @@ DATADIR="$(cd "$DATADIR" && pwd)"
 # vtscore/datasets/downloader/*.py. Deliberately excludes the per-user dirs
 # (embeddings, saved_datasets, models, detectors, staging, settings) and the
 # derived images/ + video/ media dirs. Kept in sync with the source by
-# tests_lib/downloads/test_demo_cache_script.py.
+# tests_lib/meta/test_demo_cache_script.py.
 DEMO_DIRS=(
   aclImdb apollo11_audio bbc-fulltext birdvox_full_night caltech-101 caltech-256
   celebrity_together cifar-10-batches-py clotho dbpedia_csv enrico ESC-50-master EuroSAT_RGB
