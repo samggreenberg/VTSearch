@@ -210,7 +210,7 @@ init_poolmanager  # noqa: F821 - requests HTTPAdapter override, called by reques
 _pool_connections  # noqa: F821 - the three attributes that make a requests adapter picklable
 _pool_maxsize  # noqa: F821
 _pool_block  # noqa: F821
-__getattr__  # noqa: F821 - PEP 562 module-level hook in ``vtsearch/settings/schema.py``
+__getattr__  # noqa: F821 - PEP 562 module-level hook in ``vtsearch/settings/__init__.py``
 create_module  # noqa: F821 - importlib Loader protocol, called by the import machinery
 trust_env  # noqa: F821 - requests.Session attribute, read by requests when sending
 

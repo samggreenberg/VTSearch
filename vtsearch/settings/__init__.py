@@ -89,6 +89,7 @@ from vtsearch.settings.accessors import (  # noqa: F401
     set_saved_datasets_dir,
     validate_autofind_detectors,
 )
+from vtsearch.settings import schema
 from vtsearch.settings.models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, ServerSettings, UserSettings
 from vtsearch.settings.tiers import (  # noqa: F401
     USER_SETTINGS_FILENAME,
@@ -269,6 +270,22 @@ if TYPE_CHECKING:
 
     def get_hidden_plugins() -> dict[str, list[str]]: ...
     def set_hidden_plugins(value: dict[str, list[str]]) -> None: ...
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562 - expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
+    # as attributes for external readers (tests, future callers) without
+    # forcing the eager pydantic instantiation at module load.  A module
+    # ``__getattr__`` also lets type-checkers resolve any attribute of this
+    # package, which is how the generated ``validate_<key>`` functions (which
+    # have no stubs) type-check at their call sites.
+    if name == "_SERVER_DEFAULTS":
+        return schema._server_defaults()
+    if name == "_USER_DEFAULTS":
+        return schema._user_defaults()
+    if name == "_DEFAULTS":
+        return schema._all_defaults()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # Generate accessors for every field in both models. The three

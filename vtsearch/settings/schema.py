@@ -56,19 +56,6 @@ def _all_defaults() -> dict[str, Any]:
     return {**_server_defaults(), **_user_defaults()}
 
 
-def __getattr__(name: str) -> Any:
-    # PEP 562 - expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
-    # as attributes for external readers (tests, future callers) without
-    # forcing the eager pydantic instantiation at module load.
-    if name == "_SERVER_DEFAULTS":
-        return _server_defaults()
-    if name == "_USER_DEFAULTS":
-        return _user_defaults()
-    if name == "_DEFAULTS":
-        return _all_defaults()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 #: Set of keys that belong to the server tier (everything else is per-user).
 #: Reading ``model_fields`` doesn't instantiate the model, so this stays eager.
 #: No per-user write path sets one of these - not ``PUT /api/settings``, not a

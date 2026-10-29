@@ -575,10 +575,11 @@ class TestCalibrationCache:
         assert patched.call_count == 2
 
     def test_settings_default_matches_config(self):
+        from vtsearch import settings
 
         from vtscore import config
 
-        assert settings_schema._DEFAULTS["calibrate_count"] == config.DEFAULT_CALIBRATE_COUNT
+        assert settings._DEFAULTS["calibrate_count"] == config.DEFAULT_CALIBRATE_COUNT
 
 
 class TestLearnedSort:
@@ -1187,4 +1188,3 @@ from tests.fixtures.medias import NUM_MEDIAS
 from vtscore.detectors.training import train_and_score
 from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.state import bad_votes, good_votes, medias
-from vtsearch.settings import schema as settings_schema
