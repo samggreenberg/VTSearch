@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
@@ -112,6 +112,20 @@ describe('toastyHintPlacement', () => {
   `,
 })
 class HostComponent {}
+
+/** A hint that warns, with Toasty surprised. */
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true,
+  imports: [ToastyHintComponent],
+  template: `
+    <div class="box">
+      <button #target>+</button>
+      <vt-toasty-hint hintId="mismatch" [anchor]="target" face="surprised">Select ones that match.</vt-toasty-hint>
+    </div>
+  `,
+})
+class SurprisedHostComponent {}
 
 /** A hint on the view and one inside a dialog, the dialog's with no anchor of its own. */
 @Component({
@@ -250,9 +264,9 @@ describe('ToastyHintComponent', () => {
 
   /** Render one hint under a positioned box, with `settings` loaded first
    *  (or never, when `settings` is null). */
-  async function render(settings: object | null): Promise<HTMLElement> {
+  async function render(settings: object | null, hostType: Type<unknown> = HostComponent): Promise<HTMLElement> {
     TestBed.configureTestingModule({
-      imports: [HostComponent],
+      imports: [hostType],
       providers: [...provideZoneless(), ...provideHttpTesting()],
     });
     httpMock = TestBed.inject(HttpTestingController);
@@ -268,9 +282,17 @@ describe('ToastyHintComponent', () => {
       httpMock.expectOne('/api/settings').flush(settings);
       await settleResource();
     }
-    const fixture = TestBed.createComponent(HostComponent);
+    const fixture = TestBed.createComponent(hostType);
     await settleZoneless(fixture);
     return (fixture.nativeElement as HTMLElement).querySelector('vt-toasty-hint') as HTMLElement;
+  }
+
+  /** jsdom has no PointerEvent: a MouseEvent of the pointer type, given the id. */
+  function pointer(target: Element, type: string, clientX: number, clientY: number, button = 0): void {
+    const event = new MouseEvent(type, { bubbles: true, clientX, clientY, button });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    target.dispatchEvent(event);
+    TestBed.tick();
   }
 
   function checkbox(host: HTMLElement, label: string): HTMLInputElement {
@@ -349,6 +371,66 @@ describe('ToastyHintComponent', () => {
     expect(host.querySelector('.toasty-hint__text')?.textContent?.trim()).toBe('Over the dialog.');
     expect(host.querySelector('.toasty-hint__options')).toBeNull();
     expect(host.querySelectorAll('input')).toHaveLength(0);
+  });
+
+  it('drags by Toasty or the bubble, from wherever the last drag left it (#5462)', async () => {
+    const host = await render({});
+    const toasty = host.querySelector('img') as HTMLImageElement;
+    pointer(toasty, 'pointerdown', 10, 10);
+    expect(host.classList).toContain('toasty-hint--dragging');
+    pointer(toasty, 'pointermove', 40, 25);
+    expect(host.style.translate).toBe('30px 15px');
+    pointer(toasty, 'pointerup', 40, 25);
+    expect(host.classList).not.toContain('toasty-hint--dragging');
+    // Once let go, moving the pointer moves nothing.
+    pointer(toasty, 'pointermove', 90, 90);
+    expect(host.style.translate).toBe('30px 15px');
+
+    const text = host.querySelector('.toasty-hint__text') as HTMLElement;
+    pointer(text, 'pointerdown', 0, 0);
+    pointer(text, 'pointermove', -10, 5);
+    pointer(text, 'pointerup', -10, 5);
+    expect(host.style.translate).toBe('20px 20px');
+    // The placement is untouched: the drag rides on top of it.
+    expect(host.style.left).toBe('815px');
+    expect(host.style.top).toBe('44px');
+  });
+
+  it('starts no drag from a Hide box or a right-click (#5462)', async () => {
+    const host = await render({});
+    const option = checkbox(host, 'Hide this hint').closest('label') as HTMLElement;
+    pointer(option, 'pointerdown', 0, 0);
+    pointer(option, 'pointermove', 50, 50);
+    expect(host.classList).not.toContain('toasty-hint--dragging');
+    expect(host.style.translate).toBe('');
+
+    const toasty = host.querySelector('img') as HTMLImageElement;
+    pointer(toasty, 'pointerdown', 0, 0, 2);
+    pointer(toasty, 'pointermove', 50, 50);
+    expect(host.style.translate).toBe('');
+  });
+
+  it('pulls a surprised face while the pointer is over a happy Toasty, and back after (#5462)', async () => {
+    const host = await render({});
+    const toasty = host.querySelector('img') as HTMLImageElement;
+    toasty.dispatchEvent(new MouseEvent('mouseenter'));
+    TestBed.tick();
+    expect(toasty.getAttribute('src')).toBe('toasty-surprised.png');
+    toasty.dispatchEvent(new MouseEvent('mouseleave'));
+    TestBed.tick();
+    expect(toasty.getAttribute('src')).toBe('logo.png');
+  });
+
+  it('cheers a surprised Toasty up while the pointer is over him (#5462)', async () => {
+    const host = await render({}, SurprisedHostComponent);
+    const toasty = host.querySelector('img') as HTMLImageElement;
+    expect(toasty.getAttribute('src')).toBe('toasty-surprised.png');
+    toasty.dispatchEvent(new MouseEvent('mouseenter'));
+    TestBed.tick();
+    expect(toasty.getAttribute('src')).toBe('logo.png');
+    toasty.dispatchEvent(new MouseEvent('mouseleave'));
+    TestBed.tick();
+    expect(toasty.getAttribute('src')).toBe('toasty-surprised.png');
   });
 
   it('brings the hint back when hiding it fails to save', async () => {

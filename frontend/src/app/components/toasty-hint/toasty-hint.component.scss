@@ -3,7 +3,7 @@
 // (see `toastyHintPlacement`). Reaching left puts Toasty at the right end of
 // the row.
 :host {
-  --toasty-size: 64px;
+  --toasty-size: 80px;
   position: absolute;
   z-index: var(--z-elevated);
   // An absolute box shrinks to the room between `left` and the container's
@@ -14,8 +14,9 @@
   flex-direction: row-reverse;
   align-items: flex-start;
   gap: var(--space-xs);
-  // Toasty himself never takes a click meant for what's under him; the
-  // bubble opts back in for its checkboxes.
+  // The gap between Toasty and the bubble never takes a click meant for
+  // what's under it; Toasty and the bubble opt back in, to be dragged (#5462)
+  // and for the bubble's checkboxes.
   pointer-events: none;
   animation: toasty-hint-in var(--transition-slow) var(--ease-out);
 }
@@ -30,6 +31,22 @@
 
 :host(.toasty-hint--off) {
   display: none;
+}
+
+// The grab cursor says Toasty and his bubble can be moved; the Hide boxes
+// keep their own pointer.
+.toasty-hint__toasty,
+.toasty-hint__bubble {
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+}
+
+:host(.toasty-hint--dragging) {
+  .toasty-hint__toasty,
+  .toasty-hint__bubble {
+    cursor: grabbing;
+  }
 }
 
 .toasty-hint__toasty {
@@ -51,7 +68,6 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  pointer-events: auto;
 }
 
 :host(.toasty-hint--above) .toasty-hint__bubble {

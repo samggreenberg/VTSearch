@@ -160,6 +160,7 @@ from vtscore.training.thresholds.conformal import (
 )
 from vtscore.training.thresholds.fold_orderings import (
     CALIBRATION_SPLIT_SEED,
+    FoldOrdering,
     _compute_fold_orderings_grouped,
     _fold_fit_ordering,
     _group_node_blocks,
@@ -168,6 +169,7 @@ from vtscore.training.thresholds.fold_orderings import (
     _pooled_group_scores,
     _row_wise_fold_ordering,
     _split_train_counts,
+    _tag_hard_views,
     _torch_fold_ordering,
     compute_fold_orderings,
     compute_grouped_fold_node_scores,
@@ -676,6 +678,7 @@ __all__ = [
     "CONFORMAL_BASE_BUDGET",
     "CONFORMAL_QPOS_MAX",
     "CalibrationFolds",
+    "FoldOrdering",
     "FOLD_CONFORMAL_COMBINES",
     "_calibration_cache_key",
     "_score_rows_digest",
@@ -696,6 +699,7 @@ __all__ = [
     "_pooled_group_scores",
     "_row_wise_fold_ordering",
     "_split_train_counts",
+    "_tag_hard_views",
     "_torch_fold_ordering",
     "compute_fold_orderings",
     "compute_grouped_fold_node_scores",

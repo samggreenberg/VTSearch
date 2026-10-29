@@ -246,7 +246,7 @@ The library is designed to be used from multiple threads, with these
 ground rules:
 
 - **All mutable state is RLock-protected.** The single `_state_lock` in
-  `vtscore/state/core.py` covers `DatasetContext` and `DetectorContext`
+  `vtscore/state/primitives.py` covers `DatasetContext` and `DetectorContext`
   mutation. Using an RLock (not a plain Lock) lets one public function
   call another safely - for example `apply_label()` calls
   `add_label_to_history()` while holding the lock.
@@ -378,7 +378,7 @@ is the authority on where to import it from.
 | `vtscore.exporters` | `get_exporter`, `list_exporters`. |
 | `vtscore.labels` | **Empty `__init__` - no re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
 | `vtscore.plugins` | `PluginBase`, `PluginField`, `PluginRegistry`, `make_plugin_registry`, `FieldType`, `FieldOption`, `EntryPointTombstone`. Inventory: `vtscore.plugins.inventory`; normalisation: `vtscore.plugins.normalize`. |
-| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. `RequestMissingContextError` lives in `vtscore.state.core`; the current-user resolver in `vtscore.state.current_user`. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
+| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. `RequestMissingContextError` is imported from `vtscore.state.core`; the current-user resolver in `vtscore.state.current_user`. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
 | `vtscore.coverage` | `CoverageAtlas` and its constants. |
 | `vtscore.projection` / `vtscore.timing` | Both re-export their public surface from `__init__` (see [packages/projection.md](packages/projection.md), [packages/timing.md](packages/timing.md)). |
 | `vtscore.sync` | `SyncSource`. |

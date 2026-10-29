@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-29-hard-good-line-5409.3701022672bd.tar.gz",
+   "source_commit": "3701022672bd5dda1ff22d81d8580c2cc383b3a0",
+   "files": {
+    "mechanism.csv": {
+     "bytes": 520,
+     "oid": "28d21b93771ebbd150324721048d5dd3cea5712a"
+    },
+    "paired.csv": {
+     "bytes": 43762,
+     "oid": "379cc51e63cccb7c7990f4b4aaa5824585caa831"
+    },
+    "summary.csv": {
+     "bytes": 12811,
+     "oid": "ac25a3702ca9457715be836474fe87e54a25833b"
+    }
+   }
+  }
+ ]
+}

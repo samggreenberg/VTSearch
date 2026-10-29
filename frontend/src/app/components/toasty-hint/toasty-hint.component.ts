@@ -47,6 +47,22 @@ export interface ToastyHintPlacement {
 /** Clearance (px) between the control and Toasty. */
 const GAP = 4;
 
+/** The face Toasty pulls while the pointer is over him (#5462): startled out
+ *  of a happy or sad face, cheered out of a surprised one. */
+export const HOVER_FACE: Readonly<Record<ToastyFace, ToastyFace>> = {
+  happy: 'surprised',
+  sad: 'surprised',
+  surprised: 'happy',
+};
+
+/** Where a drag of the hint started: the pointer, and the hint's offset then. */
+interface DragStart {
+  pointerId: number;
+  x: number;
+  y: number;
+  from: { x: number; y: number };
+}
+
 /**
  * Place a hint: Toasty centred on the anchor control, just below or above it,
  * with the bubble reaching the preferred way; or, `beside`, Toasty at the
@@ -117,6 +133,11 @@ export function toastyHintPlacement(
  * it, as long as the container does not clip where the hint lands. It is
  * measured after render and again whenever the anchor, the container or the
  * hint itself changes size.
+ *
+ * The user can drag Toasty or his bubble out of the way (#5462), by anything
+ * but the Hide boxes. Where it was dragged is not kept: the offset lives on
+ * this instance and goes with it, so the next hint stands where it belongs.
+ * Pointing at Toasty changes his face ({@link HOVER_FACE}).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -133,6 +154,12 @@ export function toastyHintPlacement(
     '[style.left.px]': 'placement()?.left',
     '[style.top.px]': 'placement()?.top',
     '[style.visibility]': "placement() ? null : 'hidden'",
+    '[style.translate]': 'dragTranslate()',
+    '[class.toasty-hint--dragging]': 'dragging()',
+    '(pointerdown)': 'startDrag($event)',
+    '(pointermove)': 'drag($event)',
+    '(pointerup)': 'endDrag($event)',
+    '(pointercancel)': 'endDrag($event)',
   },
 })
 export class ToastyHintComponent {
@@ -147,7 +174,9 @@ export class ToastyHintComponent {
   /** Toasty's face: happy for a next step, surprised when something needs
    *  fixing, sad when something went wrong. */
   readonly face = input<ToastyFace>('happy');
-  readonly faceSrc = computed(() => TOASTY_FACES[this.face()]);
+  /** The pointer is over Toasty, who then pulls his {@link HOVER_FACE}. */
+  readonly hovered = signal(false);
+  readonly faceSrc = computed(() => TOASTY_FACES[this.hovered() ? HOVER_FACE[this.face()] : this.face()]);
   /** Whether the bubble offers "Hide this hint" and "Hide all hints". Off for
    *  a hint shown while the server is unreachable, where a hide can't be saved. */
   readonly hideable = input(true, { transform: booleanAttribute });
@@ -172,6 +201,15 @@ export class ToastyHintComponent {
    *  (neither is a template event), so a signal so the host moves. */
   readonly placement = signal<ToastyHintPlacement | null>(null);
 
+  /** How far (px) the user has dragged the hint from its placement. */
+  readonly dragOffset = signal({ x: 0, y: 0 });
+  readonly dragTranslate = computed(() => {
+    const { x, y } = this.dragOffset();
+    return x === 0 && y === 0 ? null : `${x}px ${y}px`;
+  });
+  private readonly dragStart = signal<DragStart | null>(null);
+  readonly dragging = computed(() => this.dragStart() !== null);
+
   private readonly host: HTMLElement = inject(ElementRef).nativeElement;
 
   constructor() {
@@ -195,6 +233,30 @@ export class ToastyHintComponent {
 
   hideAll(): void {
     this.hints.hideAll();
+  }
+
+  /** A primary press on Toasty or his bubble, outside the Hide boxes, starts
+   *  a drag. Only those two take the pointer at all (the host passes it
+   *  through), and the press is captured on whichever it landed on, so the
+   *  drag keeps up with a pointer that outruns it. */
+  startDrag(event: PointerEvent): void {
+    const target = event.target as Element | null;
+    if (event.button !== 0 || !target || target.closest('.toasty-hint__options')) return;
+    const handle = target.closest('.toasty-hint__toasty, .toasty-hint__bubble');
+    if (!handle) return;
+    // Optional: jsdom has no pointer capture.
+    handle.setPointerCapture?.(event.pointerId);
+    this.dragStart.set({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: this.dragOffset() });
+  }
+
+  drag(event: PointerEvent): void {
+    const start = this.dragStart();
+    if (!start || event.pointerId !== start.pointerId) return;
+    this.dragOffset.set({ x: start.from.x + event.clientX - start.x, y: start.from.y + event.clientY - start.y });
+  }
+
+  endDrag(event: PointerEvent): void {
+    if (this.dragStart()?.pointerId === event.pointerId) this.dragStart.set(null);
   }
 
   /** The box the host is absolutely positioned in. jsdom has no layout, so no

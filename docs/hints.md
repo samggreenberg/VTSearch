@@ -14,6 +14,12 @@ going away is the one thing gone wrong a hint speaks to, and otherwise sad is
 for error toasts. **Text** is what the bubble says, with the bold words in bold;
 `{…}` is filled in at runtime (see the notes under each table).
 
+**Moving Toasty.** The user can drag Toasty or his bubble out of the way, by
+anything but the Hide boxes (#5462). Where a hint was dragged is not kept: the
+next hint stands where it belongs. While the pointer is over Toasty he pulls
+another face, surprised out of happy or sad and happy out of surprised
+(`HOVER_FACE` in `toasty-hint.component.ts`).
+
 **What a hint says.** The state that raised it, then the one step to take, in
 a sentence or two: "You have detectors, but none is selected. Select one…",
 never "Now click a detector". Nothing about the step after that, and nothing
@@ -81,7 +87,7 @@ table's "Click **+** to add one": Toasty is saying it.
 | `train` | happy | Your new detector has no training labels yet. Click **Train** to teach it. | One detector with no training labels is selected, beside one dataset, so Train is enabled. |
 | `train-one-dataset` | surprised | You selected {N} datasets, but a new detector trains on one at a time. Select just one, then click **Train**. | Several datasets are selected with one detector that has no labels and no typed description, so nothing is enabled. |
 | `untrained-detector` | surprised | {detector} has no training labels yet. Select it and one dataset to **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Tune and Find are off. |
-| `trained-here` | happy | You trained this detector on this dataset. Select a different dataset or detector to **Tune** or **Find**. | One detector and one dataset are selected, so Tune is enabled, and the detector holds labels from that dataset: its Train votes or Tune corrections there (#5142). Tune and Find would show it items it has already seen. Stands by the datasets' **+**. |
+| `trained-here` | surprised | You trained this detector on this dataset. Select a different dataset or detector to **Tune** or **Find**. | One detector and one dataset are selected, so Tune is enabled, and the detector holds labels from that dataset: its Train votes or Tune corrections there (#5142). Tune and Find would show it items it has already seen. Stands by the datasets' **+**. |
 | `test-or-find` | happy | Your detector is trained. Click **Tune** to check it on this dataset, or **Find** to collect its matches. | One trained detector and one dataset it holds no labels from are selected, so Tune is enabled. |
 | `find` | happy | You selected several datasets or detectors, so only **Find** is on. Click it to run each detector on each dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Tune is not. |
 
@@ -146,7 +152,7 @@ list's "Click bins on the canvas" line: Toasty is saying it.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `browse-pan-zoom` | happy | This map shows your {media}, with similar ones near each other. Drag to pan, or double-click to zoom in. | The user has never moved a map. Stands under the zoom buttons. Any move retires it: a drag, the wheel, a double-click, the zoom buttons, the arrow keys, a minimap jump or zoom to fit. |
+| `browse-pan-zoom` | happy | This map shows your {media}, with similar ones near each other. Drag to pan or wheel to zoom. | The user has never moved a map. Stands under the zoom buttons. Any move retires it: a drag, the wheel, a double-click, the zoom buttons, the arrow keys, a minimap jump or zoom to fit. |
 | `browse-thumbnail-size` | happy | These buttons change how large the thumbnails appear. Try making them larger or smaller. | The user has never resized a map's thumbnails, on a map whose tiles show them (not text, whose tiles are density cells). Stands under the two size buttons, and either one retires it. |
 | `browse-tile-details` | happy | Each tile holds the items that landed there. Right-click one to see them all. | The user has never right-clicked a tile to open its bin details. Stands under the buttons at the map's top left (**Rebuild Map**), reaching over the map. |
 | `browse-select` | happy | Nothing is selected yet. Click a tile to add its items here. | The user has never selected anything on a map. Stands under the Selection panel's sort row, in place of the empty list's own line. The first selection retires it: a tile clicked or boxed, select-all, or an item picked in the bin details. |
