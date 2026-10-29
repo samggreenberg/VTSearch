@@ -252,7 +252,7 @@ class TestSavingRun:
         assert get_context(entry["id"]) is None
 
     def test_json_mode_reports_the_saved_dataset(self, client, tmp_path, capsys):
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
         from vtscore.cli import autodetect_main
 
         cli_progress.set_format("json")
@@ -342,7 +342,7 @@ class TestPipelineFile:
         path = tmp_path / "pipeline.yaml"
         path.write_text(yaml.safe_dump(pipeline))
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(path)
 
@@ -361,7 +361,7 @@ class TestPipelineFile:
             )
         )
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(path)
 
@@ -401,7 +401,7 @@ class TestDeleteAfterAutoFind:
         return out_path
 
     def test_deletes_the_import_once_detection_has_run(self, client, tmp_path, monkeypatch, capsys):
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
 
         cli_progress.set_format("json")
         try:
@@ -526,7 +526,7 @@ class TestDeleteAfterAutoFind:
         path = tmp_path / "pipeline.yaml"
         path.write_text(yaml.safe_dump(pipeline))
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(path)
 

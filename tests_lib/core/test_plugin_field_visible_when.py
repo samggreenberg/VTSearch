@@ -273,7 +273,7 @@ class TestCli:
 
 class TestOtherRequiredChecks:
     def test_label_importer_yaml_check_skips_inactive_fields(self):
-        from vtscore.cli_pipeline import _require_fields
+        from vtscore.cli.pipeline import _require_fields
 
         plugin = _FakePlugin([_enable(), _email()])
         _require_fields(plugin, "fake", {"enable_email": False})

@@ -19,9 +19,10 @@ import numpy as np
 import pytest
 import torch
 
-import vtscore.cli as cli
+import vtscore.cli.detectors as cli_detectors
+import vtscore.cli.scoring as cli_scoring
 from tests.cli.test_cli_score_geometry import _fires_on_dim1_mlp, _patch_medias
-from vtscore import cli_progress
+from vtscore.cli import progress as cli_progress
 from vtscore.detectors.training import scoring_rows_for_snap
 from vtscore.state import set_beta
 from vtscore.training.thresholds import LineRanking
@@ -59,7 +60,7 @@ def _train(monkeypatch, n_ranked: int | None) -> dict[str, dict[str, Any]]:
         return True
 
     monkeypatch.setattr(lt, "train_from_labelset", _fake_train)
-    return cli._load_and_train_detectors(["det"], "image", {1: {"id": 1, "media_type": "image"}})
+    return cli_detectors._load_and_train_detectors(["det"], "image", {1: {"id": 1, "media_type": "image"}})
 
 
 def _events(capsys) -> list[dict]:
@@ -202,9 +203,9 @@ class TestAQuotaHeadReportsWhatItExports:
         set_beta(1.0)
         cli_progress.set_format("json")
 
-        out = cli._load_and_train_detectors(["det"], "image", snap)
+        out = cli_detectors._load_and_train_detectors(["det"], "image", snap)
         assert is_centroid_head(out["det"]["mlp"])
-        exported = cli._score_direct_all(["det"], out, snap, self.EMBEDDER)["det"]["total_hits"]
+        exported = cli_scoring._score_direct_all(["det"], out, snap, self.EMBEDDER)["det"]["total_hits"]
         assert 0 < exported != 32, "the centroid's line keeps a set of its own"
         assert out["det"]["balance"]["status"] == "unchecked" and out["det"]["balance"]["count"] == exported
         event = [e for e in _events(capsys) if e["event"] == "detector_unchecked"][0]
@@ -227,14 +228,14 @@ BALANCE = {
 class TestResultsCarryTheState:
     def test_direct_scoring(self):
         info = {"mlp": _fires_on_dim1_mlp(), "threshold": 0.5, "balance": BALANCE}
-        out = cli._score_direct_all(["d"], {"d": info}, _patch_medias(), "dinov3_patch")
+        out = cli_scoring._score_direct_all(["d"], {"d": info}, _patch_medias(), "dinov3_patch")
         assert out["d"]["balance"] == BALANCE and "floor" not in out["d"]
         assert {h["id"] for h in out["d"]["hits"]} == {1}, "the unchecked cut still exports its hits"
 
     def test_routed_scoring(self):
         medias = _patch_medias()
         info = {"mlp": _fires_on_dim1_mlp(), "threshold": 0.5, "balance": BALANCE}
-        out = cli._score_one_detector(
+        out = cli_scoring._score_one_detector(
             "d", info, medias, scoring_rows_for_snap(medias, "dinov3_patch"), {cid: cid for cid in medias}
         )
         assert out["balance"] == BALANCE and "floor" not in out
@@ -242,5 +243,5 @@ class TestResultsCarryTheState:
 
     def test_a_detector_with_no_state_reports_none(self):
         info = {"mlp": _fires_on_dim1_mlp(), "threshold": 0.5}
-        out = cli._score_direct_all(["d"], {"d": info}, _patch_medias(), "dinov3_patch")
+        out = cli_scoring._score_direct_all(["d"], {"d": info}, _patch_medias(), "dinov3_patch")
         assert out["d"]["balance"] is None

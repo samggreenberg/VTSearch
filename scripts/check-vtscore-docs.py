@@ -35,7 +35,7 @@ DOCS = PKG / "docs" / "packages"
 #: entries may share one doc — the CLI modules and the top-level runtime
 #: modules are each documented as a group.
 DOC_FOR: dict[str, str] = {
-    "cli.py": "cli.md",
+    "cli": "cli.md",
     "cli_pipeline.py": "cli.md",
     "cli_progress.py": "cli.md",
     "cli_resume.py": "cli.md",

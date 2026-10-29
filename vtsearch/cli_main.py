@@ -390,7 +390,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Format for CLI status output. 'text' (default) prints "
             "human-readable prose; 'json' emits NDJSON on stdout, one event "
-            "per line, for scripted callers and CI. See vtscore.cli_progress "
+            "per line, for scripted callers and CI. See vtscore.cli.progress "
             "for the event schema. Applies to --autodetect and --pipeline."
         ),
     )
@@ -509,7 +509,7 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
 
 def _run_pipeline(args, parser) -> None:
     """Run the ``--pipeline FILE`` the user named, as the ``--user`` they authenticated as."""
-    from vtscore.cli_pipeline import run_pipeline_file
+    from vtscore.cli.pipeline import run_pipeline_file
 
     _start_headless_run(args, parser)
     run_pipeline_file(args.pipeline)
@@ -617,7 +617,7 @@ def _apply_import_hooks(args, parser) -> None:
 
 def _authenticate_cli_user(args, parser) -> None:
     """Establish and authenticate the ``--user`` an AutoFind run executes as."""
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
 
     # Establish (and authenticate) the user this AutoFind runs as, mirroring
     # the server's api_key login. With --user the run reads that user's
@@ -666,7 +666,7 @@ def _maybe_import_labels(args, parser, settings_path, dry_run, importer) -> None
     labels (#4238), so a labelled detector can be run headlessly without ever
     being made in the UI.
     """
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
 
     if args.create_detector and not args.import_labels_into:
         parser.error("--create-detector only applies with --import-labels-into")
@@ -745,8 +745,9 @@ def _create_detector_media_type(args, parser, importer) -> str:
     ``--detector-media-type``, and the source declares none) ends the run
     here - before any media is loaded, and under ``--dry-run`` too.
     """
-    from vtscore import cli_progress
-    from vtscore.cli import _label_import_media_type, _SourceSpec
+    from vtscore.cli import progress as cli_progress
+    from vtscore.cli.labels import _label_import_media_type
+    from vtscore.cli.sources import _SourceSpec
 
     if not args.create_detector:
         return ""
@@ -797,7 +798,7 @@ def _importer_outputs(args, parser, importer) -> list | None:
         return None
     if not args.importer:
         parser.error("--outputs requires --importer <name> (a pickle holds one dataset)")
-    from vtscore.cli import _check_multi_output
+    from vtscore.cli.sources import _check_multi_output
     from vtscore.datasets.importers.base import parse_output_specs
 
     try:
@@ -980,7 +981,7 @@ def _start_headless_run(args, parser) -> None:
     # produces output. In JSON mode we also re-route the process-wide media
     # progress callback from update_progress (which resolves per-thread, so
     # headless it reaches nothing) to an NDJSON emitter on stdout.
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
     from vtscore.concurrency.notifications import notifications
 
     cli_progress.set_format(args.progress_format)
@@ -1051,7 +1052,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
     # saving means holding the whole dataset, so the two cannot be combined.
     save_dataset = not getattr(args, "tempimport", False)
     if stream_results and save_dataset:
-        from vtscore.cli import _STREAM_CANNOT_SAVE
+        from vtscore.cli.run import _STREAM_CANNOT_SAVE
 
         parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
     override_clipper = _override_clipper(args, parser)

@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from vtscore.cli import _score_direct_all
+from vtscore.cli.scoring import _score_direct_all
 
 DIM = 4
 

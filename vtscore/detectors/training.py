@@ -749,7 +749,7 @@ def train_and_threshold(
     # A *partly* embedded haystack has no such branch, and that is why the CLI
     # must embed at load: fitting the cut on the subset that happens to carry a
     # vector is silent, plausible, and wrong - a lower threshold over fewer
-    # items (issue #3556).  `vtscore.cli._embed_loaded_medias` is what keeps the
+    # items (issue #3556).  `vtscore.cli.sources._embed_loaded_medias` is what keeps the
     # CLI's snap embedded before this call, mirroring the GUI's load pipeline.
     #
     # The population the quantile is realized on is almost always *snap* - the

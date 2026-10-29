@@ -136,8 +136,8 @@ VTSearch/
 ├── vtscore/                Library tier; no Flask dependency (gated, see below)
 │   ├── config/             CoreConfig (core_config.py), paths / DATA_DIR, model IDs, runtime knobs
 │   ├── host_seams.py       The complete list of callbacks the app installs into the library
-│   ├── cli.py              CLI autodetect workflow (cli_pipeline.py: pipeline YAML;
-│   │                       cli_progress.py: text / NDJSON progress)
+│   ├── cli/                CLI autodetect workflow, one module per stage (pipeline.py:
+│   │                       pipeline YAML; progress.py: text / NDJSON progress)
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
 │   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs

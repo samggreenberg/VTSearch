@@ -24,8 +24,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from vtscore import cli_progress
-from vtscore.cli import _load_importer_chunked, _load_importer_whole
+from vtscore.cli import progress as cli_progress
+from vtscore.cli.sources import _load_importer_chunked, _load_importer_whole
 from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 
 

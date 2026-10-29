@@ -1,7 +1,7 @@
 """The ``--resume`` checkpoint: identity, fingerprints, file round-trip and threshold pinning (#5280).
 
 The end-to-end resume runs are in ``tests/cli/test_cli_resume.py``; these pin
-:mod:`vtscore.cli_resume` on its own - what counts as the same run, the same
+:mod:`vtscore.cli.resume` on its own - what counts as the same run, the same
 chunk and the same cut, and that the file never holds an importer's field
 values in the clear.
 """
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from vtscore.cli_resume import (
+from vtscore.cli.resume import (
     THRESHOLD_DRIFT_LIMIT,
     ResumeRefusedError,
     StreamCheckpoint,

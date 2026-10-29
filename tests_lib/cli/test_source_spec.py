@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.cli._SourceSpec``.
+"""Tests for ``vtscore.cli.sources._SourceSpec``.
 
 The four public ``autodetect_*_main`` entry points are a 2x2 matrix
 (pickle/importer x whole/chunked) whose cells used to hand-copy three
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.cli import _SourceSpec
+from vtscore.cli.sources import _SourceSpec
 from vtscore.datasets.importers.base import OutputSpec
 
 

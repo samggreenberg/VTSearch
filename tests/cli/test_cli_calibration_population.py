@@ -17,9 +17,10 @@ from typing import Any
 import numpy as np
 import torch
 
-import vtscore.cli as cli
+import vtscore.cli.detectors as cli_detectors
 import vtscore.detectors.converter_routing as cr
-from vtscore.cli import _RoutedSnapshots, _detector_group_key, _score_medias_with_detectors
+from vtscore.cli.detectors import _RoutedSnapshots, _detector_group_key
+from vtscore.cli.scoring import _score_medias_with_detectors
 
 DIM = 4
 
@@ -204,7 +205,7 @@ class TestTrainingIsHandedTheRoutedSnapshot:
 
         monkeypatch.setattr(lt, "train_from_labelset", _fake_train)
         routed = _RoutedSnapshots(medias)
-        cli._load_and_train_detectors(["det"], "image", medias, routed)
+        cli_detectors._load_and_train_detectors(["det"], "image", medias, routed)
         return captured
 
     def test_haystack_is_the_routed_snapshot_not_the_loaded_medias(self, client, monkeypatch):
@@ -249,5 +250,5 @@ class TestTrainingIsHandedTheRoutedSnapshot:
             return True
 
         monkeypatch.setattr(lt, "train_from_labelset", _fake_train)
-        cli._load_and_train_detectors(["det"], "image", {1: {"id": 1, "media_type": "image"}})
+        cli_detectors._load_and_train_detectors(["det"], "image", {1: {"id": 1, "media_type": "image"}})
         assert captured["haystack"] is None
