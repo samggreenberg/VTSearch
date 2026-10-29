@@ -658,7 +658,7 @@ where they take effect; nothing else reads them off the importer.
 
 Every clip produced by an importer is automatically tagged with an
 **origin**; a dict identifying the importer and its parameters. The load
-pipeline stamps it (`_tag_origins()` in `vtscore/datasets/load_pipeline.py`)
+pipeline stamps it (`_tag_origins()` in `vtscore/datasets/load_workers.py`)
 after `run()` completes:
 
 ```python

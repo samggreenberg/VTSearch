@@ -4,7 +4,7 @@ An ``origin.params`` dict is the canonical, pickle-surviving record of how a
 derived media was produced (see the origins-are-canonical rule in
 ``CLAUDE.md``).  Two independent code paths rederive content from it:
 
-* :mod:`vtscore.media.lazy_clip` — serves a lazy clip's **display bytes** on
+* :mod:`vtscore.media.clipping.lazy_clip` — serves a lazy clip's **display bytes** on
   demand, out of a process-scoped LRU, for the HTTP byte routes.
 * :func:`vtscore.detectors.resolver._apply_clip_and_embed` — rederives a label's
   content on a resolved file and **embeds** it, for cross-dataset training.

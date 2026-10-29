@@ -1,8 +1,9 @@
 """Shared constants and helpers for the load-pipeline stages.
 
-This is the leaf module of the stages package: it imports nothing from
-:mod:`vtscore.datasets.load_pipeline`, so both the orchestrator and the
-individual stage modules can depend on it without forming an import cycle.
+This is the leaf module of the stages package: it imports nothing from the
+load modules (:mod:`vtscore.datasets.load_pipeline` and its siblings), so both
+the orchestrator and the individual stage modules can depend on it without
+forming an import cycle.
 """
 
 from __future__ import annotations

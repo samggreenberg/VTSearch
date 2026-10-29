@@ -1,32 +1,31 @@
-"""Image embedder - EUPE patch-region mode (``eupe_patch``).
+"""Image embedder - DINOv2 patch-region mode (``dinov2_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
-image using the ``facebookresearch/EUPE`` ViT-B/16 backbone.  ~30×
-slower per image and ~100× more storage than the single-vector variant,
-but enables region similarity, region-aware detector scoring, and (in v2)
-region voting.
+image.  ~30× slower per image and ~100× more storage than the
+single-vector variant, but enables region similarity, region-aware detector
+scoring, and (in v2) region voting.
 
 For the single-vector variant of the same backbone see
-``embedder_eupe_single.py``.  Both share weights via ``_eupe_shared.py``.
+``embedder_dinov2_single.py``.  Both share weights via
+``_dinov2_shared.py``.
 
-EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
-which doesn't return weights, so :attr:`patch_saliency` falls back to a
-CLS-cosine-similarity proxy (softmax of each patch's cosine similarity
-to the CLS vector).  EUPE outputs are bound by Meta's FAIR Noncommercial
-Research Licence - see :attr:`license_notice`.
+DINOv2 weights are **ungated** on Hugging Face.  Image input is the HF
+default (224² for the standard processor) with patch size 14 → 16 × 16
+= 256 patch tokens.  There is no text encoder, so :attr:`supports_text`
+is ``False``.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from vtscore.media.image._eupe_shared import _EupeBase
+from vtscore.media.image.embedders._dinov2_shared import _Dinov2Base
 from vtscore.media.image._image_bulk import bulk_patch_forward_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput
 
 
-class ImageEupePatchEmbedder(_EupeBase):
-    """Embeds images using facebookresearch/EUPE ViT-B/16 with CLS + patch regions.
+class ImageDinov2PatchEmbedder(_Dinov2Base):
+    """Embeds images using DINOv2 ViT-B/14 with CLS pooling + patch regions.
 
     Output dimension: 768.  Per-image side-channel: HAC region tree +
     14 × 14 patch grid (see :func:`vtscore.media.patch_embed`).
@@ -34,11 +33,11 @@ class ImageEupePatchEmbedder(_EupeBase):
 
     @property
     def name(self) -> str:
-        return "eupe_patch"
+        return "dinov2_patch"
 
     @property
     def display_name(self) -> str:
-        return "EUPE patch (region-aware images)"
+        return "DINOv2 patch (region-aware images)"
 
     @property
     def supports_patch_regions(self) -> bool:
@@ -50,7 +49,7 @@ class ImageEupePatchEmbedder(_EupeBase):
     def _patch_forward_bulk_impl(self, medias: list[dict]) -> list[Optional[PatchEmbedOutput]]:
         if self._model is None:
             self.load_models()
-        if self._model is None or self._preprocess is None:
+        if self._model is None or self._processor is None:
             return [None] * len(medias)
         with self._embed_lock:
             return bulk_patch_forward_image_files(
@@ -58,8 +57,8 @@ class ImageEupePatchEmbedder(_EupeBase):
                 forward_pil_batch=self._patch_forward_pil_batch,
                 batch_size=self.embed_batch_size,
                 on_progress=self._on_progress,
-                label="EUPE patch",
+                label="DINOv2 patch",
             )
 
 
-EMBEDDER = ImageEupePatchEmbedder()
+EMBEDDER = ImageDinov2PatchEmbedder()

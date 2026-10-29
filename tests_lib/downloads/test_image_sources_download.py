@@ -839,7 +839,7 @@ class TestPlaces365CategoriesList:
     """The hardcoded ``PLACES365_CATEGORIES`` matches the upstream label space."""
 
     def test_has_365_unique_entries(self):
-        from vtscore.media.image._demo_categories import PLACES365_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import PLACES365_CATEGORIES
 
         cats = PLACES365_CATEGORIES
         assert len(cats) == 365
@@ -879,7 +879,7 @@ class TestEmitImageClip:
     }
 
     def _emit(self, **overrides):
-        from vtscore.media.image._demo_sources import _emit_image_clip
+        from vtscore.media.image.demo._demo_sources import _emit_image_clip
 
         return _emit_image_clip(7, **{**self._BASE, **overrides})
 
@@ -971,7 +971,7 @@ class TestEmbedLoop:
         return out
 
     def _run(self, tmp_path, n=3, clips=None, **kw):
-        from vtscore.media.image._demo_sources import _embed_loop, _render_single_label_image
+        from vtscore.media.image.demo._demo_sources import _embed_loop, _render_single_label_image
 
         clips = {} if clips is None else clips
         _embed_loop(

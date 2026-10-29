@@ -26,7 +26,8 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.training.thresholds.spot_check import CHECK_MIN_PICKS, LikelyRange, band_edges
+from vtscore.training.thresholds.check_schedule import CHECK_MIN_PICKS, band_edges
+from vtscore.training.thresholds.ranges import LikelyRange
 
 #: The level the ranges are drawn at: a central ``1 - alpha`` posterior range.
 TEST_ALPHA = 0.05

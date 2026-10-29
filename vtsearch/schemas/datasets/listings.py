@@ -337,7 +337,7 @@ class ConverterInfoSchema(Schema):
 class ClipperParameterSchema(Schema):
     """One entry of a clipper's ``parameters`` / ``creation_questions`` list.
 
-    See ``MediaClipper.parameters`` in ``vtscore/media/clipper.py`` for the
+    See ``MediaClipper.parameters`` in ``vtscore/media/clipping/clipper.py`` for the
     descriptor contract.  ``min`` / ``max`` / ``step`` are only meaningful for
     ``number`` parameters.
     """
@@ -353,7 +353,7 @@ class ClipperParameterSchema(Schema):
 
 
 class ClipperInfoSchema(PluginExtrasSchema):
-    """One ``MediaClipper.to_dict()`` payload (see ``vtscore/media/clipper.py``).
+    """One ``MediaClipper.to_dict()`` payload (see ``vtscore/media/clipping/clipper.py``).
 
     The base key set is fixed, but concrete clippers append their own
     resolved parameter values (``duration``, ``top_db``, ``box``, …), so this
@@ -387,7 +387,7 @@ class ClipperInfoSchema(PluginExtrasSchema):
 
 
 class CleanerInfoSchema(ClipperInfoSchema):
-    """One ``MediaCleaner.to_dict()`` payload (see ``vtscore/media/cleaner.py``).
+    """One ``MediaCleaner.to_dict()`` payload (see ``vtscore/media/clipping/cleaner.py``).
 
     ``MediaCleaner`` subclasses ``MediaClipper``, so this is the clipper
     descriptor plus the cleaner-only ``default_enabled`` flag.

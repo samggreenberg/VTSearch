@@ -1,37 +1,32 @@
-"""Image embedder - DINOv3 patch-region mode (``dinov3_patch``).
+"""Image embedder - EUPE patch-region mode (``eupe_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
-image.  ~30× slower per image and ~100× more storage than the
-single-vector variant, but enables region similarity, region-aware detector
-scoring, and (in v2) region voting.
+image using the ``facebookresearch/EUPE`` ViT-B/16 backbone.  ~30×
+slower per image and ~100× more storage than the single-vector variant,
+but enables region similarity, region-aware detector scoring, and (in v2)
+region voting.
 
 For the single-vector variant of the same backbone see
-``embedder_dinov3_single.py``.  Both share weights via
-``_dinov3_shared.py``.
+``embedder_eupe_single.py``.  Both share weights via ``_eupe_shared.py``.
 
-DINOv3 produces high-quality per-patch tokens and exposes a clean
-CLS→patch attention map (cleaner than DINOv2's thanks to Gram-anchored
-"storage" / register tokens that absorb high-norm artifacts).  We slice
-the 4 register tokens out of the token sequence before reshaping to the
-14 × 14 patch grid.
-
-DINOv3 weights are gated on Hugging Face - running this embedder requires
-the ``HF_TOKEN`` env var to be set to a user token that has accepted the
-DINOv3 licence at
-``https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m``.
+EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
+which doesn't return weights, so :attr:`patch_saliency` falls back to a
+CLS-cosine-similarity proxy (softmax of each patch's cosine similarity
+to the CLS vector).  EUPE outputs are bound by Meta's FAIR Noncommercial
+Research Licence - see :attr:`license_notice`.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from vtscore.media.image._dinov3_shared import _Dinov3Base
+from vtscore.media.image.embedders._eupe_shared import _EupeBase
 from vtscore.media.image._image_bulk import bulk_patch_forward_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput
 
 
-class ImageDinov3PatchEmbedder(_Dinov3Base):
-    """Embeds images using DINOv3 ViT-B/16 with CLS pooling + patch regions.
+class ImageEupePatchEmbedder(_EupeBase):
+    """Embeds images using facebookresearch/EUPE ViT-B/16 with CLS + patch regions.
 
     Output dimension: 768.  Per-image side-channel: HAC region tree +
     14 × 14 patch grid (see :func:`vtscore.media.patch_embed`).
@@ -39,11 +34,11 @@ class ImageDinov3PatchEmbedder(_Dinov3Base):
 
     @property
     def name(self) -> str:
-        return "dinov3_patch"
+        return "eupe_patch"
 
     @property
     def display_name(self) -> str:
-        return "DINOv3 patch (region-aware images)"
+        return "EUPE patch (region-aware images)"
 
     @property
     def supports_patch_regions(self) -> bool:
@@ -55,7 +50,7 @@ class ImageDinov3PatchEmbedder(_Dinov3Base):
     def _patch_forward_bulk_impl(self, medias: list[dict]) -> list[Optional[PatchEmbedOutput]]:
         if self._model is None:
             self.load_models()
-        if self._model is None or self._processor is None:
+        if self._model is None or self._preprocess is None:
             return [None] * len(medias)
         with self._embed_lock:
             return bulk_patch_forward_image_files(
@@ -63,8 +58,8 @@ class ImageDinov3PatchEmbedder(_Dinov3Base):
                 forward_pil_batch=self._patch_forward_pil_batch,
                 batch_size=self.embed_batch_size,
                 on_progress=self._on_progress,
-                label="DINOv3 patch",
+                label="EUPE patch",
             )
 
 
-EMBEDDER = ImageDinov3PatchEmbedder()
+EMBEDDER = ImageEupePatchEmbedder()

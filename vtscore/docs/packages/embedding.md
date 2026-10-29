@@ -565,7 +565,7 @@ def default_concurrent_embeddings() -> int: ...
 ```
 
 (`vtscore/embedding/loader.py`.) Heuristics for the dataset-
-load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
+load `ConcurrencyGate`s in `vtscore.datasets.load_workers`:
 
 - **Downloads** - `VTSEARCH_MAX_CONCURRENT_DOWNLOADS` when set, else
   `max(1, min(4, os.cpu_count()))`. Bandwidth- and disk-bound.

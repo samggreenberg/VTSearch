@@ -59,7 +59,7 @@ def letterhead_pages(corpus: Path) -> list[Any]:
 def embed(corpus: Path, out: Path) -> int:
     from PIL import Image
 
-    from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder  # noqa: PLC0415
+    from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder  # noqa: PLC0415
 
     pages = letterhead_pages(corpus)
     embedder = ImageSiglipEmbedder()

@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from vtscore.media.structural import SIFT_DESCRIPTOR_DIM, StructuralFeatures
-from vtscore.media.structural_tiles import (
+from vtscore.media.structural.structural_tiles import (
     PROJECTION_NAME,
     TILE_DIM,
     Projection,
@@ -127,9 +127,9 @@ class TestVectorisedTiles:
 
     @pytest.mark.parametrize("n", [3000, 400, 5])
     def test_equals_the_reference_aggregation(self, n, monkeypatch):
-        from vtscore.media import structural_tiles as st
+        from vtscore.media.structural import structural_tiles as st
         from vtscore.media.structural import aggregate_vlad, load_vlad_codebook
-        from vtscore.media.structural_tiles import raw_tiles, tile_rows
+        from vtscore.media.structural.structural_tiles import raw_tiles, tile_rows
 
         # The reference (tile_rows) cuts one layer, so compare on the coarse layer alone.
         monkeypatch.setattr(st, "TILE_LAYERS", ((st.TILE_W, st.TILE_H),))
@@ -152,7 +152,7 @@ def _doc_features(seed: int = 0, n: int = 800) -> StructuralFeatures:
 
 def _cache_projection(models_dir, dim: int = 16) -> None:
     """A small real fit, written where ``load_tile_projection`` looks."""
-    from vtscore.media.structural_tiles import raw_tiles
+    from vtscore.media.structural.structural_tiles import raw_tiles
 
     rows = np.concatenate([raw_tiles(_doc_features(s))[0] for s in range(3)])
     write_projection(fit_projection(rows, dim), projection_path(models_dir), {"fit_on": "unit test"})
@@ -162,22 +162,22 @@ class TestLoadBackfill:
     """Build step 2: ``sift_vlad_doc`` datasets get ``tile_vectors`` at load, derived from local features."""
 
     def _use_models_dir(self, monkeypatch, models_dir) -> None:
-        import vtscore.media.structural_tiles as st
+        import vtscore.media.structural.structural_tiles as st
 
         real_load = st.load_tile_projection
         monkeypatch.setattr(st, "load_tile_projection", lambda *_a, **_k: real_load(models_dir, dim=16))
         st._load_cached.cache_clear()
 
     def test_the_document_embedder_opts_in_and_the_photo_one_does_not(self):
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
 
         assert ImageSiftVladDocEmbedder().supports_tiled_stage1 is True
         assert ImageSiftVladEmbedder().supports_tiled_stage1 is False
 
     def test_forward_tiles_each_page_from_its_stored_features(self, monkeypatch, tmp_path):
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
-        from vtscore.media.structural_tiles import TileVectors
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.structural.structural_tiles import TileVectors
 
         _cache_projection(tmp_path)
         self._use_models_dir(monkeypatch, tmp_path)
@@ -189,7 +189,7 @@ class TestLoadBackfill:
         assert out[1] is None
 
     def test_a_missing_projection_warns_and_tiles_nothing(self, monkeypatch, tmp_path, caplog):
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
 
         self._use_models_dir(monkeypatch, tmp_path / "empty")
         with caplog.at_level("WARNING"):
@@ -219,7 +219,7 @@ class TestTileLayers:
     """#4415: the shipped tiling is two layers, the measured coarse one and a fine one."""
 
     def test_the_shipped_layers_and_projection(self):
-        from vtscore.media import structural_tiles as st
+        from vtscore.media.structural import structural_tiles as st
 
         assert st.TILE_LAYERS == ((st.TILE_W, st.TILE_H), (st.TILE_W / 2, st.TILE_H / 2))
         # v1, fit on the coarse layer, is applied to both: a both-layer refit scored lower (#4415 arm C).
@@ -227,7 +227,7 @@ class TestTileLayers:
         assert st.FIT_LAYERS == ((st.TILE_W, st.TILE_H),)
 
     def test_a_fine_layer_adds_tiles_on_a_dense_page(self, monkeypatch):
-        from vtscore.media import structural_tiles as st
+        from vtscore.media.structural import structural_tiles as st
 
         rng = np.random.default_rng(3)
         kp = np.zeros((6000, 4), dtype=np.float32)

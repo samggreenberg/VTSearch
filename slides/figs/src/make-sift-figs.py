@@ -83,7 +83,7 @@ from vtscore.media.structural import (  # noqa: E402
     SiftMatcher,
     ratio_test_matches,
 )
-from vtscore.media.structural_tiles import (  # noqa: E402
+from vtscore.media.structural.structural_tiles import (  # noqa: E402
     MIN_TILE_KP,
     TILE_LAYERS,
     load_tile_projection,

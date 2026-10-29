@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vtscore.media.structural_geometry import fit_model, fit_scale_translation
+from vtscore.media.structural.structural_geometry import fit_model, fit_scale_translation
 
 
 @pytest.fixture()

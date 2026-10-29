@@ -91,7 +91,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     import vtscore.media.structural as structural  # noqa: PLC0415
     import vtscore.training.structural_stage1 as s1  # noqa: PLC0415
-    from vtscore.media.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
     from vtscore.state.core import DetectorContext  # noqa: PLC0415
     from vtscore.training import structural_similarity as ss  # noqa: PLC0415
 
@@ -114,7 +114,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pages = {p.page_id: p for p in embed_corpus.pages_for_tier(args.corpus, args.tier)}
     ids = sorted(pages)
     feats = load_or_extract(ids, {p: pages[p].path for p in ids}, args.feature_cache, args.tier, args.workers)
-    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+    import vtscore.media.structural.structural_tiles as st  # noqa: PLC0415
 
     tiles = _cached_tiles(ids, args.feature_cache, args.tier, st) if args.feature_cache else {}
     if len(tiles) < len(ids):  # no cache covering the tier: tile here (slow at 50k pages)

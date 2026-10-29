@@ -6,7 +6,7 @@ import re
 import unicodedata
 from typing import Any
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 
 
 def _retype_text(media: dict[str, Any], text: str) -> dict[str, Any]:

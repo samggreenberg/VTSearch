@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 
 if TYPE_CHECKING:
     from vtscore.media.audio.loudness import PcmAudio

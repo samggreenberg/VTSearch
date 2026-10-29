@@ -11,7 +11,7 @@ from vtscore.media.base import (
     ProgressCallback,
     _noop_progress,
 )
-from vtscore.media.image._demo_sources import build_demo_datasets, load_demo_source
+from vtscore.media.image.demo._demo_sources import build_demo_datasets, load_demo_source
 
 
 _IMAGE_MIME_TYPES: dict[str, str] = {
@@ -25,7 +25,7 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 class ImageMediaType(MediaType):
     """Handles image medias - file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtscore.media.image.embedder_siglip.ImageSiglipEmbedder`.
+    Embedding is handled by :class:`~vtscore.media.image.embedders.embedder_siglip.ImageSiglipEmbedder`.
     """
 
     #: Images render a downscaled thumbnail: a browsable-thumbnail type.

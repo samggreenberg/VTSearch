@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from vtscore.media.clipper import (
+from vtscore.media.clipping.clipper import (
     DefaultClipper,
     MediaClipper,
     clip_with_bounds,

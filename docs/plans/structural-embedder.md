@@ -63,7 +63,7 @@ reorders what was previously planned here.
   pairs against SP+LG's **41%**, and as a ranker SP+LG reaches AP 0.395 / 0.481 on
   the two document corpora against SigLIP's 0.204 / 0.235 — **the first
   configuration in either study where structural search beats the deep embedder on
-  a real corpus.** `vtscore/media/structural_splg.py` is a
+  a real corpus.** `vtscore/media/structural/structural_splg.py` is a
   `StructuralMatcher`-conformant implementation already in the tree; what is owed
   is wiring it to an embedder (`embedder_superpoint_lightglue`, reusing
   `_structural_shared.py` verbatim) and the three integration items its module
@@ -108,7 +108,7 @@ reorders what was previously planned here.
 
 - **3-DoF geometry as a per-media-profile default.** `scale_translation`
   (isotropic scale + translation, no rotation) is implemented in
-  `vtscore/media/structural_geometry.py` and is a **free precision win** on flat
+  `vtscore/media/structural/structural_geometry.py` and is a **free precision win** on flat
   rasters: identical AP to the production 4-DoF fit, with false verifications
   dropping sharply (synthetic SIFT verified-precision 0.77 → 0.98). A digitally
   overlaid mark on a screenshot or a scanned page never rotates. Owed: pick the
@@ -127,7 +127,7 @@ reorders what was previously planned here.
   tiles), so it wants its own scoping pass; it is the cheapest known lever for the
   screenshot/iconography regime. Stage 1 of it has shipped for document pages
   only: a `sift_vlad_doc` dataset ranks by tiled VLAD, a page scoring by its best
-  tile (`vtscore/media/structural_tiles.py`, #3928). Photos and screenshots still
+  tile (`vtscore/media/structural/structural_tiles.py`, #3928). Photos and screenshots still
   match whole images.
 
 <!-- item-sep -->
@@ -302,10 +302,10 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 
 ### Integration points
 
-- **Embedder(s):** `vtscore/media/image/embedder_sift_vlad.py` (`sift_vlad`) and
+- **Embedder(s):** `vtscore/media/image/embedders/embedder_sift_vlad.py` (`sift_vlad`) and
   `embedder_sift_vlad_doc.py` (`sift_vlad_doc`: a document-sized keypoint budget
   and the tiled Stage 1) on a shared `_structural_shared.py` base.
-- **Matcher abstraction:** `vtscore/media/structural.py` — protocol + SIFT impl
+- **Matcher abstraction:** `vtscore/media/structural/__init__.py` — protocol + SIFT impl
   (`detect_and_describe`, `aggregate_vlad`, `verify`, `match_stats_to_features`).
   Library-tier, import-clean.
 - **Loader hook:** flag-gated sibling pass in the loader storing `local_features`.

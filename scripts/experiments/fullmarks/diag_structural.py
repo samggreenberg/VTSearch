@@ -33,7 +33,7 @@ BUDGETS = tuple(None if b == "stored" else int(b) for b in os.environ.get("DIAG_
 #: Only classes whose id starts with one of these (space-separated); all when unset.
 PREFIXES = tuple(os.environ.get("DIAG_PREFIXES", "").split())
 #: ``sift`` (the shipped ``sift_vlad`` matcher) or ``splg`` (SuperPoint +
-#: LightGlue, ``vtscore.media.structural_splg`` -- the backend the 2026-07-13 study
+#: LightGlue, ``vtscore.media.structural.structural_splg`` -- the backend the 2026-07-13 study
 #: found beats SigLIP on documents, never wired to an embedder; #3911).  ``splg``
 #: has no stored features, so ``stored`` is not a valid budget for it.
 BACKEND = os.environ.get("DIAG_BACKEND", "sift")
@@ -58,7 +58,7 @@ def main() -> int:
     emb = get_embedder("sift_vlad")
     emb.load_models()
     if BACKEND == "splg":
-        from vtscore.media.structural_splg import SplgMatcher  # noqa: PLC0415
+        from vtscore.media.structural.structural_splg import SplgMatcher  # noqa: PLC0415
 
         matcher = SplgMatcher(geometry_model=GEOMETRY, extract_long_side=LONG_SIDE)
         if None in BUDGETS:

@@ -1,6 +1,6 @@
 """Image embedder - SigLIP-L (open_clip ``ViT-SO400M-14-SigLIP-384``).
 
-Unlike :mod:`vtscore.media.image.embedder_siglip` (the base SigLIP loaded via
+Unlike :mod:`vtscore.media.image.embedders.embedder_siglip` (the base SigLIP loaded via
 ``transformers``), this embedder loads the larger SO400M/384 checkpoint through
 ``open_clip``.  Loading through open_clip - rather than the transformers port -
 means the 1152-dimensional vectors match galleries produced by open_clip's own

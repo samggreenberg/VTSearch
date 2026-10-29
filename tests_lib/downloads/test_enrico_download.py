@@ -228,7 +228,7 @@ class TestLoadDemoSourceEnrico:
 
 class TestEnricoCategoriesList:
     def test_has_20_unique_topics(self):
-        from vtscore.media.image._demo_categories import ENRICO_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import ENRICO_CATEGORIES
 
         assert len(ENRICO_CATEGORIES) == 20
         assert len(set(ENRICO_CATEGORIES)) == 20

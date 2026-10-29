@@ -1,11 +1,11 @@
 """Image embedder - SigLIP2-L (google/siglip2-so400m-patch14-384).
 
 The SO400M/384 member of the SigLIP 2 family.  Unlike
-:mod:`vtscore.media.image.embedder_siglip_l` - which reaches the *v1* SO400M
+:mod:`vtscore.media.image.embedders.embedder_siglip_l` - which reaches the *v1* SO400M
 checkpoint through ``open_clip`` because that is where its canonical weights
 live - SigLIP 2 ships a first-party Hugging Face port, so this embedder loads
 through :class:`~transformers.AutoModel` / :class:`~transformers.AutoProcessor`
-exactly like :mod:`vtscore.media.image.embedder_siglip2` and shares the whole
+exactly like :mod:`vtscore.media.image.embedders.embedder_siglip2` and shares the whole
 cross-modal surface with it.
 """
 
@@ -24,7 +24,7 @@ from vtscore.media.embedder import (
     timed_progress,
     to_compute_device,
 )
-from vtscore.media.image._cross_modal_shared import _CrossModalHFEmbedder
+from vtscore.media.image.embedders._cross_modal_shared import _CrossModalHFEmbedder
 
 
 class ImageSiglip2LEmbedder(_CrossModalHFEmbedder):
