@@ -138,8 +138,8 @@ def test_dockerfile_installs_bakes_and_seeds_the_same_media_types() -> None:
     """All three read the list the Dockerfile resolved once, so the image is the same types end to end."""
     text = _dockerfile_text()
     assert re.search(rf'for t in {_TYPES}; do echo "-r requirements/labbench-\$t\.txt"; done', text)
-    assert re.search(rf"^RUN .*python -u scripts/preload_default_embedder\.py {_TYPES}", text, re.MULTILINE)
-    assert re.search(rf"^RUN python scripts/seed_labbench_settings\.py {_TYPES} /app/data", text, re.MULTILINE)
+    assert re.search(rf"^RUN .*python -u scripts/install/preload_default_embedder\.py {_TYPES}", text, re.MULTILINE)
+    assert re.search(rf"^RUN python scripts/install/seed_labbench_settings\.py {_TYPES} /app/data", text, re.MULTILINE)
 
 
 def test_only_a_one_type_image_is_locked() -> None:

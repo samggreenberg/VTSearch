@@ -160,5 +160,7 @@ def test_dockerfile_bakes_and_locks_the_same_media_type() -> None:
     """One ``MEDIA_TYPE`` feeds both, so the baked weights match the lock."""
     text = re.sub(r"\\\n\s*", " ", _DOCKERFILE.read_text())
     assert re.search(r"^ARG MEDIA_TYPE=?\s*$", text, re.MULTILINE)
-    assert re.search(r'^RUN .*python -u scripts/preload_default_embedder\.py "\$MEDIA_TYPE"', text, re.MULTILINE)
+    assert re.search(
+        r'^RUN .*python -u scripts/install/preload_default_embedder\.py "\$MEDIA_TYPE"', text, re.MULTILINE
+    )
     assert re.search(r"^ENV .*VTSEARCH_SOLO_MEDIA_TYPE=\$\{MEDIA_TYPE\}", text, re.MULTILINE)
