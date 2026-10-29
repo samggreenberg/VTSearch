@@ -19,7 +19,7 @@ import time
 
 from flask import g, request
 
-from vtsearch.logging_config import new_request_id
+from vtsearch.runtime.logging_config import new_request_id
 
 #: Attribute stamped on a view function by :func:`state_sync_exempt`.
 _STATE_SYNC_EXEMPT_ATTR = "_vts_state_sync_exempt"

@@ -83,7 +83,7 @@ chosen **per request** by two HTTP headers:
 | `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
 | `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / model / labelset resolve to | Same interceptor |
 
-Key semantics (the `before_request` hook in `vtsearch/hooks.py`, and
+Key semantics (the `before_request` hook in `vtsearch/runtime/request_hooks.py`, and
 `vtsearch/routes/_context.py`):
 
 - **Per-request, not global.** The headers stash the chosen context on

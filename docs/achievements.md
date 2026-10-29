@@ -17,7 +17,7 @@ knows nothing else about it; with no app wired up, crediting is a no-op.
 |---|---|---|
 | Catalog | `vtsearch/achievements_catalog.py` | Pure data: `ACHIEVEMENTS` (each entry's `id`, `name`, `description`, `icon` and four ascending `tiers`), `TIER_NAMES`, the importers that do not count (`EXCLUDED_DATASET_IMPORTERS`), the streak's gap (`STREAK_GAP_SECONDS`), the media types and hours the two tick-off rows show, and the Readme Reader docs. Imports nothing from the app. |
 | State machine | `vtsearch/achievements.py` | The `record_*` functions that credit events, `get_full_state()` (the panel's payload), the two watermark writers `acknowledge()` and `mark_toasted()`, and `wipe_state()`. Re-exports the catalog's public names. |
-| Library seam | `vtscore/achievements_hooks.py` | `record_achievement(event, …)` for the four `KNOWN_EVENTS` (`vote`, `dataset_load`, `detector_import`, `find`), dispatched to whatever recorder the app registered. An unknown event raises at registration. |
+| Library seam | `vtscore/host/achievements.py` | `record_achievement(event, …)` for the four `KNOWN_EVENTS` (`vote`, `dataset_load`, `detector_import`, `find`), dispatched to whatever recorder the app registered. An unknown event raises at registration. |
 | App wiring | `vtsearch/seam_wiring.py` | `register_app_achievement_recorders()` installs one recorder per event at startup, each forwarding to the matching `record_*`. |
 | Routes | `vtsearch/routes/achievements.py` | `GET /api/achievements`, the two watermark POSTs, the phrase check and the raw-doc route; see the [API reference](API.md). |
 | Frontend | `frontend/src/app/` | `AchievementsService` holds the state and the unlock stream; `achievementsRefreshInterceptor` refreshes it after any POST that can credit; `AchievementUnlockHostComponent` pops the toast; `AchievementsTabComponent` is the panel (Total Score, rows, the three expandable rows); `AchievementBadgeComponent` draws a badge at a tier; the trophy button and its dot are in `AppComponent`. |
@@ -29,7 +29,7 @@ knows nothing else about it; with no app wired up, crediting is a no-op.
 | `votes_cast`, `days_active`, `hours_voted`, `media_types_touched`, `detectors_trained`, `vote_streak` | `record_vote` (event `vote`) | `vtscore/state/votes.py`, on every vote that lands an item in a labeled state |
 | `datasets_loaded` | `record_dataset_load` (event `dataset_load`) | `vtscore/datasets/load_origin.py`, when a load finishes, named by its importer |
 | `detectors_imported` | `record_detector_import` (event `detector_import`) | `vtscore/labels/sync.py` when a pull from a labelset source changes a detector, and `vtsearch/routes/labels/importers.py` |
-| `find_media` | `record_find` (event `find`) | `vtsearch/routes/detectors/scoring.py` (`POST /api/find-label`, the scoring pass behind Find and a sort by detector), `vtsearch/autofind.py` (AutoFind), and the CLI's autodetect in `vtscore/cli/scoring.py` |
+| `find_media` | `record_find` (event `find`) | `vtsearch/routes/detectors/scoring.py` (`POST /api/find-label`, the scoring pass behind Find and a sort by detector), `vtsearch/runtime/autofind.py` (AutoFind), and the CLI's autodetect in `vtscore/cli/scoring.py` |
 | `docs_read` | `record_doc_phrase` | `POST /api/achievements/check-phrase` |
 
 **One vote, six credits.** `record_vote` counts the vote, adds the detector to

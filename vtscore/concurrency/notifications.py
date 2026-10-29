@@ -223,7 +223,7 @@ class NotificationBroker:
 
 
 #: Process-wide broker. The SSE endpoint subscribes one handler per connected
-#: client; the CLI subscribes a printer (see ``vtsearch.cli_main``).
+#: client; the CLI subscribes a printer (see ``vtsearch.cli.main``).
 notifications = NotificationBroker()
 
 

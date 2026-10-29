@@ -108,7 +108,7 @@ def _score_medias_with_detectors(
             )
 
     if results:
-        from vtscore.achievements_hooks import record_achievement
+        from vtscore.host.achievements import record_achievement
 
         record_achievement("find", len(medias) * len(results))
 

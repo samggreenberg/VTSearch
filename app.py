@@ -5,7 +5,7 @@ import warnings
 
 # Native math libraries read these env vars during *their* import, which happens
 # the moment torch / numpy / scipy are imported, so they have to be set before
-# anything triggers that.  ``vtsearch.torch_threads`` imports only ``os`` for
+# anything triggers that.  ``vtsearch.runtime.torch_threads`` imports only ``os`` for
 # that reason.
 #
 # The server defaults to its CPU allocation, not to the library default of 1:
@@ -15,8 +15,8 @@ import warnings
 # started any other way silently loses that, and nothing in the log says so.
 # Batch work and tests keep the low-memory default of 1 in
 # ``vtscore.config.TORCH_THREADS``.
-from vtsearch.torch_threads import ENV_VAR as _THREADS_ENV  # noqa: E402
-from vtsearch.torch_threads import resolve as _resolve_threads  # noqa: E402
+from vtsearch.runtime.torch_threads import ENV_VAR as _THREADS_ENV  # noqa: E402
+from vtsearch.runtime.torch_threads import resolve as _resolve_threads  # noqa: E402
 
 _torch_threads = str(_resolve_threads())
 os.environ["OMP_NUM_THREADS"] = _torch_threads
@@ -49,8 +49,8 @@ if platform.machine() in ("x86_64", "AMD64"):
 # request_id / dataset_id / detector_id / user fields. Override via:
 #   VTSEARCH_LOG_LEVEL=INFO   (default WARNING)
 #   VTSEARCH_LOG_FORMAT=text  (default json; switch to text for local dev)
-from vtsearch.diagnose import apply_diagnostic_preset  # noqa: E402
-from vtsearch.logging_config import setup_logging  # noqa: E402
+from vtsearch.runtime.diagnose import apply_diagnostic_preset  # noqa: E402
+from vtsearch.runtime.logging_config import setup_logging  # noqa: E402
 
 # ``VTSEARCH_DIAGNOSE=1`` sets the whole diagnostic bar set at once (issue
 # #3853, where two sessions were run at the wrong bars and a third only got
@@ -200,7 +200,7 @@ app.config["OPENAPI_SWAGGER_UI_PATH"] = "/docs"
 app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
 from vtsearch.errors import VTSearchApi  # noqa: E402
-from vtsearch.openapi_postprocess import (  # noqa: E402
+from vtsearch.openapi.postprocess import (  # noqa: E402
     assign_operation_ids,
     collapse_nullable_refs,
     normalize_unprocessable_response,
@@ -216,6 +216,9 @@ api = VTSearchApi(app)
 # see operations tagged with their Flask view function name. The patch is
 # safe to apply now because ``to_dict`` is only called lazily; blueprints
 # registered later in this module are picked up automatically.
+# ``Api(app)`` builds the spec in its constructor; flask-smorest types it as
+# optional only for the deferred ``init_app`` form.
+assert api.spec is not None
 _apispec_to_dict = api.spec.to_dict
 
 
@@ -233,14 +236,15 @@ api.spec.to_dict = _to_dict_with_operation_ids
 # ---------------------------------------------------------------------------
 # Request-lifecycle hooks and global JSON error handlers
 # ---------------------------------------------------------------------------
-# Both live in their own modules (``vtsearch.hooks`` / ``vtsearch.errors``);
+# Both live in their own modules (``vtsearch.runtime.request_hooks`` / ``vtsearch.errors``);
 # registration is decorator-based on this module-level ``app``, so each
 # module exposes a ``register_*`` function that wires its handlers on in the
 # original order.
 
-from vtsearch import admin_overrides, import_hooks  # noqa: E402
+from vtsearch.settings import admin_overrides  # noqa: E402
+from vtsearch.runtime import import_hooks  # noqa: E402
 from vtsearch.errors import register_error_handlers  # noqa: E402
-from vtsearch.hooks import register_hooks  # noqa: E402
+from vtsearch.runtime.request_hooks import register_hooks  # noqa: E402
 
 register_hooks(app)
 register_error_handlers(app)
@@ -314,7 +318,7 @@ def _report_import_hooks() -> None:
 def _report_admin_overrides() -> None:
     """Print every process-level admin restriction actually in force.
 
-    Walks :data:`vtsearch.admin_overrides.OVERRIDES` and reports each knob
+    Walks :data:`vtsearch.settings.admin_overrides.OVERRIDES` and reports each knob
     whose effective value is an actual restriction, naming where it came from
     -- the flag, the env var, or (when neither was given and the persisted
     setting is doing the work) the settings key. An operator can then confirm
@@ -326,7 +330,7 @@ def _report_admin_overrides() -> None:
     support address on every boot would be noise.
     """
     from vtsearch import settings as _settings
-    from vtsearch.settings_models import ServerSettings, UserSettings
+    from vtsearch.settings.models import ServerSettings, UserSettings
 
     defaults = {**UserSettings().model_dump(), **ServerSettings().model_dump()}
     for override in admin_overrides.OVERRIDES.values():
@@ -425,7 +429,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     Per-user ``settings_source`` sync runs lazily on each user's first
     settings access (see
-    ``vtsearch.settings_store.UserSettingsStore._run_sync_from_source``)
+    ``vtsearch.settings.store.UserSettingsStore._run_sync_from_source``)
     and re-fires whenever the source's ``peek_version`` token changes,
     not at server boot; there is no server-wide user to sync for.
     """
@@ -457,7 +461,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     # thresholds produced it makes every absence in it ambiguous -- "no slow
     # requests" read as "nothing was slow" for a whole session in #3853 that
     # was in fact running a 1000ms bar.
-    from vtsearch.diagnose import log_effective_settings
+    from vtsearch.runtime.diagnose import log_effective_settings
 
     log_effective_settings()
 
@@ -524,6 +528,6 @@ if os.environ.get("VTSEARCH_SERVER_INIT") == "1" and __name__ != "__main__":
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from vtsearch.cli_main import main
+    from vtsearch.cli.main import main
 
     main(app, initialize_server)

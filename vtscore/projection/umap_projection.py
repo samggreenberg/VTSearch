@@ -172,9 +172,9 @@ def _umap_layout(
     ``cuml.manifold.UMAP`` (~20-100x faster on large sets); otherwise it is the
     CPU ``umap-learn`` reducer.  A cuML failure (including an nvrtc compile error
     that only surfaces inside the fit) transparently degrades to the CPU reducer.
-    See :mod:`vtscore.gpu_backends`.
+    See :mod:`vtscore.config.gpu_backends`.
     """
-    from vtscore.gpu_backends import umap_fit_transform
+    from vtscore.config.gpu_backends import umap_fit_transform
 
     fit_result: list[np.ndarray] = []
     fit_error: list[Exception] = []

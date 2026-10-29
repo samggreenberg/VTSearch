@@ -4,7 +4,7 @@ The load pipeline (:func:`vtscore.datasets.load_origin._run_origin_load_in_backg
 reports the end of an import through its ``on_finished`` callback with one
 :class:`DatasetImported`.  The app passes that event on to the functions a
 server admin names with ``--on-dataset-imported`` (see
-:mod:`vtsearch.import_hooks`), which is how a deployment sends an email, posts
+:mod:`vtsearch.runtime.import_hooks`), which is how a deployment sends an email, posts
 to a chat channel, or does anything else when a user's import completes.
 
 The pipeline leaves :attr:`DatasetImported.notify` at its default; the app
@@ -19,7 +19,10 @@ new field can be added here without breaking a hook that ignores it.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
+
+if TYPE_CHECKING:
+    from vtscore.datasets.stages.finalize import DroppedGroup
 
 #: How an import ended: :data:`SUCCEEDED` or :data:`FAILED`.
 ImportOutcome = Literal["succeeded", "failed"]
@@ -58,6 +61,20 @@ class DatasetImported:
         records the import can ignore it.  Every hook is still called either
         way: the server cannot tell an alert from a record, so the hook
         decides.
+    :param n_imported: How many items the import brought in, before any were
+        left out: :attr:`n_media`, plus :attr:`n_dropped`, plus any merged
+        into another item as a duplicate.  0 on failure.
+    :param n_dropped: How many items the import left out because an embedder
+        could not read them (the count the import's warning toast gave); 0
+        when none were, and on failure.
+    :param dropped: Those items, grouped by reason, commonest first: one
+        ``{"reason", "count", "items"}`` dict per reason, the list the
+        dataset's Stats window shows.  ``items`` are the names the user would
+        look for (the item's ``origin_name``, which an importer may set to its
+        own record id, else its file name), at most
+        :data:`~vtscore.datasets.stages.finalize.MAX_RECORDED_DROPS` across
+        every group; ``count`` stays exact past that.  A copy, like
+        :attr:`origin`.  Empty when nothing was dropped, and on failure.
     """
 
     outcome: ImportOutcome
@@ -69,3 +86,6 @@ class DatasetImported:
     origin: dict[str, Any] = field(default_factory=dict)
     error: str = ""
     notify: bool = True
+    n_imported: int = 0
+    n_dropped: int = 0
+    dropped: list[DroppedGroup] = field(default_factory=list)

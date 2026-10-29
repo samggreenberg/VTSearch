@@ -7,7 +7,7 @@ deps), and let the user kill it before we try to bind.
 
 Extracted from ``app.py`` so the WSGI ``app`` object gunicorn imports stays
 free of this CLI-only concern; only the ``__main__`` launch path (via
-``vtsearch.cli_main``) calls :func:`_acquire_single_instance_lock` and
+``vtsearch.cli.main``) calls :func:`_acquire_single_instance_lock` and
 :func:`_preflight_port`.
 """
 
@@ -140,7 +140,7 @@ def _acquire_single_instance_lock(port: int):
     load, so the duplicate dies in milliseconds. Returns a handle the caller
     must hold for the process lifetime.
     """
-    from vtscore.single_instance import AlreadyRunningError, acquire
+    from vtscore.concurrency.single_instance import AlreadyRunningError, acquire
 
     try:
         return acquire(port)

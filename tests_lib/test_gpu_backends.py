@@ -1,4 +1,4 @@
-"""Fallback behaviour of the cuML backend selectors (``vtscore.gpu_backends``).
+"""Fallback behaviour of the cuML backend selectors (``vtscore.config.gpu_backends``).
 
 These run on a CPU box: they inject a *fake* ``cuml`` whose estimators construct
 cleanly but raise inside ``fit`` — the shape of the real-world failure where
@@ -16,7 +16,7 @@ import types
 import numpy as np
 import pytest
 
-import vtscore.gpu_backends as gb
+import vtscore.config.gpu_backends as gb
 
 
 @pytest.fixture(autouse=True)

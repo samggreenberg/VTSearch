@@ -23,7 +23,7 @@ operation's ``responses`` fails the test.
 What it does not cover, on purpose: the codes every route shares.  Those
 are the global handlers in ``vtsearch/errors.py``, which turn exceptions
 into 409 / 404 for an unloaded or deleted context, 400 for a missing one and
-500 for anything uncaught, and the request hooks in ``vtsearch/hooks.py``,
+500 for anything uncaught, and the request hooks in ``vtsearch/runtime/request_hooks.py``,
 whose 401 refuses a request the login provider rejects.  They are documented
 once, by the ``default`` response every operation carries.
 
@@ -48,11 +48,11 @@ from typing import Any, TypeGuard
 
 import app as app_module
 import vtsearch
-from vtsearch.openapi_postprocess import _flask_to_openapi_path
+from vtsearch.openapi.postprocess import _flask_to_openapi_path
 
 _VTSEARCH_DIR = Path(vtsearch.__file__).resolve().parent
 #: Modules whose codes apply to every route: the ``default`` response's (see above).
-_GLOBAL_MODULES = {_VTSEARCH_DIR / "errors.py", _VTSEARCH_DIR / "hooks.py"}
+_GLOBAL_MODULES = {_VTSEARCH_DIR / "errors.py", _VTSEARCH_DIR / "runtime" / "request_hooks.py"}
 #: Callee name -> (position, keyword) of its status argument.
 _ERROR_CALLS = {"abort": (0, None), "error_response": (1, "status")}
 _FUNCTION_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)

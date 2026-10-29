@@ -4,7 +4,7 @@
 it needs an answer only the host app has - the per-request
 ``DatasetContext`` / ``DetectorContext`` on ``flask.g``, a persisted user
 setting, an achievement counter - it exposes a ``register_*`` hook (the
-*host seams*, listed in :mod:`vtscore.host_seams`; see
+*host seams*, listed in :mod:`vtscore.host.seams`; see
 ``../vtscore/docs/architecture.md``).  ``app.py`` calls the ``register_*``
 functions here once at startup to install the app's answers, so the library
 stays import-clean.
@@ -151,14 +151,14 @@ def register_app_achievement_recorders() -> None:
     file, so the recording functions are app-tier - but the events they
     count (a vote landing, a dataset load completing, a detector import, a
     find run) are raised from inside :mod:`vtscore`.  The library dispatches
-    them through :func:`vtscore.achievements_hooks.record_achievement`; this
+    them through :func:`vtscore.host.achievements.record_achievement`; this
     installs the app-side recorders.  Without them the events are no-ops,
     which is what a library-only consumer wants.
 
     Each recorder imports ``vtsearch.achievements`` lazily so app startup
     doesn't pull the settings stack in through this wiring.
     """
-    from vtscore.achievements_hooks import register_achievement_recorder
+    from vtscore.host.achievements import register_achievement_recorder
 
     def _record_vote(*args: Any, **kwargs: Any) -> None:
         from vtsearch.achievements import record_vote

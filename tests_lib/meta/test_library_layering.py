@@ -52,7 +52,7 @@ _ALLOWED_VTSCORE: dict[str, str] = {
 #: Imports of ``vtsearch`` under ``tests_lib/`` that are allowed to remain,
 #: with the reason.  Empty on purpose: unlike the library's two entries below,
 #: no test *needs* the app tier, and the one that looked like it did (a patch of
-#: ``vtsearch.logging_config.install_transformers_logging_bridge``) was really a
+#: ``vtsearch.runtime.logging_config.install_transformers_logging_bridge``) was really a
 #: missing seam in ``vtscore.embedding.loader``, now filled by
 #: ``_install_transformers_logging_bridge``.  Reach for that fix first; an entry
 #: here means the library has no seam and nobody added one.
@@ -113,7 +113,7 @@ class TestVtscoreDoesNotImportVtsearch:
             "vtscore must not import vtsearch (the dependency runs the other way).\n"
             + "\n".join(offenders)
             + "\n\nRoute app-tier behaviour through a registered hook instead - see "
-            "vtscore/state/current_user.py and vtscore/achievements_hooks.py for the pattern."
+            "vtscore/state/current_user.py and vtscore/host/achievements.py for the pattern."
         )
 
     def test_allowlist_has_no_stale_entries(self):
@@ -158,7 +158,7 @@ class TestTestsLibDoesNotImportVtsearch:
             + "\n\nUse the vtscore equivalent - e.g. get_active_context().medias rather than "
             "the vtsearch.state proxy - or add a library-tier seam to patch, the way "
             "vtscore.embedding.loader._install_transformers_logging_bridge exists so the "
-            "preload tests need not patch vtsearch.logging_config. If the test genuinely "
+            "preload tests need not patch vtsearch.runtime.logging_config. If the test genuinely "
             "belongs to the app tier, move it to tests/."
         )
 
@@ -169,7 +169,7 @@ class TestTestsLibDoesNotImportVtsearch:
         so it is every bit as much an app-tier dependency as an ``import``
         statement - and it is exactly the shape the scan above misses.  Both
         halves have to hold or the gate only covers the easy one.  This is not
-        hypothetical: three ``patch("vtsearch.logging_config...")`` calls in
+        hypothetical: three ``patch("vtsearch.runtime.logging_config...")`` calls in
         ``cli/test_preload_progress.py`` were the tier's only surviving app
         dependency once the two ``vtsearch.state`` imports were fixed.
         """

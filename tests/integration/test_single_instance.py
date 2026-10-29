@@ -6,7 +6,7 @@ import subprocess
 import sys
 import textwrap
 
-from vtscore import single_instance
+from vtscore.concurrency import single_instance
 
 
 def test_second_acquire_same_port_raises(tmp_path, monkeypatch):
@@ -20,7 +20,7 @@ def test_second_acquire_same_port_raises(tmp_path, monkeypatch):
         code = textwrap.dedent(
             """
             import sys
-            from vtscore import single_instance
+            from vtscore.concurrency import single_instance
             try:
                 single_instance.acquire(5099)
             except single_instance.AlreadyRunningError as exc:
@@ -42,7 +42,7 @@ def test_lock_released_after_holder_exits(tmp_path, monkeypatch):
     monkeypatch.setenv("VTSEARCH_RUNDIR", str(tmp_path))
     # A short-lived process takes the lock and exits without explicit release.
     subprocess.run(  # noqa: S603
-        [sys.executable, "-c", "from vtscore import single_instance; single_instance.acquire(5098)"],
+        [sys.executable, "-c", "from vtscore.concurrency import single_instance; single_instance.acquire(5098)"],
         check=True,
     )
     # No stale lock left behind: we can acquire the same port now.

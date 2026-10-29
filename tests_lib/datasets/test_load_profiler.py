@@ -153,7 +153,7 @@ def test_rows_stamp_active_cuml_state(monkeypatch, tmp_path, clean_seen_embedder
     differs materially between the two)."""
     out = tmp_path / "prof.jsonl"
     monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
-    monkeypatch.setattr("vtscore.gpu_backends.cuml_enabled", lambda: True)
+    monkeypatch.setattr("vtscore.config.gpu_backends.cuml_enabled", lambda: True)
     tracker = _make_tracker()
 
     prof = start_profiler(tracker, "image", "siglip")

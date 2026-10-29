@@ -95,8 +95,8 @@ def _atomic_write_text(path: Path, text: str) -> None:
     # overwrite the same detector file can't truncate each other's in-flight
     # tmp file or chase one that was already renamed away (which surfaced as
     # ``FileNotFoundError: '<name>.json.tmp' -> '<name>.json'`` from
-    # ``os.replace``).  Mirrors ``vtsearch.settings_store._atomic_write`` and
-    # ``vtscore.io.atomic_write_text``.
+    # ``os.replace``).  Mirrors ``vtsearch.settings.store._atomic_write`` and
+    # ``vtscore.utils.io.atomic_write_text``.
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     try:
         with open(tmp, "w", encoding="utf-8") as f:

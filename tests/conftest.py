@@ -106,7 +106,7 @@ init_medias()
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 # Record the host seams this conftest has just wired, so the per-test reset can
-# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+# put them back after a test installs its own (see :mod:`vtscore.host.seams`).
 capture_startup_host_seams()
 
 freeze_startup_heap()
@@ -129,7 +129,7 @@ _stub_embedding_models = make_stub_embedding_models_fixture(_EMBED_AUDIO_FILE_TA
 # that collects tests/core/test_frontend.py would build while workers running
 # tests/api/test_dashboard.py read static/ before it exists (and several
 # workers could kick off concurrent ~16s npm builds).  A cross-process flock
-# (vtscore.io.file_lock) elects one builder; the others block until the build
+# (vtscore.utils.io.file_lock) elects one builder; the others block until the build
 # finishes, then see the bundle and return.
 # ---------------------------------------------------------------------------
 
@@ -164,7 +164,7 @@ def angular_bundle() -> None:
             "Run: cd frontend && npm install && npm run build:prod"
         )
 
-    from vtscore.io import file_lock
+    from vtscore.utils.io import file_lock
 
     # flock-based: releases automatically if the building process dies, so a
     # crashed builder can't wedge the other workers.
@@ -198,8 +198,8 @@ def reset_state():
     :func:`tests_shared.state_reset.reset_shared_state`, which the library
     suite calls too.  Only the app-tier extras are spelled out here.
     """
-    from vtsearch.autofind import clear_autofind_runs
-    from vtsearch.import_hooks import clear_import_hooks
+    from vtsearch.runtime.autofind import clear_autofind_runs
+    from vtsearch.runtime.import_hooks import clear_import_hooks
 
     clear_autofind_runs()
     clear_import_hooks()
@@ -260,6 +260,7 @@ class _MergedSettingsPath:
     def write_text(self, content: str, *args, **kwargs) -> int:
         import json as _json
         from vtsearch import settings as _settings
+        from vtsearch.settings import schema as settings_schema
 
         try:
             data = _json.loads(content)
@@ -272,8 +273,8 @@ class _MergedSettingsPath:
             self._server.parent.mkdir(parents=True, exist_ok=True)
             return self._server.write_text(content, *args, **kwargs)
 
-        server_data = {k: v for k, v in data.items() if k in _settings._SERVER_KEYS}
-        user_data = {k: v for k, v in data.items() if k not in _settings._SERVER_KEYS}
+        server_data = {k: v for k, v in data.items() if k in settings_schema._SERVER_KEYS}
+        user_data = {k: v for k, v in data.items() if k not in settings_schema._SERVER_KEYS}
 
         self._server.parent.mkdir(parents=True, exist_ok=True)
         self._server.write_text(_json.dumps(server_data, indent=2) + "\n")
@@ -330,10 +331,11 @@ def isolated_settings(tmp_path, monkeypatch):
     see a merged view of both tiers.
     """
     from vtsearch import settings as settings_mod
+    from vtsearch.settings import tiers as settings_tiers
 
     test_settings_path = tmp_path / "settings.json"
     user_default_path = tmp_path / "users" / "default" / "user_settings.json"
-    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
+    monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", test_settings_path)
     # Redirect per-user settings files under tmp_path/users/<username>/.
     settings_mod.set_user_data_dir_override(tmp_path / "users")
     settings_mod.reset()

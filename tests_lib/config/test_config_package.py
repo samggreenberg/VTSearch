@@ -1,6 +1,6 @@
 """The ``vtscore.config`` package keeps the surface its single-module form had.
 
-Three invariants, all of which a seventh submodule could break silently:
+Three invariants, all of which a new submodule could break silently:
 
 * every public name the module exposed is still reachable as ``vtscore.config.X``;
 * ``_RELOAD_ORDER`` names every submodule, so :func:`vtscore.config._reload_all`
@@ -55,7 +55,7 @@ def test_reload_order_is_a_dependency_order():
 
 
 def test_every_public_name_resolves_on_the_package():
-    """``__all__`` is the pre-split public surface; each entry must be reachable."""
+    """``__all__`` is the package's public surface; each entry must be reachable."""
     for name in config.__all__:
         assert hasattr(config, name), name
 

@@ -509,6 +509,8 @@ def _report_each(
             user=request_user,
             media_type=job.output.media_type,
             origin=job.spec.origin,
+            n_imported=job.ids.n_imported,
+            dropped=job.ids.dropped,
         )
 
 

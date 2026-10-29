@@ -125,7 +125,7 @@ def main() -> None:
     from vtscore.state.coverage import build_coverage_atlas  # noqa: PLC0415
 
     start_stall_diagnostics_from_env()
-    from vtsearch.diagnose import log_effective_settings  # noqa: PLC0415
+    from vtsearch.runtime.diagnose import log_effective_settings  # noqa: PLC0415
 
     log_effective_settings()
     initialize_models()

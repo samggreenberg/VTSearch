@@ -753,7 +753,7 @@ class _AutoDetectResultSchema(Schema):
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an AutoFind run's results.
 
-    Built by ``vtsearch.autofind.run_autofind_export``: a fixed
+    Built by ``vtsearch.runtime.autofind.run_autofind_export``: a fixed
     ``{exporter, exporter_display_name, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for

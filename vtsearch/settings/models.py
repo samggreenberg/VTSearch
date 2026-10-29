@@ -391,7 +391,7 @@ class ServerSettings(BaseModel):
     # out (no source, even when a default exists). ``None`` (the default)
     # means there is no deployment-wide source. The precedence
     # (user-explicit > deployment-default > none) is resolved in one place -
-    # :meth:`vtsearch.settings_store.UserSettingsStore.resolve_settings_source` -
+    # :meth:`vtsearch.settings.store.UserSettingsStore.resolve_settings_source` -
     # so every sync path agrees. To personalise per user, template the
     # ``field_values`` (e.g. ``{"filepath": "data/user-settings/{username}.json"}``)
     # just as with the per-user key.
@@ -498,7 +498,7 @@ class UserSettings(BaseModel):
     # built-in "default" user, reads fall back to the server settings file when
     # absent here, so the CLI ``--settings`` flat file and single-user
     # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
-    # read-through in ``vtsearch.settings._read_value``).
+    # read-through in ``vtsearch.settings.tiers._read_value``).
     #
     # - ``autofind_detectors``: detector names flagged for AutoFind (each maps
     #   to a JSON file under ``data/detectors/``).
@@ -535,7 +535,7 @@ class UserSettings(BaseModel):
     # started finishes (#5170). The alerts are the admin's
     # ``--on-dataset-imported`` hooks; this reaches them as
     # ``DatasetImported.notify`` and the hooks decide what to do with it (see
-    # ``vtsearch.import_hooks``). The Settings modal shows it only on a server
+    # ``vtsearch.runtime.import_hooks``). The Settings modal shows it only on a server
     # with hooks configured.
     import_alerts_enabled: bool = True
 

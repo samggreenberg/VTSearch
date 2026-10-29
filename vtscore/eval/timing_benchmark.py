@@ -317,7 +317,7 @@ def svm_backend_parity(
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+    from vtscore.config.gpu_backends import cuml_enabled  # noqa: PLC0415
 
     if not cuml_enabled():
         return float("nan")

@@ -81,7 +81,7 @@ def diagnose_enabled() -> bool:
 def apply_diagnostic_preset() -> dict[str, str]:
     """Apply :data:`PRESET` to the environment; returns what it actually set.
 
-    Call this **before** :func:`vtsearch.logging_config.setup_logging`, which
+    Call this **before** :func:`vtsearch.runtime.logging_config.setup_logging`, which
     reads ``VTSEARCH_LOG_LEVEL`` once. Values already in the environment are
     left alone, so the return value is the subset this call is responsible
     for -- which is what the startup line reports, so a reader can tell a
@@ -124,7 +124,7 @@ def effective_settings() -> dict[str, Any]:
     )
     from vtscore.detectors.store import detector_write_mode
 
-    from vtsearch.hooks import slow_request_threshold_ms
+    from vtsearch.runtime.request_hooks import slow_request_threshold_ms
 
     return {
         "diagnose": diagnose_enabled(),

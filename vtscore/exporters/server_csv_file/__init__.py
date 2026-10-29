@@ -18,7 +18,7 @@ from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
-from vtscore.io import (
+from vtscore.utils.io import (
     atomic_write_stream,
     atomic_write_text,
     commit_write_stream,
@@ -159,7 +159,7 @@ class ServerCsvResultsExporter(ResultsExporter):
 
         Uses a fixed column superset (see :attr:`_STREAM_COLUMNS`) because a
         streaming writer cannot look ahead to decide which optional clip
-        columns are present.  :func:`~vtscore.io.atomic_write_stream` owns the
+        columns are present.  :func:`~vtscore.utils.io.atomic_write_stream` owns the
         tmp-file/``fsync``/rename ritual, so a run that dies mid-stream leaves
         no half-written export and two concurrent exports to the same path
         can't clobber each other's temp file.
@@ -241,7 +241,7 @@ class ServerCsvResultsExporter(ResultsExporter):
         streaming writer cannot look ahead, and they are the ones the
         ``server_csv_file`` label importer reads, which ignores the extra
         ``detector`` column.  Written through
-        :func:`~vtscore.io.atomic_write_stream`, as the hit stream is.
+        :func:`~vtscore.utils.io.atomic_write_stream`, as the hit stream is.
         """
         filepath = Path(field_values["filepath"])
 

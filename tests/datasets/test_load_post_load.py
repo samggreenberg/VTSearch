@@ -57,6 +57,19 @@ def _fake_load(target_medias):
     }
 
 
+def _load_with_an_unreadable_item(target_medias):
+    """:func:`_fake_load` plus one media with no vector, for the embedder to decline."""
+    _fake_load(target_medias)
+    target_medias[2] = {
+        **target_medias[1],
+        "id": 2,
+        "md5": "unreadable-md5",
+        "embedding": None,
+        "filename": "broken.wav",
+        "origin_name": "broken.wav",
+    }
+
+
 def _failing_load(_target_medias):
     raise RuntimeError("importer blew up")
 
@@ -163,6 +176,24 @@ class TestOnFinishedHook:
         assert event.error == ""
         assert event.origin == _ORIGIN
         assert event.origin is not _ORIGIN, "a hook must not be able to edit the dataset's recorded origin"
+        assert (event.n_imported, event.n_dropped, event.dropped) == (1, 0, [])
+
+    def test_reports_the_items_a_load_dropped(self, isolated_settings, tmp_path, monkeypatch):
+        """The total and the dropped list reach the hook, so a mailer can tell the user (#5449)."""
+        from tests.helpers import register_declining_embedder
+        from vtscore.datasets.registry import list_datasets
+
+        register_declining_embedder(monkeypatch, "clap", "audio", decline={"broken.wav"})
+        events: list[DatasetImported] = []
+        _run_load(tmp_path, _load_with_an_unreadable_item, on_finished=events.append)
+
+        (event,) = events
+        assert event.outcome == SUCCEEDED
+        assert (event.n_imported, event.n_media, event.n_dropped) == (2, 1, 1)
+        assert event.dropped == [{"reason": mock.ANY, "count": 1, "items": ["broken.wav"]}]
+        assert "CLAP" in event.dropped[0]["reason"]
+        (entry,) = list_datasets()
+        assert event.dropped == entry["dropped_groups"], "the list the dataset's Stats window shows"
 
     def test_reports_a_failed_load(self, isolated_settings, tmp_path):
         events: list[DatasetImported] = []
@@ -174,6 +205,7 @@ class TestOnFinishedHook:
         assert event.error == "importer blew up" == _snapshot(task_id)["error"]
         assert event.dataset_id == ""
         assert event.n_media == 0
+        assert (event.n_imported, event.n_dropped, event.dropped) == (0, 0, [])
         assert event.name == "Post-load test"
         assert event.user == "default"
 

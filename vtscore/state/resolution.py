@@ -8,7 +8,7 @@ them at call time.  So read them by attribute (``resolution._dataset_context_res
 never ``from vtscore.state.resolution import _dataset_context_resolver``: that
 binds a copy a later ``register_*`` call does not update.  For the same
 reason :mod:`vtscore.state.core` does not re-export them, and
-:mod:`vtscore.host_seams` snapshots and restores them here.
+:mod:`vtscore.host.seams` snapshots and restores them here.
 """
 
 from __future__ import annotations

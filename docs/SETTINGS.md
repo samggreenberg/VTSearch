@@ -9,7 +9,7 @@ is the most common settings mistake on a fresh deployment, so start here:
 
 | Tier | File | Holds | Model |
 |------|------|-------|-------|
-| **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings_models.py`) |
+| **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings/models.py`) |
 | **Per-user** | `<user data dir>/user_settings.json` | Every user preference — theme, volume, autopilot, AutoFind, panel layout, browse prefs. Resolved per request from the logged-in user. | `UserSettings` (same module) |
 
 The per-user file lives at `data/user_settings.json` in a single-user
@@ -172,7 +172,7 @@ through their CLI flag or environment variable.
 ## Per-user tier — `user_settings.json`
 
 An abridged example; the full field list is `UserSettings` in
-`vtsearch/settings_models.py`.
+`vtsearch/settings/models.py`.
 
 ```json
 {

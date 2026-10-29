@@ -60,7 +60,7 @@ SCAN_PATHS = [
 # fields via metaclass at class-creation time.
 EXCLUDE = [
     "*/vtsearch/schemas/*",
-    "*/vtsearch/settings_models.py",
+    "*/vtsearch/settings/models.py",
 ]
 
 # Scanned (so their imports count as uses) but not *reported on*. One-off

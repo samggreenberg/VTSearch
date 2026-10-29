@@ -203,7 +203,7 @@ describe('LabelViewComponent', () => {
       req.flush(votes ?? { good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     // /api/settings. `volume` is a 0-1 fraction: the server clamps it to that
-    // range (`settings_models.py`), and the centre panel writes it straight
+    // range (`settings/models.py`), and the centre panel writes it straight
     // onto `HTMLMediaElement.volume`, which throws on anything outside it.
     httpMock.match('/api/settings').forEach(req =>
       req.flush({ volume: 0.8, ...PANELS_OPEN }),

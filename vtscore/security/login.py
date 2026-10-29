@@ -83,7 +83,7 @@ class LoginProvider(ABC):
         """Whether the server rejects unauthenticated ``/api/*`` requests.
 
         When ``True``, the ``_enforce_auth`` before_request hook (see
-        ``vtsearch.hooks``) aborts with 401 whenever
+        ``vtsearch.runtime.request_hooks``) aborts with 401 whenever
         :meth:`is_authenticated` is ``False``, except for the small
         allowlist of auth endpoints the SPA needs to reach the login
         screen. Defaults to ``True`` so a custom provider that implements

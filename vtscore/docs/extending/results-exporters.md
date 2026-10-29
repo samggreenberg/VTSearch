@@ -339,7 +339,7 @@ score. Either way an exporter that writes what it is given in the order it is
 given needs nothing more.
 
 Write each record as it arrives; never collect them. A file exporter writes
-through `vtscore.io.atomic_write_stream`, and a delivery exporter (a POST, an
+through `vtscore.utils.io.atomic_write_stream`, and a delivery exporter (a POST, an
 email) groups the stream with `iter_stream_batches(items, batch_size)` from
 `vtscore.exporters.base`, after `resolve_stream_batch_size` has coerced its
 `batch_size` field.
@@ -377,9 +377,9 @@ exporter to read it; the exporter's side is three rules:
 - After each chunk is durable, call `resume.commit(position)`. Never commit a
   chunk only partly written.
 
-For a text file, `vtscore.io.resumable_write_stream(path, position)` opens the
+For a text file, `vtscore.utils.io.resumable_write_stream(path, position)` opens the
 file (truncating a fresh one, or cutting a resumed one back to `position`) and
-`vtscore.io.commit_write_stream(f)` flushes, `fsync`s and returns the byte
+`vtscore.utils.io.commit_write_stream(f)` flushes, `fsync`s and returns the byte
 offset to commit. The built-in `server_json_file` and `server_csv_file` are
 both under thirty lines on top of them. Write in place, not through
 `atomic_write_stream`: an atomic stream leaves nothing behind to resume.

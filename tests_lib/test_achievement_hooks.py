@@ -1,4 +1,4 @@
-"""The library-tier achievement seam (:mod:`vtscore.achievements_hooks`).
+"""The library-tier achievement seam (:mod:`vtscore.host.achievements`).
 
 Library code raises achievement events; the app installs the recorders
 that persist them.  With no app wired up, every event must be a silent
@@ -9,19 +9,19 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore import achievements_hooks
-from vtscore.achievements_hooks import KNOWN_EVENTS, record_achievement, register_achievement_recorder
+from vtscore.host import achievements
+from vtscore.host.achievements import KNOWN_EVENTS, record_achievement, register_achievement_recorder
 
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    saved = dict(achievements_hooks._recorders)
-    achievements_hooks._recorders.clear()
+    saved = dict(achievements._recorders)
+    achievements._recorders.clear()
     try:
         yield
     finally:
-        achievements_hooks._recorders.clear()
-        achievements_hooks._recorders.update(saved)
+        achievements._recorders.clear()
+        achievements._recorders.update(saved)
 
 
 class TestRecordAchievement:

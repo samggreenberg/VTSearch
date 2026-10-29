@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.io import read_server_json
+from vtscore.utils.io import read_server_json
 from vtscore.labels.importers.base import LabelImporter, PluginField
 from vtscore.labels.json_format import extract_labels
 

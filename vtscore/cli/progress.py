@@ -8,7 +8,7 @@ are emitted to stdout as **NDJSON** - one JSON object per line, each shaped
 can consume progress without scraping prose or tqdm glyphs.
 
 The events, from :mod:`vtscore.cli`, :mod:`vtscore.cli.pipeline` and the
-app's ``vtsearch/cli_main.py``:
+app's ``vtsearch/cli/main.py``:
 
 - ``chunk_start``    - a new chunk is about to be scored
   fields: ``chunk_num`` (int), ``chunk_size`` (int)

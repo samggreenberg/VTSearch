@@ -25,7 +25,7 @@ def _has_context_id(header_name: str, query_param: str) -> bool:
     """Return True iff *header_name* or *query_param* identifies a context.
 
     Matches the precedence applied by the ``_set_request_context``
-    ``before_request`` hook in ``vtsearch/hooks.py``: header first, then
+    ``before_request`` hook in ``vtsearch/runtime/request_hooks.py``: header first, then
     query-param fallback for browser-native requests
     (``<img src>`` / ``<audio src>`` / ``<video src>``) that bypass
     Angular's HttpClient interceptor.

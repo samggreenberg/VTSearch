@@ -540,7 +540,7 @@ class TestDeleteAfterAutoFind:
 
 
 def _run_main(monkeypatch, argv):
-    from vtsearch import cli_main
+    from vtsearch.cli import main as cli_main
 
     monkeypatch.setattr("sys.argv", ["app.py", *argv])
     monkeypatch.setattr(cli_main, "_run_server", lambda *a, **k: pytest.fail("server started"))

@@ -5,21 +5,22 @@ accessors in :mod:`vtsearch.settings` delegate to: cross-process file
 locking, the server/per-user in-memory caches, the one-shot legacy
 migration, and the bidirectional sync-from/to-source state machine.
 
-The split keeps :mod:`vtsearch.settings` focused on the *schema* (the
+The split keeps the rest of the package focused on the *schema* (the
 Pydantic-driven ``get_<key>`` / ``set_<key>`` surface, tier routing, CLI
 fallbacks, effective-value resolvers) while this module owns the *engine*.
+:mod:`vtsearch.settings.tiers` creates the one instance.
 
 Why a class with injected dependencies rather than a second flat module:
 several mutable containers (``_settings_lock``, ``_user_caches``,
-``_sync_state``) are imported by name from :mod:`vtsearch.settings` by other
-modules (``vtsearch.achievements``, the sync-source tests), so they must
-stay as module globals there. The store receives those same objects *by
-reference* in its constructor, so both views mutate one set of containers.
+``_sync_state``) are read by name from :mod:`vtsearch.settings.tiers` (by the
+sync-source and thread-safety tests), so they must stay as module globals
+there. The store receives those same objects *by reference* in its
+constructor, so both views mutate one set of containers.
 The reassignable scalars (``server_cache``, ``legacy_migrated``) and the
 per-user sync locks live solely on the store. Path resolution and the
 "apply an imported settings dict" callback (with the hook that runs after
 it, outside the sync lock) are injected so this module never imports
-:mod:`vtsearch.settings` (no import cycle).
+the rest of :mod:`vtsearch.settings` (no import cycle).
 
 The canonical lock order is **file lock → settings lock**: file I/O runs
 under the cross-process :func:`file_lock` only, and the in-process
@@ -326,7 +327,7 @@ class UserSettingsStore:
     Owns the lock-ordering-sensitive load / mutate / sync machinery.  The
     mutable containers passed in (``settings_lock``, ``user_caches``,
     ``sync_state``, ``syncing``) are shared by reference with
-    :mod:`vtsearch.settings` so external importers see one set of objects.
+    :mod:`vtsearch.settings.tiers` so external importers see one set of objects.
 
     ``sanitize(data, tier)`` is applied to every dict on its way *into* a
     cache (``tier`` is ``"server"`` or ``"user"``); it is the store's only
@@ -351,7 +352,7 @@ class UserSettingsStore:
         exclude_from_source_export: set[str],
         freshness_check_interval: float = 1.0,
     ) -> None:
-        # Shared-by-reference containers (also module globals in vtsearch.settings).
+        # Shared-by-reference containers (also module globals in vtsearch.settings.tiers).
         self._lock = settings_lock
         self._user_caches = user_caches
         self._sync_state = sync_state
@@ -1036,7 +1037,7 @@ class UserSettingsStore:
         """Reset every in-memory cache and sync state (for testing).
 
         Clears the shared containers in place (so the module-level aliases
-        in :mod:`vtsearch.settings` stay valid) and the store-only state.
+        in :mod:`vtsearch.settings.tiers` stay valid) and the store-only state.
         """
         with self._lock:
             self._server_cache = None

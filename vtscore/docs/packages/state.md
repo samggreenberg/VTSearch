@@ -311,7 +311,7 @@ at the end). There is no
 Each `register_*` call *rebinds* a module global in
 `vtscore.state.resolution`, which the resolution chain reads at call time.
 Code that reads or restores the installed hook directly (as
-`vtscore.host_seams` does for tests) must go through that module
+`vtscore.host.seams` does for tests) must go through that module
 (`resolution._dataset_context_resolver`), never a `from … import` copy, and
 not through `vtscore.state.core`, which deliberately does not re-export the
 three globals.

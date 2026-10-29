@@ -12,7 +12,7 @@ check, not a result: it says the arm being measured is the arm #3077 measured.
 
 ## 1. The question
 
-`enrich_descriptions` defaults to `False` (`vtsearch/settings_models.py`). It is a
+`enrich_descriptions` defaults to `False` (`vtsearch/settings/models.py`). It is a
 single **global** boolean — not per-embedder, not per-media-type — so its correct
 value depends on whichever embedders users actually run.
 

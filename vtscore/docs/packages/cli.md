@@ -590,7 +590,7 @@ lists the extra fields.
 Progress ticks with no `message` and `total <= 0` are dropped, so
 consumers never see empty `{"status":"idle"}` records. In text mode a
 saving run's import is narrated as one `import_progress` line per phase
-instead; that event has no JSON form. The app tier (`vtsearch.cli_main`)
+instead; that event has no JSON form. The app tier (`vtsearch.cli.main`)
 adds three more: `labels_imported` (same fields) for `--import-labels-into`,
 `labels_import_dry_run` for it under `--dry-run`, and `authenticated_user`
 (`user`) for `--user`.

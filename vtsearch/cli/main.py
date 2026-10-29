@@ -22,9 +22,10 @@ from typing import Any
 
 from vtscore.media import set_progress_callback
 
-from vtsearch import admin_overrides, import_hooks
-from vtsearch.logging_config import setup_logging
-from vtsearch.port_preflight import _acquire_single_instance_lock, _preflight_port
+from vtsearch.settings import admin_overrides
+from vtsearch.runtime import import_hooks
+from vtsearch.runtime.logging_config import setup_logging
+from vtsearch.cli.port_preflight import _acquire_single_instance_lock, _preflight_port
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -396,12 +397,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     # The process-level admin overrides (--solo-media-type, --solo-embedder,
     # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only)
-    # are declared once in vtsearch.admin_overrides, which
+    # are declared once in vtsearch.settings.admin_overrides, which
     # owns their flag spellings, help text, env-var equivalents and validators
     # together.
     admin_overrides.register_override_flags(parser)
     # Not an admin override: it has no persisted setting to override, and must
-    # never get one (see vtsearch.import_hooks).
+    # never get one (see vtsearch.runtime.import_hooks).
     import_hooks.add_cli_argument(parser)
     return parser
 
@@ -590,7 +591,7 @@ def _apply_verbosity(args) -> None:
 def _apply_admin_overrides(args, parser) -> None:
     """Validate and stash every process-level admin override the flags carried.
 
-    Loops over :data:`vtsearch.admin_overrides.OVERRIDES`. Each descriptor
+    Loops over :data:`vtsearch.settings.admin_overrides.OVERRIDES`. Each descriptor
     owns its own validator (``--solo-media-type`` checks the media-type
     registry, ``--solo-embedder`` checks that the embedder is registered *for
     that type*), and the env-var form runs the same validator, so the two
