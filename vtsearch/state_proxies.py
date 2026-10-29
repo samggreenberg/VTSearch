@@ -14,7 +14,7 @@ proxy classes.
 
 This module is the canonical app-tier state API (the proxy layer), not a
 thin adapter, which is why it lives at ``vtsearch/state_proxies.py`` rather
-than under ``vtsearch/shim/`` (which holds the genuine Flask glue).
+than under ``vtsearch/seam_wiring.py`` (which holds the genuine Flask glue).
 
 .. warning::
 
