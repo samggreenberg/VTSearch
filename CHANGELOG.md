@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **An import alert can say what the import left out** (issue #5449). The event a server's
+  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
+  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
+  reason), so an alert email can tell you which files to look into. The
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+
 - **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
   similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
   built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps

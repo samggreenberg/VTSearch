@@ -743,8 +743,10 @@ photo merged in the Image dataset leave one face, not one per copy.
 **When an import ends.** `_run_origin_load_in_background(...,
 on_finished=None)` calls *on_finished* once with a frozen
 `DatasetImported(outcome, dataset_id, name, user, media_type, n_media,
-origin, error, notify)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
-is not reported). The pipeline leaves `notify` at `True`; the app sets it from
+origin, error, notify, n_imported, n_dropped, dropped)` (`outcome` is
+`SUCCEEDED` or `FAILED`; a cancelled import is not reported). `n_imported` is
+how many items reached the finalize stage, and `dropped` the ones it left out
+for want of a vector, as the `DroppedGroup`s the registry entry keeps. The pipeline leaves `notify` at `True`; the app sets it from
 the user's `import_alerts_enabled` setting and routes the event to the
 functions an admin names with `--on-dataset-imported`.
 

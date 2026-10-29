@@ -178,7 +178,11 @@ def notify(event: DatasetImported) -> None:
         return
     address = address_for(event.user)  # VTSearch stores no email addresses
     if event.outcome == SUCCEEDED:
-        send(address, f"{event.name} is ready: {event.n_media} {event.media_type} items")
+        lines = [f"{event.name} is ready: {event.n_media} {event.media_type} items"]
+        for group in event.dropped:  # the items left out, grouped by why
+            lines.append(f"{group['count']} left out: {group['reason']}")
+            lines.extend(f"  {item}" for item in group["items"])
+        send(address, "\n".join(lines))
     elif event.outcome == FAILED:
         send(address, f"Importing {event.name} failed: {event.error}")
 ```
@@ -198,6 +202,9 @@ The event is a frozen `DatasetImported`:
 | `user` | The VTSearch username that started the import. |
 | `media_type` | `"image"`, `"audio"`, …; empty if a failure came before the type was known. |
 | `n_media` | Items in the saved dataset; `0` on failure. |
+| `n_imported` | Items the import brought in, before any were left out: `n_media`, plus `n_dropped`, plus any merged into another as a duplicate. `0` on failure. |
+| `n_dropped` | Items left out because an embedder could not read them (a file labelled as a supported type that is really something else, say); `0` when none were, and on failure. |
+| `dropped` | Those items grouped by reason, commonest first: `{"reason", "count", "items"}` dicts, the list the dataset's Stats window shows (a copy). `items` names each item the way the user would look for it: its `origin_name`, which an importer can set to its own record id, else its file name, plus the span for a clip. At most 1,000 names across the groups (`vtscore.datasets.stages.finalize.MAX_RECORDED_DROPS`); `count` stays exact past that. Empty when nothing was dropped, and on failure. |
 | `origin` | The importer and parameters the dataset was built from (a copy). |
 | `error` | The message the user was shown; empty on success. |
 | `notify` | `False` when the user turned off import alerts; `True` otherwise. |

@@ -1618,6 +1618,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DatasetImported` says how many items an import brought in and which it dropped** (issue #5449). Three new
+  fields, all defaulted so a hook that ignores them is unchanged: `n_imported` (the items that reached the finalize
+  stage: `n_media`, plus `n_dropped`, plus any merged away as duplicates), `n_dropped` (the items left out because
+  an embedder could not read them) and `dropped` (those items as the `DroppedGroup`s the registry entry keeps, a
+  copy). All three are empty on a failed import. A hook that emails the user can now list what to look into.
+
 - **`vtscore.projection.similarity_order`: a 1-D similarity order over a dataset** (issue #5465).
   `fit_similarity_order(matrix, ids, *, n_neighbors, min_dist, random_state=None)` sorts the ids by a 1-D UMAP of
   their embeddings (PCA-1 below ten points, as given below three) and returns a `SimilarityOrder(ids, method)`;

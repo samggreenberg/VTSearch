@@ -57,6 +57,7 @@ from vtscore.datasets.stages._load_profiler import start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
+    DroppedGroup,
     _build_coverage_atlas_stage,
     _collapse_duplicates_stage,
     _collapse_near_duplicates_stage,
@@ -108,7 +109,7 @@ class _DatasetLoadSpec:
 
 @dataclass
 class _LoadIds:
-    """The ids :func:`_finish_dataset_load` learns as it goes.
+    """The ids :func:`_finish_dataset_load` learns as it goes, and what it dropped.
 
     Mutable on purpose: the caller's failure handler needs the registry entry
     id even when the stages raise *after* registration, so the helper writes
@@ -117,6 +118,10 @@ class _LoadIds:
 
     context_id: str
     registry_entry_id: str | None = None
+    #: How many items reached the finalize stage, and the ones it left out for
+    #: want of a vector, for the load's ``DatasetImported`` event (#5449).
+    n_imported: int = 0
+    dropped: list[DroppedGroup] = field(default_factory=list)
 
 
 def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoadSpec, ids: _LoadIds) -> None:
@@ -144,7 +149,8 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     # serialize/disk-write window. See FinalizeProgress.
     fin = FinalizeProgress(pacer, spec.media_type)
     fin.begin("cleanup")
-    dropped_groups = _drop_none_embeddings_stage(ctx, fin, embed_failures)
+    ids.n_imported = len(ctx.medias)
+    ids.dropped = _drop_none_embeddings_stage(ctx, fin, embed_failures)
     # Re-lazify clips from reference (thin) parents now that
     # embedding is done: strip their materialized bytes so the
     # dataset stores recipes, not duplicated clip payloads.
@@ -175,7 +181,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
         spec.ingest_started_at,
         import_group=spec.import_group,
         output_category=spec.output_category,
-        dropped_groups=dropped_groups,
+        dropped_groups=ids.dropped,
     )
     # Opt-in: compute + persist the 2-D Browse projection now,
     # so the Browse canvas opens instantly instead of building
@@ -422,6 +428,8 @@ def _run_origin_load_in_background(
             user=task.request_user,
             media_type=media_type,
             origin=origin,
+            n_imported=ids.n_imported,
+            dropped=ids.dropped,
         )
 
     return _spawn_import_worker(task, load_task)
@@ -450,11 +458,15 @@ def _report_finished(
     user: str,
     media_type: str,
     origin: dict,
+    n_imported: int,
+    dropped: list[DroppedGroup],
 ) -> None:
     """Tell a load's *on_finished* hook how it ended; see :func:`_run_origin_load_in_background`.
 
     *dataset_id* and *name* are what the load was asked for; on success they
-    are replaced by what the registry saved.
+    are replaced by what the registry saved.  *n_imported* and *dropped* are
+    what reached the finalize stage and what it left out (see
+    :class:`_LoadIds`), reported only on success.
     """
     if on_finished is None:
         return
@@ -483,6 +495,9 @@ def _report_finished(
                 media_type=media_type or first.get("media_type", ""),
                 n_media=len(ctx.medias),
                 origin=copy.deepcopy(origin),
+                n_imported=n_imported,
+                n_dropped=sum(group["count"] for group in dropped),
+                dropped=copy.deepcopy(dropped),
             )
         on_finished(event)
     except Exception:
