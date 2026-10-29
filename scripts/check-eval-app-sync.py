@@ -983,6 +983,23 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="training.example_centroid",
+        app="py:vtscore.training.query_sort.example_sort_cuts_from_paths",
+        harness="vtscore/eval/example_opening.py::example_sort",
+        kind="ported",
+        note=(
+            "The example opening's sort (#4699): cosine to the centroid of the starting photos' "
+            "L2-normalised vectors, each weighing the same. Face studies patch the harness side "
+            "(#5376 swaps a hard-view face out, #5389 weighs it less), so a change to how the app "
+            "averages its examples changes what those studies measured against. If the app changes "
+            "which examples average or how they are weighted, change the harness to match."
+        ),
+        divergence=(
+            "The app re-ranks a structural (SIFT/VLAD) dataset against every example (Stage 2); "
+            "the harness ranks by the centroid alone and refuses a patch dataset."
+        ),
+    ),
+    Mirror(
         id="detectors.label_quota_query",
         app="py:vtscore.detectors.labelset_training.install_query_head",
         harness="vtscore/eval/step_trainers.py::_query_step",
