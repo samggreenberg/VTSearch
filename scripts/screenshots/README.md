@@ -171,7 +171,14 @@ stub randomness the UI exposes (never rely on unseeded draws).
   so a near miss stays visible. Without ImageMagick it compares bytes. The
   tolerance covers rasterisation, not typefaces, which `capture.ts` pins
   (above). Its defaults were measured between two Linux Chromiums, not yet
-  against a Mac's rasteriser. What the app computes in floating point moves
+  against a Mac's rasteriser. A render elsewhere compares like for like only
+  in the build that drew the baselines, which `capture.ts` names at launch
+  (`[launch] Chromium …`). The container has no copy of the build Playwright
+  pins, so `launch.mjs` falls back to the newest one it carries: Chrome for
+  Testing 153.0.8010.12, the full build, in October 2026. Point
+  `CHROMIUM_PATH` at the same build to use it in place of the pin (#5391).
+  The container draws every shot the same on every run, so its baselines
+  are a reference, not a sample. What the app computes in floating point moves
   with the CPU (the Browse map's layout, the training-domain percentages, which
   picture a near tie serves), so a shot names those regions in its manifest
   `computed`; the render writes their boxes beside it and `check.sh` blanks
