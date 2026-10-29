@@ -78,3 +78,8 @@ slides/_out/
 # must stay untracked so gridenv.sh's creation block is the live mechanism:
 # tracking it made that block dead code (#3437).
 .shadow/
+
+# Merge-conflict and patch backups (`git mergetool`'s `.orig`, `patch`'s `.rej`).
+# A bare `git add -A` after a conflicted merge sweeps them up (#5456).
+*.orig
+*.rej
