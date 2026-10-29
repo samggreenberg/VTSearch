@@ -28,7 +28,7 @@ def _grouped_vote_inputs(style_name, n_good=6, n_bad=6, seed=0):
     Mirrors ``_style_train_and_calibrate``'s vote-to-vector assembly so the two
     threshold entry points get identical inputs.
     """
-    from vtscore.detectors.training import _flood_context
+    from vtscore.detectors.training_calibration import _flood_context
 
     medias, _ = _planted_dataset(n_per_cat=max(n_good, n_bad) + 2, seed=seed)
     style = resolve_style(style_name)

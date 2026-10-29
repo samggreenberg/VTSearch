@@ -283,8 +283,8 @@ that take `inclusion_value` as a cut position (`conformal_threshold`,
 
 By reading the labels against the haystack's own score distribution rather
 than picking between them (`_fused_threshold` in
-`vtscore/detectors/training.py`, reached through `train_and_threshold` with a
-haystack to score). Under a balance (the app's case, and `CoreConfig.beta`'s
+`vtscore/detectors/training_calibration.py`, reached through
+`train_and_threshold` with a haystack to score). Under a balance (the app's case, and `CoreConfig.beta`'s
 default of `1.0`) the line is the **labels' line** (`LabelsLine`, #4452): the
 class model the calibration folds' held-out votes imply, cut where the
 expected F-beta peaks at the prevalence it estimates on the scored haystack.

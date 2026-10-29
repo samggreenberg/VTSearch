@@ -149,7 +149,7 @@ enforced by `./run-tests.sh` gates:
   `scripts/gates/check-docs.py` rejects both patterns outright, here and in
   every other tracked doc but the experiment reports (including in this
   sentence). Reference the module and the symbol instead
-  (``` `pool_box_from_media` in `vtscore/detectors/training.py` ```): it
+  (``` `pool_box_from_media` in `vtscore/detectors/training_votes.py` ```): it
   is stable under any edit that doesn't move the symbol, and it is
   greppable, which a line number never was.
 
