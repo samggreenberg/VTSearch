@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 from vtscore.media.embedder import MediaEmbedder
 from vtscore.utils.hashing import content_md5
 

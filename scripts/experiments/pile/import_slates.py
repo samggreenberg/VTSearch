@@ -108,7 +108,8 @@ def main() -> int:
     from vtscore.datasets import registry as ds_registry  # noqa: PLC0415
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
     from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtscore.datasets.load_pipeline import _run_importer_in_background, loading_tasks  # noqa: PLC0415
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+    from vtscore.datasets.load_pipeline import _run_importer_in_background  # noqa: PLC0415
     from vtscore.detectors import registry as det_registry  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _write_detector  # noqa: PLC0415
 

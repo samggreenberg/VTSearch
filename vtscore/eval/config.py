@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from vtscore.media.image._demo_categories import VGGFACE2_CATEGORIES
+from vtscore.media.image.demo._demo_categories import VGGFACE2_CATEGORIES
 
 
 @dataclass

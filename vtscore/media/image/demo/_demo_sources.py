@@ -21,7 +21,7 @@ from vtscore.config import DATA_DIR
 from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
 from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
 from vtscore.media.base import DemoDataset, demo_slice, demo_slice_by_category
-from vtscore.media.image._demo_categories import (
+from vtscore.media.image.demo._demo_categories import (
     CELEBRITY_TOGETHER_CATEGORIES,
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
@@ -819,7 +819,7 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
 #: The photos each Celebrities in Context person is shown in, pinned so the demo
 #: fetches a few thousand loose files instead of the dataset's 11 GB archive.
 #: Built by ``scripts/data/build_celebrity_together_manifest.py``.
-_CELEBRITY_TOGETHER_MANIFEST = Path(__file__).resolve().parent.parent / "assets" / "celebrity_together.json"
+_CELEBRITY_TOGETHER_MANIFEST = Path(__file__).resolve().parents[2] / "assets" / "celebrity_together.json"
 
 
 def celebrity_together_photos() -> dict[str, list[str]]:

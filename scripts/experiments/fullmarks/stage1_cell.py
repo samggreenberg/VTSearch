@@ -42,7 +42,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from vtscore.media.structural_tiles import (  # noqa: E402  (one definition, shared with the app)
+from vtscore.media.structural.structural_tiles import (  # noqa: E402  (one definition, shared with the app)
     MIN_TILE_KP,
     TILE_H,
     TILE_W,
@@ -53,7 +53,7 @@ from vtscore.media.structural_tiles import (  # noqa: E402  (one definition, sha
     tile_rows,
     tile_windows,  # noqa: F401  (re-exported: tests and the probe check read s1.tile_windows)
 )
-from vtscore.media.structural_tiles import page_scores_per_query as page_scores  # noqa: E402
+from vtscore.media.structural.structural_tiles import page_scores_per_query as page_scores  # noqa: E402
 
 #: Pages sampled to fit the projection.  400 pages is ~20,000 tiles, well over
 #: the 8,192 dimensions being reduced, and costs ~1% of the build.

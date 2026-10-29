@@ -20,7 +20,7 @@ from vtscore.media.embedder import (
     timed_progress,
     to_compute_device,
 )
-from vtscore.media.image._cross_modal_shared import _CrossModalHFEmbedder
+from vtscore.media.image.embedders._cross_modal_shared import _CrossModalHFEmbedder
 
 
 class ImageSiglip2Embedder(_CrossModalHFEmbedder):

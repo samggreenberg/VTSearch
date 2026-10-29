@@ -228,7 +228,7 @@ def _restore_signpost_text(media_data: dict[str, Any], media_info: dict[str, Any
 def _restore_original_payload(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
     """Carry a pickled pre-clean payload snapshot onto the media.
 
-    Written by the chain runner when a :class:`~vtscore.media.cleaner.MediaCleaner`
+    Written by the chain runner when a :class:`~vtscore.media.clipping.cleaner.MediaCleaner`
     rewrote the item at load time (``docs/plans/media-cleaners.md``); it is the
     only copy of what the user imported, so it has to survive the round-trip or
     the item silently loses its Clean/Original toggle.  Absent fields are left

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from vtscore.datasets.load_pipeline import _park_load_terminal
+from vtscore.datasets.load_workers import _park_load_terminal
 from vtscore.datasets.stages.embedding import _ensure_model_loaded
 from vtscore.media.embedder import MediaEmbedder
 

@@ -16,14 +16,14 @@ text encoder, so :attr:`supports_text` is ``False``.
 
 from __future__ import annotations
 
-from vtscore.media.image._dinov2_shared import _Dinov2Base
+from vtscore.media.image.embedders._dinov2_shared import _Dinov2Base
 
 
 class ImageDinov2SingleEmbedder(_Dinov2Base):
     """Embeds images using DINOv2 ViT-B/14 with CLS-token pooling.
 
     Output dimension: 768.  No patch-region pipeline - use
-    :class:`~vtscore.media.image.embedder_dinov2_patch.ImageDinov2PatchEmbedder`
+    :class:`~vtscore.media.image.embedders.embedder_dinov2_patch.ImageDinov2PatchEmbedder`
     if you need region search.
     """
 

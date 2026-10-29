@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm_core`, `gmm_em`, `gmm_threshold`, `text_sort` (`gmm` re-exports those four), `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm_core`, `gmm_em`, `gmm_threshold`, `text_sort` (`gmm` re-exports those four), `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `check_schedule`, `ranges`, `spot_check`, `balance`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -637,7 +637,13 @@ follow that.
 
 `vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
 stopped at the F-beta peak by #4413 and priced in
-[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)),
+split along its seams in #5425: `check_schedule.py` holds the balance's
+presets, the bands and the schedule, `ranges.py` the likely range,
+`spot_check.py` `LineRanking` and `SpotCheck`, and `balance.py` the mixture's
+counts, the count rule and the balance's state. Every name below still
+imports from `vtscore.training.thresholds.spot_check` as well as from the
+package.
 The line's preference is a **balance**: F-beta's *beta*, with the presets
 `BALANCE_PRESETS` (0.25, 1, 4; `DEFAULT_BETA` 1) and any value in
 `[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps

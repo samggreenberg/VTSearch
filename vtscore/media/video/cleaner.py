@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 from vtscore.media.image.edge_trim import (
     DEFAULT_EDGE_TOL,
     DEFAULT_MAX_EDGE_TRIM,

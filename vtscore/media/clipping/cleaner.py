@@ -3,7 +3,7 @@
 A *MediaCleaner* removes content-free regions from a media item so the
 embedder spends its representational capacity on signal instead of
 letterbox bars, leading silence, or PDF-extraction junk.  Like a
-:class:`~vtscore.media.clipper.MediaClipper` it maps type X to type X, but
+:class:`~vtscore.media.clipping.clipper.MediaClipper` it maps type X to type X, but
 it differs in **cardinality** and **use**:
 
 ============  ==================  ==============================
@@ -40,7 +40,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.clipper import MediaClipper
 
 
 class MediaCleaner(MediaClipper):

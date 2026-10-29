@@ -1,6 +1,6 @@
 """SIFT/VLAD tuned for document scans — same backend, a document-sized keypoint budget.
 
-The shipped :mod:`~vtscore.media.image.embedder_sift_vlad` keeps
+The shipped :mod:`~vtscore.media.image.embedders.embedder_sift_vlad` keeps
 ``DEFAULT_MAX_FEATURES`` (1,024) keypoints per image, which is right for photos
 and wrong for scanned pages: a page is mostly text, the text wins the response
 ranking, and the mark that is actually being searched for gets none of the
@@ -37,7 +37,7 @@ only with that number in front of you.
 
 from __future__ import annotations
 
-from vtscore.media.image._structural_shared import _StructuralImageBase
+from vtscore.media.image.embedders._structural_shared import _StructuralImageBase
 from vtscore.media.structural import DOCUMENT_MAX_FEATURES, SiftMatcher, StructuralMatcher
 
 

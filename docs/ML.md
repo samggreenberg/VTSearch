@@ -256,7 +256,7 @@ The same control answers the neighbouring question — "is the capacity right?" 
 |---------|-------|-------|
 | `OMP_NUM_THREADS` | `app.py` | the resolved thread count |
 | `MKL_NUM_THREADS` | `app.py` | the resolved thread count |
-| `torch.set_num_threads` | `vtscore/media/torch_setup.py` (`ensure_torch_configured`) | the resolved thread count |
+| `torch.set_num_threads` | `vtscore/media/torch_utils/torch_setup.py` (`ensure_torch_configured`) | the resolved thread count |
 | dtype | `vtscore/training/mlp.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
@@ -489,8 +489,8 @@ report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(li
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold` and `conformal_threshold` (`conformal.py`), `compute_fold_orderings` (`fold_orderings.py`), `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm_threshold.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training; its stages are `training_snap.py` (the embedding space), `training_scoring.py` (scoring a snapshot), `training_votes.py` (a vote's training rows) and `training_calibration.py` (the fold context, the split and the line)
 - `vtscore/detectors/label_quota.py`, `centroid_head.py`, `query_head.py`: the label quota, and the Goods' centroid and typed query's heads under it
-- `vtscore/training/thresholds/labels_line.py`, `spot_check.py`, `line_test.py`: the labels line, the spot check and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md)); the labels line draws on `class_model.py` (the labels' class model), `corpus_model.py` (the corpus fits and the cut) and `head_count.py` (the head's count line and Autopilot's cues)
+- `vtscore/training/thresholds/labels_line.py`, `check_schedule.py`, `ranges.py`, `spot_check.py`, `balance.py`, `line_test.py`: the labels line, the spot check (its schedule, its likely range, the walk, and the balance's state) and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md)); the labels line draws on `class_model.py` (the labels' class model), `corpus_model.py` (the corpus fits and the cut) and `head_count.py` (the head's count line and Autopilot's cues)
 - `vtscore/detectors/labeling_progress.py`: Per-step cache of the detectors the app trained, and their stability analysis
-- `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_setup.py`: torch thread configuration
+- `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_utils/torch_setup.py`: torch thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation
 - `vtscore/config/runtime.py`: `SVM_HEAD_C`, `DEFAULT_CALIBRATE_COUNT`, `TORCH_THREADS`, and the BCE-arm knobs (`TRAIN_EPOCHS`, …); `vtscore/config/models.py`: the model IDs
