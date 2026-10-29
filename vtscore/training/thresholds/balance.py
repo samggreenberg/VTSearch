@@ -11,7 +11,7 @@ every response that carries a line reports beside it.
 :class:`~vtscore.training.thresholds.spot_check.SpotCheck` and
 :class:`~vtscore.training.thresholds.spot_check.LineRanking` are read here as
 types only: :mod:`~vtscore.training.thresholds.spot_check` re-exports every
-name in this module, so importing it back at runtime would be a cycle.
+public name in this module, so importing it back at runtime would be a cycle.
 
 Split out of :mod:`~vtscore.training.thresholds.spot_check` (#5425).
 """
