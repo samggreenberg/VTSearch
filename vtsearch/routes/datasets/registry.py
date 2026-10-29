@@ -416,7 +416,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 _reg_end_load(dataset_id)
                 _loading_tasks.mark_finished(task_id)
 
-    from vtsearch.runtime.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     # Registered before the thread starts so a cancel arriving in the same
     # instant can tell "not started yet" from "nothing here"; see
@@ -521,7 +521,7 @@ def build_dataset_coverage_atlas(dataset_id: str):
             finally:
                 _loading_tasks.mark_finished(task_id)
 
-    from vtsearch.runtime.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     # Registered before the thread starts; see ``LoadingTasksTracker.set_worker``.
     worker = spawn(build_task, name=f"atlas-{dataset_id[:8]}", start=False)

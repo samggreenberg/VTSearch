@@ -13,7 +13,7 @@ gets a task id back immediately.  Both import paths use it — the
 detector-from-labelset route and the in-session label importer — so neither
 one can reintroduce the blocking shape.
 
-The one app-tier dependency, ``vtsearch.runtime.threading.spawn`` (which replays the
+The one app-tier dependency, ``vtsearch.runtime.context_threads.spawn`` (which replays the
 request's user / dataset / detector thread-locals into the worker), is
 injected by the caller so this module stays Flask-free, matching
 :mod:`vtscore.detectors.embedder_sync`.

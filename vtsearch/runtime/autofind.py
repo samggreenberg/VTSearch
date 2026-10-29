@@ -882,7 +882,7 @@ def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list
     answers to.
     """
     from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
-    from vtsearch.runtime.threading import spawn  # noqa: PLC0415
+    from vtsearch.runtime.context_threads import spawn  # noqa: PLC0415
 
     if trigger not in TRIGGERS:
         raise ValueError(f"Unknown AutoFind trigger {trigger!r}; expected one of {TRIGGERS}")

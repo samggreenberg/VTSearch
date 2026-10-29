@@ -65,7 +65,7 @@ from vtsearch.schemas.datasets.staging import (
     DatasetStagingStartedResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
-from vtsearch.runtime.threading import spawn
+from vtsearch.runtime.context_threads import spawn
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(

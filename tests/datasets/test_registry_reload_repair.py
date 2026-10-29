@@ -34,17 +34,17 @@ def _saved_medias(n: int, *, missing_second: tuple[int, ...]) -> dict[int, dict]
 
 def _load(client, monkeypatch, dataset_id: str) -> None:
     """Load *dataset_id* from the registry and wait for its worker to finish."""
-    import vtsearch.runtime.threading as vts_threading
+    import vtsearch.runtime.context_threads as context_threads
 
     spawned: list[threading.Thread] = []
-    real_spawn = vts_threading.spawn
+    real_spawn = context_threads.spawn
 
     def _spawn(*args, **kwargs):
         thread = real_spawn(*args, **kwargs)
         spawned.append(thread)
         return thread
 
-    monkeypatch.setattr(vts_threading, "spawn", _spawn)
+    monkeypatch.setattr(context_threads, "spawn", _spawn)
     resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
     assert resp.status_code == 200
     (worker,) = [t for t in spawned if t.name == f"ds-load-{dataset_id[:8]}"]

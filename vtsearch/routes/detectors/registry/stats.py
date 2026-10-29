@@ -250,7 +250,7 @@ def browse_detector_positives(detector_id: str):
         get_loaded_detector_ids,
     )
     from vtscore.state.core import get_detector_context, unregister_context
-    from vtsearch.runtime.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     entry = get_detector(detector_id)
     if entry is None:

@@ -275,7 +275,7 @@ def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str
 
         from vtscore.datasets.ingest_task import start_ingest_task
         from vtsearch.state import cached_media_lookups, find_missing_entries, medias
-        from vtsearch.runtime.threading import spawn
+        from vtsearch.runtime.context_threads import spawn
 
         origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
         missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)

@@ -243,7 +243,7 @@ def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
     """
     from vtscore.detectors.embedder_sync import maybe_start_label_reembed
     from vtsearch.state import get_active_detector_context
-    from vtsearch.runtime.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     det_ctx_existing = get_active_detector_context()
     if det_ctx_existing.detector_id == detector_id:
@@ -305,7 +305,7 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
                 task_id=task_id,
             )
 
-        from vtsearch.runtime.threading import spawn
+        from vtsearch.runtime.context_threads import spawn
 
         spawn(load_task, name=f"det-load-{detector_id[:8]}")
     except Exception:

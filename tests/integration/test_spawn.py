@@ -1,4 +1,4 @@
-"""Tests for ``vtsearch.runtime.threading.spawn``: background thread that
+"""Tests for ``vtsearch.runtime.context_threads.spawn``: background thread that
 replays the calling thread's user / dataset / detector context."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from vtsearch.state import (
     unregister_context,
     unregister_detector_context,
 )
-from vtsearch.runtime.threading import spawn
+from vtsearch.runtime.context_threads import spawn
 from vtscore.state.core import (
     set_thread_dataset_context,
     set_thread_detector_context,
