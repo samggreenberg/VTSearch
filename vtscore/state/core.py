@@ -549,7 +549,7 @@ class DatasetContext:
     #
     # ``_NON_DERIVED_SLOTS`` names the rest explicitly so the two sets can be
     # asserted to *partition* ``__slots__`` (see
-    # ``tests_lib/core/test_derived_cache_reset.py``).  That partition is the
+    # ``tests_lib/state/test_derived_cache_reset.py``).  That partition is the
     # whole point: a slot added to ``__slots__`` fails the test until it is
     # filed as a cache or as state, instead of being quietly missed the way
     # every hand-written clear-list here had already missed eleven slots by

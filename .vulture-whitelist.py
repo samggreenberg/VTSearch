@@ -307,7 +307,7 @@ ERROR_SCHEMA  # noqa: F821
 # Vulture sees the assignments in ``__init__`` and ``update()`` but not the
 # dynamic reads. The two also-in-the-tuple names (``smart_slope`` and
 # ``stable_confident_flip_rate``) are read directly by
-# ``tests_lib/detectors/test_stopping_columns.py`` and don't need entries.
+# ``tests_lib/eval/test_stopping_columns.py`` and don't need entries.
 # ---------------------------------------------------------------------------
 smart_slope_t  # noqa: F821
 stable_flip_rate  # noqa: F821

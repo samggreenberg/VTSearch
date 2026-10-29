@@ -87,7 +87,7 @@ ingest (`_attach_patch_grid_to_media`), the live region matrix
 been re-quantised by the other two. It would then have compared float16 with
 float16 and reported a perfect null. All three now read
 `vtscore.embedding.matrix.PATCH_ROW_DTYPE` at call time. It is float16, so there
-is no behaviour change. `tests_lib/core/test_patch_row_dtype.py` pins that value
+is no behaviour change. `tests_lib/embedding/test_patch_row_dtype.py` pins that value
 and checks that every site follows the name. It is not an env knob, on purpose:
 a stored grid keeps the dtype it was built with, so a runtime switch would flip
 only half the path.

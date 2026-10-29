@@ -162,7 +162,7 @@ argument for a pre-registered follow-up, not a ship.
   point; a cut rule would be the axis three studies have already exhausted.
 - **The theory bench as evidence.** #2883 item 3: it has mis-sized this family
   twice at full power. Synthetic data is used here only to pin the estimators'
-  behaviour in `tests_lib/detectors/test_transfer_rules.py` — a selftest of the
+  behaviour in `tests_lib/eval/test_transfer_rules.py` — a selftest of the
   code, never a result.
 
 ## Commitments

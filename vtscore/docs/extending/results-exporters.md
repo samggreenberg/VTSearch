@@ -501,14 +501,14 @@ scored run, which this one refuses with `UnsupportedPayloadError`.
 
 ## Testing pattern
 
-Library-tier exporter tests belong in `tests_lib/io/`. The autouse
+Library-tier exporter tests belong in `tests_lib/exporters/`. The autouse
 fixtures (see [`tests_lib/conftest.py`](../../../tests_lib/conftest.py))
 reset library-tier global state and stub embedders; `_allow_test_tmp_paths`
 widens path validation so `validate_server_filepath` accepts the test
 tmp directory.
 
 ```python
-# tests_lib/io/test_signed_webhook_exporter.py
+# tests_lib/exporters/test_signed_webhook_exporter.py
 import hashlib
 import hmac
 import json
@@ -574,7 +574,7 @@ class TestSignedWebhookExport:
             exp.export_find_results({"media_type": "audio", "results": {}}, {})
 ```
 
-See [`tests_lib/io/test_importers.py`](../../../tests_lib/io/test_importers.py)
+See [`tests_lib/datasets/test_importers.py`](../../../tests_lib/datasets/test_importers.py)
 for the general I/O-plugin test pattern and the existing
 [`vtscore/exporters/webhook/__init__.py`](../../exporters/webhook/__init__.py)
 + its app-tier tests for a real working webhook exporter.

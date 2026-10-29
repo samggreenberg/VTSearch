@@ -11,7 +11,7 @@ different items from the first Bad pick onward, and only two whole runs could
 price that.  Since #4136 the flag draws the *display* line only and the Bad
 phase samples at the midpoint under both arms, so a re-run of this A/B
 measures no trajectory difference by construction
-(``tests_lib/sorting/test_text_sort_threshold.py`` pins the opening's picks
+(``tests_lib/training/test_text_sort_threshold.py`` pins the opening's picks
 against the rule).
 
 The wrapper refuses to run unless the rule the thresholds module actually

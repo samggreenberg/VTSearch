@@ -432,7 +432,7 @@ class TestEvalTextSortEnrich:
         assert all(kw["enrich"] is True for kw in call_kwargs)
         # Called directly with no embedder_name, so it forwards the empty
         # default. run_eval is what fills it in; that is covered by
-        # tests_lib/detectors/test_eval.py.
+        # tests_lib/eval/test_eval.py.
         assert all(kw["embedder_name"] == "" for kw in call_kwargs)
 
     def test_eval_text_sort_without_enrich(self):

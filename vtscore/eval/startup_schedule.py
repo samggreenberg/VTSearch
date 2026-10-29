@@ -74,7 +74,7 @@ It counts goods, which is why a ``b`` round refuses it: a round hunting
 negatives would call itself dry on exactly the picks it wants.
 
 :data:`PRODUCTION_STARTUP` spells today's opening in that grammar, and
-``tests_lib/detectors/test_startup_schedule.py`` pins it against the ported
+``tests_lib/eval/test_startup_schedule.py`` pins it against the ported
 phase machine: running it must reproduce the default flow pick for pick.  That
 pinning is the point - the default arm has to *be* the app (see "The Eval
 Default Arm IS the App" in ``docs/EVAL.md``), so a study measures deviations
@@ -94,7 +94,7 @@ from typing import Literal, Optional, Sequence
 #: Equal by construction to ``GOOD_TARGET`` / ``BAD_TARGET`` / ``MORE_TARGET``
 #: and the Sort+Select pairing in
 #: :func:`vtscore.eval.al_strategies._select_phase_faithful`; pinned against all
-#: of them by ``tests_lib/detectors/test_startup_schedule.py`` and by
+#: of them by ``tests_lib/eval/test_startup_schedule.py`` and by
 #: ``scripts/check-eval-app-sync.py``'s ``autopilot.startup_default`` mirror.
 #: From #4282 to #4740 it was ``g3@top,b4@mid,g20+dry1/16@top``, the ``more``
 #: walk; #4671 found it lost after vote 23 on the objective.  It does not spell

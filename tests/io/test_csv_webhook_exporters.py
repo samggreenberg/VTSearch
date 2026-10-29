@@ -121,7 +121,7 @@ class TestCsvExporterCLI:
         # presence check must not reject the same absence when the exporter is
         # driven directly (issue #3874). A required field with *no* default
         # still raises - see ``TestPluginFieldDefaults`` in
-        # ``tests_lib/core/test_plugin_field_defaults.py``.
+        # ``tests_lib/plugins/test_plugin_field_defaults.py``.
         from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
         exp = ServerCsvResultsExporter()

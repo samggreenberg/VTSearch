@@ -1154,7 +1154,7 @@ if $_run_pytest; then
     #       worker (tests_lib/projection/test_umap_projection.py), and to keep
     #       each eval-sweep module together so its memoized sweeps hit the cache
     #       instead of being recomputed on every worker that draws one
-    #       (tests_lib/detectors/sweep_cache.py).
+    #       (tests_lib/eval/sweep_cache.py).
     #
     # Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
     # The two trees have independent conftests; pytest's auto-merge picks

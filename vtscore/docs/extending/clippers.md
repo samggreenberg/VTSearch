@@ -339,12 +339,13 @@ recording does, and nothing at the tail is dropped.
 
 ## Testing pattern
 
-Clipper tests live in `tests_lib/core/` (registration + behaviour) or
-`tests_lib/detectors/test_clipper_chain.py`. The autouse
+Clipper tests live in `tests_lib/media/` (registration + behaviour), beside
+the clippers in `vtscore/media/`, or in
+`tests_lib/datasets/test_clipper_chain.py` for the chain that runs them. The autouse
 `reset_contexts` fixture resets all contexts between tests.
 
 ```python
-# tests_lib/core/test_sound_overlap_clipper.py
+# tests_lib/media/test_sound_overlap_clipper.py
 import io
 import wave
 
@@ -397,7 +398,7 @@ class TestSoundOverlapClipper:
         assert cl.parameters[0]["default"] == 2.0  # original unchanged
 ```
 
-See [`tests_lib/detectors/test_clipper_chain.py`](../../../tests_lib/detectors/test_clipper_chain.py)
+See [`tests_lib/datasets/test_clipper_chain.py`](../../../tests_lib/datasets/test_clipper_chain.py)
 for end-to-end load-pipeline tests that route media through a clipper
 and verify the produced clips end up in `medias` with the right
 origins.

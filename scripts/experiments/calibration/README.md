@@ -358,7 +358,7 @@ its **candidate 2** ("drop the mixture-weight factor: `lam = fnr/fpr` instead of
 computes — the prior-odds factor in `rate`'s `lam` cancels the `w_lo/w_hi` inside
 `_rate_cut`'s `offset` exactly, so `rate` is prior-free and its interior root is
 invariant to the mixture weights at every inclusion (pinned by
-`tests_lib/detectors/test_cut_inclusion_sweep.py::TestRateIsPriorFree`). The rule
+`tests_lib/eval/test_cut_inclusion_sweep.py::TestRateIsPriorFree`). The rule
 that genuinely retains the priors is `cross_tilt`, added as the literal reading
 of candidate 2 so the issue's text gets priced too. Candidate 4 ("keep `mid`") is
 the `mid` arm, the honest null.
@@ -388,7 +388,7 @@ folds a live `calibrate_count=K` run trains are the first K of these. Every K is
 therefore paired within the step, the arm at `K == CALIB_CALIBRATE_COUNT`
 reproduces the step's own conformal cut, and the extra folds cannot perturb the
 live trajectory (all three asserted in
-`tests_lib/detectors/test_fold_count_variant_rows.py`).
+`tests_lib/eval/test_fold_count_variant_rows.py`).
 
 Price is set by the grid's **maximum**, not its length: `Kmax - calibrate_count`
 extra fold fits per step. Size it from one real cell before submitting.
@@ -443,7 +443,7 @@ each positive's ground-truth box (the owner's ruling on #3321, #4159);
 `skyline_test_xfit` stays whole-image only. The harness warns and skips an arm a
 column cannot run rather than improvising one.
 See [`docs/EVAL.md`](../../../docs/EVAL.md) for the full read, and
-`tests_lib/detectors/test_skyline_arm.py` for the telescope, vote-independence
+`tests_lib/eval/test_skyline_arm.py` for the telescope, vote-independence
 and cross-fitting checks.
 
 ## Voted-media exclusion floor (issue #3312)

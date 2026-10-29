@@ -37,7 +37,7 @@ wheels are built against a pinned torch and would constrain ours), so the
 fbank is ported here from torchaudio's own pure-PyTorch implementation
 (BSD-2), specialised to the settings BEATs uses.  The port was checked against
 torchaudio's output and agrees bit-for-bit at every signal length tried;
-``tests_lib/detectors/test_beats_embedder.py`` pins values captured from that
+``tests_lib/media/test_beats_embedder.py`` pins values captured from that
 verified run so later refactors cannot drift away from it.
 """
 

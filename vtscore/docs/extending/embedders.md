@@ -311,7 +311,7 @@ the per-file embedder scan handles registration.
 
 ## Testing pattern
 
-Library tests for embedders live in `tests_lib/detectors/`. The
+Library tests for embedders live in `tests_lib/media/`, beside the embedders in `vtscore/media/`. The
 autouse `_stub_embedding_models` fixture in
 [`tests_lib/conftest.py`](../../../tests_lib/conftest.py) stubs every
 built-in embedder so test runs don't download model weights;
@@ -319,7 +319,7 @@ built-in embedder so test runs don't download model weights;
 want to exercise its load path.
 
 ```python
-# tests_lib/detectors/test_minilm_embedder.py
+# tests_lib/media/test_minilm_embedder.py
 import numpy as np
 import pytest
 
@@ -358,7 +358,7 @@ class TestMiniLMEmbed:
         assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4
 ```
 
-See [`tests_lib/detectors/test_new_embedders.py`](../../../tests_lib/detectors/test_new_embedders.py)
+See [`tests_lib/media/test_new_embedders.py`](../../../tests_lib/media/test_new_embedders.py)
 for a longer reference covering registration, capability flags, and
 basic embed behaviour. Network-dependent or GPU-only paths belong
 under `tests_lib/gpu/` (excluded by default; run with `-m gpu`).

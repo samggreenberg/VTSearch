@@ -352,7 +352,7 @@ then schedules a paced push to S3; loading the detector calls
 
 ## Testing pattern
 
-Labelset-source tests live in `tests_lib/io/` and benefit from the
+Labelset-source tests live in `tests_lib/labels/` and benefit from the
 autouse fixtures that reset detector contexts. Use
 [`vtscore.labels.sync.flush_pending_label_syncs`](../../labels/sync.py)
 in tests that assert the scheduled push actually wrote, or
@@ -360,7 +360,7 @@ in tests that assert the scheduled push actually wrote, or
 to drop pending pushes between tests.
 
 ```python
-# tests_lib/io/test_s3_labelset_source.py
+# tests_lib/labels/test_s3_labelset_source.py
 from unittest.mock import patch
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet

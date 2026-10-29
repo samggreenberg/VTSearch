@@ -66,7 +66,7 @@ the other direction.
   the old `fold_seconds`, which is left untouched so archived runs keep meaning.
   `final_score_seconds` joins them for the final model's own haystack pass -
   K-independent, and so a denominator term rather than a numerator one.
-- `tests_lib/detectors/test_fold_count_variant_rows.py::TestFoldCountCostColumns`
+- `tests_lib/eval/test_fold_count_variant_rows.py::TestFoldCountCostColumns`
   pins the arithmetic (`cal_seconds` is the sum of its parts), that the scoring
   term is billed per fold, and that a run with no anchored fit reports NaN
   rather than silently claiming the anchored rule is free.

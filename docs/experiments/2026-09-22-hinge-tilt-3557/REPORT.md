@@ -33,7 +33,7 @@ The proof is short. For k < 0 <= k', `H(k) >= M(k) >= M(0) >= M(k') = H(k')`,
 and a max of non-increasing functions is non-increasing. It is written into
 `FoldAnchoredCut._quantile_at`. It is checked by a property test over 40 random
 two-fold estimators on a 0.05-step grid that approaches the seam from both
-sides (`tests_lib/detectors/test_hinge_cut_rule.py`). Every other rule on the
+sides (`tests_lib/training/test_hinge_cut_rule.py`). Every other rule on the
 grid (`mid`, `mid_tilt`, `rate`, `cross_tilt`) also measured 0 violations.
 
 **The literal rule really breaks, and not where the unit test predicted.** The

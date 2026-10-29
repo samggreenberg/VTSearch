@@ -366,15 +366,15 @@ so it can't block other plugins.
 
 ## Testing pattern
 
-Library-tier importer tests live in `tests_lib/io/` or
-`tests_lib/datasets/` and don't touch Flask. Use the autouse fixtures
+Library-tier importer tests live in `tests_lib/datasets/`, beside the
+importers in `vtscore/datasets/importers/`, and don't touch Flask. Use the autouse fixtures
 in [`tests_lib/conftest.py`](../../../tests_lib/conftest.py) (which
 reset contexts and stub all embedders) and assert the importer is
 discoverable, validates its fields correctly, and populates `medias`
 with the right shape.
 
 ```python
-# tests_lib/io/test_my_importer.py
+# tests_lib/datasets/test_my_importer.py
 from vtscore.datasets.importers import get_importer, list_importers
 from my_pkg.importer import MyImporter
 

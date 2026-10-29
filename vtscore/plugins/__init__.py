@@ -479,7 +479,7 @@ def inactive_field_keys(fields: Iterable[PluginField], values: Mapping[str, Any]
 #: Order is **not** load-bearing: :func:`_default_plugin_name` strips the
 #: *longest* matching suffix, and no entry here is a proper suffix of
 #: another except via the four generic tail entries, which are shorter than
-#: everything they appear in.  ``tests_lib/core/test_plugin_name_suffix_contract.py``
+#: everything they appear in.  ``tests_lib/plugins/test_plugin_name_suffix_contract.py``
 #: proves both halves of that.
 #:
 #: ``LabelsetExporter`` earns its place beside ``ResultsExporter``: it is the

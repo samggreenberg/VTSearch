@@ -24,7 +24,7 @@ built for an interactive session (one detector, advancing one vote at a time).
 A simulation runs thousands of independent trajectories and already holds every
 per-step model it needs, so it feeds those inputs in directly.  The rules —
 every threshold and constant below — are copied verbatim, and
-``tests_lib/detectors/test_autopilot_flow.py`` pins them against the sources.
+``tests_lib/eval/test_autopilot_flow.py`` pins them against the sources.
 
 Because this is a copy, it can go stale silently: change a phase trigger in the
 app and the simulated user keeps taking the old route, so every study run after

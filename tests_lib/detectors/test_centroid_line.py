@@ -281,7 +281,7 @@ class TestInTheHarness:
     VARIANTS = ["midpoint@1", "count@1", "count@0.25"]
 
     def _run(self, **kw):
-        from tests_lib.detectors.test_example_opening import _medias
+        from tests_lib.eval.test_example_opening import _medias
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
         picks: list[dict] = []

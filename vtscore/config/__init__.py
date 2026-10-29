@@ -248,7 +248,7 @@ __all__ = [
 ]
 
 #: Every submodule of this package, in dependency order (a module only reads
-#: from ones earlier in the tuple).  ``tests_lib/core/test_config_package.py``
+#: from ones earlier in the tuple).  ``tests_lib/config/test_config_package.py``
 #: pins it against the files on disk, so a seventh module cannot be added
 #: without landing here.
 _RELOAD_ORDER = ("paths", "runtime", "models", "device", "processor_backend", "core_config")
