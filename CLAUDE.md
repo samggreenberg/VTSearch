@@ -112,14 +112,16 @@ Before sending, scan the turn for `#` followed by digits. **Every hit outside a 
 
 ## Status emojis in messages to the user
 
-Six emojis mark what the user scans a message for. Each goes **in front of** the existing words, never in place of them, and they follow the link rule's direction test: messages to the user get them; nothing bound for GitHub or git does (comments, PR titles and bodies, commit messages, branch names), and neither do code spans, code fences or a cloud session's title.
+Eight emojis mark what the user scans a message for. Each goes **in front of** the existing words, never in place of them, and they follow the link rule's direction test: messages to the user get them; nothing bound for GitHub or git does (comments, PR titles and bodies, commit messages, branch names), and neither do code spans, code fences or a cloud session's title.
 
 | Emoji | Goes in front of | Only when |
 |---|---|---|
 | 🎫 | an issue link | this session already knows it is an issue |
 | 🔧 | a PR link | this session already knows it is a PR |
 | ⏱️ | an ETA | it estimates when something still running will finish |
+| ⚪ | the note that a test run started | you just started a `./run-tests.sh` run |
 | 🟢 | a test verdict | the last `./run-tests.sh` on this tree printed a `RUN PASSED` banner other than `RUN PASSED, EXCEPT …` |
+| 🟡 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN PASSED, EXCEPT …` |
 | 🔴 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN FAILED` or `TESTS BLOCKED` |
 | 🔀 | the news that a PR merged into `dev` | GitHub reports it merged |
 
@@ -128,10 +130,10 @@ Six emojis mark what the user scans a message for. Each goes **in front of** the
 ```
 
 - **🎫 and 🔧: mark only what you already know.** The type is known when this session opened the item, read it, or ran a lookup that returned it. Otherwise leave the emoji off; never make a GitHub call just to pick one. An unmarked link only means its type wasn't checked. The emoji sits outside the link, so the link text stays `#N`.
-- **🟢 and 🔴 come from the verdict banner, not a judgement call.** 🟢 means a complete gate passed: the full run, or a `slides`, `docs`, markdown-only or frontend-only run, each complete for its scope. A group run's `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN`, or a single pytest or Vitest file, gets neither. An edit after the run voids its emoji until you run again.
+- **⚪ opens a run; 🟢, 🟡 or 🔴 closes it, read off the verdict banner rather than judged.** 🟢 means a complete gate passed: the full run, or a `slides`, `docs`, markdown-only or frontend-only run, each complete for its scope. 🟡 is a group run's `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN`: everything that ran passed, but it is not the full gate. A bare pytest or Vitest invocation is not a `./run-tests.sh` run and gets none of the four. An edit after the run voids its emoji until you run again.
 - **🔀 means merged, not opened.** An open PR is 🔧; 🔀 goes on only once GitHub shows the merge, whether you merged it or found it merged.
 - **⏱️ is for the future only.** "The run took 8 min" gets none.
-- **Reserved.** Never use these six for anything else (no decorative 🟢 in a table, no 🔧 meaning "fix"), or scanning for them stops working.
+- **Reserved.** Never use these eight for anything else (no decorative 🟢 in a table, no 🔧 meaning "fix"), or scanning for them stops working.
 
 ## Branch Policy (CRITICAL)
 
