@@ -297,7 +297,7 @@ export interface AutoDetectResultsData {
 
 /**
  * The `autofind` block on a background AutoFind's `loading-tasks` row (see
- * `vtsearch/autofind.py`). The identity half is there from the
+ * `vtsearch/runtime/autofind.py`). The identity half is there from the
  * first frame; the counts arrive with the terminal (`idle`) frame of a run
  * that finished.
  */

@@ -25,7 +25,9 @@ from typing import Any, Callable
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import admin_overrides, import_hooks, settings
+from vtsearch import settings
+from vtsearch.settings import admin_overrides
+from vtsearch.runtime import import_hooks
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
@@ -83,7 +85,7 @@ def _with_effective(data: dict) -> dict:
     whether a restriction came from a CLI flag, an env var, or the settings
     file. The set is not spelled out: each knob declares its own
     ``effective_key`` (and any JSON coercion) in
-    :mod:`vtsearch.admin_overrides`, and this loops the registry, so a new
+    :mod:`vtsearch.settings.admin_overrides`, and this loops the registry, so a new
     override is surfaced without touching this route.
 
     Shared by the GET and PUT responses. Stale dict fields are coerced to
@@ -93,7 +95,7 @@ def _with_effective(data: dict) -> dict:
     _coerce_dict_fields(data)
     for override in admin_overrides.OVERRIDES.values():
         data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
-    # Not an admin override (see :mod:`vtsearch.import_hooks`), so set here:
+    # Not an admin override (see :mod:`vtsearch.runtime.import_hooks`), so set here:
     # only whether hooks exist, never what they are.
     data["import_hooks_configured"] = import_hooks.configured()
     return data

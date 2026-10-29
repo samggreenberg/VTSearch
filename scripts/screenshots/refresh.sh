@@ -77,7 +77,7 @@ refuse_stale_app() {
         port="${BASH_REMATCH[2]}"
         listeners=$(cd "$REPO_ROOT" && python -c '
 import sys
-from vtsearch.port_preflight import _describe_pid, _find_listener_pids
+from vtsearch.cli.port_preflight import _describe_pid, _find_listener_pids
 print(", ".join(_describe_pid(p) for p in _find_listener_pids(int(sys.argv[1]))))' "$port" 2>/dev/null) || true
     fi
     {

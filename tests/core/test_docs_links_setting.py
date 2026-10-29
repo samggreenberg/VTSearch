@@ -3,7 +3,7 @@
 A deployment that adds its own plugins or extensions lists the docs for them
 in the Help modal, beside the built-in user guide: an ordered list of
 ``{"label", "url"}`` objects the operator writes into the server settings
-file. It lives on :class:`~vtsearch.settings_models.ServerSettings`, is
+file. It lives on :class:`~vtsearch.settings.models.ServerSettings`, is
 read-only over the API, and is normalized so only usable links (a label, and
 an ``http(s)`` URL or a root-relative path) reach the frontend.
 """
@@ -15,7 +15,7 @@ import json
 import app as app_module
 import vtsearch.settings as settings_mod
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
-from vtsearch.settings_models import ServerSettings, UserSettings, partition_docs_links
+from vtsearch.settings.models import ServerSettings, UserSettings, partition_docs_links
 
 ACME = {"label": "Acme plugin guide", "url": "https://acme.example/docs"}
 WIKI = {"label": "Lab wiki", "url": "/wiki/vtsearch"}

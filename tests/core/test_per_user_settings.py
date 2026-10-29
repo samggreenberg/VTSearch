@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 
 from vtsearch import settings as settings_mod
-from vtsearch import settings_store as settings_store_mod
+from vtsearch.settings import store as settings_store_mod
 from vtsearch.auth import set_thread_user
 
 

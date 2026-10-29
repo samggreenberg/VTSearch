@@ -198,8 +198,8 @@ def reset_state():
     :func:`tests_shared.state_reset.reset_shared_state`, which the library
     suite calls too.  Only the app-tier extras are spelled out here.
     """
-    from vtsearch.autofind import clear_autofind_runs
-    from vtsearch.import_hooks import clear_import_hooks
+    from vtsearch.runtime.autofind import clear_autofind_runs
+    from vtsearch.runtime.import_hooks import clear_import_hooks
 
     clear_autofind_runs()
     clear_import_hooks()

@@ -3,7 +3,7 @@
 A single setting is currently declared in several parallel places:
 
 * a Pydantic field on :class:`ServerSettings` / :class:`UserSettings`
-  (``vtsearch.settings_models``) - the source of truth for type / default
+  (``vtsearch.settings.models``) - the source of truth for type / default
   / range / enum, and the source the ``get_<key>`` / ``set_<key>``
   accessors in :mod:`vtsearch.settings` are generated from;
 * a marshmallow field on ``SettingsUpdateSchema`` (loadable) and
@@ -33,7 +33,7 @@ from __future__ import annotations
 from vtsearch import settings
 from vtsearch.routes.settings import api
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
-from vtsearch.settings_models import ServerSettings, UserSettings
+from vtsearch.settings.models import ServerSettings, UserSettings
 
 
 def _loadable_update_keys() -> set[str]:
@@ -184,7 +184,7 @@ class TestStubsMirrorTheModels:
     def test_every_generated_accessor_has_a_stub(self):
         missing = _pydantic_fields() - _stubbed_accessor_keys() - self.HAND_WRITTEN
         assert not missing, (
-            f"Pydantic fields with no TYPE_CHECKING stub in vtsearch/settings.py: {sorted(missing)}. "
+            f"Pydantic fields with no TYPE_CHECKING stub in vtsearch/settings/__init__.py: {sorted(missing)}. "
             "Add `def get_<key>() -> T: ...` / `def set_<key>(value: T) -> None: ...` to that block; "
             "do not silence the call sites with `# type: ignore[name-defined]`."
         )

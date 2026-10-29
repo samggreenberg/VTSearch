@@ -98,7 +98,7 @@ def get_torch_device():
 
 # Concurrency defaults are clamped into this range, matching the
 # ``_clamp(1, 16)`` on the settings fields they feed (see
-# ``vtsearch/settings_models.py``). Bounding here means neither the env
+# ``vtsearch/settings/models.py``). Bounding here means neither the env
 # override nor the hardware probe can hand the settings layer a value it would
 # only reject.
 _CONCURRENCY_MIN = 1
@@ -277,7 +277,7 @@ def _install_transformers_logging_bridge() -> None:
     :func:`initialize_models` so tests have a *library-tier* seam to patch.
     Patching it saves the ~0.7s ``transformers`` import in suites that stub
     every embedder; without the seam the only patchable name was the app-tier
-    ``vtsearch.logging_config`` symbol, which forced ``tests_lib/`` (whose whole
+    ``vtsearch.runtime.logging_config`` symbol, which forced ``tests_lib/`` (whose whole
     contract is "no ``vtsearch`` imports") to reach across the tier boundary.
 
     The ``vtsearch`` import is optional by design - see the ``embedding/loader.py``
@@ -285,7 +285,7 @@ def _install_transformers_logging_bridge() -> None:
     library keeps working when the app package is absent.
     """
     try:
-        from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
+        from vtsearch.runtime.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
 
         install_transformers_logging_bridge()
     except Exception:

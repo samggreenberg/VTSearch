@@ -133,11 +133,11 @@ filesystem-hygiene check, not an authentication one.
 
 1. `set_login_provider(provider)` is called once at startup. The built-in
    providers are selected by `python app.py --login trivial|api_key`
-   (`_run_server` in `vtsearch/cli_main.py`); a custom provider must be
+   (`_run_server` in `vtsearch/cli/main.py`); a custom provider must be
    activated the same way — add a branch there, or call
    `set_login_provider()` from your own startup code before the server
    starts serving.
-2. The `before_request` middleware (`vtsearch/hooks.py`) calls
+2. The `before_request` middleware (`vtsearch/runtime/request_hooks.py`) calls
    `provider.get_user(request)` and stores the result in `g.user`; when the
    provider's `enforce_auth()` is true it also 401s unauthenticated `/api/*`
    requests (only `/api/auth/status`, `/api/auth/login` and
@@ -234,7 +234,7 @@ installs none of that variable's hooks. The startup log lists the hooks
 in force. There is deliberately no settings-file key for this: a
 settings file that could name code to run would let anyone who can
 import settings run code on the server. The wiring is
-`vtsearch/import_hooks.py`; the pipeline side is the `on_finished`
+`vtsearch/runtime/import_hooks.py`; the pipeline side is the `on_finished`
 callback in `vtscore/datasets/load_pipeline.py`.
 
 ---
@@ -464,4 +464,4 @@ See [Authentication Providers](#authentication-providers) above.
 - [ ] Override `login_required()` if the frontend should show a login screen
 - [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
 - [ ] Screen any client-supplied username with `is_safe_username()`
-- [ ] Activate it with `set_login_provider(MyProvider())` at startup (a new `--login` branch in `_run_server`, `vtsearch/cli_main.py`, or your own startup code)
+- [ ] Activate it with `set_login_provider(MyProvider())` at startup (a new `--login` branch in `_run_server`, `vtsearch/cli/main.py`, or your own startup code)

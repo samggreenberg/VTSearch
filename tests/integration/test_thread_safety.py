@@ -28,7 +28,7 @@ from vtsearch.state import (
 import vtsearch.state as _state
 import vtscore.state.core as _core
 import vtsearch.settings as _settings_mod
-import vtsearch.settings_store as _settings_store_mod
+import vtsearch.settings.store as _settings_store_mod
 import vtscore.detectors.labeling_progress as _progress_mod
 
 

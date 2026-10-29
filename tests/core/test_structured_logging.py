@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from vtsearch.logging_config import (
+from vtsearch.runtime.logging_config import (
     ContextFilter,
     JsonFormatter,
     TextFormatter,
@@ -553,7 +553,7 @@ class TestSlowRequestLogging:
     def test_slow_request_logged_at_warning_with_request_id(self, client, caplog, monkeypatch):
         """Every request is "slow" at a 0ms threshold, so one must be logged."""
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
-        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.WARNING, logger="vtsearch.runtime.request_hooks"):
             resp = client.get("/api/auth/status")
         rid = resp.headers["X-Request-Id"]
 
@@ -569,13 +569,13 @@ class TestSlowRequestLogging:
     def test_fast_request_not_logged(self, client, caplog, monkeypatch):
         """A high threshold must stay silent, or the log is noise."""
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
-        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.WARNING, logger="vtsearch.runtime.request_hooks"):
             client.get("/api/auth/status")
         assert not [r for r in caplog.records if "slow request" in r.getMessage()]
 
     def test_unparseable_threshold_falls_back_to_default(self, monkeypatch):
         """Bad config must not fault every request."""
-        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, slow_request_threshold_ms
+        from vtsearch.runtime.request_hooks import _DEFAULT_SLOW_REQUEST_MS, slow_request_threshold_ms
 
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "not-a-number")
         assert slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
@@ -586,7 +586,7 @@ class TestSlowRequestLogging:
         Registering it later would silently under-report every request."""
         import flask
 
-        from vtsearch.hooks import _log_slow_request, register_hooks
+        from vtsearch.runtime.request_hooks import _log_slow_request, register_hooks
 
         app = flask.Flask(__name__)
         register_hooks(app)
@@ -601,7 +601,7 @@ class TestSlowRequestLogging:
         collection that froze every thread.
         """
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
-        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.WARNING, logger="vtsearch.runtime.request_hooks"):
             client.get("/api/auth/status")
         msg = [r for r in caplog.records if "slow request" in r.getMessage()][-1].getMessage()
         assert "cpu=" in msg and "gc=" in msg
@@ -617,7 +617,7 @@ class TestRequestTrace:
 
     def test_every_request_traced_at_info(self, client, caplog, monkeypatch):
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
-        with caplog.at_level(logging.INFO, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.INFO, logger="vtsearch.runtime.request_hooks"):
             resp = client.get("/api/auth/status")
         traces = [r for r in caplog.records if "request trace" in r.getMessage()]
         assert traces, "no trace line at INFO"
@@ -630,7 +630,7 @@ class TestRequestTrace:
     def test_silent_at_warning(self, client, caplog, monkeypatch):
         """A stock deployment logs at WARNING and must not pay for the trace."""
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
-        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.WARNING, logger="vtsearch.runtime.request_hooks"):
             client.get("/api/auth/status")
         assert not [r for r in caplog.records if "request trace" in r.getMessage()]
 
@@ -638,7 +638,7 @@ class TestRequestTrace:
         """The two prefixes are exclusive, so a reader adding up a trace does
         not double-count the requests that also crossed the slow bar."""
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
-        with caplog.at_level(logging.INFO, logger="vtsearch.hooks"):
+        with caplog.at_level(logging.INFO, logger="vtsearch.runtime.request_hooks"):
             client.get("/api/auth/status")
         msgs = [r.getMessage() for r in caplog.records]
         assert [m for m in msgs if "slow request" in m]
@@ -669,7 +669,7 @@ class TestLogFile:
         root.setLevel(prior_level)
 
     def test_records_land_in_the_file_and_on_the_stream(self, monkeypatch, tmp_path):
-        from vtsearch.logging_config import setup_logging
+        from vtsearch.runtime.logging_config import setup_logging
 
         path = tmp_path / "logs" / "app.log"  # parent does not exist yet
         monkeypatch.setenv("VTSEARCH_LOG_FILE", str(path))
@@ -683,7 +683,7 @@ class TestLogFile:
         assert "heartbeat late" in stream.getvalue()
 
     def test_unwritable_path_keeps_the_stream(self, monkeypatch, tmp_path, capsys):
-        from vtsearch.logging_config import setup_logging
+        from vtsearch.runtime.logging_config import setup_logging
 
         blocker = tmp_path / "not-a-dir"
         blocker.write_text("x")

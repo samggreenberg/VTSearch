@@ -30,7 +30,7 @@ from typing import Any
 import pytest
 
 from vtsearch import settings
-from vtsearch.settings_models import ServerSettings
+from vtsearch.settings.models import ServerSettings
 
 
 def _server_key_values(tmp_path: Path) -> dict[str, Any]:

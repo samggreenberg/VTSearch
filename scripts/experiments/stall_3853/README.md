@@ -28,7 +28,7 @@ On a stall the log carries, at the default WARNING level:
   thread on top means the process was not scheduled (memory pressure,
   swapping, a paged-out cgroup): read `majflt` and the cgroup limit hits.
 - `slow request: … in NNNms cpu=NNms gc=NNms` for each frozen request
-  (`vtsearch/hooks.py`).  Read `cpu` first: `cpu ~ wall` is work, `cpu << wall`
+  (`vtsearch/runtime/request_hooks.py`).  Read `cpu` first: `cpu ~ wall` is work, `cpu << wall`
   is blocking or descheduling, `gc ~ wall` is a collection that froze
   everything.
 - `slow phase: learned_sort …`, `slow phase: train_and_score …`,

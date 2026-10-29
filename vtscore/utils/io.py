@@ -164,7 +164,7 @@ def atomic_write_text(path: Path | str, text: str) -> None:
     # Per-writer unique tmp suffix so two threads (or two processes)
     # racing to overwrite the same destination can't truncate each
     # other's in-flight tmp file or chase one that was already renamed
-    # away.  Mirrors the pattern in ``vtsearch.settings_store._atomic_write``.
+    # away.  Mirrors the pattern in ``vtsearch.settings.store._atomic_write``.
     tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     try:
         with open(tmp, "w", encoding="utf-8", newline="") as f:
@@ -339,7 +339,7 @@ def commit_write_stream(f: IO[str]) -> int:
 # Cross-process file locking
 # ---------------------------------------------------------------------------
 #
-# Library-tier twin of ``vtsearch.settings_store.file_lock``.  It lives here
+# Library-tier twin of ``vtsearch.settings.store.file_lock``.  It lives here
 # (not in the app tier) so library-tier stores - the dataset/detector
 # registries - can serialise their read-modify-write cycles across processes
 # without importing ``vtsearch`` (which would break the library-clean layering).

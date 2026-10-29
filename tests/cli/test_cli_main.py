@@ -1,4 +1,4 @@
-"""In-process coverage for ``vtsearch.cli_main`` — the ``python app.py``
+"""In-process coverage for ``vtsearch.cli.main`` — the ``python app.py``
 argparse build, two-pass parsing, ``_apply_*`` overrides, and the
 list-plugins / pipeline / autodetect / server dispatch.
 
@@ -18,8 +18,8 @@ import sys
 
 import pytest
 
-from vtsearch import admin_overrides
-from vtsearch import cli_main
+from vtsearch.settings import admin_overrides
+from vtsearch.cli import main as cli_main
 from vtsearch import settings as settings_mod
 
 

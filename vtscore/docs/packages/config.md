@@ -225,7 +225,7 @@ when one is in scope). Tests rely on this: they override
 
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.torch_threads`). |
+| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.runtime.torch_threads`). |
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB), for a host app to enforce. `0` = unlimited. |

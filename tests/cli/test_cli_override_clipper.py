@@ -18,7 +18,7 @@ import pytest
 from tests.helpers import make_dataset_file
 from vtscore.detectors.input_spec import resolve_clipper_spec
 from vtscore.media.audio.audio_generator import generate_wav
-from vtsearch import cli_main
+from vtsearch.cli import main as cli_main
 from vtsearch.settings import get_detectors_dir
 from vtsearch.state import medias
 

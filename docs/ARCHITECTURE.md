@@ -222,7 +222,7 @@ exception, not even for request-scoped context resolution.  Library code that
 needs to run against a particular dataset or detector takes an explicit context
 and scopes it with `override_detector_context()` /
 `thread_dataset_context()` (`vtscore/state/core.py`); the Flask `g` lookup lives
-one tier up, in the resolvers `vtsearch/shim/` registers and the `vtsearch/hooks.py`
+one tier up, in the resolvers `vtsearch/shim/` registers and the `vtsearch/runtime/request_hooks.py`
 handler that fills `g` (the proxies in `vtsearch/state_proxies.py` are themselves
 Flask-free).
 `scripts/check-vtscore-clean.py` (run as `./run-tests.sh vtscore-clean`)
@@ -324,7 +324,7 @@ modules on the right.
   `SyncSource[LoadT, SaveT]` in `vtscore/sync/`, which captures the
   shared `load()`/`save()` shape; each concrete source plugin is still
   pure I/O.  The *engine* driving settings sources is not — it lives in
-  `vtsearch/settings_store.py` and is documented under
+  `vtsearch/settings/store.py` and is documented under
   [The settings sync engine](#the-settings-sync-engine).
   The labelset-source engine is `vtscore/labels/sync.py`: every write of a
   detector file (`vtscore/detectors/store.py`) schedules a paced push of that
@@ -358,7 +358,7 @@ modules on the right.
 | `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
 | `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |
 | `vtscore/eval/` | No | No | **Yes**: needs media + datasets |
-| `vtsearch/settings.py` | No | Yes (per-user caches, current user) | Partially: JSON file I/O, but app-tier (imports `vtsearch.*`) |
+| `vtsearch/settings/__init__.py` | No | Yes (per-user caches, current user) | Partially: JSON file I/O, but app-tier (imports `vtsearch.*`) |
 | `vtscore/media/base.py` | No | No | **Yes**: abstract only |
 | `vtscore/media/{audio,image,text,video,document,face}` | No | No | **Yes**: torch + HF models |
 | `vtscore/converters/` | No | No | **Yes**: pure media conversion |
@@ -633,8 +633,8 @@ own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).
 
-Persistent settings live in `vtsearch/settings.py`, split across two tiers.
-The two Pydantic models in `vtsearch/settings_models.py` are the authoritative
+Persistent settings live in `vtsearch/settings/__init__.py`, split across two tiers.
+The two Pydantic models in `vtsearch/settings/models.py` are the authoritative
 field lists — this document names the tiers and the shape, not every key.
 
 - **Server tier** (`ServerSettings`, shared, `data/settings.json`): the
@@ -667,7 +667,7 @@ server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
 `support_email`, `semantic_only` and `autopilot_only`, plus the per-user
 `solo_embedder_per_media_type`, at startup, for every user and for the life
 of the process, without the settings file. Each is
-declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI
+declared once in `vtsearch/settings/admin_overrides.py` — a descriptor carrying its CLI
 flag, its env-var equivalent (so the gunicorn images, which never parse `argv`,
 can set it too), the validator both entry paths share, how it combines with the
 persisted value, and the key `/api/settings` publishes the result under. The
@@ -681,7 +681,7 @@ What `achievement_state` holds is in [achievements.md](achievements.md#state).
 Four AutoFind keys (`autofind_detectors`, `autofind_exporter`,
 `autofind_exporter_field_values`, `autofind_cli_delete_dataset`) read through
 to the server file for the built-in `default` user (CLI / single-user); see
-`_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings.py`.
+`_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings/__init__.py`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
 
@@ -742,7 +742,7 @@ objects** (`_ProxyDict` / `_ProxyList`) that call
 
 1. **A request-scoped context.** The app registers Flask resolvers
    (`vtsearch/shim/`, `register_flask_context_resolvers()`) that read what the
-   `before_request` handler (`vtsearch/hooks.py`) stashed on Flask's `g`: the
+   `before_request` handler (`vtsearch/runtime/request_hooks.py`) stashed on Flask's `g`: the
    contexts named by the `X-Dataset-Id` / `X-Detector-Id` headers — or the
    `dataset_id` / `detector_id` query parameters for browser-native requests
    (`<img>` / `<audio>` / `<video>` sources) that bypass Angular's
@@ -973,7 +973,7 @@ modifying route code.
 
 ### Per-request user context
 
-The `before_request` middleware (`vtsearch/hooks.py`) populates `g.user` on
+The `before_request` middleware (`vtsearch/runtime/request_hooks.py`) populates `g.user` on
 every request via the active provider's `get_user()`, then — when the
 provider's `enforce_auth()` is true — rejects unauthenticated `/api/*`
 requests with a JSON 401 (`error_code: "auth_required"`) before any route
@@ -1027,7 +1027,7 @@ reads through to, above — see [Settings files](SETTINGS.md)).
 
 The engine that drives a settings source (see
 [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source))
-lives in `UserSettingsStore` (`vtsearch/settings_store.py`). This section is
+lives in `UserSettingsStore` (`vtsearch/settings/store.py`). This section is
 its internals: how a user is bound to a source, when a read touches the
 source, how local edits and upstream values are reconciled, and the lock
 order. The plugin guide carries the short form a source author must honor;
@@ -1051,7 +1051,7 @@ route) reads it, so they cannot disagree about which source a user is on:
 
 Two keys are never exported to a source: `settings_source` and
 `default_settings_source` (`_EXCLUDE_FROM_SOURCE_EXPORT` in
-`vtsearch/settings.py`). Pushing the binding through the binding would
+`vtsearch/settings/__init__.py`). Pushing the binding through the binding would
 let a source rewrite which source is active.
 
 ### The freshness probe and its cost

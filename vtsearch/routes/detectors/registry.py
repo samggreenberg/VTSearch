@@ -378,7 +378,7 @@ def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str
 
         from vtscore.datasets.ingest_task import start_ingest_task
         from vtsearch.state import cached_media_lookups, find_missing_entries, medias
-        from vtsearch.threading import spawn
+        from vtsearch.runtime.threading import spawn
 
         origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
         missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
@@ -752,7 +752,7 @@ def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
     """
     from vtscore.detectors.embedder_sync import maybe_start_label_reembed
     from vtsearch.state import get_active_detector_context
-    from vtsearch.threading import spawn
+    from vtsearch.runtime.threading import spawn
 
     det_ctx_existing = get_active_detector_context()
     if det_ctx_existing.detector_id == detector_id:
@@ -814,7 +814,7 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
                 task_id=task_id,
             )
 
-        from vtsearch.threading import spawn
+        from vtsearch.runtime.threading import spawn
 
         spawn(load_task, name=f"det-load-{detector_id[:8]}")
     except Exception:
@@ -1398,7 +1398,7 @@ def browse_detector_positives(detector_id: str):
         get_loaded_detector_ids,
     )
     from vtscore.state.core import get_detector_context, unregister_context
-    from vtsearch.threading import spawn
+    from vtsearch.runtime.threading import spawn
 
     entry = get_detector(detector_id)
     if entry is None:

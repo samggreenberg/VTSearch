@@ -76,7 +76,7 @@ def _force_cold_sync(user_path, username: str = "default") -> None:
     adopt, so the load always fires.
     """
     from vtsearch import settings
-    from vtsearch import settings_store as settings_store_mod
+    from vtsearch.settings import store as settings_store_mod
 
     settings._sync_state.pop(username, None)
     settings_store_mod._sync_marker_path(user_path).unlink(missing_ok=True)
@@ -1106,7 +1106,7 @@ class TestSyncFromSourceFreshness:
         import os
 
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
         from vtsearch.settings_io.sources import get_settings_source
 
         source_file = tmp_path / "remote.json"
@@ -1256,7 +1256,7 @@ class TestDirtyKeyWriteOrdering:
         be able to observe "value written, key not yet dirty".
         """
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         seen: list[set[str]] = []
         real_file_lock = settings_store_mod.file_lock
@@ -1411,7 +1411,7 @@ class TestSyncDedupMarker:
 
     def test_fresh_worker_adopts_marker_and_skips_load(self, tmp_path, isolated_settings, monkeypatch):
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
         from vtsearch.settings_io.sources import get_settings_source
 
         source_file = tmp_path / "remote.json"
@@ -1481,7 +1481,7 @@ class TestSyncDedupMarker:
 
     def test_clearing_source_removes_marker(self, tmp_path, isolated_settings):
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         source_file = tmp_path / "remote.json"
         self._configure_and_pull(settings, tmp_path, source_file, 0.66)

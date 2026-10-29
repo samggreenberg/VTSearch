@@ -302,7 +302,7 @@ class TestSettingsAPI:
 
     def test_import_hooks_configured_is_published_read_only(self, client):
         """Whether the admin named hooks, never which (#5170); a PUT cannot set it."""
-        from vtsearch import import_hooks
+        from vtsearch.runtime import import_hooks
 
         assert client.get("/api/settings").get_json()["import_hooks_configured"] is False
         res = client.put("/api/settings", json={"import_hooks_configured": True})

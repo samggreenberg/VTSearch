@@ -407,7 +407,7 @@ class TestImportLabelsIntoRunsThatDetector:
         settings_path = _settings_file_with_detectors(tmp_path, ["nonexistent-detector"])
         out_path = tmp_path / "hits.json"
 
-        from vtsearch import cli_main
+        from vtsearch.cli import main as cli_main
 
         monkeypatch.setattr(
             "sys.argv",
@@ -655,7 +655,7 @@ class TestCreateDetectorEndToEnd:
     def test_flag_run_creates_and_scores_new_detector(self, client, tmp_path, monkeypatch):
         """The whole #4235 hope: labels + a dataset in, hits out, with the
         detector made along the way and never touched in the UI."""
-        from vtsearch import cli_main
+        from vtsearch.cli import main as cli_main
         from vtscore.datasets.loader import export_dataset_to_file
         from vtscore.detectors.registry import find_by_name
         from vtscore.detectors.store import _detector_path, _read_detector

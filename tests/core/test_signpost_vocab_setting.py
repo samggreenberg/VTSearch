@@ -3,7 +3,7 @@
 The custom signpost tag vocabulary is a deployment-level choice an operator
 makes for a whole instance (a domain taxonomy every user of the server should
 see on the map), not a per-user preference. It therefore lives on
-:class:`~vtsearch.settings_models.ServerSettings`, is read-only over the API,
+:class:`~vtsearch.settings.models.ServerSettings`, is read-only over the API,
 and is set by editing the server settings file.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import vtsearch.settings as settings_mod
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
-from vtsearch.settings_models import SIGNPOST_VOCAB_MAX_TERMS, ServerSettings, UserSettings
+from vtsearch.settings.models import SIGNPOST_VOCAB_MAX_TERMS, ServerSettings, UserSettings
 
 
 class TestTier:

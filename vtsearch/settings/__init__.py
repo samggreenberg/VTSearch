@@ -28,8 +28,8 @@ from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, cast
 from pydantic import TypeAdapter, ValidationError
 
 from vtscore.config import DATA_DIR
-from vtsearch import admin_overrides as _admin
-from vtsearch.settings_models import (
+from vtsearch.settings import admin_overrides as _admin
+from vtsearch.settings.models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_PANEL_PX,
@@ -37,7 +37,7 @@ from vtsearch.settings_models import (
     UserSettings,
     partition_docs_links,
 )
-from vtsearch.settings_store import AppliedSettings, UserSettingsStore, UserSyncState as _UserSyncState
+from vtsearch.settings.store import AppliedSettings, UserSettingsStore, UserSyncState as _UserSyncState
 
 if TYPE_CHECKING:
     # The accessors below are generated at import time by the
@@ -218,7 +218,7 @@ SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 #: The process-level **admin overrides** (the solo mediaType lock, the
 #: solo-embedder locks, the plugin hide list, the dataset retention window,
 #: the support email, the Semantic-only lock) live in
-#: :mod:`vtsearch.admin_overrides`, which owns one declarative descriptor per
+#: :mod:`vtsearch.settings.admin_overrides`, which owns one declarative descriptor per
 #: knob covering its CLI flag, its env var, the validator both share, how it
 #: combines with the persisted setting, and the key it is published under at
 #: ``/api/settings``. The ``set_cli_X`` / ``get_cli_X`` / ``get_effective_X``
@@ -343,7 +343,7 @@ _EXCLUDE_FROM_SOURCE_EXPORT = {
 # ``_sync_state`` and ``_user_caches``, and the thread-safety test asserts on
 # ``_settings_lock``. No *production* module reads them any more - app code
 # that wants a multi-key read of a user's tier calls :func:`snapshot_user`.
-# The :class:`~vtsearch.settings_store.UserSettingsStore` instance (created at
+# The :class:`~vtsearch.settings.store.UserSettingsStore` instance (created at
 # the bottom of this module) is handed these same objects by reference, so
 # both views mutate one set of containers. The reassignable scalars
 # (``server_cache``, ``legacy_migrated``) and the per-user sync locks live
@@ -401,7 +401,7 @@ def _user_settings_path(username: str) -> Path:
 # module-level identity because ``vtsearch.achievements`` imports
 # ``_ensure_user_loaded`` directly, and the rest of this module's read/write
 # paths call both by name. The actual two-tier cache + sync machinery lives
-# on ``_store`` (see :mod:`vtsearch.settings_store`).
+# on ``_store`` (see :mod:`vtsearch.settings.store`).
 # ---------------------------------------------------------------------------
 
 
@@ -733,7 +733,7 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
 def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
     """Return *data* with values the tier's model would reject removed.
 
-    Applied by :class:`~vtsearch.settings_store.UserSettingsStore` to every
+    Applied by :class:`~vtsearch.settings.store.UserSettingsStore` to every
     dict on its way into a cache, so the raw caches that ``get_all`` merges
     hold only values the API can serialise. Two things are dropped:
 
@@ -852,7 +852,7 @@ del _model, _field_name, _g, _s, _v
 #    (the disk value can become invalid via direct file edits).
 #
 # We keep a small shim layer that delegates per-element validation to
-# the Pydantic models defined in :mod:`vtsearch.settings_models`.
+# the Pydantic models defined in :mod:`vtsearch.settings.models`.
 # -------------------------------------------------------------------
 
 _GRID_ICON_SIZE_DEFAULT: str = "M"
@@ -1067,7 +1067,7 @@ def set_last_embedder_for_media_type(media_type: str, embedder: str) -> None:
 
 
 def get_effective_override(name: str) -> Any:
-    """Resolve one :mod:`~vtsearch.admin_overrides` knob against its setting.
+    """Resolve one :mod:`~vtsearch.settings.admin_overrides` knob against its setting.
 
     Reads the persisted value through the getter the descriptor names, then
     hands both to the descriptor's ``resolve`` rule. The named
@@ -1092,7 +1092,7 @@ def set_cli_solo_media_type(value: str | None) -> None:
 
     This stores whatever it is given: validation against the live media-type
     registry happens on the way in, in
-    :func:`vtsearch.admin_overrides.apply_flag_values`.
+    :func:`vtsearch.settings.admin_overrides.apply_flag_values`.
     """
     if value is not None:
         value = value.strip() or None
@@ -1190,7 +1190,7 @@ def get_effective_support_email() -> str:
        (``--support-email`` / ``VTSEARCH_SUPPORT_EMAIL``), which applies to
        every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
-       defaults to :data:`~vtsearch.settings_models.DEFAULT_SUPPORT_EMAIL`.
+       defaults to :data:`~vtsearch.settings.models.DEFAULT_SUPPORT_EMAIL`.
 
     This is the value surfaced at ``/api/settings`` so the Help modal's
     "Email us" link opens a pre-addressed compose window.
@@ -1202,7 +1202,7 @@ def get_rejected_docs_links() -> list[Any]:
     """Return the persisted ``docs_links`` entries that :func:`get_docs_links` drops.
 
     The accessor quietly keeps only the usable links (see
-    :func:`~vtsearch.settings_models.partition_docs_links`), so an operator
+    :func:`~vtsearch.settings.models.partition_docs_links`), so an operator
     whose link is missing from the Help modal would otherwise have nothing to
     go on. ``app.py`` names each of these in the startup log instead.
     """
@@ -1257,7 +1257,7 @@ def get_effective_autopilot_only() -> bool:
     Resolution order:
 
     1. The process-level override (``--autopilot-only`` /
-       ``VTSEARCH_AUTOPILOT_ONLY``, stored by :mod:`vtsearch.admin_overrides`),
+       ``VTSEARCH_AUTOPILOT_ONLY``, stored by :mod:`vtsearch.settings.admin_overrides`),
        which applies to every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
        defaults to ``False``.
@@ -1303,7 +1303,7 @@ def get_effective_solo_embedders() -> dict[str, str]:
     ``VTSEARCH_SOLO_EMBEDDERS`` fallbacks. The merge rule -- user entries win
     per-key, an empty-string user value is a per-type opt-out sentinel -- lives
     with the descriptor, in
-    :func:`vtsearch.admin_overrides._resolve_solo_embedders`.
+    :func:`vtsearch.settings.admin_overrides._resolve_solo_embedders`.
     """
     return get_effective_override("solo_embedders")
 
@@ -1420,7 +1420,7 @@ def set_cli_hidden_plugins(value: dict[str, Any] | None) -> None:
     Called by tests that want to seed a known hide list. ``None`` or an empty
     dict clears the fallback. The ``--hide-plugin`` /
     ``VTSEARCH_HIDE_PLUGINS`` entry points accumulate through
-    :func:`vtsearch.admin_overrides.apply_flag_values` instead, which
+    :func:`vtsearch.settings.admin_overrides.apply_flag_values` instead, which
     validates each family against the live registry first.
     """
     normalized = _admin.normalize_hidden_plugins(value or {})
@@ -1626,7 +1626,7 @@ def _server_default_settings_source() -> dict[str, Any] | None:
     """Return the deployment-wide ``default_settings_source`` server setting.
 
     A thin wrapper over the autogenerated server-tier accessor, injected into
-    :class:`~vtsearch.settings_store.UserSettingsStore` so its precedence
+    :class:`~vtsearch.settings.store.UserSettingsStore` so its precedence
     resolver can read the deployment default without importing this module.
     """
     return get_default_settings_source()
@@ -1637,7 +1637,7 @@ def get_settings_source_config() -> dict[str, Any] | None:
 
     Resolves the per-user / deployment-default precedence via the store's
     single resolver (see
-    :meth:`~vtsearch.settings_store.UserSettingsStore.resolve_settings_source`):
+    :meth:`~vtsearch.settings.store.UserSettingsStore.resolve_settings_source`):
     a user's own ``settings_source`` wins, an explicit ``{"source_name":
     "none"}`` opts out, and otherwise the user inherits the deployment-wide
     ``default_settings_source``. Config shape::

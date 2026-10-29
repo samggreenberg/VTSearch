@@ -41,7 +41,7 @@ shared.
 
 **Patch targets** follow the caller, not this package: a stub has to be
 installed where the name is looked up.  A caller that imports a public name
-from this package lazily (as ``vtsearch.cli_main`` and
+from this package lazily (as ``vtsearch.cli.main`` and
 :mod:`~vtscore.cli.pipeline` do with :func:`import_labels_into_detector` and
 the ``autodetect_*_main`` entry points) re-reads it here on every call, so
 patching ``vtscore.cli`` reaches it.  A caller inside a stage module resolves

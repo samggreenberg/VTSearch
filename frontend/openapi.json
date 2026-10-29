@@ -8687,7 +8687,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's head on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoFind detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoFind\n(``POST /api/datasets/registry/<dataset_id>/autofind``); both run through\n:mod:`vtsearch.autofind`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's head on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoFind detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoFind\n(``POST /api/datasets/registry/<dataset_id>/autofind``); both run through\n:mod:`vtsearch.runtime.autofind`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {

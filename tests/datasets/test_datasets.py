@@ -479,12 +479,12 @@ class TestStartupState:
 
         Verify that the production startup path does NOT call init_medias() –
         it should only load models and wait for user selection. The server
-        launch path lives in ``vtsearch.cli_main._run_server`` (extracted from
+        launch path lives in ``vtsearch.cli.main._run_server`` (extracted from
         app.py's old ``__main__`` ``else`` branch).
         """
         import inspect
 
-        from vtsearch import cli_main
+        from vtsearch.cli import main as cli_main
 
         server_source = inspect.getsource(cli_main._run_server)
         assert "init_medias()" not in server_source, (

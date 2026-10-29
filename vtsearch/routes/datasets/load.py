@@ -42,8 +42,8 @@ from vtscore.datasets.load_pipeline import (
     _run_origin_load_in_background,
 )
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
-from vtsearch.autofind import import_post_load
-from vtsearch.import_hooks import fire_dataset_imported
+from vtsearch.runtime.autofind import import_post_load
+from vtsearch.runtime.import_hooks import fire_dataset_imported
 from vtsearch.routes._context import require_dataset_header
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._policy import abort_if_semantic_only_embedders

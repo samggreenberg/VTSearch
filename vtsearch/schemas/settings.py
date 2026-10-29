@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import (
+from vtsearch.settings.models import (
     VALID_ANIMATION_MODES,
     VALID_BROWSE_GRAPHICS,
     VALID_FOCUS_MODES,

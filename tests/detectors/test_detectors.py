@@ -1454,7 +1454,7 @@ class TestLoadModelEndpoint:
         succeeds there is no worker to run ``end_detector_load``, so the route
         itself must clean up or the detector is stuck "in progress" forever.
         """
-        import vtsearch.threading as vts_threading
+        import vtsearch.runtime.threading as vts_threading
         from vtscore.concurrency.progress import detector_loading_tasks
         from vtscore.detectors.registry import begin_detector_load, end_detector_load
 

@@ -717,7 +717,7 @@ class TestConcurrentWrites:
         settings_mod.set_volume(0.5)
         # ``_atomic_write`` removes the tmp via rename, but the filename
         # shape is what we care about. Confirm by inspecting the helper.
-        from vtsearch.settings_store import _atomic_write
+        from vtsearch.settings.store import _atomic_write
 
         # Drive it once and check the tmp name pattern used by inspecting
         # the directory contents during a captured write.
@@ -872,7 +872,7 @@ class TestFileLockWithoutFcntl:
         when ``fcntl`` is unavailable (in-process lock still enforces it)."""
         import threading
 
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         monkeypatch.setattr(settings_store_mod, "_fcntl", None)
         path = tmp_path / "x.json"
@@ -915,7 +915,7 @@ class TestFileLockWithoutFcntl:
 
     def test_settings_write_round_trips_without_fcntl(self, isolated_settings, monkeypatch):
         """A normal read-modify-write still works with ``fcntl`` unavailable."""
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         monkeypatch.setattr(settings_store_mod, "_fcntl", None)
         settings_mod.set_volume(0.5)

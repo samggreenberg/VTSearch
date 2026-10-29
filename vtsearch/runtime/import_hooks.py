@@ -32,7 +32,7 @@ called: one that emails should skip a user who said no, and one that only
 records imports can ignore it.  The server cannot tell which is which, so it
 leaves that to the hook (#5170).
 
-**Why this is not an** :mod:`~vtsearch.admin_overrides` **entry.** Every knob in
+**Why this is not an** :mod:`~vtsearch.settings.admin_overrides` **entry.** Every knob in
 that registry overrides a persisted setting and is published at
 ``/api/settings``.  This one must never be persisted: a settings file that
 could name code to run would let anyone who can import a settings file run code
@@ -66,7 +66,7 @@ _source: str | None = None
 class HookSpecError(ValueError):
     """A ``module:function`` spec did not name a callable.
 
-    Carries a message written for an operator.  :mod:`vtsearch.cli_main` turns
+    Carries a message written for an operator.  :mod:`vtsearch.cli.main` turns
     it into ``parser.error``; the env path prints it as a warning instead,
     because a bad variable should not stop a container from booting.
     """

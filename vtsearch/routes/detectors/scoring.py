@@ -17,7 +17,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
-from vtsearch.hooks import state_sync_exempt
+from vtsearch.runtime.request_hooks import state_sync_exempt
 from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
@@ -46,7 +46,7 @@ detector_scoring_bp = Blueprint(
 
 def _detector_type(det_data: dict | None) -> str:
     """The locked embedder type of a detector JSON (legacy-migrated)."""
-    from vtsearch.autofind import detector_type  # noqa: PLC0415
+    from vtsearch.runtime.autofind import detector_type  # noqa: PLC0415
 
     return detector_type(det_data)
 
@@ -54,9 +54,9 @@ def _detector_type(det_data: dict | None) -> str:
 def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     """Whether the active snap binds an embedder of the detector's locked type.
 
-    See :func:`vtsearch.autofind.dataset_supplies_detector_type`.
+    See :func:`vtsearch.runtime.autofind.dataset_supplies_detector_type`.
     """
-    from vtsearch.autofind import dataset_supplies_detector_type  # noqa: PLC0415
+    from vtsearch.runtime.autofind import dataset_supplies_detector_type  # noqa: PLC0415
 
     return dataset_supplies_detector_type(det_data, snap)
 
@@ -935,10 +935,10 @@ def auto_detect(body: dict):
 
     The synchronous, scripted sibling of the Dashboard's background AutoFind
     (``POST /api/datasets/registry/<dataset_id>/autofind``); both run through
-    :mod:`vtsearch.autofind`.  This one reports on the shared Find
+    :mod:`vtsearch.runtime.autofind`.  This one reports on the shared Find
     tracker and is cancelled by ``/api/find/cancel``.
     """
-    from vtsearch.autofind import (  # noqa: PLC0415
+    from vtsearch.runtime.autofind import (  # noqa: PLC0415
         AutoFindUnavailable,
         plan_autofind,
         run_autofind_export,
@@ -988,7 +988,7 @@ def get_autofind_run(run_id: str):
     never existed.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autofind import get_autofind_run as _get_run  # noqa: PLC0415
+    from vtsearch.runtime.autofind import get_autofind_run as _get_run  # noqa: PLC0415
 
     record = _get_run(run_id, get_current_user())
     if record is None:
@@ -1018,7 +1018,7 @@ def prep_autofind_run_browse(run_id: str):
     handler reads no request proxy - it resolves the run's dataset by id.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autofind import prep_run_browse  # noqa: PLC0415
+    from vtsearch.runtime.autofind import prep_run_browse  # noqa: PLC0415
 
     answer = prep_run_browse(run_id, get_current_user())
     if answer is None:

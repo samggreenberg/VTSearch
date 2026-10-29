@@ -14,9 +14,9 @@ import logging
 
 import pytest
 
-from vtsearch import diagnose
+from vtsearch.runtime import diagnose
 
-LOGGER = "vtsearch.diagnose"
+LOGGER = "vtsearch.runtime.diagnose"
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +143,7 @@ class TestStartupLine:
         from vtscore.concurrency import stalls
         from vtscore.detectors import store
 
-        from vtsearch import hooks
+        from vtsearch.runtime import request_hooks as hooks
 
         assert set(diagnose.BAR_ENVS) == {
             hooks._SLOW_REQUEST_MS_ENV,

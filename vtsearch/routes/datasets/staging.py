@@ -46,8 +46,8 @@ from vtscore.datasets.registry import (
     register_dataset as _reg_register,
 )
 from vtsearch.auth import get_current_user
-from vtsearch.autofind import import_post_load
-from vtsearch.import_hooks import fire_dataset_imported
+from vtsearch.runtime.autofind import import_post_load
+from vtsearch.runtime.import_hooks import fire_dataset_imported
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
@@ -66,7 +66,7 @@ from vtsearch.schemas.datasets import (
     ImporterSuggestedNameResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
-from vtsearch.threading import spawn
+from vtsearch.runtime.threading import spawn
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
