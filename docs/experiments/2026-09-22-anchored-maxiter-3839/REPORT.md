@@ -140,20 +140,20 @@ converged fit as well as fold 1's. The two anchored fits also fix fold 0's
 fit (5 folds corpus-wide go from `inverted_means` to anchored, and 2 the other
 way).
 
-![Cost against distance from converged, one point per arm](figures/tradeoff.png)
+![Cost against distance from converged, one point per arm](figures/tradeoff.webp)
 
 *Mean refit iterations relative to `shipped`, against the p90 distance from the
 converged answer on the 243 capped cases. Blue (more budget) is the only
 direction that goes down.*
 
-![Capped folds: iterations to converge vs midpoint gap](figures/capped_gap.png)
+![Capped folds: iterations to converge vs midpoint gap](figures/capped_gap.webp)
 
 *Each fold refit: iterations it needs to reach 1e-13, against how far
 `shipped`'s midpoint sits from the converged one. The capped folds (orange) need
 hundreds to thousands of iterations and sit 10–1000x further from converged than
 the rest.*
 
-![ECDF of distance from converged on capped cases](figures/move_to_limit_ecdf.png)
+![ECDF of distance from converged on capped cases](figures/move_to_limit_ecdf.webp)
 
 *On the capped cases, how far each rule leaves the admitted set from the
 converged fit.*
@@ -182,11 +182,11 @@ A/B per environment (Δcost, cap2000 − shipped): every environment is within
 
 ### The quality-over-clicks pair
 
-![Cost over clicks](figures/cost_vs_clicks.png)
+![Cost over clicks](figures/cost_vs_clicks.webp)
 
-Per run: [`caltech101_m`](figures/cost_vs_clicks_runs__caltech101_m.png) ·
-[`coco_val`](figures/cost_vs_clicks_runs__coco_val.png) ·
-[`visual_genome_m`](figures/cost_vs_clicks_runs__visual_genome_m.png).
+Per run: [`caltech101_m`](figures/cost_vs_clicks_runs__caltech101_m.webp) ·
+[`coco_val`](figures/cost_vs_clicks_runs__coco_val.webp) ·
+[`visual_genome_m`](figures/cost_vs_clicks_runs__visual_genome_m.webp).
 Interactive: [`viewer.html`](viewer.html).
 
 ---

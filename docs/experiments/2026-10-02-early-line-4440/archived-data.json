@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-02-early-line-4440.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/rules-tier-m.csv": {
+     "bytes": 99762,
+     "oid": "6c05fb88db9fe1d4585a2732fd23e1143f77d670"
+    },
+    "measurements/rules-tier-s.csv": {
+     "bytes": 118737,
+     "oid": "66faecbe65ac407895d6dbd60c8a1bdee8ad3ac5"
+    }
+   }
+  }
+ ]
+}

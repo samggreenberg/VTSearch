@@ -39,9 +39,9 @@ in the training half. There is no FPR + FNR anywhere (owner, #4357).
 | **F1 of the returned set, P = 50%** | 0.38 | 0.34 | 0.40 | **0.47** | 0.50 |
 | **Goods found** | — | 11 | 14 | **20** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
-![F1 of the line's set over clicks](figures/f1_over_clicks.png)
+![F1 of the line's set over clicks](figures/f1_over_clicks.webp)
 
 1. **150 clicks close about two thirds of the gap to full labels.** AP rises
    from 0.42 to 0.51 against a ceiling of 0.55. F1 of the returned set rises
@@ -64,7 +64,7 @@ in the training half. There is no FPR + FNR anywhere (owner, #4357).
 3. **Harvest is front-loaded.** 11 of the 20 Goods arrive in the first 25
    clicks. The last 100 clicks find 5.
 
-![Mean Goods found over clicks](figures/goods_over_clicks.png)
+![Mean Goods found over clicks](figures/goods_over_clicks.webp)
 
 ### The line on a fresh corpus
 
@@ -80,7 +80,7 @@ in the training half. There is no FPR + FNR anywhere (owner, #4357).
 | 90% (top 32) | 150 clicks | 60% | **36%** | 0.38 | 0.38 | 0.47 | 0.54 |
 | | full labels | 64% | 36% | 0.41 | 0.39 | 0.50 | 0.58 |
 
-![The line at each floor](figures/line_at_floors.png)
+![The line at each floor](figures/line_at_floors.webp)
 
 - **At the default 50%, the clicks take the kept set from 49% to 60% right,**
   within 4 points of full labels (64%). The top of the ranking is nearly as good
@@ -114,7 +114,7 @@ should certify is **#4358**.
 | medium (49) | 0.38 | **0.49** | 0.51 | 0.46 | 59% | 63% | 20 |
 | small (46) | 0.16 | **0.24** | 0.31 | 0.24 | 31% | 23% | 9.7 |
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 **Well:** sports equipment, fruit and other things a scene is *about*, with a
 silhouette SigLIP knows.

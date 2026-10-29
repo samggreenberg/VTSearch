@@ -68,7 +68,7 @@ baseline against every arm's own `n_test_pos` and found no mismatch. #4584's σ 
 
 ## Result
 
-![The objective over votes, and target 0.75 minus target 0.5](figures/acqtarget_curves.png)
+![The objective over votes, and target 0.75 minus target 0.5](figures/acqtarget_curves.webp)
 
 *Top: the objective over votes, today's app (blue) and target 0.75 (orange). Bottom: their paired difference, ±2
 SE. The arms part at vote 8, when the Boundary picks start after the opening's seven votes. Target 0.75 runs a
@@ -99,7 +99,7 @@ that is one point on the curve, and it is gone after the check (+0.001).*
 
 ## Per run
 
-![Each run's difference in the session mean](figures/acqtarget_per_run.png)
+![Each run's difference in the session mean](figures/acqtarget_per_run.webp)
 
 *Each run's session mean under 0.75 minus its pair under 0.5. About 100 runs per preset score exactly the same in
 both arms. The rest spread evenly both ways: at beta 1/4, 21% gain more than 0.02 and 19% lose more than 0.02; at

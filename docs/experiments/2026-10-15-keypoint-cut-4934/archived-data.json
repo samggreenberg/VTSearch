@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-15-keypoint-cut-4934.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/paired.csv": {
+     "bytes": 6973,
+     "oid": "7dee9a15db41e8b5ceea11c82b5ccd159d714bbb"
+    },
+    "measurements/steps.csv": {
+     "bytes": 1606963,
+     "oid": "6670ee7c742c3367932fa8313ba6bbaac92f9316"
+    }
+   }
+  }
+ ]
+}

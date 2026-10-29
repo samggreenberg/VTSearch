@@ -41,7 +41,7 @@ Every head separates coin-flip labels perfectly on its own votes and scores chan
 
 ## G0: is there a gap to explain? Yes, and it is ranking
 
-![Stage B paired, area under the curve](figures/stageB_paired_aulc.png)
+![Stage B paired, area under the curve](figures/stageB_paired_aulc.webp)
 
 *Each arm minus the shipped SVM, averaged over clicks 1–150, ±2 SE, 480 paired cells. Right of zero means the shipped SVM is better. Oracle cost is the best cut the test labels allow, so it measures the ranking alone. Regret is cost minus oracle cost, the cut's own loss.*
 
@@ -57,15 +57,15 @@ The shipped SVM's advantage over the old head is about **80% ranking** (0.010 of
 
 Quality over clicks, averaged and per run (the standard pair), from the shared [`curves.py`](../../../scripts/experiments/calibration/curves.py). Click 0 is the zero-click text sort:
 
-![cost over clicks](figures/cost_vs_clicks.png)
+![cost over clicks](figures/cost_vs_clicks.webp)
 
 *Cost at the shipped cut, one panel per dataset, one line per arm, mean over categories and seeds.*
 
-![oracle cost over clicks](figures/oracle_cost_vs_clicks.png)
+![oracle cost over clicks](figures/oracle_cost_vs_clicks.webp)
 
 *The same, for oracle cost (ranking only).*
 
-Per-run views, every seed as its own line: [`cost_vs_clicks_runs__visual_genome_m.png`](figures/cost_vs_clicks_runs__visual_genome_m.png), [`cost_vs_clicks_runs__coco_val.png`](figures/cost_vs_clicks_runs__coco_val.png), [`cost_vs_clicks_runs__caltech101_m.png`](figures/cost_vs_clicks_runs__caltech101_m.png). The interactive **[`viewer.html`](viewer.html)** carries every arm × dataset × category × metric.
+Per-run views, every seed as its own line: [`cost_vs_clicks_runs__visual_genome_m.webp`](figures/cost_vs_clicks_runs__visual_genome_m.webp), [`cost_vs_clicks_runs__coco_val.webp`](figures/cost_vs_clicks_runs__coco_val.webp), [`cost_vs_clicks_runs__caltech101_m.webp`](figures/cost_vs_clicks_runs__caltech101_m.webp). The interactive **[`viewer.html`](viewer.html)** carries every arm × dataset × category × metric.
 
 ## M1: is it the fit, not the loss? Survives, and it is the answer
 
@@ -73,7 +73,7 @@ If the loss were the mechanism, the logistic loss would stay behind the SVM once
 
 **On Stage B's own vote sets** (replay, 480 cells, held-out oracle cost; negative means the first arm ranks better):
 
-![replay](figures/stageA_replay.png)
+![replay](figures/stageA_replay.webp)
 
 | same votes | click 10 | click 20 | click 40 | click 80 | click 150 |
 |---|---|---|---|---|---|
@@ -96,7 +96,7 @@ Holding the votes fixed reproduces the in-loop gap (0.020–0.024 early). The lo
 
 Neither smoothing nor init explains it. Running the **same Adam loop** longer makes it *worse*, because weight decay 1e-4 is almost no regularisation: the head drifts toward the hard-margin end (‖w‖ ≈ 21, no vote inside the margin). The in-loop `linconv` arm shows the same thing at scale (oracle cost +0.018 ± 0.003 behind the SVM). The early stop was the only thing regularising the old head. It regularised by **Adam's trajectory**, whose per-coordinate step sizes aim it in a different direction from the L2 path: at 8 Goods its weight vector has cosine 0.75 to converged logistic regression and 0.76 to the SVM, while the SVM and converged logistic regression sit at 0.96 to each other ([`A_geometry.csv`](A_geometry.csv)).
 
-![regularisation path and margin](figures/stageA_regpath_and_margin.png)
+![regularisation path and margin](figures/stageA_regpath_and_margin.webp)
 
 *Left: held-out AP along C for the SVM (blue) and converged logistic regression (green), with the old head as orange lines (it has no C). Right: the fraction of votes inside the SVM margin.*
 
@@ -111,7 +111,7 @@ The dilution arm (a uniformly hard core plus k× its size in easy votes, same co
 | 4 Goods | not resolvable | −0.008 ± 0.002 | not resolvable | +0.021 ± 0.003 |
 | 8 Goods | not resolvable | −0.012 ± 0.003 | not resolvable | +0.031 ± 0.005 |
 
-![mechanisms](figures/stageA_mechanisms.png)
+![mechanisms](figures/stageA_mechanisms.webp)
 
 *Held-out AP, SVM minus each logistic head, along each manipulated axis (±2 SE). Left: dilution. Middle: label noise. Right: Bad:Good ratio.*
 

@@ -347,9 +347,9 @@ class TestTheBalance:
 @pytest.fixture
 def single_vector(monkeypatch):
     """The test embedder as a known single-vector space (the registry does not know it: no hold by default)."""
-    import vtscore.detectors.training as training
+    import vtscore.detectors.training_calibration as training_calibration
 
-    monkeypatch.setattr(training, "_patch_space_for", lambda name: False if name == EMBEDDER else None)
+    monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: False if name == EMBEDDER else None)
 
 
 class TestTheQueryHold:
@@ -378,7 +378,8 @@ class TestTheQueryHold:
     @pytest.mark.usefixtures("single_vector")
     def test_the_cli_says_the_hold_not_the_quota(self, world, capsys):
         """3 Goods and 4 Bads meet the quota: the CLI names the hold and what it owes, not "under the quota" (#4889)."""
-        from vtscore import cli, cli_progress
+        from vtscore.cli import detectors as cli_detectors
+        from vtscore.cli import progress as cli_progress
 
         snap, _proto, make, _embedded = world
         ctx = _ctx()
@@ -387,7 +388,7 @@ class TestTheQueryHold:
         previous = cli_progress.get_format()
         cli_progress.set_format("text")
         try:
-            cli._report_centroid("held", ctx, ls)
+            cli_detectors._report_centroid("held", ctx, ls)
         finally:
             cli_progress.set_format(previous)
         line = capsys.readouterr().out.strip()
@@ -411,9 +412,9 @@ class TestTheQueryHold:
         assert ctx.model is not None and not is_quota_head(ctx.model)
 
     def test_a_patch_space_has_no_hold(self, world, monkeypatch):
-        import vtscore.detectors.training as training
+        import vtscore.detectors.training_calibration as training_calibration
 
-        monkeypatch.setattr(training, "_patch_space_for", lambda name: True)
+        monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: True)
         snap, _proto, make, _embedded = world
         ctx = _ctx()
         assert lt.train_from_labelset(
@@ -434,7 +435,7 @@ class TestTheQueryHold:
 
     def test_a_cached_trained_head_is_not_handed_out_while_the_query_holds(self, world, monkeypatch):
         """The learned sort caches its head under the labels' signature from the quota on; a Find must not take it."""
-        import vtscore.detectors.training as training
+        import vtscore.detectors.training_calibration as training_calibration
 
         snap, _proto, make, _embedded = world
         ctx = _ctx()
@@ -442,7 +443,7 @@ class TestTheQueryHold:
         assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap)  # a head under this signature
         assert ctx.model is not None and not is_quota_head(ctx.model)
         assert cached_head_is_current(ctx, ls, QUERY), "an unknown space hands over at the quota"
-        monkeypatch.setattr(training, "_patch_space_for", lambda name: False)
+        monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: False)
         assert not cached_head_is_current(ctx, ls, QUERY), "a Find there gives the query's set"
         assert cached_head_is_current(ctx, ls, ""), "a detector with no query takes the head at the quota"
 
@@ -455,9 +456,9 @@ class TestTheQueryHold:
 @pytest.fixture
 def patch_space(monkeypatch):
     """The test embedder as a known patch space (the Region path's DINOv3 patches)."""
-    import vtscore.detectors.training as training
+    import vtscore.detectors.training_calibration as training_calibration
 
-    monkeypatch.setattr(training, "_patch_space_for", lambda name: True if name == EMBEDDER else None)
+    monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: True if name == EMBEDDER else None)
 
 
 MISSED = ([1], [40])  # a Good, and a Bad before the Goods quota
@@ -519,12 +520,12 @@ class TestTheQueryMiss:
         assert is_centroid_head(model) and threshold == CENTROID_THRESHOLD
 
     def test_a_query_head_cached_before_the_miss_counted_is_not_handed_out(self, world, monkeypatch):
-        import vtscore.detectors.training as training
+        import vtscore.detectors.training_calibration as training_calibration
 
         snap, _proto, make, _embedded = world
         ctx = _ctx()
         ls = make(*MISSED)
         assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY)
         assert is_query_head(ctx.model) and cached_head_is_current(ctx, ls, QUERY), "an unknown space keeps it"
-        monkeypatch.setattr(training, "_patch_space_for", lambda name: True)
+        monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: True)
         assert not cached_head_is_current(ctx, ls, QUERY)

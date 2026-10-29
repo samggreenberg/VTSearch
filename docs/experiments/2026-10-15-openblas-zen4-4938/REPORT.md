@@ -57,7 +57,7 @@ future numpy upgrade can.
 
 ## Which ops crash or disagree
 
-![Per numpy version and L2 setting, whether each probed op gives the same result on every node](figures/ops_by_numpy.png)
+![Per numpy version and L2 setting, whether each probed op gives the same result on every node](figures/ops_by_numpy.webp)
 
 *Each cell is one op on 6 nodes under the Haswell pin: "same" when every node returned the same bits, "differ"
 when one did not, "crash" when one segfaulted. Every "differ" and "crash" is the EPYC 9534. The figure does not

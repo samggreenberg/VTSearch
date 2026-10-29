@@ -1,0 +1,35 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-25-calibration-fold-combine.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/contrasts_over_k_binary.png": {
+     "bytes": 74343,
+     "oid": "983f5e81a6894ed9bf77b720e80ec2ec962a8715"
+    },
+    "figures/degenerate_folds_over_k.png": {
+     "bytes": 37070,
+     "oid": "fdb38e22789c55deea1753ab7bb3c8b354a0de79"
+    },
+    "figures/per_run_binary_qmean_k4.png": {
+     "bytes": 200546,
+     "oid": "478d6af8290c44c4730625286ab2db12ee8fdd48"
+    },
+    "figures/per_run_region_qmean_k4.png": {
+     "bytes": 217927,
+     "oid": "73000df79c631fa816edc48ca055ee06e254f211"
+    },
+    "figures/threshold_sd_over_k_binary.png": {
+     "bytes": 91993,
+     "oid": "9791ffd6e060b44d4e545bea6d6c974d0f49c41f"
+    },
+    "figures/threshold_sd_over_k_region.png": {
+     "bytes": 85814,
+     "oid": "32f8d7ca23b2f7eb032e44c6b977595f2747b0d8"
+    }
+   }
+  }
+ ]
+}

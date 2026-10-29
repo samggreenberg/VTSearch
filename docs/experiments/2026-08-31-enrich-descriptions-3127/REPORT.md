@@ -101,7 +101,7 @@ mistake that clustering avoids.
 
 ### 3.1 Per media type
 
-![Δ AP by media type](figures/delta_by_media_type.png)
+![Δ AP by media type](figures/delta_by_media_type.webp)
 
 *Each row is one embedder's paired mean Δ AP with ±2 clustered SE. Grey rows are
 controls, not defaults — the rule in §6 reads only the four coloured ones. An
@@ -135,7 +135,7 @@ look at.
 
 ### 3.2 Per dataset — the image default disagrees with itself
 
-![Δ AP by dataset](figures/delta_by_dataset.png)
+![Δ AP by dataset](figures/delta_by_dataset.webp)
 
 *One row per dataset, same pairing and same ±2 clustered SE. The image rows
 (orange) are the point: within a single media type and a single embedder, the
@@ -160,7 +160,7 @@ for.**
 
 ### 3.3 Where the effect lives: one template, not an ensemble
 
-![Every wrapper on its own](figures/wrappers.png)
+![Every wrapper on its own](figures/wrappers.webp)
 
 *Each bar is one wrapper scored alone, against the plain typed query; the dashed
 red line is `enriched`, the mean of all five. Error bars are ±2 clustered SE.

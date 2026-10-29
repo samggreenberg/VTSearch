@@ -81,7 +81,7 @@ standard error is reported as unresolved rather than given a third decimal.
 
 # What a run looks like
 
-![Mean cost against votes cast, per haystack, one line per representation](figures/fig_cost_vs_votes.png)
+![Mean cost against votes cast, per haystack, one line per representation](figures/fig_cost_vs_votes.webp)
 
 The end of each curve is the number a summary table would report. The interesting
 part is not the end:
@@ -97,7 +97,7 @@ part is not the end:
 
 ## Which error each configuration makes
 
-![Cost split into fpr and fnr for every arm](figures/fig_error_budget.png)
+![Cost split into fpr and fnr for every arm](figures/fig_error_budget.webp)
 
 Bar height is cost; the split says whether an arm over-includes or misses.
 `siglip` **over-includes**: on Visual Genome its fpr (0.30) is three times its
@@ -262,7 +262,7 @@ draw — so every table above confounds them. To separate them, the patch encode
 own runs were repeated with region voting off: same haystacks, same categories,
 same seeds, same splits, differing only in whether a box is dragged.
 
-![Cost over votes with and without a drawn box, on the same cells](figures/fig_binary_vs_boxes.png)
+![Cost over votes with and without a drawn box, on the same cells](figures/fig_binary_vs_boxes.webp)
 
 | haystack | contrast | Δcost | ΔAP | ΔAUROC |
 |---|---|---:|---:|---:|
@@ -326,7 +326,7 @@ HAC leaf is 1/12:
 
 > **\*** Band edges changed on 2026-09-24: `large` now runs to the whole frame, and the 0.80 cap this run used is gone. See [`large` runs to the whole frame](../../../scripts/experiments/pile/README.md#large-runs-to-the-whole-frame-2026-09-24).
 
-![Cost, AP and fnr against box-area band](figures/fig_scale_bands.png)
+![Cost, AP and fnr against box-area band](figures/fig_scale_bands.webp)
 
 Best-arm cost runs **0.37 (large) → 0.46 (medium) → 0.49 (small)** and AP 0.41 →
 0.39 → 0.29. Sub-patch retrieval is hard for every configuration; patch geometry
@@ -352,7 +352,7 @@ scenes where the clock is large and unambiguous (`000000036678.jpg`:
 
 # Positives are the binding constraint
 
-![Positives accumulated against votes cast](figures/fig_positives.png)
+![Positives accumulated against votes cast](figures/fig_positives.webp)
 
 150 clicks buy a median of **4–11 positive examples**, and a tenth of runs finish
 on 2–5. Against the dotted diagonal — the unreachable ceiling where every vote is
@@ -361,7 +361,7 @@ is not threshold-limited, it is example-limited.
 
 Averages hide what that does to an individual run:
 
-![The cost curves with one line per individual run](figures/fig_cost_traces.png)
+![The cost curves with one line per individual run](figures/fig_cost_traces.webp)
 
 **Every whole-image configuration has runs that sit flat near cost 1.0 for all
 150 votes.** The mean says `vg_box_small × siglip` is 0.63 and implies a typical
@@ -421,7 +421,7 @@ These two are usually discussed as alternatives. They are not the same kind of
 thing at all: a typed query hands you *discrimination* immediately and calibrates
 badly; the clicking loop hands you *calibration* and needs examples to do it.
 
-![Typed-query cost against the clicked detector's ramp](figures/fig_text_vs_detector.png)
+![Typed-query cost against the clicked detector's ramp](figures/fig_text_vs_detector.webp)
 
 | arm | text AP | detector AP after 150 votes | votes until the detector's cost stays below the typed cost |
 |---|---:|---:|---:|
@@ -478,7 +478,7 @@ the entire error class.*
 
 # The cut rule is not the frontier
 
-![Regret split into calibration shift and rule inefficiency](figures/fig_regret_decomposition.png)
+![Regret split into calibration shift and rule inefficiency](figures/fig_regret_decomposition.webp)
 
 Regret against a perfectly placed threshold runs 0.00–0.11 by arm, and
 essentially all of it is **calibration shift** — the move from the half the

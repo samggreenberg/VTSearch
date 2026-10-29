@@ -154,7 +154,7 @@ class TestScoreAllMediaNaNSafety:
     """``_score_all_media`` (non-region path) must not leak NaN to results."""
 
     def test_non_region_path_replaces_nan_with_sentinel(self):
-        from vtscore.detectors.training import _score_all_media
+        from vtscore.detectors.training_scoring import _score_all_media
 
         rng = np.random.default_rng(0)
         clips: dict[int, dict] = {}

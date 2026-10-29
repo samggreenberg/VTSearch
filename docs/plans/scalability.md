@@ -177,7 +177,7 @@ false hit can't happen because `media_revision` bumps on every structural change
 
 ### S10: head scoring pass — O(N) inference on every retrain
 
-**File:** `vtscore/detectors/training.py` (`_score_all_media`, called on every retrain)
+**File:** `vtscore/detectors/training_scoring.py` (`_score_all_media`, called on every retrain)
 
 Scoring all media runs the head over every item after every vote (a matrix
 multiply for the shipped linear SVM), and the threshold fit repeats the pass once
@@ -281,7 +281,7 @@ the *pickle* loader, which still reads the whole file at once.
 
 ### S20: CLI autodetect scores every item, serial label resolution per detector
 
-**Files:** `vtscore/cli.py` (`_train_detectors_for_first_chunk`, serial
+**Files:** `vtscore/cli/detectors.py` (`_train_detectors_for_first_chunk`, serial
 `for det_name in detector_names:` loop), `vtsearch/routes/detectors/scoring.py`
 
 **Partly shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):

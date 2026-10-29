@@ -77,7 +77,7 @@ Gains are paired per run; ± is one SE over classes (a class's bands and seeds a
 
 ## Result
 
-![F-beta over clicks per arm, and the paired gain over today's line](figures/transfer_over_clicks_binary.png)
+![F-beta over clicks per arm, and the paired gain over today's line](figures/transfer_over_clicks_binary.webp)
 
 *Top: mean F-beta of the returned set over clicks. Bottom: each arm's paired gain over today's line, ±1 SE.*
 
@@ -100,7 +100,7 @@ Gains are paired per run; ± is one SE over classes (a class's bands and seeds a
 
 ## Why the plain transfer loses
 
-![Saturation over clicks on the control's sessions](figures/saturation_binary.png)
+![Saturation over clicks on the control's sessions](figures/saturation_binary.webp)
 
 *Read off arm c's sessions, where the transferred line was fitted beside today's on every step. Left: the share of
 held-out Goods above their fold's whole haystack. Middle: the Good component's mean, transferred minus raw (median
@@ -179,7 +179,7 @@ sort) ran only arm c: one seed of 144 cells at beta 1, the transferred line fitt
 drawing nothing. No Region closed loop was run. On Binary the same-head reading matched the closed loop to the third
 decimal at beta 1, so it is the best stand-in available.
 
-![The plain transfer fitted beside today's line on Region's sessions](figures/saturation_region.png)
+![The plain transfer fitted beside today's line on Region's sessions](figures/saturation_region.webp)
 
 | control's heads, Region, beta 1 | clicks 1–25 | 26–50 | 51–100 | 101–150 |
 |---|---|---|---|---|

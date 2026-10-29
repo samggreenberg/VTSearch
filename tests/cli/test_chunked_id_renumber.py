@@ -142,8 +142,6 @@ def _stub_detector_training(monkeypatch):
     import torch
     from torch import nn
 
-    import vtscore.cli as cli_mod
-
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None, override_clipper=None):
         # Tiny linear "MLP" that always returns 0.5 logit → 0.62 sigmoid.
         linear = nn.Linear(_CLAP_DIM, 1)
@@ -154,7 +152,7 @@ def _stub_detector_training(monkeypatch):
         mlp.eval()
         return {name: {"mlp": mlp, "threshold": 0.5} for name in detector_names}
 
-    monkeypatch.setattr(cli_mod, "_load_and_train_detectors", _fake_load_and_train)
+    monkeypatch.setattr("vtscore.cli.detectors._load_and_train_detectors", _fake_load_and_train)
 
 
 class TestChunkedPickleIdRenumber:

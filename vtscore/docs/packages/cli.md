@@ -1,22 +1,35 @@
-# `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`
+# `vtscore.cli`
 
 The Flask-free command-line entry points for VTSearch's autodetect
 workflow: load a dataset (from pickle or via an importer), train each
 AutoFind detector against it, score every media, and hand the results
-to an exporter. Three modules cooperate - `vtscore.cli` is the
-imperative pipeline (four entry-point functions plus helpers),
-`vtscore.cli_pipeline` parses YAML pipeline files into the same call
-shape, and `vtscore.cli_progress` is a tiny format-aware emitter that
-both modules use for status output (human prose or NDJSON).
+to an exporter. The `vtscore.cli` package holds the imperative pipeline,
+one stage per module, and re-exports its four entry-point functions and
+the label-import helpers at the top. `vtscore.cli.pipeline` parses YAML
+pipeline files into the same call shape, and `vtscore.cli.progress` is a
+tiny format-aware emitter that every stage uses for status output (human
+prose or NDJSON).
 
 ## Contents
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/cli.py` | The imperative autodetect pipeline - four entry points plus helpers |
-| `vtscore/cli_pipeline.py` | Parse a YAML pipeline file into the same call shape |
-| `vtscore/cli_progress.py` | Format-aware status emitter (human prose or NDJSON) |
-| `vtscore/cli_resume.py` | The checkpoint a resumable streamed run (`resume=True`) keeps beside its output |
+| `vtscore/cli/__init__.py` | Re-exports the public entry points; the stage layout and where to patch |
+| `vtscore/cli/autodetect.py` | The four `autodetect_*_main` entry points, one per (pickle / importer) x (whole / chunked) |
+| `vtscore/cli/run.py` | One source end to end: save it, dry-run it, or detect and export (`_run_source`, `_run_pipeline`) |
+| `vtscore/cli/sources.py` | Where a run's medias come from (`_SourceSpec` and its loaders) |
+| `vtscore/cli/detectors.py` | Reading, re-clipping and training the run's detectors against its first chunk |
+| `vtscore/cli/scoring.py` | Scoring a chunk against the trained heads and merging chunks' results |
+| `vtscore/cli/export.py` | Resolving and running the exporter |
+| `vtscore/cli/streaming.py` | `stream_results`: hits straight to a streaming exporter |
+| `vtscore/cli/resumable.py` | `resume`: the stream, checkpointed after every chunk |
+| `vtscore/cli/datasets.py` | Saving a run's datasets to the dashboard, and multi-dataset runs |
+| `vtscore/cli/dry_run.py` | `dry_run`: validate the run and print or emit its plan |
+| `vtscore/cli/labels.py` | Importing labels into a detector |
+| `vtscore/cli/pipeline.py` | Parse a YAML pipeline file into the same call shape |
+| `vtscore/cli/progress.py` | Format-aware status emitter (human prose or NDJSON) |
+| `vtscore/cli/resume.py` | The checkpoint a resumable streamed run (`resume=True`) keeps beside its output |
+| `vtscore/cli_pipeline.py`, `vtscore/cli_progress.py`, `vtscore/cli_resume.py` | Deprecated aliases of `vtscore.cli.pipeline`, `.progress` and `.resume` - the same module objects, with a `DeprecationWarning` on import |
 
 **See also:** [`docs/CLI.md`](../../../docs/CLI.md) for the user-facing
 `python app.py --autodetect` reference; the functions documented here
@@ -26,15 +39,15 @@ are the underlying primitives.
 
 - `vtscore.cli` - the supported library entry points. Call these
   directly from a Python script or a custom wrapper CLI.
-- `vtscore.cli_pipeline` - same flow, but driven by a YAML file. Use
+- `vtscore.cli.pipeline` - same flow, but driven by a YAML file. Use
   this when you want a reusable, file-shaped artefact instead of a
   long argv invocation.
-- `vtscore.cli_progress` - wire your script's `stdout`/`stderr` for
-  human vs. machine consumption. Both other modules emit through
+- `vtscore.cli.progress` - wire your script's `stdout`/`stderr` for
+  human vs. machine consumption. Every stage emits through
   this; you call `set_format("json")` once at startup to flip the
   whole CLI into NDJSON mode.
 
-`vtscore.cli` and `vtscore.cli_pipeline` read their settings (the
+`vtscore.cli` and `vtscore.cli.pipeline` read their settings (the
 AutoFind list and exporter, the detectors directory, …) with
 `vtscore.config.get_setting()`, and apply `--settings` with
 `redirect_settings_path()`, so the app's setting getters - or a
@@ -89,7 +102,7 @@ def autodetect_main(
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
     max_results: int | None = None,
-) -> None: ...                                                # vtscore/cli.py
+) -> None: ...                                                # vtscore/cli/autodetect.py
 
 def autodetect_main_chunked(
     dataset_path: str,
@@ -107,7 +120,7 @@ def autodetect_main_chunked(
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
     max_results: int | None = None,
-) -> None: ...                                                # vtscore/cli.py
+) -> None: ...                                                # vtscore/cli/autodetect.py
 
 def autodetect_importer_main(
     importer_name: str,
@@ -125,7 +138,7 @@ def autodetect_importer_main(
     outputs: list[OutputSpec] | None = None,
     override_clipper: dict[str, Any] | None = None,
     max_results: int | None = None,
-) -> None: ...                                                # vtscore/cli.py
+) -> None: ...                                                # vtscore/cli/autodetect.py
 
 def autodetect_importer_main_chunked(
     importer_name: str,
@@ -145,7 +158,7 @@ def autodetect_importer_main_chunked(
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
     max_results: int | None = None,
-) -> None: ...                                                # vtscore/cli.py
+) -> None: ...                                                # vtscore/cli/autodetect.py
 ```
 
 ### Behaviour
@@ -214,9 +227,9 @@ def autodetect_importer_main_chunked(
   that overrides `run_chunked_cli_deferred`, as `server_folder` does, is not
   asked to read their files), retrains on the same first chunk and keeps the
   recorded thresholds; any mismatch raises
-  `vtscore.cli_resume.ResumeRefusedError` (a `ValueError`). The checkpoint is
+  `vtscore.cli.resume.ResumeRefusedError` (a `ValueError`). The checkpoint is
   removed when the run completes. The CLI flag is `--resume`; the
-  pipeline-YAML key is `resume:`. See `vtscore/cli_resume.py` for the
+  pipeline-YAML key is `resume:`. See `vtscore/cli/resume.py` for the
   checkpoint's contents and guarantees.
 - **`max_results=N`** (with `stream_results`; refused without it and with
   `resume`) hands the exporter only each detector's N best records, sorted by
@@ -281,7 +294,7 @@ def import_labels_into_detector_from_file(
 ) -> tuple[int, int]:
 ```
 
-Defined in `vtscore/cli.py`. `import_labels_into_detector` runs a
+Defined in `vtscore/cli/labels.py`. `import_labels_into_detector` runs a
 named label importer (`vtscore.labels.importers`) with the given field
 values, merges the returned `LabeledElement`s into the named
 detector's labelset, and returns `(applied, skipped)`. Required fields
@@ -307,7 +320,7 @@ a dataset pickle's `meta.json`, or an importer's `media_type` field.
 
 ### What `_run_pipeline` does
 
-All four entry points delegate to `vtscore/cli.py::_run_pipeline`
+All four entry points delegate to `vtscore/cli/run.py::_run_pipeline`
 (via `_autodetect` and `_run_source`, which first saves the dataset when
 `save_dataset` is set; a multi-dataset source runs it once per dataset). The
 interesting steps:
@@ -369,9 +382,9 @@ scores as its query only while its labels are under the quota both as
 written and as resolved (#4758): one whose labels meet the quota but
 fail to resolve still raises.
 
-## `vtscore.cli_pipeline` - YAML pipeline files
+## `vtscore.cli.pipeline` - YAML pipeline files
 
-Source: `vtscore/cli_pipeline.py`. Two public functions:
+Source: `vtscore/cli/pipeline.py`. Two public functions:
 
 ```python
 def load_pipeline_file(path: str | Path) -> dict[str, Any]:
@@ -397,13 +410,13 @@ plugin registry - a typo in `importer.name` or any `fields.*` key
 fails at parse time before media touches RAM.
 
 ```python
-from vtscore.cli_pipeline import load_pipeline_file, run_pipeline_file
+from vtscore.cli.pipeline import load_pipeline_file, run_pipeline_file
 
 config = load_pipeline_file("pipeline.yaml")
 # config is a fully-validated dict; inspect or mutate before running.
 
 run_pipeline_file("pipeline.yaml")
-# Loads + dispatches against vtscore.cli._run_source.
+# Loads + dispatches against vtscore.cli.run._run_source.
 ```
 
 `run_pipeline_file(path)` is the "do everything" wrapper: it calls
@@ -419,9 +432,9 @@ a detector list inline without mutating `settings.json`. A
 `cli_progress.set_format("json")` first for an NDJSON stream; the label
 import is a `labels_imported` event, as it is for `--import-labels-into`.
 
-## `vtscore.cli_resume` - resume checkpoints
+## `vtscore.cli.resume` - resume checkpoints
 
-Source: `vtscore/cli_resume.py`. The checkpoint a `resume=True` run (CLI
+Source: `vtscore/cli/resume.py`. The checkpoint a `resume=True` run (CLI
 `--resume`) saves beside its output, `<path>.resume.json`, after every chunk
 the exporter commits, and the checks a later run makes before it continues:
 
@@ -472,9 +485,9 @@ Every refusal is a `ResumeRefusedError`, a `ValueError`, whose message names
 the checkpoint to delete to start over. Only digests, byte offsets and
 thresholds are stored: no embedding and no model weight.
 
-## `vtscore.cli_progress` - format-aware output
+## `vtscore.cli.progress` - format-aware output
 
-Source: `vtscore/cli_progress.py`. Every write goes straight to
+Source: `vtscore/cli/progress.py`. Every write goes straight to
 `sys.stdout`/`sys.stderr` with a `flush()`; the only state is a
 single module-global `_format` flag.
 
@@ -529,7 +542,7 @@ def notification_subscriber(notification: Notification) -> None: ...
   Never ends the run, even at `level="error"`.
 
 ```python
-from vtscore import cli_progress
+from vtscore.cli import progress as cli_progress
 
 cli_progress.set_format("json")
 cli_progress.emit(
@@ -542,34 +555,34 @@ cli_progress.emit(
 
 ### Event reference
 
-Events emitted by `vtscore.cli`, `vtscore.cli_pipeline` and
-`vtscore.cli_progress`. Every event includes `event` and `ts`; each row
+Events emitted by the `vtscore.cli` package's stages, `vtscore.cli.pipeline`
+and `vtscore.cli.progress`. Every event includes `event` and `ts`; each row
 lists the extra fields.
 
 | Event              | Fields                                                            | Source                                |
 |--------------------|-------------------------------------------------------------------|---------------------------------------|
-| `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
-| `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
-| `chunk_skipped`    | `chunk_num: int`, `chunk_size: int`, `read: bool` (a completed chunk a resumed run checked, not scored; `read` is `false` when its importer's walk checked it without reading its files) | `_ResumableChunks.records` in `cli.py` |
-| `resume_start`     | `checkpoint: str`, `chunks_done: int`, `resumed: bool` (`false` for a resumable run starting fresh) | `_run_resumable_streaming_pipeline` in `cli.py` |
-| `resume_threshold_kept` | `detector`, `retrained: float`, `recorded: float` (the retrained cut moved within noise; the recorded one is kept) | `_write_resumable_stream` in `cli.py` |
-| `resume_complete`  | `checkpoint: str` (now removed), `chunks: int`                    | `_run_resumable_streaming_pipeline` in `cli.py` |
-| `top_results`      | `detector`, `kept: int`, `seen: int` (the records the detector produced), `max_results: int`; one per detector, before the export | `_top_records` in `cli.py` |
-| `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
-| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`, plus `override_input_spec` when the clipper override did it | `_input_spec_reclip` / `_override_reclip` in `cli.py` |
-| `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
-| `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643), `hold_labels`, `hold_owed` (`0`) | `_report_centroid` in `cli.py` |
-| `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758), `hold_labels`, `hold_owed` (past the quota, held on the query, #4889) | `_report_centroid` in `cli.py` |
-| `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
-| `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
-| `detection_skipped` | `reason`, plus `dataset` (its name) in a multi-dataset run       | `_emit_detection_skipped` in `cli.py` |
-| `dataset_saved`    | `dataset_id`, `name`, `num_items`, `pkl_path`, `already_saved`    | `_save_source_dataset` / `_emit_dataset_saved` in `cli.py` |
-| `dataset_start`    | `name`, `media_type`, `category`, `dataset_id` (`null` unless saved), `index` (0-based), `count` | `_RunDataset.announce` in `cli.py`, per dataset of a multi-dataset run |
-| `dataset_failed`   | `name`, `error`                                                   | `_save_multi_source_datasets` / `_temporary_output_runs` in `cli.py` |
-| `dataset_deleted`  | `dataset_id`, `name`                                              | `_delete_after_detection` in `cli.py` |
-| `labels_imported`  | `detector`, `applied`, `skipped`, `created`                       | `_import_labels` in `cli_pipeline.py` |
-| `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
-| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `override_clipper` (the clipper override's `input_spec`, or `null`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
+| `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli/run.py`            |
+| `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli/run.py`      |
+| `chunk_skipped`    | `chunk_num: int`, `chunk_size: int`, `read: bool` (a completed chunk a resumed run checked, not scored; `read` is `false` when its importer's walk checked it without reading its files) | `_ResumableChunks.records` in `cli/resumable.py` |
+| `resume_start`     | `checkpoint: str`, `chunks_done: int`, `resumed: bool` (`false` for a resumable run starting fresh) | `_run_resumable_streaming_pipeline` in `cli/resumable.py` |
+| `resume_threshold_kept` | `detector`, `retrained: float`, `recorded: float` (the retrained cut moved within noise; the recorded one is kept) | `_write_resumable_stream` in `cli/resumable.py` |
+| `resume_complete`  | `checkpoint: str` (now removed), `chunks: int`                    | `_run_resumable_streaming_pipeline` in `cli/resumable.py` |
+| `top_results`      | `detector`, `kept: int`, `seen: int` (the records the detector produced), `max_results: int`; one per detector, before the export | `_top_records` in `cli/streaming.py` |
+| `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors` in `cli/detectors.py` |
+| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`, plus `override_input_spec` when the clipper override did it | `_input_spec_reclip` / `_override_reclip` in `cli/detectors.py` |
+| `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli/detectors.py` |
+| `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643), `hold_labels`, `hold_owed` (`0`) | `_report_centroid` in `cli/detectors.py` |
+| `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758), `hold_labels`, `hold_owed` (past the quota, held on the query, #4889) | `_report_centroid` in `cli/detectors.py` |
+| `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli/scoring.py`    |
+| `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli/sources.py`    |
+| `detection_skipped` | `reason`, plus `dataset` (its name) in a multi-dataset run       | `_emit_detection_skipped` in `cli/run.py` |
+| `dataset_saved`    | `dataset_id`, `name`, `num_items`, `pkl_path`, `already_saved`    | `_save_source_dataset` / `_emit_dataset_saved` in `cli/datasets.py` |
+| `dataset_start`    | `name`, `media_type`, `category`, `dataset_id` (`null` unless saved), `index` (0-based), `count` | `_RunDataset.announce` in `cli/datasets.py`, per dataset of a multi-dataset run |
+| `dataset_failed`   | `name`, `error`                                                   | `_save_multi_source_datasets` / `_temporary_output_runs` in `cli/datasets.py` |
+| `dataset_deleted`  | `dataset_id`, `name`                                              | `_delete_after_detection` in `cli/datasets.py` |
+| `labels_imported`  | `detector`, `applied`, `skipped`, `created`                       | `_import_labels` in `cli/pipeline.py` |
+| `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli/export.py`    |
+| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `override_clipper` (the clipper override's `input_spec`, or `null`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan` in `cli/dry_run.py` |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`; `dataset` while a multi-dataset run imports | `progress_callback`, `_relay_import_progress` |
 | `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |

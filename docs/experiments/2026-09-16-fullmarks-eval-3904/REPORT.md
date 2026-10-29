@@ -26,7 +26,7 @@ contamination rule the issue asked to be wired in.
 4. **SigLIP is the only method above chance**, at mean AP **0.12** on tier `s`
    and **0.076** on `m`, against 0.029 for the source-only control.
 
-![mean AP by pool and method](fig_ap_by_pool.png)
+![mean AP by pool and method](fig_ap_by_pool.webp)
 
 ## What was scored
 
@@ -68,7 +68,7 @@ s / m / l were eligible negatives for all ten Tobacco800 classes.**
 **The pages it removes are real positives, not a precaution.** SigLIP's
 highest-ranked excluded pages for each Tobacco800 class, beside its query crop:
 
-![excluded pages](excluded_tobacco800_m.png)
+![excluded pages](excluded_tobacco800_m.webp)
 
 The *Lorillard* script class has its own wordmark on the UCSF pages SigLIP ranks
 1, 2, 3 and 4; the B&W three-leaf class has it at 1, 2, 4 and 5; the *RJR* block
@@ -114,7 +114,7 @@ FullMarks has no cell for it.
 crop and (a) 8 of its true positives, (b) 8 same-source negatives, with the
 stored features and with the pages re-extracted at larger budgets.
 
-![inliers by budget](fig_inliers_by_budget.png)
+![inliers by budget](fig_inliers_by_budget.webp)
 
 **Stored pages hold exactly 1,024 keypoints** (median), taken by response from a
 300 dpi page that is mostly text, and the mark gets almost none of them:

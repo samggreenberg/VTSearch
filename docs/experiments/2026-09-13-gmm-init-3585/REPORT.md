@@ -228,7 +228,7 @@ control is not only "how much" but "where": the candidate agrees with the
 incumbent wherever the mixture is identifiable and parts company where nothing
 identifies it, while re-initialising the incumbent parts company everywhere.
 
-![The arms](figures/arms.png)
+![The arms](figures/arms.webp)
 
 *One point per arm: median speedup against the mean percentage of the haystack
 whose verdict changes. Bottom right is faster and more faithful; the dashed line
@@ -236,7 +236,7 @@ is the incumbent's own speed. `sklearn_kmeanspp` is the scale — it is what
 touching the incumbent's init costs. What this figure does **not** show: the
 distribution behind each mean, which is the next one.*
 
-![How often, and by how much](figures/change_ecdf.png)
+![How often, and by how much](figures/change_ecdf.webp)
 
 *The distribution behind those means: the fraction of cases (y) whose verdict
 change is at or below a given size (x, log). A curve that reaches 1.0 at the
@@ -374,7 +374,7 @@ and the gap is not a rounding difference: the reconstruction under-counts the
 per-media Python work that dominates the non-GMM side. The saving is real and
 the multiplier on a whole sort is 1.7x, not 10x.
 
-![Cost against sample size](figures/cost_vs_n.png)
+![Cost against sample size](figures/cost_vs_n.webp)
 
 *Cost per fit against the size of the sample, log-log, one line per arm. Solid:
 measured on a real sort or fold haystack of that size. Dotted: the same array
@@ -427,7 +427,7 @@ family; at 32 tests a p of 0.005 is roughly what chance produces, and no
 mechanism predicts that this environment in particular should benefit. It is
 reported because leaving it out would be worse, and it is not being banked.
 
-![Cost over clicks, averaged](figures/cost_vs_clicks.png)
+![Cost over clicks, averaged](figures/cost_vs_clicks.webp)
 
 *The mandatory quality-over-clicks pair, averaged: one panel per dataset, one
 line per arm, over every seed and category, with the inter-quartile band. Click
@@ -439,9 +439,9 @@ figure does **not** license: reading a gap between two lines that the paired
 table above says is inside its own error bar.*
 
 The per-run panels — one file per dataset, every seed as its own line — are
-[`figures/cost_vs_clicks_runs__visual_genome_m.png`](figures/cost_vs_clicks_runs__visual_genome_m.png),
-[`…__coco_val.png`](figures/cost_vs_clicks_runs__coco_val.png) and
-[`…__caltech101_m.png`](figures/cost_vs_clicks_runs__caltech101_m.png), and the
+[`figures/cost_vs_clicks_runs__visual_genome_m.webp`](figures/cost_vs_clicks_runs__visual_genome_m.webp),
+[`…__coco_val.png`](figures/cost_vs_clicks_runs__coco_val.webp) and
+[`…__caltech101_m.png`](figures/cost_vs_clicks_runs__caltech101_m.webp), and the
 interactive [`viewer.html`](viewer.html) carries every other slice (any dataset,
 any category, any metric the run emitted, seeds pooled or drawn individually).
 

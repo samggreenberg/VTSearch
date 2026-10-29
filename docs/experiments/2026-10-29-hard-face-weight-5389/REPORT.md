@@ -6,7 +6,7 @@ recover #5376's β 4 loss. At weights 0, ¼ and ½, F at 50 votes moves at most 
 The β 4 line still returns about 20 faces where leaving the face out returns 9, so precision stays near 0.3.
 The app keeps its plain mean.** Clear sessions are unchanged, as they must be.
 
-![F at 50 votes per β and weight, with #5376's hard-face-out level](f50.png)
+![F at 50 votes per β and weight, with #5376's hard-face-out level](f50.webp)
 
 | K = 4, flagged sessions, F at 50 votes | 1024 px, 26 people | 640 px, 25 people |
 |---|---:|---:|
@@ -62,7 +62,7 @@ The control matches #5376's control in the flagged sessions' means (β 4: 0.80 a
   with a bootstrap 95% interval over people, and `identical`. It also holds the control's and #5376's
   leave-it-out level on the flagged sessions (`arm` = `ctl`, `swap`).
 - `paired.csv`: one row per person (the first 8 characters of the id), size, β and arm, with both values.
-- `f50.png`: the figure above.
+- `f50.webp`: the figure above.
 
 The runs: 792 cells (51 flagged person-sizes × 3 β × 4 arms, plus 30 clear × 3 β × 2 arms). They ran as
 10 CPU packs of 16 cells at a time, sharded by person so each person's arms share a node. That took 17

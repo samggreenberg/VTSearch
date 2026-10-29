@@ -30,7 +30,7 @@ of sessions where it keeps nothing new from **45% to 22%**. Beta ¼ there stays 
 nothing new in 66%) until #4779 draws the line over the unvoted media. The owner chose that split on
 2026-10-11.
 
-![Each drop rule's F-beta minus count_gap_floor's at every vote, per bench and balance](fig_centroid_drop.png)
+![Each drop rule's F-beta minus count_gap_floor's at every vote, per bench and balance](fig_centroid_drop.webp)
 
 *Figure 1. Each rule's mean F-beta minus `count_gap_floor`'s, at every vote, over every run. Rows are
 beta ¼, 1 and 4; columns are FHIBE face crops from 1 and 4 example photos, whole photos from 1, and

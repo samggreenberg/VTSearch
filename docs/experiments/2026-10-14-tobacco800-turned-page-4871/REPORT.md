@@ -14,7 +14,7 @@ other arm and source is unchanged.
 
 ## What was wrong
 
-![The page as stored, and turned 180 degrees, with the XML's boxes](figures/turned.png)
+![The page as stored, and turned 180 degrees, with the XML's boxes](figures/turned.webp)
 
 *Left: the TIF as stored, with the XML's logo box (red) and signature box
 (green). The red box holds no ink at all (every pixel is 255), and the green
@@ -28,7 +28,7 @@ unchanged. They land on the eagle and on Mrs. Jarrett's signature.*
   signature zone was wrong too, but signatures are recorded and never queried,
   so only the logo showed up.
 
-![The eagle, upright, with both boxes](figures/eagle.png)
+![The eagle, upright, with both boxes](figures/eagle.webp)
 
 *Red: the XML's logo box, turned (92 × 84). Blue: the completeness box (71 ×
 78), which clips about a fifth off the icon's right edge. The source box is the

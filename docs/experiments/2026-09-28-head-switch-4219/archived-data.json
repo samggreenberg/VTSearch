@@ -1,0 +1,83 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-head-switch-4219.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "binary/stageB_levels.csv": {
+     "bytes": 2840,
+     "oid": "50fdc8295cfa061d731429ae9138099ffea4f1f2"
+    },
+    "binary/stageB_paired.csv": {
+     "bytes": 42849,
+     "oid": "2ed9a22dca0cbeee05dd9c008b4cdd216804f16b"
+    },
+    "binary/stageB_provenance.json": {
+     "bytes": 594,
+     "oid": "38f58d770f29c22a0af300f16dac530f69ef1dfa"
+    },
+    "cutincl/cutincl_levels.csv": {
+     "bytes": 1030,
+     "oid": "a38f61113fc41ef87ca9b5745d0d91564dc8055b"
+    },
+    "figures/cost_vs_clicks.csv": {
+     "bytes": 47402,
+     "oid": "874efa7497455b1e5ce0351e78c153ade8dcf07b"
+    },
+    "figures/cost_vs_clicks.png": {
+     "bytes": 84539,
+     "oid": "af4b23abc47bf3b4fae5bedb5b27f0db75eefa20"
+    },
+    "figures/cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 436772,
+     "oid": "c47e2766dfa623e9f624ca7a07a5d09d03e04947"
+    },
+    "figures/oracle_cost_vs_clicks.csv": {
+     "bytes": 47764,
+     "oid": "604c80ec20dc5a2fcdae3ef049a6d857446f66ca"
+    },
+    "figures/oracle_cost_vs_clicks.png": {
+     "bytes": 77707,
+     "oid": "7607234c44fcc076f4414bebe89203243d51ed9e"
+    },
+    "figures/oracle_cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 651382,
+     "oid": "6f14de7f61bcaecc66c678214cf1cd30e7e6d7ce"
+    },
+    "figures/paired_delta_by_band.csv": {
+     "bytes": 253773,
+     "oid": "64f7cdcbd10db88e9c6f7fa6e7052c8965149e08"
+    },
+    "figures_region/cost_vs_clicks.csv": {
+     "bytes": 30949,
+     "oid": "006ade44c732cd34295395a73defe8461835fcb4"
+    },
+    "figures_region/cost_vs_clicks.png": {
+     "bytes": 75871,
+     "oid": "f2ed3b08100fe963d156299f3a1185c2857d92c4"
+    },
+    "figures_region/cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 314130,
+     "oid": "cb46789c11e298fef4610d3dd31688c4186d8653"
+    },
+    "figures_region/oracle_cost_vs_clicks.csv": {
+     "bytes": 31519,
+     "oid": "74e43a996542cc27eb9baf7853c91613b889de38"
+    },
+    "figures_region/oracle_cost_vs_clicks.png": {
+     "bytes": 71134,
+     "oid": "0343ea5d66f4b53823736e8efde96cb41d412c11"
+    },
+    "figures_region/oracle_cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 258252,
+     "oid": "e07825fd1eae9e3fb3682124cfff7c1945554718"
+    },
+    "figures_region/paired_delta_by_band.csv": {
+     "bytes": 122477,
+     "oid": "b42c8fa29d03bd06a8b62698de02616ba1521833"
+    }
+   }
+  }
+ ]
+}

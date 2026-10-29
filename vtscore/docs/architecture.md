@@ -319,7 +319,7 @@ package has a guide in [`packages/`](README.md#package-reference).
 vtscore/
 ├── __init__.py                 # __version__ (manual semver)
 ├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables
-├── cli.py / cli_pipeline.py / cli_progress.py   # autodetect CLI, YAML pipeline, text/NDJSON progress
+├── cli/                        # autodetect CLI, one module per stage: entry points, YAML pipeline, text/NDJSON progress
 ├── io.py                       # server-file JSON read + atomic-write helpers for plugins
 ├── gpu_backends.py             # optional cuML routing
 ├── single_instance.py          # the port lock
@@ -385,7 +385,7 @@ is the authority on where to import it from.
 | `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
 | `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
 | `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
-| `vtscore.cli` | Plain modules: `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`. |
+| `vtscore.cli` | The entry points: `autodetect_main` and its three siblings, `import_labels_into_detector`, `DetectorNotFoundError`. The stages are submodules: `vtscore.cli.pipeline`, `vtscore.cli.progress`, `vtscore.cli.resume`, … (`vtscore.cli_pipeline`, `cli_progress` and `cli_resume` are deprecated aliases of the first three). |
 
 ## Dependency direction
 

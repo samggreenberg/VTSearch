@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from vtscore.cli import _run_exporter
+from vtscore.cli.export import _run_exporter
 
 
 # ---------------------------------------------------------------------------

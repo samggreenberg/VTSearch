@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-27-buffalo-m-5330.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "cosine_hist.csv": {
+     "bytes": 382,
+     "oid": "d2dce05ed0f307d94740692159432c9395127220"
+    },
+    "nme_cdf.csv": {
+     "bytes": 6093,
+     "oid": "29069dc0a4f151fc17c3fb99bdd348bec1a3f1a1"
+    },
+    "summary.csv": {
+     "bytes": 1820,
+     "oid": "6262c55c1e3b9e2ac1789db61c57a75bee249521"
+    }
+   }
+  }
+ ]
+}

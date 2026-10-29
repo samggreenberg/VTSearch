@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 import torch
 
-from vtscore.cli import _score_medias_with_detectors
+from vtscore.cli.scoring import _score_medias_with_detectors
 import vtscore.detectors.converter_routing as cr
 
 

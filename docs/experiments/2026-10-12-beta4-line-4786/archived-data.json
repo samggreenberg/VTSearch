@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-12-beta4-line-4786.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ab.csv": {
+     "bytes": 5726,
+     "oid": "00c5dac1a7c1903149d23642babee29d696316c1"
+    },
+    "ab_curves.csv": {
+     "bytes": 209861,
+     "oid": "4d6683a29a6c0a0a6612955ffd37098ba380071b"
+    },
+    "ab_merged.csv": {
+     "bytes": 2675,
+     "oid": "3c51161b6da564455c8f3d6a1426a3703929ce55"
+    },
+    "curves_b4.csv": {
+     "bytes": 391705,
+     "oid": "452aa3e5b7d0b5bfba8317581992660e7256365a"
+    },
+    "curves_low.csv": {
+     "bytes": 870552,
+     "oid": "382f6103bc39e53ce2690602589a8c2509b29c28"
+    },
+    "rules_b4.csv": {
+     "bytes": 337037,
+     "oid": "14b8dd526cef3de25ed96aecea72173e3a0b9dbf"
+    },
+    "rules_low.csv": {
+     "bytes": 728016,
+     "oid": "7681c995953bdb577d7e0558f45ee916ccda3a21"
+    }
+   }
+  }
+ ]
+}

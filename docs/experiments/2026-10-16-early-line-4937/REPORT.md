@@ -91,7 +91,7 @@ what any line on this head could reach.
 
 ## The symptom
 
-![Today's Find line on the withheld half at each preset](figures/binary/symptom.png)
+![Today's Find line on the withheld half at each preset](figures/binary/symptom.webp)
 
 *Left to right, over votes, at each preset: the set size against the best set's (dotted: the class model's cut
 alone); the prevalence estimate against the truth; the expected F-beta minus the F-beta; the best cut's F-beta minus
@@ -166,7 +166,7 @@ which is why the gate is there.
 
 ## The class model's cut: the Good component's error, split
 
-![The Good component's mean and spread against the withheld positives', split exactly](figures/binary/good_component.png)
+![The Good component's mean and spread against the withheld positives', split exactly](figures/binary/good_component.webp)
 
 *Top: the Good component's mean minus the withheld positives' mean on the final scale, split exactly into selection
 (the held-out Goods against the withheld positives, both on the fold models' scale) and scale (the withheld positives,
@@ -196,7 +196,7 @@ the preset. Over the session, at every preset:
 
 ## The class model's cut: each piece swapped for the truth
 
-![Each swap's F-beta gain over today's line and its set size, on the class model's cut](figures/binary/swaps.png)
+![Each swap's F-beta gain over today's line and its set size, on the class model's cut](figures/binary/swaps.webp)
 
 *Top: each swap's F-beta gain over today's line on the same heads, on the snapshots where the class model draws the
 line. Bottom: each swap's median set size against the best set's. "The true chances" is the best cut, smoothed: the
@@ -290,7 +290,7 @@ Sessions picked by rule at vote 40 (`early_line_4937.py examples`): the median s
 that keep too few, the largest, the one where the true Good component leaves the most to the true chances, and a
 large-band session whose set is about right.
 
-![Beta 4, vote 40](figures/binary/examples_b4_vote40.png)
+![Beta 4, vote 40](figures/binary/examples_b4_vote40.webp)
 
 *Each row is one session. Left: the withheld half's top on a log count scale, positives green, negatives grey; the
 line's Good component (red) and the positives' own normal (green dashes), both scaled to the positives' count; today's
@@ -325,7 +325,7 @@ Head's count line sessions at vote 40, at the 10th, 50th and 90th percentile of 
 
 ## Per session
 
-![Each session's set size against the best set's, over votes](figures/binary/per_session.png)
+![Each session's set size against the best set's, over votes](figures/binary/per_session.webp)
 
 *One thin line per session (all snapshots, both lines); the medians of today, the true Good component and the true
 chances on top.*

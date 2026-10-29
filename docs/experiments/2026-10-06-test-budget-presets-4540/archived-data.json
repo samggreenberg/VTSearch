@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-06-test-budget-presets-4540.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "presets.csv": {
+     "bytes": 1805,
+     "oid": "4d91cd9bcc5a6ad1bc27a623270abad73e459209"
+    },
+    "presets_posterior_split.csv": {
+     "bytes": 1806,
+     "oid": "a7e8889971772f4ac1d80e691ef26f25cbb8f319"
+    },
+    "provenance.json": {
+     "bytes": 2095,
+     "oid": "e91f61e1d40657c701e4e28a97200b66bcb69286"
+    },
+    "summary.csv": {
+     "bytes": 65507,
+     "oid": "9cf5ab1d832beb6cbae618f0d0ef60e1d3a58838"
+    }
+   }
+  }
+ ]
+}

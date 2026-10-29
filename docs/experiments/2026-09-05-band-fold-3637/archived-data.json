@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-05-band-fold-3637.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/unbanded.json": {
+     "bytes": 187677,
+     "oid": "174c47aa3dcd4c93e1548a4fdf3a4301f1c52cd6"
+    }
+   }
+  }
+ ]
+}

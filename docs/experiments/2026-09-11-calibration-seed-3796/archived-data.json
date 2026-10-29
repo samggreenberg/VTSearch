@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-11-calibration-seed-3796.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/average_precision_vs_clicks.png": {
+     "bytes": 187147,
+     "oid": "2cbf60185b197d0d20165523cf2ca514d7917050"
+    },
+    "figures/cost_vs_clicks.png": {
+     "bytes": 218960,
+     "oid": "0e78f13745401152ca3167870ed7f5a76cf25974"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-16-fullmarks-eval-3904.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/diag_structural.json": {
+     "bytes": 12807,
+     "oid": "22b4fb27b71ff853f18c53687c2d5da892c0f498"
+    }
+   }
+  }
+ ]
+}

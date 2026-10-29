@@ -31,7 +31,7 @@ the inliers on documents and photos. This report validates what replaced it.
   multi-statistic accept rule is plausible. It would have to beat #4367's
   Bad-ceiling line end to end, and it is filed as #4434.
 
-![Distributions, tier m](figures/distributions-m.png)
+![Distributions, tier m](figures/distributions-m.webp)
 
 *Every template, tier `m`. Top: all fits with a sane model. Bottom: fits past
 the 8-inlier gate. The false pairs' spike at reprojection error ≈ 0 is the

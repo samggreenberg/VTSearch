@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-28-face-quality-5372.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "auc.csv": {
+     "bytes": 283,
+     "oid": "b2c2c0829d9945d92f7b405a0f2399c57068388b"
+    },
+    "cuts.csv": {
+     "bytes": 4606,
+     "oid": "f706bfaf4e1681c765015b072cf72fdee17ef4fd"
+    },
+    "fails.csv": {
+     "bytes": 353,
+     "oid": "dabeb82342e8a28071bc1bc56254037dd8931bd9"
+    }
+   }
+  }
+ ]
+}

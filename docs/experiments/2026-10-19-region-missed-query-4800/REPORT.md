@@ -25,7 +25,7 @@ The gain is on small and medium instances (+0.005 and +0.006 over votes 1–50 a
 that gains 0.0005 to 0.0009 less over votes 1–50, at 1 to 2 SE (paired), so the two are close. **The owner chose
 the first Bad** (2026-10-19), asked with both rules' numbers.
 
-![What Find returns on the missed votes, and the difference to today at every vote](figures/fig_missed_query.png)
+![What Find returns on the missed votes, and the difference to today at every vote](figures/fig_missed_query.webp)
 
 *Figure 1. The Region path, rows beta ¼, 1 and 4. Left: F-beta at each vote over the sessions whose typed query has
 missed by then: the typed query's set (orange, today) and the region centroid (blue). The grey bars are the share of

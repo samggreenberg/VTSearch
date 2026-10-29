@@ -99,7 +99,7 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     from vtscore.detectors.centroid_head import is_centroid_head
     from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds, query_missed
     from vtscore.detectors.query_head import is_query_head, query_head_text, typed_query_prior_applies
-    from vtscore.detectors.training import _patch_space_for
+    from vtscore.detectors.training_calibration import _patch_space_for
     from vtscore.training import svm_prior
 
     if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):

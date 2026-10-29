@@ -131,7 +131,7 @@ session mean by +0.013 to +0.029 from four photos and +0.001 to +0.004 from one
 | 4 photos | 640 | 1 | 0.746 → 0.748 | +0.003 ± 0.002 | +0.006 ± 0.005 | +0.003 ± 0.002 | 0 → 0 |
 | 4 photos | 640 | 4 | 0.758 → 0.764 | +0.006 ± 0.003 | +0.006 ± 0.005 | +0.003 ± 0.002 | 0 → 0 |
 
-![Roll + sideways minus roll at every click](fig_session_gain.png)
+![Roll + sideways minus roll at every click](fig_session_gain.webp)
 
 *Figure 1. Roll + sideways minus roll, in the objective the session shows at every click, mean over
 the 562 people; colour is the preset, solid 1024 px with a ±1 SE band, dashed 640 px.*

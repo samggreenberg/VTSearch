@@ -1,0 +1,131 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-18-cross-corpus-4739.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/fbeta_vs_clicks.csv": {
+     "bytes": 68786,
+     "oid": "2a9c7ff3a50b9352c668d5ad165112ee6b2a8224"
+    },
+    "figures/fbeta_vs_clicks.png": {
+     "bytes": 89521,
+     "oid": "17425309310db22e6947ca7a50aec485618e7c58"
+    },
+    "figures/fbeta_vs_clicks_runs__coco_better.png": {
+     "bytes": 1053701,
+     "oid": "b9e6f3c372f996cb83741dfd29fe7657d4822c32"
+    },
+    "figures/screens_examples.csv": {
+     "bytes": 68795,
+     "oid": "2965758db556d07e04ba40beb8340d737ee25d18"
+    },
+    "flags.csv": {
+     "bytes": 6864,
+     "oid": "b81fab90f1454b9f2eff0cd1240284087f5c55cd"
+    },
+    "identity.csv": {
+     "bytes": 584,
+     "oid": "018e183500b1f2a0475533c6966b0d4dfd0b8696"
+    },
+    "legs.csv": {
+     "bytes": 22616,
+     "oid": "0c4373180b73b3ba06e9d3a57224ec91afbe7492"
+    },
+    "provenance.json": {
+     "bytes": 144,
+     "oid": "4f113d20dd6ab6a60251b89ce3de213965c94b87"
+    },
+    "screens0/curves.csv": {
+     "bytes": 101962,
+     "oid": "886e0b2ecad9f248b899488cb42d86e1e882a54e"
+    },
+    "screens0/find_curves.csv": {
+     "bytes": 81222,
+     "oid": "c5e371b4b918c5bb789746b3162c856849289675"
+    },
+    "screens0/find_paired_curve.csv": {
+     "bytes": 16373,
+     "oid": "9f71e8dae26832a9b620379d1f4ac63b511b70a1"
+    },
+    "screens0/flags.csv": {
+     "bytes": 2026,
+     "oid": "7156e34434adf99fd9eef5b71588f37c7665b533"
+    },
+    "screens0/paired.csv": {
+     "bytes": 14313,
+     "oid": "9d7c4b23e6eed1e75d313758fa756cb74b2faff8"
+    },
+    "screens0/paired_curve.csv": {
+     "bytes": 16373,
+     "oid": "5477fe149bd1b51a1934d342d33c8fa7cc834467"
+    },
+    "screens0/provenance.json": {
+     "bytes": 1595,
+     "oid": "90268c4f4a4a1e1db43873d3a1f1bd453711b1d4"
+    },
+    "screens_equal/curves.csv": {
+     "bytes": 101962,
+     "oid": "886e0b2ecad9f248b899488cb42d86e1e882a54e"
+    },
+    "screens_equal/find_curves.csv": {
+     "bytes": 81323,
+     "oid": "2974d7d394c7ec2a2fea09c06b174fef4f0b58b3"
+    },
+    "screens_equal/find_paired_curve.csv": {
+     "bytes": 16387,
+     "oid": "379fca85c3d03cedca8676d1c57230cdf3508134"
+    },
+    "screens_equal/flags.csv": {
+     "bytes": 2141,
+     "oid": "f8081ca785e74c8b9e44bb4aa2968a8d2d1f7a70"
+    },
+    "screens_equal/paired.csv": {
+     "bytes": 14324,
+     "oid": "7cef18d1d90fdedc050b3dbb9a02ce69211e5c59"
+    },
+    "screens_equal/paired_curve.csv": {
+     "bytes": 16373,
+     "oid": "5477fe149bd1b51a1934d342d33c8fa7cc834467"
+    },
+    "screens_equal/provenance.json": {
+     "bytes": 1595,
+     "oid": "90268c4f4a4a1e1db43873d3a1f1bd453711b1d4"
+    },
+    "screens_only/curves.csv": {
+     "bytes": 101962,
+     "oid": "886e0b2ecad9f248b899488cb42d86e1e882a54e"
+    },
+    "screens_only/find_curves.csv": {
+     "bytes": 55706,
+     "oid": "e673590ae1766ac69dc244b1ec8ec078b7708eae"
+    },
+    "screens_only/find_paired_curve.csv": {
+     "bytes": 8150,
+     "oid": "bf050e29bd191f559781de3d3f829980c7a34938"
+    },
+    "screens_only/flags.csv": {
+     "bytes": 1907,
+     "oid": "2dc6090a9f4a72922387350c569fda6fe9fb1f43"
+    },
+    "screens_only/paired.csv": {
+     "bytes": 12866,
+     "oid": "60d88c37163c151632f87a07eb7a96d6a992916f"
+    },
+    "screens_only/paired_curve.csv": {
+     "bytes": 16373,
+     "oid": "5477fe149bd1b51a1934d342d33c8fa7cc834467"
+    },
+    "screens_only/provenance.json": {
+     "bytes": 1595,
+     "oid": "90268c4f4a4a1e1db43873d3a1f1bd453711b1d4"
+    },
+    "span.csv": {
+     "bytes": 649,
+     "oid": "3de16b88918b77355b7bb8f6ab3036b8be204e06"
+    }
+   }
+  }
+ ]
+}

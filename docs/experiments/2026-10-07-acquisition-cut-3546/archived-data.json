@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-acquisition-cut-3546.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/curves.csv": {
+     "bytes": 25739,
+     "oid": "2a05292b8a1f8f89a31e41f91c41a4137e2e4d07"
+    },
+    "tables/levels.csv": {
+     "bytes": 1990,
+     "oid": "e434e39bedc444bb7ee46226f846f3f6b6f12b8e"
+    },
+    "tables/paired.csv": {
+     "bytes": 18010,
+     "oid": "0c858dc36a224bd91768e5e4a5515e72124b99c1"
+    },
+    "tables/per_run_goods.csv": {
+     "bytes": 39917,
+     "oid": "7a002759fe42318a314a61d05a4fb98d5da9dd82"
+    },
+    "tables/provenance.json": {
+     "bytes": 3440,
+     "oid": "e0bac7fead0ae077de28de001b7d24a8be5fb981"
+    }
+   }
+  }
+ ]
+}

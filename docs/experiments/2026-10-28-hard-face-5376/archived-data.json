@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-28-hard-face-5376.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "k1.csv": {
+     "bytes": 1031,
+     "oid": "ed006518b41b32ec1f2b050523302627a38071ac"
+    },
+    "paired.csv": {
+     "bytes": 20080,
+     "oid": "9f7c23c42519c7b3fce1c064ec6b43a7e41a7b75"
+    },
+    "summary.csv": {
+     "bytes": 5582,
+     "oid": "046a03f2e1480df0ab110f0b062eabf6303a6dce"
+    }
+   }
+  }
+ ]
+}

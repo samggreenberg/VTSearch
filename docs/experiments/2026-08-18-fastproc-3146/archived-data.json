@@ -1,0 +1,107 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-18-fastproc-3146.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "BENCH_POWER_TABLES.txt": {
+     "bytes": 3572,
+     "oid": "d6480e630d8e22f9c2c0d370ad2d3039661ba682"
+    },
+    "BENCH_TABLES.txt": {
+     "bytes": 6936,
+     "oid": "ea4bfb1bc0d319365bd99d1b5574d139d537d534"
+    },
+    "CHECK_ARMS.txt": {
+     "bytes": 1414,
+     "oid": "34d5b7770b517e35c0328add173b6c43808f57bd"
+    },
+    "DISPATCH_TABLES.txt": {
+     "bytes": 4829,
+     "oid": "271acb28b6aca2703d67560c6241e1c0a3a46dd9"
+    },
+    "DRIFT_TABLES.txt": {
+     "bytes": 11140,
+     "oid": "1dd305a65e46135a481effad2fa6aa9513ecc400"
+    },
+    "ODD_INPUTS.txt": {
+     "bytes": 10327,
+     "oid": "dba65f913cf3496cd9877c8ec7ab9262070ac110"
+    },
+    "PAIRING.txt": {
+     "bytes": 632,
+     "oid": "39824c61e45c419f696beab1857d04b392797fb8"
+    },
+    "PAIRING_power.txt": {
+     "bytes": 454,
+     "oid": "ca20c744e40618be33d75e041eb5ce661582ba37"
+    },
+    "PIXEL_TABLES.txt": {
+     "bytes": 2848,
+     "oid": "e8d45fca9143dc543dd4f30ade9b54897f099e26"
+    },
+    "adjudication.csv": {
+     "bytes": 666,
+     "oid": "3c852326a8b391e6dcfa880ea63e3c20b7ac1747"
+    },
+    "drift.csv": {
+     "bytes": 1120,
+     "oid": "4e7235968315201c0cebd9df27b7d7c40f31a04a"
+    },
+    "examples.json": {
+     "bytes": 12744,
+     "oid": "710bc79117ec6fbfa3d22ba8e8b14fb00fe9397a"
+    },
+    "figures/cost_breakdown.svg": {
+     "bytes": 58779,
+     "oid": "0c34941c346a7a4e8a9c5aa3a0ca89f19f0af9bb"
+    },
+    "figures/cost_speedup.svg": {
+     "bytes": 66857,
+     "oid": "f4c9fd4e461d81b76b770d253f189e86128f8a07"
+    },
+    "figures/pixel_vs_vector.svg": {
+     "bytes": 57175,
+     "oid": "282d0516bd4ad3a2807e0f176866ca5aaee970f4"
+    },
+    "figures/rank_stability_exemplar.png": {
+     "bytes": 67758,
+     "oid": "b6d931c50e359974e6d425439c6472a372ec506b"
+    },
+    "figures/rank_stability_text_query.png": {
+     "bytes": 69379,
+     "oid": "3ae94bc5147b35dc462fde2ccd22c33331bdf44e"
+    },
+    "figures/topk_and_top1.svg": {
+     "bytes": 70296,
+     "oid": "7bac23745727b6106874708c8c7a26ee22c229f1"
+    },
+    "figures/topk_overlap.png": {
+     "bytes": 80081,
+     "oid": "ca53b7592c62332cd3bdecb4803202bf39b8768a"
+    },
+    "odd_inputs.csv": {
+     "bytes": 11632,
+     "oid": "f50a2000c17afe846103cdb926d3f9e65c7b1108"
+    },
+    "pixel_drift.csv": {
+     "bytes": 1700,
+     "oid": "d090ef14fb25410763e29beb7fad35ba976a91c4"
+    },
+    "pixel_drift_examples.json": {
+     "bytes": 7171,
+     "oid": "321b9cb88876ba2098c4e549383279fa736685b5"
+    },
+    "rank_stability.csv": {
+     "bytes": 108846,
+     "oid": "3f4a935c7548548a1b699b150b14b4c13a82f955"
+    },
+    "timing_arms.json": {
+     "bytes": 1085,
+     "oid": "e19ef27d95d8e72aaac74ce10908fa824bdf0a1a"
+    }
+   }
+  }
+ ]
+}

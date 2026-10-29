@@ -44,9 +44,9 @@ roster.
   ranking** (0.42 against 0.93 at the final click). The ranking puts the
   positives first; the gate draws the line in the wrong place.
 
-![AP and Goods found](figures/ap_found.png)
+![AP and Goods found](figures/ap_found.webp)
 
-![F1 over clicks](figures/f1_over_clicks.png)
+![F1 over clicks](figures/f1_over_clicks.webp)
 
 **The line at each floor P.** The structural path has no precision-floor
 estimator, so a P-cut here is an **oracle**: the deepest cut of the ranking
@@ -61,7 +61,7 @@ whose precision is ≥ P.
 The gate's recall matches the 50% cut's. Its F1 is low because its precision
 is wrong, and wrong in a class-dependent direction (section 3).
 
-![The line at each floor](figures/line_at_floors.png)
+![The line at each floor](figures/line_at_floors.webp)
 
 ## 2. The spot check
 
@@ -69,7 +69,7 @@ The structural path has none (owner decision). This section is omitted.
 
 ## 3. Where the app does well and where it does poorly
 
-![Per class](figures/per_class.png)
+![Per class](figures/per_class.webp)
 
 **By source, final AP:**
 
@@ -117,7 +117,7 @@ around them:
 
 | `ucsf/logo_bw_oval_emblem`, rank 20,100 | `ucsf/logo_bat_leaf`, rank 24,495 |
 |---|---|
-| ![bw oval](misses/ucsf__logo_bw_oval_emblem-ucsf__fmly0212_0.png) | ![bat leaf](misses/ucsf__logo_bat_leaf-ucsf__fsyj0214_0.png) |
+| ![bw oval](misses/ucsf__logo_bw_oval_emblem-ucsf__fmly0212_0.webp) | ![bat leaf](misses/ucsf__logo_bat_leaf-ucsf__fsyj0214_0.webp) |
 | a 0.09 × 0.02 oval inside a dense letterhead line | a faint, small leaf in the corner, few keypoints |
 
 - **Some misses sit just past the cut:** `afm90c00` at 2,007; `bat_leaf` at
@@ -176,7 +176,7 @@ form-box stamp. The Good on `stampds-00213` costs 0.41 AP, and a later Good on
 
 | `stampds-00213`: −0.41 | `stampds-00223`: +0.34 |
 |---|---|
-| ![harmful](images/harmful-staver__stamp_stampds-00213_1-staver__stampds-00213.png) | ![helpful](images/helpful-staver__stamp_stampds-00213_1-staver__stampds-00223.png) |
+| ![harmful](images/harmful-staver__stamp_stampds-00213_1-staver__stampds-00213.webp) | ![helpful](images/helpful-staver__stamp_stampds-00213_1-staver__stampds-00223.webp) |
 
 - Both boxes hold the same printed form box. On `00213` the box also takes in
   the typed lines around it.

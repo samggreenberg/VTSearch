@@ -11,7 +11,7 @@ contamination rule for a UCSF class narrows from *all of UCSF* to *UCSF's
 Tobacco industry*. At tier `m` that takes each class's headline pool from
 ~2,900 pages to ~46,700.
 
-![95% upper bound per stratum](figures/bounds.png)
+![95% upper bound per stratum](figures/bounds.webp)
 
 | sample | n | pages carrying the mark | 95% upper bound (3/n) |
 |---|---:|---:|---:|
@@ -86,7 +86,7 @@ scoring time.
 
 ## The shortcut this does not fix
 
-![mark-blind controls, v4.0 vs v4.1](figures/shortcut.png)
+![mark-blind controls, v4.0 vs v4.1](figures/shortcut.webp)
 
 At v4.0 the UCSF classes' headline pool had the source shortcut `own_verified`
 was built to remove. Positives were nearly the only UCSF pages in it, so

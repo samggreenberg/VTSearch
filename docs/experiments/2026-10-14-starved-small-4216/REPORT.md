@@ -75,7 +75,7 @@ re-read covers every arm run since then on the same bench, plus the embedding ar
 
 ## Why opening and acquisition arms cannot move it
 
-![The starved share over the session, and where today's starved runs are](figures/fig_harvest.png)
+![The starved share over the session, and where today's starved runs are](figures/fig_harvest.webp)
 
 *Figure 1. Left: the share of `@small` runs (beta 1) with fewer than 3 positives found by each vote.
 The arms are not paired with each other: the 24-seed SotA, today's 5 seeds, Region's 2 seeds, and
@@ -100,7 +100,7 @@ the sort's top 150, outranked by look-alikes (Figure 5).
 
 ## Every arm, paired
 
-![Paired change in the starved share, every arm, beta 1](figures/fig_paired.png)
+![Paired change in the starved share, every arm, beta 1](figures/fig_paired.webp)
 
 *Figure 2. Each arm against its own control on the same cells, seeds and commit, at beta 1. Beta 1/4
 and 4 differ from these rows by a run or two (`paired.csv`): the Good phase does not read the preset.
@@ -140,7 +140,7 @@ of those moves is resolvable. The large band never starves.
 
 ## What moving it pays, by band
 
-![The objective, session mean, by band, for the three contrasts that move the starved share](figures/fig_cost.png)
+![The objective, session mean, by band, for the three contrasts that move the starved share](figures/fig_cost.webp)
 
 *Figure 3. Paired change in the objective (F-beta of the shown set, mean over votes 1–150), ±2 SE.
 "Small, rescued runs" are the runs the arm took from starved to fed. Region is beta 1 only, on 2
@@ -169,7 +169,7 @@ seeds. One x scale for all three panels.*
 
 ## Where today's starved runs are
 
-![Starved runs per class](figures/fig_classes.png)
+![Starved runs per class](figures/fig_classes.webp)
 
 *Figure 4. Starved runs over runs, per `@small` class, at beta 1. The columns are not paired with
 each other. "Today, Binary, seeds 0–1" and "Region path" are paired.*
@@ -198,7 +198,7 @@ wide around the labelled box, at the image's own pixels, with the box's size in 
 
 ## The text tower decides it
 
-![The typed query's sort's reach on small objects, per embedder](figures/fig_reach.png)
+![The typed query's sort's reach on small objects, per embedder](figures/fig_reach.webp)
 
 *Figure 6. Offline: the share of `@small` runs whose typed-query sort holds fewer than 3 positives in
 its top 150. This is the starved share before #4731's exit (SigLIP 24 seeds, the rest 5 seeds; ±2 SE,

@@ -29,7 +29,7 @@ can be *deployed*, which is a different question.
    miss members that sit in off-roster classes or carry no box, so some "known
    negatives" are positives. This *understates* SIFT → #3927.
 
-![mean AP by ranker](fig_rankers.png)
+![mean AP by ranker](fig_rankers.webp)
 
 ## What was run
 
@@ -67,7 +67,7 @@ keypoints) and 0.37–0.45 for three round SPODS stamps and one StaVer form box.
 likely to fool a ranker — a small binarised device, a round stamp, a crest, a
 form box — the ten highest-ranked pages are:
 
-![top-ranked pages](top_sift_examples.png)
+![top-ranked pages](top_sift_examples.webp)
 
 The *DY.Secretary* stamp and the Philip Morris crest: ten of ten positives, each
 carrying the mark. `cgr96c00` (the Microbiological Associates "m"): four
@@ -112,7 +112,7 @@ cores, ~100 s at 50,000 on 40.
 
 ## 2. The budget
 
-![AP by budget](fig_budget.png)
+![AP by budget](fig_budget.webp)
 
 | `max_features` | keypoints / page (median, p90) | stored / page (median) | AP |
 |---:|---|---:|---:|
@@ -132,7 +132,7 @@ finding.
 
 ## 3. Stage 1
 
-![shortlist](fig_shortlist.png)
+![shortlist](fig_shortlist.webp)
 
 (Tier `s`; tier `m` is in §1b.)
 
@@ -153,7 +153,7 @@ fixed K is a shrinking fraction of a larger tier. Exhaustive verification costs
 Same-source pages SIFT ranked strongly but that are labelled negative were
 checked mark by mark ([`measurements/strong_negatives_sift_16384.json`](measurements/strong_negatives_sift_16384.json)):
 
-![Tobacco800 missed members](tobacco800_missed_members.png)
+![Tobacco800 missed members](tobacco800_missed_members.webp)
 
 - `tobacco800/logo_azb11c00_1` (B&W three-leaf): **seven** "negatives" carry the
   identical mark, labelled as six different off-roster classes.

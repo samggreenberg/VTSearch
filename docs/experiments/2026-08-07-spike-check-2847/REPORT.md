@@ -156,18 +156,18 @@ left is a ranking problem wearing a threshold problem's clothes.
 
 ### On `cat` specifically — the issue's own class
 
-![fig1](figures/fig1_cat_arms.png)
+![fig1](figures/fig1_cat_arms.webp)
 
 Deep-spike steps on `cat`: **8 → 1** (A → D). Per-run incidence 25% → 12%. The
 production panel decays smoothly from the cold start to ~0.10 with the oracle at
 ~0.07–0.09; the control panel carries isolated blips to 0.76, 0.67, 0.50 and
 0.40, which is the character of the figure in the issue.
 
-![fig2](figures/fig2_cat_production.png)
+![fig2](figures/fig2_cat_production.webp)
 
-![fig3](figures/fig3_incidence_and_magnitude.png)
+![fig3](figures/fig3_incidence_and_magnitude.webp)
 
-![fig0](figures/fig0_literal_repro_n20.png)
+![fig0](figures/fig0_literal_repro_n20.webp)
 
 *#2847's exact command on `evaluation-framework` HEAD at 20 seeds: 7 of 20 runs
 deep-spike (rings), against an oracle whose warm-window median is 0.046. The

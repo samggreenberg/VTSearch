@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-30-structural-rerank-mlp-4169.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/belgalogos/rows.csv": {
+     "bytes": 100159,
+     "oid": "c069d38ab9571f689c01bbdd5079582a6d43da24"
+    },
+    "measurements/belgalogos/run.json": {
+     "bytes": 347,
+     "oid": "af7357b586fddb07dc406a45164ab07b0acdbd63"
+    },
+    "measurements/examples.txt": {
+     "bytes": 7406,
+     "oid": "b27de1e24cb18f05615ae07f521253bea41a3e53"
+    },
+    "measurements/fullmarks-m/rows.csv": {
+     "bytes": 85218,
+     "oid": "011cabf458e6360c15fce3ab89f60a9809b4c85c"
+    },
+    "measurements/fullmarks-m/run.json": {
+     "bytes": 257,
+     "oid": "5963536f4608631776660eaf68b80307ac8eafba"
+    },
+    "measurements/fullmarks-s/rows.csv": {
+     "bytes": 230890,
+     "oid": "10e242910e5fba6b6c75fd187c5c38c76d07abc2"
+    },
+    "measurements/fullmarks-s/run.json": {
+     "bytes": 341,
+     "oid": "6bd4b274916c979f17adea2cacf4a3af26f05f76"
+    }
+   }
+  }
+ ]
+}

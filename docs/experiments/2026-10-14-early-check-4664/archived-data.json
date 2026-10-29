@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-early-check-4664.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/early_check_at_stop.csv": {
+     "bytes": 1688,
+     "oid": "e72cf47b15b7d4fc375588dab4328dbf1e3cb346"
+    },
+    "tables/early_counts.json": {
+     "bytes": 161,
+     "oid": "b442a4a4c5ebc48395190a35ed8a3151dcfa0d30"
+    },
+    "tables/early_curves.csv": {
+     "bytes": 56120,
+     "oid": "0d10a7b786999da74dafae810df1d8628f2a4d37"
+    },
+    "tables/early_examples.csv": {
+     "bytes": 4501,
+     "oid": "1283490c97c340637b2c3a2b7f45622f558d0a5c"
+    },
+    "tables/early_gains.csv": {
+     "bytes": 86087,
+     "oid": "0642e6be1a233aa0be2e05ef70bbcfae552e3749"
+    },
+    "tables/early_splits.csv": {
+     "bytes": 4044,
+     "oid": "c71dc96b3ba588807d1c3c3a5f139a78c65f9365"
+    },
+    "tables/early_summary.csv": {
+     "bytes": 18638,
+     "oid": "17a43d830feca9b51eb2f8ddf3a17bf171f467e4"
+    }
+   }
+  }
+ ]
+}

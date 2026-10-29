@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-22-o365-confirm-4817.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/ab_counts.json": {
+     "bytes": 112,
+     "oid": "5113a23cd75ec486386c48e1e6036292fe481438"
+    },
+    "tables/ab_examples.csv": {
+     "bytes": 3729,
+     "oid": "f4fde86d09d3261e0fc3e1efbfebb9324eb284bd"
+    },
+    "tables/ab_gains.csv": {
+     "bytes": 27191,
+     "oid": "285a98f4c72e6d0a854d239002a5a2ff79707afa"
+    },
+    "tables/ab_splits.csv": {
+     "bytes": 4370,
+     "oid": "d015dcf003487fbf88cc716a12f4a49e34e3f10e"
+    },
+    "tables/ab_summary.csv": {
+     "bytes": 7049,
+     "oid": "d24d83fc4b9d58a2ed041d8fffd834cbe23eef6b"
+    },
+    "tables/ab_summary_all110.csv": {
+     "bytes": 6973,
+     "oid": "7c245d07d1df7e111f865f2975e7ad505851e308"
+    },
+    "tables/paired-107.txt": {
+     "bytes": 1639,
+     "oid": "b9300338c51af03ad7d2337251887ae09ed01830"
+    }
+   }
+  }
+ ]
+}

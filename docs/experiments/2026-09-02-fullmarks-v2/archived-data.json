@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-02-fullmarks-v2.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "cluster_sweep.json": {
+     "bytes": 8856,
+     "oid": "1eaa5ee6c880e2b76c85ad00dea65253281210ca"
+    }
+   }
+  }
+ ]
+}

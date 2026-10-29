@@ -307,7 +307,8 @@ class TestPortableExport:
 class TestCli:
     def test_a_label_less_typed_query_detector_runs_and_says_so(self, world, capsys):
         """Before #4758 the CLI raised "has no labels"; now it scores the query, in the text space."""
-        from vtscore import cli, cli_progress
+        from vtscore.cli import detectors as cli_detectors
+        from vtscore.cli import progress as cli_progress
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.query_head import is_query_head
         from vtscore.state.core import DetectorContext
@@ -318,7 +319,7 @@ class TestCli:
         previous = cli_progress.get_format()
         cli_progress.set_format("json")
         try:
-            out = cli._load_and_train_detectors(["cli-query"], "image", corpus)
+            out = cli_detectors._load_and_train_detectors(["cli-query"], "image", corpus)
         finally:
             cli_progress.set_format(previous)
 
@@ -333,17 +334,17 @@ class TestCli:
         # The text-mode line names the query it scores as.
         ctx = DetectorContext("cli-query", name="cli-query", media_type="image")
         ctx.model = out["cli-query"]["mlp"]
-        cli._report_centroid("cli-query", ctx, LabelSet([]))
+        cli_detectors._report_centroid("cli-query", ctx, LabelSet([]))
         line = capsys.readouterr().out.strip()
         assert f"its typed query's own set ('{QUERY}')" in line and "3 more Goods and 4 more Bads" in line
 
     def test_without_a_query_a_label_less_detector_still_raises(self, world):
-        from vtscore import cli
+        from vtscore.cli import detectors as cli_detectors
 
         corpus, _query = world
         _write_detector("cli-empty", corpus, goods=[], bads=[])
         with pytest.raises(ValueError, match="has no labels"):
-            cli._load_and_train_detectors(["cli-empty"], "image", corpus)
+            cli_detectors._load_and_train_detectors(["cli-empty"], "image", corpus)
 
 
 #: The typed query a re-sort swaps in (#4801), and the media whose text vector it embeds as.

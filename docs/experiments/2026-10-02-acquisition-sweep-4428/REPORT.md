@@ -30,7 +30,7 @@ reverted while this ran (#4437); the rank cut stays as a harness arm.
 | 2 | × 0.5 | 0.198 | 0.491 | 35 → 128 | −0.019 ± 0.004 |
 | 2 | × 0.25 | 0.189 | 0.487 | 30 → 136 | −0.022 ± 0.004 |
 
-![beta 1: the objective over clicks per factor](figures/objective_beta1.png)
+![beta 1: the objective over clicks per factor](figures/objective_beta1.webp)
 
 The harvesting cuts track line − 4 until about click 60, when the user's
 unvoted top runs out of positives; the kept set's edge score then climbs and
@@ -47,7 +47,7 @@ re-drawn line +0.01 - which is the harvest the objective penalises.
 | × 0.5 | 0.218 | 0.237 | +0.018 ± 0.008 | 0.15 | 0.70 | 13 → 228 |
 | × 0.75 | 0.261 | 0.247 | −0.011 ± 0.008 | 0.16 | 0.71 | 14 → 224 |
 
-![300 clicks: the objective over clicks per factor](figures/objective_c300.png)
+![300 clicks: the objective over clicks per factor](figures/objective_c300.webp)
 
 Past 150 clicks the three factors converge: 15 positives are left unvoted in
 the pool, the unchecked line returns 13 withheld images at F1 0.22–0.26, and

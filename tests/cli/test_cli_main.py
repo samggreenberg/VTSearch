@@ -222,7 +222,7 @@ class TestPipeline:
     @staticmethod
     def _record_run(monkeypatch, probe=None):
         """Patch the pipeline runner to record its path, plus *probe()* taken at run time."""
-        import vtscore.cli_pipeline as pipe
+        import vtscore.cli.pipeline as pipe
 
         seen = {}
 
@@ -302,7 +302,7 @@ class TestPipeline:
         assert seen["probe"] == ["alice"], "the user must be active before the pipeline runs"
 
     def test_pipeline_honours_json_progress_format(self, monkeypatch):
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
 
         callbacks = []
         monkeypatch.setattr(cli_main, "set_progress_callback", callbacks.append)

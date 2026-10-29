@@ -60,7 +60,7 @@ named, divided by their span: the owner's single number for a step.
 
 ## Result
 
-![F-beta over clicks per arm, and the paired gain over Autopilot as shipped](figures/early_over_clicks.png)
+![F-beta over clicks per arm, and the paired gain over Autopilot as shipped](figures/early_over_clicks.webp)
 
 *Top: mean F-beta of the returned set over clicks (the circles are after the closing check). Bottom: each arm's
 paired gain over a0, with the click it checks at dotted.*
@@ -82,7 +82,7 @@ paired gain over a0, with the click it checks at dotted.*
   just after the hold ends: they lift F to where a0 is at click 37. a0 matches it by click 38, and the check's
   next rounds cost a little.
 - **Per run** the gains centre on zero, and every seed shows the same shape
-  ([per-seed curves and session histogram](figures/early_per_run.png)). Most sessions that move do so by less
+  ([per-seed curves and session histogram](figures/early_per_run.webp)). Most sessions that move do so by less
   than ±0.02 over clicks 1–150.
 
 ### Where the early check runs

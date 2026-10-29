@@ -62,7 +62,7 @@ named, widening the pool moves supply by about the pool ratio:
 
 ## The cells
 
-![cell supply against the floor](fig_cell_supply.png)
+![cell supply against the floor](fig_cell_supply.webp)
 
 The five cells below 300 are `bus@small` (177), `boat@small` (238),
 `umbrella@small` (244), `dog@small` (263) and `kite@small` (270) — every one in
@@ -298,7 +298,7 @@ if union > largest * pc.BAND_MAX_INFLATION:
     return SCATTERED                          # excluded from every band of this class
 ```
 
-![the scatter guard on two real COCO images](fig_scatter.png)
+![the scatter guard on two real COCO images](fig_scatter.webp)
 
 Both images above hold **three cars**. On the left the largest is 4.7% of the
 frame and the union is 27.4% — **5.8x**, so the union describes the spread rather

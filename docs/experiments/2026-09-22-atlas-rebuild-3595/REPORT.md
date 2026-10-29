@@ -30,7 +30,7 @@ The tables and figures are rebuilt from the committed rows by
 
 ## 1. The rebuild is linear to 36 497 items
 
-![rebuild seconds against n](figures/rebuild_scaling.png)
+![rebuild seconds against n](figures/rebuild_scaling.webp)
 
 *Rebuild seconds against dataset size, on linear axes so any curvature would
 show. Dots are this run's two reps per size; crosses are #3521's caltech101
@@ -59,7 +59,7 @@ effect. Two reps cannot say more, and the slope is unaffected.
 
 ## 2. The 0.85 weight: right for image, too high for audio
 
-![coverage share per branch](figures/coverage_share.png)
+![coverage share per branch](figures/coverage_share.webp)
 
 *The coverage step's share of a dataset open (coverage ÷ (coverage + items)),
 per branch, against n. The dotted line is the shipped default of 0.85.*

@@ -23,7 +23,7 @@ ceiling**: the same head trained on every label in the training half.
 | **cost** | 0.48 | 0.42 | 0.38 | **0.32** | 0.14 |
 | **F1** | 0.021 | 0.036 | 0.041 | **0.048** | — |
 
-![Mean cost over clicks](figures/cost_over_clicks.png)
+![Mean cost over clicks](figures/cost_over_clicks.webp)
 
 1. **150 clicks close about half the distance to having every label.** Cost
    falls from 0.48 to 0.32 against a ceiling of 0.14, which closes 48% of the
@@ -43,7 +43,7 @@ ceiling**: the same head trained on every label in the training half.
    50 false positives for every true one. Cost rewards that trade and F1 does
    not, which is why cost looks moderate while F1 is 0.048.
 
-![Mean F1 over clicks](figures/f1_over_clicks.png)
+![Mean F1 over clicks](figures/f1_over_clicks.webp)
 
 ## Where it does well and where it does poorly
 
@@ -84,7 +84,7 @@ that fill a scene rather than define it.
 
 Every cell, text only → final → full labels:
 
-![Per class and size](figures/per_cell.png)
+![Per class and size](figures/per_cell.webp)
 
 ## Why the weak classes are weak
 

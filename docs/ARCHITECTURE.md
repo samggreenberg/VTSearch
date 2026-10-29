@@ -136,8 +136,8 @@ VTSearch/
 ├── vtscore/                Library tier; no Flask dependency (gated, see below)
 │   ├── config/             CoreConfig (core_config.py), paths / DATA_DIR, model IDs, runtime knobs
 │   ├── host_seams.py       The complete list of callbacks the app installs into the library
-│   ├── cli.py              CLI autodetect workflow (cli_pipeline.py: pipeline YAML;
-│   │                       cli_progress.py: text / NDJSON progress)
+│   ├── cli/                CLI autodetect workflow, one module per stage (pipeline.py:
+│   │                       pipeline YAML; progress.py: text / NDJSON progress)
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
 │   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs
@@ -362,7 +362,7 @@ modules on the right.
 | `vtscore/media/base.py` | No | No | **Yes**: abstract only |
 | `vtscore/media/{audio,image,text,video,document,face}` | No | No | **Yes**: torch + HF models |
 | `vtscore/converters/` | No | No | **Yes**: pure media conversion |
-| `vtscore/concurrency/progress.py` | No | No | **Yes**: threading only |
+| `vtscore/concurrency/progress.py` and the `progress_tracker` / `loading_tracker` / `progress_cancel` modules it re-exports | No | No | **Yes**: threading only |
 | `vtscore/projection/` | No | No (params) | **Yes**: numpy + UMAP over an (N, d) matrix |
 | `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
 | `vtscore/config/` | No | No | **Yes**: just constants |
@@ -493,7 +493,8 @@ load_dataset_from_folder(
 
 ### Progress tracking
 
-**Files:** `vtscore/concurrency/progress.py`, `vtscore/timing/`
+**Files:** `vtscore/concurrency/progress.py` (the facade), `vtscore/concurrency/progress_tracker.py`,
+`vtscore/concurrency/loading_tracker.py`, `vtscore/concurrency/progress_cancel.py`, `vtscore/timing/`
 
 A thread-safe progress tracker with no framework dependencies.  Uses
 `threading.Lock` and module-level dicts.  Can be dropped into any

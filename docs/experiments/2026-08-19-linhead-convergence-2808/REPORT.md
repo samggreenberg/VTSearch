@@ -104,7 +104,7 @@ experiences — what the run *costs at the end*, and how bad its worst step is i
 absolute terms — are **not resolvable at this sample size**. That is a finding,
 not a gap: convergence reshapes the tail without moving the outcome.
 
-![fig1_ramp.png](figures/fig1_ramp.png)
+![fig1_ramp.webp](figures/fig1_ramp.webp)
 
 *Cost over the votes the user spends, mean ± SE across categories, seeds and
 embedders, split by dataset. The dotted line is the `t = 20` warm boundary; cold
@@ -112,7 +112,7 @@ start is a different phenomenon (no model yet) and is excluded from every spike
 statistic. Read the separation, not the absolute level — the two datasets have
 different prevalence and are not comparable to each other.*
 
-![fig2_per_run.png](figures/fig2_per_run.png)
+![fig2_per_run.webp](figures/fig2_per_run.webp)
 
 *The same metric, one line per run. The mean (black) descends smoothly in all
 three panels and is the least representative object in the figure: individual
@@ -132,7 +132,7 @@ uniform. Broken out:
 | `visual_genome_m` × **`siglip`** | 39 | −0.016 ± 0.010 | 28.2% → **28.2%** |
 | `visual_genome_m` × `siglip2_l` | 40 | −0.033 ± 0.012 | 40.0% → 27.5% |
 
-![fig3_where.png](figures/fig3_where.png)
+![fig3_where.webp](figures/fig3_where.webp)
 
 *Left: paired Δ worst-step regret per cell type, ± SE. Negative (green) favours
 convergence; the one red bar is COCO on the shipped default, where converging is
@@ -175,7 +175,7 @@ VG, not a universal one.
 
 ## The binding constraint is positives, not spikes
 
-![fig4_binding.png](figures/fig4_binding.png)
+![fig4_binding.webp](figures/fig4_binding.webp)
 
 *Left: positives found at the final vote. Medians are mlp 5, shipped 4,
 converged 6 — the shipped head finds the fewest. Right: the same quantity against

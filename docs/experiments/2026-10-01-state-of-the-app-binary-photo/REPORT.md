@@ -44,9 +44,9 @@ in the training half.
 | **F1 of the returned set, P = 50%** | 0.38 | 0.33 | 0.39 | **0.46** | 0.49 |
 | **Goods found** | — | 11 | 14 | **20** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
-![F1 of the line's set over clicks](figures/f1_over_clicks.png)
+![F1 of the line's set over clicks](figures/f1_over_clicks.webp)
 
 1. **150 clicks close about two thirds of the gap to full labels.** AP rises
    from 0.42 to 0.51 against a ceiling of 0.55. F1 of the returned set rises
@@ -63,7 +63,7 @@ in the training half.
 3. **Harvest is front-loaded.** 11 of the 20 Goods arrive in the first 25
    clicks; the last 100 clicks find 5.
 
-![Mean Goods found over clicks](figures/goods_over_clicks.png)
+![Mean Goods found over clicks](figures/goods_over_clicks.webp)
 
 ### The line on a fresh corpus
 
@@ -79,7 +79,7 @@ in the training half.
 | 90% | 150 clicks | 30 | 61% | **38%** | 0.38 | 0.38 | 0.46 | 0.54 |
 | | full labels | 32 | 63% | 36% | 0.41 | 0.39 | 0.49 | 0.58 |
 
-![The line at each floor](figures/line_at_floors.png)
+![The line at each floor](figures/line_at_floors.webp)
 
 - **At the default 50%, the clicks take the kept set from 49% to 60% right,**
   within 3 points of full labels (63%), and 61% of sessions meet the floor.
@@ -129,7 +129,7 @@ while the picks' band-weighted share meets P, shallower while it does not.
 | medium (49) | 0.38 | **0.49** | 0.51 | 0.45 | 60% | 64% | 20 |
 | small (46) | 0.16 | **0.24** | 0.30 | 0.24 | 32% | 25% | 9.9 |
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 **Well:** sports equipment and other things a scene is *about*, with a
 silhouette SigLIP knows.

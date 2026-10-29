@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-29-floor-opening-4287.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "best_attempt_g3.csv": {
+     "bytes": 24813,
+     "oid": "376afc06b1675d90340a809b262f4ac7bfa54190"
+    },
+    "best_attempt_shipped.csv": {
+     "bytes": 24799,
+     "oid": "095363211ac107a35cd37b8e3569361101f70d4d"
+    },
+    "compare.csv": {
+     "bytes": 6586,
+     "oid": "498e1f132c81c4b27643d68a84fa9b13e8c9bcc0"
+    },
+    "rank_frames_0p1pct_g3.csv.gz": {
+     "bytes": 110831,
+     "oid": "527007652c0efdc1e91db573f25282f3b4ba55b6"
+    },
+    "rank_frames_0p1pct_shipped.csv.gz": {
+     "bytes": 111188,
+     "oid": "d57a0462f5d2d1e14032ef6f9acc5f64462d8a11"
+    },
+    "rank_frames_0p44pct_g3.csv.gz": {
+     "bytes": 265986,
+     "oid": "a23ad46f1b92b2991ee02ad694a2f8086e959a3a"
+    },
+    "rank_frames_0p44pct_shipped.csv.gz": {
+     "bytes": 291411,
+     "oid": "cb0976839b94a71418b690e9970011335ba8fd6e"
+    }
+   }
+  }
+ ]
+}

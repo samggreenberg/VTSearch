@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-siglip2l-4874.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "by_band.csv": {
+     "bytes": 7686,
+     "oid": "61649935b2e26fe1317d63650ee7eb7c75559347"
+    },
+    "by_class.csv": {
+     "bytes": 30183,
+     "oid": "60327b42c7341f4cd7651bba72fab5aad262a0fa"
+    },
+    "compare.csv": {
+     "bytes": 3018,
+     "oid": "578f44f542bffbc4d4a74001827841f4e63e4dd3"
+    },
+    "objective_by_click.csv": {
+     "bytes": 20706,
+     "oid": "f0054925992e3e84eebb8675533a8f652ac240fa"
+    },
+    "timing.csv": {
+     "bytes": 837,
+     "oid": "8a5c0597df4261143c28eca90f57348dd1239284"
+    }
+   }
+  }
+ ]
+}

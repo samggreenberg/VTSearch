@@ -57,7 +57,7 @@ from #4220 (PR #4225).
 
 ## Harvest: the walk finds what the corpus holds
 
-![Good votes by vote, per G, per pool prevalence](figures/harvest.png)
+![Good votes by vote, per G, per pool prevalence](figures/harvest.webp)
 
 | pool | G | Good votes at 25 / 50 / 150 | reached G by 150 | votes before the learned phases (median) |
 |---|---|---|---|---|
@@ -75,7 +75,7 @@ of them whatever G is. Beyond G = 6 it just keeps walking past them.
 
 ## Detector quality: a moderate walk helps, a stuck one hurts
 
-![Average precision minus today's opening, ±2 SE](figures/ap_vs_today.png)
+![Average precision minus today's opening, ±2 SE](figures/ap_vs_today.webp)
 
 AP of the session's model, paired per cell against the same pool's G = 3 run
 (720 pairs; ± is one SE):

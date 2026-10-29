@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-19-region-missed-query-4800.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "checks.json": {
+     "bytes": 1085,
+     "oid": "d822bd746155b604d0332ef26a2e4ca212e47701"
+    },
+    "curves.csv": {
+     "bytes": 21811,
+     "oid": "e27d40cacd58907f7b678802d161da058e79e0db"
+    },
+    "summary.csv": {
+     "bytes": 7140,
+     "oid": "345c53bd1768356e3f46fbdef23ada32ebdfd554"
+    },
+    "votes_under_quota.csv": {
+     "bytes": 22226,
+     "oid": "a6f8a3848df60aab0704706cbf8b52ee21295710"
+    }
+   }
+  }
+ ]
+}

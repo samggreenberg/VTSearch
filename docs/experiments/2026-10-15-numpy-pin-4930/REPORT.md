@@ -62,7 +62,7 @@ GRID run so far was affected.
 
 ## Which value works on which numpy
 
-![Ops that differ across 7 nodes, per numpy version and NPY_DISABLE_CPU_FEATURES value](figures/pins_by_numpy.png)
+![Ops that differ across 7 nodes, per numpy version and NPY_DISABLE_CPU_FEATURES value](figures/pins_by_numpy.webp)
 
 *Each cell counts the probed numpy ops whose output differs between any two of the 7 nodes; "(warns)" means
 numpy skipped a name. Unset (grey) is the drift the pin exists to remove. The figure counts disagreement, not
@@ -82,7 +82,7 @@ value), with the targets left on per CPU and the ufunc targets that ran: [`pins_
 
 ## The cells on numpy 2.5.4
 
-![Share of the 72 cells in each verdict, per pair of arms](figures/verdicts.png)
+![Share of the 72 cells in each verdict, per pair of arms](figures/verdicts.webp)
 
 *Each bar is one pair of arms over the same 72 cells. "Diagnostics only" means the base rows' picks, cut and
 F-beta agree at every vote and a measurement column (the honest oracle) does not. The figure says whether two

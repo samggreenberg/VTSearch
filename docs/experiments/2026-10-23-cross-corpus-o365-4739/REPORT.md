@@ -54,7 +54,7 @@ name (#4815, built in #4817). Over the 107 cells the two corpora share, 535 pair
 
 ## Result
 
-![The walk's price on the objective, by Find corpus](figures/walk_price_by_corpus.png)
+![The walk's price on the objective, by Find corpus](figures/walk_price_by_corpus.webp)
 
 *`nowalk` minus `ctl` at every vote, paired over 535 runs, ±2 SE; above zero the walk costs. Solid: on the Find
 corpus. Dashed: in-corpus, the same runs. Top: the withheld half alone (`screens0`), where the two are one series.
@@ -104,7 +104,7 @@ the two are level over the session (0.85 / 0.84).
 
 ## The flags
 
-![The two flags at beta 1](figures/flags_operating_range.png)
+![The two flags at beta 1](figures/flags_operating_range.webp)
 
 *Beta 1; the other presets read the same (`flags.csv`). Solid `ctl`, dashed `nowalk`.*
 

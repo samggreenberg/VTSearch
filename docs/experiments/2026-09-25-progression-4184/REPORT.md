@@ -21,7 +21,7 @@ Plan and rung table: [PLAN.md](PLAN.md). Follow-up issue: #4201.
 
 ## The ladder at two prevalences
 
-![Mean cost over votes, seven rungs, natural pool and 5% pool](figures/ladder_by_prevalence.png)
+![Mean cost over votes, seven rungs, natural pool and 5% pool](figures/ladder_by_prevalence.webp)
 
 Mean cost is FPR + FNR, filled: a cell with no app-visible detector yet is still
 showing the typed query's ranking and counts at its text-sort cost. Every curve
@@ -71,7 +71,7 @@ Over the clicks where a detector is on screen:
 | r7 | natural | 0.28 | 0.18 | 0.10 | 79% | 0.21 | 0.071 | 0.21 |
 | r7 | 5% | 0.21 | 0.16 | 0.047 | 88% | 0.13 | 0.078 | 0.084 |
 
-![Regret per rung at the two prevalences](figures/regret_by_prevalence.png)
+![Regret per rung at the two prevalences](figures/regret_by_prevalence.webp)
 
 - **The models are the same.** The best-cut cost is 0.16–0.20 and AUROC 0.94 in
   every rung, so what differs is the rule's cut.

@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-20-negative-pool-3986.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/clip.json": {
+     "bytes": 26773,
+     "oid": "fec709d34ba0386bc2b594747e93f6dc34cbd0b8"
+    },
+    "measurements/clip_l.json": {
+     "bytes": 26735,
+     "oid": "96cda78c22a69ac4b4d3b5cbabcb18df038c8e7d"
+    },
+    "measurements/shortcut-clip-shipped.json": {
+     "bytes": 38679,
+     "oid": "4dab8c29accfff0f3b1cca88c64e1b9d288ea1ea"
+    },
+    "measurements/shortcut-clip_l-shipped.json": {
+     "bytes": 38664,
+     "oid": "fb68c8d4e5fd00ea5e73beeca815b319b91809af"
+    },
+    "measurements/shortcut-siglip-barren.json": {
+     "bytes": 36150,
+     "oid": "233d79c77baa17551243bdc7992bb6094000f3e1"
+    },
+    "measurements/shortcut-siglip-shipped.json": {
+     "bytes": 38690,
+     "oid": "ffb8c5daaa9a247c7b2c2c2e02aa6c05f0f757f1"
+    },
+    "measurements/shortcut-siglip2_l-shipped.json": {
+     "bytes": 38667,
+     "oid": "7ea62837cef52c55b9b04eb7bf01dc2198e3611e"
+    },
+    "measurements/siglip.json": {
+     "bytes": 26729,
+     "oid": "aa07c57eb3c320abdb42729302020e8348f26646"
+    },
+    "measurements/siglip2_l.json": {
+     "bytes": 26668,
+     "oid": "f9f7e2cf2c8fad7b903fdef3de5e0e066923e5ad"
+    }
+   }
+  }
+ ]
+}

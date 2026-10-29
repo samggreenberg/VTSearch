@@ -55,9 +55,9 @@ by under 0.01: the scores do not depend on the seed, only which images land in t
 are in `tables/sam3_5213_paired.csv`, every cell in `tables/sam3_5213_per_cell.csv`, per class in
 `tables/sam3_5213_per_class_AP.csv`. Region's F1 by band is in #4711's report.*
 
-![AP and oracle F1 by object size: zero-shot sorts at vote 0, Region at vote 150, ±2 SE](figures/sam3_5213_bands.png)
+![AP and oracle F1 by object size: zero-shot sorts at vote 0, Region at vote 150, ±2 SE](figures/sam3_5213_bands.webp)
 
-![Region's AP, oracle F1 and shown F1 over the votes, against each zero-shot sort as a flat line](figures/sam3_5213_over_votes.png)
+![Region's AP, oracle F1 and shown F1 over the votes, against each zero-shot sort as a flat line](figures/sam3_5213_over_votes.webp)
 
 ## The question
 
@@ -225,7 +225,7 @@ R 0.889, F1 0.199). Means are over the 144 cells, ± SE over the 49 classes.
 | The better of the two at each vote (a bound, not a rule) | 0.62 | 0.64 | +0.158 (± 0.015) | 0.64 | 0.67 | +0.120 (± 0.015) |
 | SAM3's set at its GMM line | 0.18 | 0.18 | -0.30 | 0.18 | 0.18 | -0.36 |
 
-![F1 shown over the votes on each path: today, SAM3's set held, SAM3 handed over at the quota and at the 20th Good, and the per-vote bound](figures/sam3_5241_gate.png)
+![F1 shown over the votes on each path: today, SAM3's set held, SAM3 handed over at the quota and at the 20th Good, and the per-vote bound](figures/sam3_5241_gate.webp)
 
 **1. Opening on SAM3 pays, on both paths, if the hand-over waits.** With the head taking over at the 20th Good,
 F1 shown over votes 1-150 is +0.12 on Binary and +0.07 on Region. Over votes 1-50 it is +0.18 and +0.13. Handing over

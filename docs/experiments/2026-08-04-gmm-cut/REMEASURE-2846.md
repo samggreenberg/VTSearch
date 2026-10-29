@@ -72,7 +72,7 @@ above:** the incumbent moved. See "The baseline is no longer the midpoint".
 ![Panel A: the share of ramp steps falling back to the midpoint drops for every
 tilt and arm when the ordering guard comes off. Panel B: on the steps where the
 repair changes the cut, it lowers cost under the prior-free tilt on both arms and
-raises it under the cross tilt on both arms.](gumbel_any_2846.png)
+raises it under the cross tilt on both arms.](gumbel_any_2846.webp)
 
 ## The baseline is no longer the midpoint
 

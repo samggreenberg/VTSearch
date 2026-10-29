@@ -252,8 +252,8 @@ Raw analyzer output is in
 
 ## Figures
 
-![frontier](figures/vg_fig1_frontier.png)
+![frontier](figures/vg_fig1_frontier.webp)
 
-![lever verification](figures/vg_fig2_lever_verification.png)
+![lever verification](figures/vg_fig2_lever_verification.webp)
 
-![guardrails](figures/vg_fig3_guardrails.png)
+![guardrails](figures/vg_fig3_guardrails.webp)

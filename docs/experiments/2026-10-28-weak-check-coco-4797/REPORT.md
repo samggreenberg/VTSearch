@@ -84,9 +84,9 @@ The differences are averaged over every session, prompted or not (#4631), becaus
 prompts adds an exact 0. For scale, check-off sessions average 0.48–0.59 over votes 1–150 on Binary and 0.54–0.65
 on Region. A prompted session spends 22–23 votes on the check at β ¼ and 1, and 31 at β 4.
 
-![The objective at every vote, check on and off](figures/fig_objective_by_vote.png)
+![The objective at every vote, check on and off](figures/fig_objective_by_vote.webp)
 
-![Check on minus off at every vote](figures/fig_diff_by_vote.png)
+![Check on minus off at every vote](figures/fig_diff_by_vote.webp)
 
 **Binary's curve** sits at exactly 0 until vote 29, dips at vote 30, and leads from vote 31 to vote ~55 (by up to
 +0.019 at β 1 and +0.014 at β ¼). It then trails slightly (about −0.003 at β 1 over votes 55–120) and comes back
@@ -130,7 +130,7 @@ prompted are 0 by construction and are left out here.
 - **On Region the check gains in nearly every stratum at β 1 and 4**, most at 4–5 Goods and at the earliest checks.
   The cells are small (≤ 45 sessions), so only the 4–5 Goods and 11–29 strata are clearly above 0.
 
-![Every prompted session, check on minus off](figures/fig_per_session.png)
+![Every prompted session, check on minus off](figures/fig_per_session.webp)
 
 Per prompted session, the check helps more often than it hurts on Region at β 1 (69% gain, 31% lose) and β 4 (62% /
 37%). On Binary the split is even (51–54% gain, 44–49% lose).

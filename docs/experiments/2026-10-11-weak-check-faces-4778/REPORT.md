@@ -87,14 +87,14 @@ What the check is for, and what it costs, in today's sessions (`ab.csv`):
 The review (#4762, on the plain head and plain crops) had 96–98% prompted and 32–48 votes; with today's
 head and aligned crops it is 92–95% and 26–40.
 
-![The objective by vote, both arms, and where today's checks run](fig_objective_by_vote.png)
+![The objective by vote, both arms, and where today's checks run](fig_objective_by_vote.webp)
 
 *Figure 1. The objective each set shows at every vote, mean over the 562 people. Solid: today's app;
 dashed: the end-of-run check only. Bottom row: the share of today's sessions casting a check's vote (β ¼
 lies under β 1: the same sessions). The first check fills votes 11–30 (to 40 at β 4); the later humps are
 the repeats 25 votes after a check ends.*
 
-![The paired difference by vote](fig_session_diff.png)
+![The paired difference by vote](fig_session_diff.webp)
 
 *Figure 2. Check off minus today at every vote, ±1 SE over people. The gap opens at vote 11, peaks near
 vote 14 and closes by vote 35–40; afterwards it is noise around zero, with a dip at vote 40 at β 4 from one

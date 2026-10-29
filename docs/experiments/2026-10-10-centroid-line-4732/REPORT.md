@@ -28,7 +28,7 @@ gives up 0.020 on COCO's opening, where the session shows the typed query anyway
 0.27 on face crops, where the centroid *is* the opening. `CENTROID_LINE_RULE = "text"` would take the
 typed query's rule instead, and is one line to change.
 
-![F-beta of what a Find returns over votes, per rule, and the difference to the midpoint at each balance](fig_centroid_line.png)
+![F-beta of what a Find returns over votes, per rule, and the difference to the midpoint at each balance](fig_centroid_line.webp)
 
 *Figure 1. Top row: mean F-beta (beta 1) of what a Find returns at each vote, over every run, for
 three lines on the same sessions. The midpoint is grey, guarded blue and count orange. Bottom row:

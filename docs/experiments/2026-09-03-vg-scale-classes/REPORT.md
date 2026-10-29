@@ -45,7 +45,7 @@ are common"). For `truck` it is; for `train` and `airplane` it is not.
 
 ### 2. The easy end of the context axis cannot be widened — and that is structural
 
-![supply asymmetry](figures/supply-asymmetry.png)
+![supply asymmetry](figures/supply-asymmetry.webp)
 
 Every scene-exclusive class the issue wanted fails on the **small** band
 specifically, and by a wide margin: `giraffe` has 14 small-band images against
@@ -78,7 +78,7 @@ that land on *no* COCO class, on images COCO annotated exhaustively. COCO is
 exhaustive over these 80 classes, so a high share means the VG name covers
 objects COCO does not have.
 
-![definition risk](figures/definition-risk.png)
+![definition risk](figures/definition-risk.webp)
 
 `book`, the class that actually broke, scores **43%** — which is what calibrates
 the column. Exactly one candidate scores worse:
@@ -216,7 +216,7 @@ correcting the data.
 
 ### Agreement is not the quality ranking, and reading it as one inverts the answer
 
-![agreement is not quality](figures/agreement-vs-pool-error.png)
+![agreement is not quality](figures/agreement-vs-pool-error.webp)
 
 The two axes are close to independent, and the **narrow / widen** column says
 why. A disagreement where COCO said *present* and the reviewer said *absent* is
@@ -261,7 +261,7 @@ vase narrowing.
 
 ### The negative pass: the pool is 14% ± 7 contaminated, and the extrapolation holds
 
-![the negative pass](figures/negative-pass.png)
+![the negative pass](figures/negative-pass.webp)
 
 The thirteen slates each measured one class against its own negatives. The
 negative pass asked about the **pool** itself: an image sits in it because no VG

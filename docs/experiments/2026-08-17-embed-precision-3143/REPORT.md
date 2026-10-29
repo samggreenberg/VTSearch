@@ -167,9 +167,9 @@ distribution: the mean of a long-tailed drift is the number that hides the tail.
 | `siglip2_l` | `fp16_v100` | 2.8e-06 | 1.2e-05 | 3.9e-04 | 4.6e-06 ± 1.6e-07 |
 | `siglip2_l` | `bf16_l40s` | 1.3e-04 | 3.2e-04 | 3.2e-03 | 1.6e-04 ± 2.0e-06 |
 
-![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.png)
+![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.webp)
 
-![Vector drift by arm, siglip](figures/drift_siglip.png)
+![Vector drift by arm, siglip](figures/drift_siglip.webp)
 
 Bar = median, whisker = p95, log scale. **Grey marks the arms running the same
 fp32 math as the reference** — and their spread is itself the result: on
@@ -218,11 +218,11 @@ Against the same node's fp32:
 | `siglip` | `bf16_l40s` | text query | 100 | 1 ± 6.7e-06 | 98% | 99% | 99% | **97%** |
 | `siglip2_l` | `bf16_l40s` | text query | 100 | 1 ± 1.3e-05 | 99% | 98% | 99% | **98%** |
 
-![Per-category rank stability, exemplar source](figures/rank_stability_exemplar.png)
+![Per-category rank stability, exemplar source](figures/rank_stability_exemplar.webp)
 
-![Per-category rank stability, text-query source](figures/rank_stability_text_query.png)
+![Per-category rank stability, text-query source](figures/rank_stability_text_query.webp)
 
-![Top-k overlap against the reference](figures/topk_overlap.png)
+![Top-k overlap against the reference](figures/topk_overlap.webp)
 
 One dot per category, bar = mean — the average alone would hide a single category
 that fell apart. Note that these are plotted against the *reference* arm, so the
@@ -479,9 +479,9 @@ cells), `average_precision` on 0.04%, and the threshold was chosen the same way
 on **100%** of steps. That combination is the mechanism restated: the decision
 *rule* never changes, the *trajectory* always does.
 
-![Paired cost, mean trajectory and per-cell differences](figures/paired_cost_fp16_l40s_vs_fp32_l40s.png)
+![Paired cost, mean trajectory and per-cell differences](figures/paired_cost_fp16_l40s_vs_fp32_l40s.webp)
 
-![Paired average precision](figures/paired_average_precision_fp16_l40s_vs_fp32_l40s.png)
+![Paired average precision](figures/paired_average_precision_fp16_l40s_vs_fp32_l40s.webp)
 
 Left: mean trajectory for both arms. Right: **every cell's paired difference as a
 thin line**, the mean in black, the ±0.005 margin dashed. The per-cell spread is

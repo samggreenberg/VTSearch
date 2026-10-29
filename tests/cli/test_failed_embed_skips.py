@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 
 from vtsearch.settings import get_detectors_dir
-from vtscore.cli import _score_direct_all, _score_medias_with_detectors
+from vtscore.cli.scoring import _score_direct_all, _score_medias_with_detectors
 from vtscore.media.audio.audio_generator import generate_wav
 
 DIM = 4
@@ -127,7 +127,7 @@ class TestTrainAndThresholdOverAPartlyEmbeddedHaystack:
         made impossible there.
         """
         import vtscore.embedding.matrix as matrix_mod
-        from vtscore.detectors.training import _score_all_media
+        from vtscore.detectors.training_scoring import _score_all_media
 
         calls: list[int] = []
         real = matrix_mod.scoreable_snapshot

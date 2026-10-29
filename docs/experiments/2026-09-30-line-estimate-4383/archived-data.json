@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-30-line-estimate-4383.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/f1_by_size_p10.png": {
+     "bytes": 190627,
+     "oid": "ec9cae18c921dee927622a5056c5ef791bce494f"
+    },
+    "figures/recall_share_by_size_p50.png": {
+     "bytes": 163760,
+     "oid": "484b0a3cdaf6188c82b0af3214175ced3fa80f6b"
+    },
+    "paired_vs_fixed.csv": {
+     "bytes": 81619,
+     "oid": "1779503b1cc59648b20d14b664cb8054e2232daa"
+    },
+    "provenance.json": {
+     "bytes": 541,
+     "oid": "d43c3fd251721dcd836a20b2b15701f5d2e24b35"
+    },
+    "summary.csv": {
+     "bytes": 541295,
+     "oid": "639ae9518f2eb8fcfa1bdae9d5371f552c0c1815"
+    }
+   }
+  }
+ ]
+}
