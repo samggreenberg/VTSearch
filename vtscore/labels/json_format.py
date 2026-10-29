@@ -12,7 +12,7 @@ plugin at the wrong file.  Keeping the check here means the message can't
 drift between the two paths, and a third reader of the format gets it for
 free.
 
-Parsing the file itself belongs to :func:`vtscore.io.read_server_json`; these
+Parsing the file itself belongs to :func:`vtscore.utils.io.read_server_json`; these
 helpers only interpret an already-parsed object.
 """
 

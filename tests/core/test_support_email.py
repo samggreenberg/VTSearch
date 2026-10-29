@@ -14,7 +14,7 @@ import pytest
 
 from vtsearch import settings as settings_mod
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
-from vtsearch.settings_models import DEFAULT_SUPPORT_EMAIL
+from vtsearch.settings.models import DEFAULT_SUPPORT_EMAIL
 
 
 @pytest.fixture(autouse=True)

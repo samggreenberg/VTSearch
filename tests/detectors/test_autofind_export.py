@@ -1,6 +1,6 @@
 """Tests for the AutoFind server-side results auto-export.
 
-Covers :func:`vtsearch.autofind.run_autofind_export`, which
+Covers :func:`vtsearch.runtime.autofind.run_autofind_export`, which
 hands an autodetect run's results to the exporter configured under
 ``autofind_exporter``.
 """
@@ -11,7 +11,7 @@ import json
 from unittest.mock import patch
 
 from vtsearch import settings
-from vtsearch.autofind import run_autofind_export
+from vtsearch.runtime.autofind import run_autofind_export
 
 _SAMPLE_RESULTS = {
     "media_type": "audio",

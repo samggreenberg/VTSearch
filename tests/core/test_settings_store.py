@@ -1,4 +1,4 @@
-"""Direct unit tests for :mod:`vtsearch.settings_store` primitives.
+"""Direct unit tests for :mod:`vtsearch.settings.store` primitives.
 
 The settings routes exercise the store end-to-end, but its low-level file
 I/O and cross-process sync-marker helpers are worth pinning directly: they are
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from vtsearch import settings_store as store
+from vtsearch.settings import store
 
 
 # ---------------------------------------------------------------------------

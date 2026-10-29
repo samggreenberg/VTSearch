@@ -10,7 +10,7 @@ importing `vtsearch.settings`. The package is import-clean - it never
 reaches into the app - and is the only place library code is allowed to
 read environment variables directly.
 
-**Source:** `vtscore/config/` - a package of six submodules, listed under
+**Source:** `vtscore/config/` - a package of seven submodules, listed under
 [Contents](#contents) below. Everything public is re-exported
 from `vtscore/config/__init__.py`, so `vtscore.config.X` and
 `from vtscore.config import X` are the import paths for all of it; the
@@ -28,6 +28,7 @@ The submodules are layered: each reads only from ones above it.
 | `device` | `DEVICE` / `resolve_device()` (with the CUDA smoke-test), `EMBED_PRECISION` / `embed_precision()` and the dtype resolvers | - |
 | `processor_backend` | which `transformers` image-processor implementation runs, and on what device | `device` |
 | `core_config` | `CoreConfig`, `get_setting()` and the hooks that answer it (`register_setting_getter()`, `register_core_config_builder()`, `register_settings_path_redirect()`) | `runtime` |
+| `gpu_backends` | whether UMAP and k-means run on cuML or the CPU libraries (`cuml_enabled()`), and the two fits that route between them; see [GPU backends](#gpu-backends-gpu_backends) | `device` |
 
 Two consequences matter to test authors, and only to test authors:
 
@@ -224,7 +225,7 @@ when one is in scope). Tests rely on this: they override
 
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.torch_threads`). |
+| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.runtime.torch_threads`). |
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB), for a host app to enforce. `0` = unlimited. |
@@ -404,6 +405,76 @@ For library-only consumers, step 2 is `register_core_config_builder()`
 with a builder returning the consumer's `CoreConfig(...)`. The library is
 identical in both cases - it does not care what answered the read.
 
+## GPU backends: `gpu_backends`
+
+cuML (part of NVIDIA's RAPIDS suite) is an optional, GPU-only
+dependency. When a usable CUDA device resolves *and* cuML imports, the
+two heavyweight CPU clustering steps move to the GPU:
+
+| Consumer | CPU | GPU |
+|----------|-----|-----|
+| [Projection](projection.md) UMAP | `umap-learn` | `cuml.manifold.UMAP` |
+| [Coverage atlas](coverage.md) hierarchical k-means | `sklearn.cluster.KMeans` | `cuml.cluster.KMeans` |
+
+```python
+def cuml_enabled() -> bool: ...
+def umap_fit_transform(mat, *, n_components, n_neighbors, min_dist, metric, random_state) -> np.ndarray: ...
+def kmeans_fit_predict(vecs, *, n_clusters, random_state, n_init) -> tuple[np.ndarray, float | None]: ...
+```
+
+cuML's UMAP and KMeans are API-compatible with their CPU counterparts,
+so call sites only swap which estimator they construct, not how they use
+it. Both force `output_type="numpy"`, so downstream code sees plain
+numpy arrays regardless of backend.
+
+The module was the top-level `vtscore/gpu_backends.py` until #5398; that name
+is now a deprecated alias of `vtscore.config.gpu_backends`. Like every
+submodule's public names, the three functions are re-exported from
+`vtscore.config`, but the callers in this repo import them from the
+submodule: that is the one patch target that also reaches
+`umap_fit_transform`'s own call to `cuml_enabled()`. numpy is imported
+inside the two fits, so importing `vtscore.config` stays numpy-free.
+
+### Fit-time failures degrade, not just construction failures
+
+This is the part worth knowing. cuML compiles its cuVS/raft kernels with
+nvrtc **lazily, on the first `fit`** - so a broken GPU toolchain (a
+CUDA-12 nvrtc handed CUDA-13 fp8 headers it can't parse) raises *during
+the fit*, long after the estimator constructed cleanly. A guard around
+construction alone would not catch it.
+
+So both entry points wrap the whole construct-and-fit in one `try`. Any
+cuML hiccup, whenever it happens: logs one warning, flips a
+process-global kill switch, and re-runs on the CPU library. After that
+`cuml_enabled()` returns `False` for the rest of the process, so the run
+skips cuML entirely rather than re-paying a multi-second compile failure
+on every call - which matters because the coverage atlas alone fits
+k-means dozens of times. The switch resets only on a fresh interpreter.
+
+The warning is deliberately at `warning` level and fires once: a GPU box
+silently running the slow path should be visible in the logs.
+
+### Output is not byte-identical to the CPU path
+
+cuML is a separate CUDA-native implementation, so identical parameters
+do not give identical coordinates or labels. That is safe for both
+consumers because each computes its result exactly once and then freezes
+it - the projection is frozen per dataset, the atlas is cached in the
+dataset pickle - so the non-reproducibility never surfaces. The
+*structure* (neighbourhoods, cluster topology) is preserved, which is
+the whole point of these algorithms.
+
+### Opt-out
+
+cuML is optional: when it is absent, everything falls back to the CPU
+libraries automatically. `VTSEARCH_DISABLE_CUML=1` forces the CPU path at
+runtime even when cuML is installed and the GPU is usable.
+`cuml_enabled()` routes its device check through
+`vtscore.config.resolve_device`, so it honours `VTSEARCH_DEVICE` and the
+CUDA smoke test: a GPU the installed wheels can't drive resolves to
+`"cpu"` and disables the cuML path. (How the repo's installer and GPU
+Dockerfile provision cuML is covered in `docs/SETUP.md`.)
+
 ## Invariants
 
 - `vtscore.config` does **not** import `vtsearch.settings`. Ever.
@@ -428,3 +499,5 @@ identical in both cases - it does not care what answered the read.
 - [`cli.md`](cli.md) - the CLI entry points, which read their settings with `get_setting()`.
 - [`embedding.md`](embedding.md) - `get_torch_device()` and the concurrency defaults built on `resolve_device()`.
 - [`security.md`](security.md) - server-path access rules.
+- [`projection.md`](projection.md) and [`coverage.md`](coverage.md) - the UMAP and k-means fits that `gpu_backends` routes to cuML.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#environment-variables) - `VTSEARCH_DISABLE_CUML`; the [cuML troubleshooting entry](../../../docs/TROUBLESHOOTING.md#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors) covers the fit-time failures described above.

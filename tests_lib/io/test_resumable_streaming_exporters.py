@@ -3,7 +3,7 @@
 A ``--stream-results --resume`` run writes through
 ``ResultsExporter.export_cli_streaming_resumable``, committing a position after
 each chunk so a later run can cut the output back to it and append.  These
-tests pin the in-place writer in :mod:`vtscore.io`, the default refusal and
+tests pin the in-place writer in :mod:`vtscore.utils.io`, the default refusal and
 derived support flag on the base class, and that each file exporter's resumed
 output is byte-for-byte the output of one uninterrupted call.
 """
@@ -16,7 +16,7 @@ import pytest
 
 from vtscore.exporters import get_exporter
 from vtscore.exporters.base import ResultsExporter, StreamResume
-from vtscore.io import commit_write_stream, resumable_write_stream
+from vtscore.utils.io import commit_write_stream, resumable_write_stream
 
 _HEADER = {
     "media_type": "audio",
@@ -48,7 +48,7 @@ class _Recorder:
 
 
 # ---------------------------------------------------------------------------
-# vtscore.io
+# vtscore.utils.io
 # ---------------------------------------------------------------------------
 
 

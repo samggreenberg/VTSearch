@@ -50,7 +50,7 @@ class OverrideValueError(ValueError):
     """A flag or env value failed its override's validator.
 
     Carries a message written for an operator (it names the flag or variable
-    and the valid values). :mod:`vtsearch.cli_main` turns it into
+    and the valid values). :mod:`vtsearch.cli.main` turns it into
     ``parser.error`` (exit 2); the env path prints it as a warning and leaves
     the override unset, because a bad variable should not stop a container from
     booting.
@@ -589,7 +589,7 @@ def apply_flag_values(args: Any) -> None:
     """Validate and stash whatever argparse parsed for the override flags.
 
     Raises :class:`OverrideValueError` on the first bad value;
-    :mod:`vtsearch.cli_main` turns that into ``parser.error``. Runs before any
+    :mod:`vtsearch.cli.main` turns that into ``parser.error``. Runs before any
     dataset is created or any listing endpoint is served, so a typo fails fast
     instead of silently no-opping the restriction.
     """

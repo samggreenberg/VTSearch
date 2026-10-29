@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The loose top-level modules moved into packages** (issue #5398). `vtscore.io` is now
+  `vtscore.utils.io`, `vtscore.gpu_backends` is `vtscore.config.gpu_backends`, `vtscore.single_instance` is
+  `vtscore.concurrency.single_instance`, and the two host-seam modules form the new `vtscore.host` package:
+  `vtscore.host_seams` is `vtscore.host.seams` and `vtscore.achievements_hooks` is
+  `vtscore.host.achievements`. Every old name still imports, as a deprecated alias that warns and hands back
+  the moved module itself (as `vtscore.cli_pipeline` does), so a recorder registered or a stub patched
+  through either name is the one the library uses. `cuml_enabled`, `umap_fit_transform` and
+  `kmeans_fit_predict` are also re-exported from `vtscore.config`, which stays numpy-free: the two fits
+  import numpy when called. A test that stubs `cuml_enabled` for the fits patches
+  `vtscore.config.gpu_backends`, and the cuML fallback warning logs under that name. See `packages/utils.md`,
+  `config.md` and `concurrency.md`; the `packages/runtime-modules.md` page is gone.
+
 - **`vtscore/media/`'s loose root modules moved into sub-packages** (issue #5401). The clipping
   machinery is now `vtscore.media.clipping` (`clipper`, `cleaner`, `clip_recipe`, `lazy_clip`), the
   torch helpers `vtscore.media.torch_utils` (`torch_ops`, `torch_setup`), and the structural pipeline

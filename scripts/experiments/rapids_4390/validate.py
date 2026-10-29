@@ -204,7 +204,7 @@ if args.cuml:
     def _():
         import cuml  # noqa: PLC0415
 
-        from vtscore import gpu_backends  # noqa: PLC0415
+        from vtscore.config import gpu_backends  # noqa: PLC0415
 
         rng = np.random.default_rng(0)
         x = rng.standard_normal((3000, 64)).astype(np.float32)

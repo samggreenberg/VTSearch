@@ -34,7 +34,7 @@ The checkpoint holds three things:
 Only digests, offsets and thresholds are stored: no embedding and no model
 weight, which are re-derived on resume as everywhere else.
 
-Writes go through :func:`~vtscore.io.atomic_write_json`, after the exporter
+Writes go through :func:`~vtscore.utils.io.atomic_write_json`, after the exporter
 has made the chunk durable, so the checkpoint never claims more than the
 output holds.  It can claim less (the process died between the two writes);
 the exporter then cuts the output back to the recorded position and that
@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from vtscore.io import atomic_write_json
+from vtscore.utils.io import atomic_write_json
 
 #: The ``format`` tag of a checkpoint file.  ``v2`` fingerprints a chunk by its
 #: importer's key where it has one (#5314); a ``v1`` checkpoint is refused.

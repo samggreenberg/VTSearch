@@ -1,6 +1,6 @@
 """Background AutoFind: the dataset ⋯ **Run AutoFind** action and the import hook (#4252).
 
-Covers :mod:`vtsearch.autofind` end to end through its two routes:
+Covers :mod:`vtsearch.runtime.autofind` end to end through its two routes:
 
 - ``POST /api/datasets/registry/<dataset_id>/autofind`` starts a run of the
   caller's AutoFind detectors (or, given ``detector_ids``, of the detectors
@@ -22,7 +22,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-import vtsearch.autofind as autofind_mod
+import vtsearch.runtime.autofind as autofind_mod
 from tests import load_detector_and_wait, wait_for_loading_task
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.concurrency.async_jobs import projection_jobs
@@ -30,7 +30,7 @@ from vtscore.concurrency.progress import find_progress, loading_tasks
 from vtscore.projection import Projection
 from vtscore.state.core import DatasetContext, get_detector_context, register_context
 from vtsearch import settings
-from vtsearch.autofind import TASK_PREFIX, get_autofind_run, import_post_load
+from vtsearch.runtime.autofind import TASK_PREFIX, get_autofind_run, import_post_load
 from vtsearch.state import snapshot_medias
 
 GOOD = [1, 2, 3]
@@ -244,7 +244,7 @@ class TestRunAutoFindRoute:
 
 
 class _FakeTracker:
-    """Records what a :class:`~vtsearch.autofind.RunProgress` publishes."""
+    """Records what a :class:`~vtsearch.runtime.autofind.RunProgress` publishes."""
 
     def __init__(self) -> None:
         self.frames: list[dict] = []

@@ -30,7 +30,9 @@ from typing import Any
 import pytest
 
 from vtsearch import settings
-from vtsearch.settings_models import ServerSettings
+from vtsearch.settings.models import ServerSettings
+from vtsearch.settings import schema as settings_schema
+from vtsearch.settings import tiers as settings_tiers
 
 
 def _server_key_values(tmp_path: Path) -> dict[str, Any]:
@@ -60,7 +62,7 @@ def _server_key_values(tmp_path: Path) -> dict[str, Any]:
 def _server_values() -> dict[str, Any]:
     """Every server-tier key's current value, as ``GET /api/settings`` reads it."""
     current = settings.get_all()
-    return {key: current.get(key) for key in settings._SERVER_KEYS}
+    return {key: current.get(key) for key in settings_schema._SERVER_KEYS}
 
 
 def _import(client, tmp_path: Path, data: dict[str, Any], **kwargs):
@@ -97,7 +99,7 @@ def _bump(source_file: Path, data: dict[str, Any]) -> None:
     source_file.write_text(json.dumps(data))
     mtime = source_file.stat().st_mtime_ns + 10_000_000_000
     os.utime(source_file, ns=(mtime, mtime))
-    settings._sync_state["default"].last_check_monotonic -= 5.0
+    settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
 
 
 class TestFixture:
@@ -108,10 +110,10 @@ class TestFixture:
         below pass whether or not the tier is enforced.
         """
         values = _server_key_values(tmp_path)
-        assert set(values) == settings._SERVER_KEYS
+        assert set(values) == settings_schema._SERVER_KEYS
         current = _server_values()
         for key, value in values.items():
-            assert settings._validate_field(ServerSettings, key, value) == value, key
+            assert settings_schema._validate_field(ServerSettings, key, value) == value, key
             assert current[key] != value, key
 
 
@@ -123,16 +125,16 @@ class TestImportRoute:
         assert res.status_code == 200
         data = res.get_json()
         assert data["keys"] == ["volume"]
-        assert set(data["skipped"]) == settings._SERVER_KEYS
+        assert set(data["skipped"]) == settings_schema._SERVER_KEYS
         assert "Imported 1 setting(s)" in data["message"]
         assert "Skipped 17" in data["message"]
         assert _server_values() == before
         assert settings.get_volume() == 0.31
 
     def test_server_file_is_not_written(self, client, tmp_path):
-        before = settings.SETTINGS_PATH.read_text()
+        before = settings_tiers.SETTINGS_PATH.read_text()
         _import(client, tmp_path, _server_key_values(tmp_path))
-        assert settings.SETTINGS_PATH.read_text() == before
+        assert settings_tiers.SETTINGS_PATH.read_text() == before
 
     def test_registry_check_runs_on_import(self, client, tmp_path):
         """An exporter ``PUT`` would 400 on is skipped, not stored."""
@@ -145,7 +147,7 @@ class TestImportRoute:
 
     def test_turning_achievements_off_wipes_counters(self, client, tmp_path):
         from vtsearch import achievements
-        from vtsearch.settings import _user_caches
+        from vtsearch.settings.tiers import _user_caches
 
         achievements.record_vote("det-1", media_type="audio")
         assert "achievement_state" in _user_caches["default"]
@@ -238,9 +240,9 @@ class TestAutoResync:
         the state lock underneath it would be the reverse order.
         """
         ctx = _loaded_ctx()
-        lock = settings._store.per_user_sync_lock("default")
+        lock = settings_tiers._store.per_user_sync_lock("default")
         free: list[bool] = []
-        real_after_apply = settings._store._after_apply
+        real_after_apply = settings_tiers._store._after_apply
 
         def probing_after_apply(applied):
             got: list[bool] = []
@@ -257,7 +259,7 @@ class TestAutoResync:
             free.append(got == [True])
             real_after_apply(applied)
 
-        monkeypatch.setattr(settings._store, "_after_apply", probing_after_apply)
+        monkeypatch.setattr(settings_tiers._store, "_after_apply", probing_after_apply)
         new_count = settings.get_calibrate_count() + 1
         _bump(source_file, {"calibrate_count": new_count})
 

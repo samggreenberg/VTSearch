@@ -1,4 +1,4 @@
-"""The host-seam snapshot (:mod:`vtscore.host_seams`).
+"""The host-seam snapshot (:mod:`vtscore.host.seams`).
 
 Every seam is a process global shared by thousands of tests in a handful of
 long-lived xdist workers, so a test that installs one leaks it into every test
@@ -17,7 +17,7 @@ import dataclasses
 
 import pytest
 
-from vtscore.host_seams import HostSeams, capture_host_seams, restore_host_seams
+from vtscore.host.seams import HostSeams, capture_host_seams, restore_host_seams
 
 #: The seams the snapshot is responsible for.  Named here rather than derived
 #: from ``HostSeams`` so that adding a field without teaching capture/restore
@@ -123,16 +123,16 @@ class TestRestore:
 
     def test_keyed_registries_are_restored_in_place(self, restore_afterwards):
         """Callers read the module global directly, so it must not be rebound."""
-        import vtscore.achievements_hooks as achievements_hooks
+        import vtscore.host.achievements as achievements
         import vtscore.state as state
 
         live_persisters = state._setting_persisters
-        live_recorders = achievements_hooks._recorders
+        live_recorders = achievements._recorders
 
         restore_host_seams(restore_afterwards)
 
         assert state._setting_persisters is live_persisters
-        assert achievements_hooks._recorders is live_recorders
+        assert achievements._recorders is live_recorders
 
     def test_a_snapshot_is_not_a_view_of_the_live_registry(self, restore_afterwards):
         """Capturing copies, so a later mutation cannot reach back into it.

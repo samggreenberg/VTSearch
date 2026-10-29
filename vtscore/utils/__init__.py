@@ -10,6 +10,9 @@ Remaining here:
   content fingerprints. Use these instead of ``hashlib`` directly so the
   non-security declaration stays in one place (keeps MD5 working on
   FIPS-enabled hosts).
+- :mod:`vtscore.utils.io` - server-side file I/O for plugins: JSON reads,
+  atomic and resumable writes, CSV-cell escaping, a cross-process file lock.
+  It was the top-level ``vtscore.io`` (#5398), now a deprecated alias of it.
 - :mod:`vtscore.utils.optional_deps` - actionable messages for the opt-out AGPL
   packages (``ultralytics``, ``PyMuPDF``), which a default install has but an
   ``VTSEARCH_NO_AGPL=1`` install deliberately lacks.

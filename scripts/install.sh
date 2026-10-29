@@ -939,7 +939,7 @@ vts_install_cpu() {
 # --- optional cuML / RAPIDS accelerator (best-effort) ------------------------
 # cuML powers GPU UMAP (VTSBrowse projection) and GPU k-means (diversity tree);
 # VTSearch auto-detects it at runtime and falls back to the CPU umap-learn /
-# scikit-learn paths when it's absent (see vtscore/gpu_backends.py). We install
+# scikit-learn paths when it's absent (see vtscore/config/gpu_backends.py). We install
 # it by default on GPU hosts, but as an ISOLATED, NON-FATAL step:
 #
 #   - It's a multi-gigabyte RAPIDS stack (cudf, rmm, cupy, ...) and lives on a

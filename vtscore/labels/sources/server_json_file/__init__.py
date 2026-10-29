@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from vtscore.config import DATA_DIR
-from vtscore.io import atomic_write_json, read_server_json
+from vtscore.utils.io import atomic_write_json, read_server_json
 from vtscore.labels.json_format import extract_labels, require_label_object
 from vtscore.labels.sources.base import LabelsetSource, PluginField
 

@@ -73,7 +73,7 @@ _LOAD_STEP_WEIGHTS_CPU_IMAGE = [0.35, 0.10, 0.35, 0.20]
 # save (serialize → zip → disk write) is never GPU-accelerated, and the
 # atlas k-means only moves to the GPU when cuML is installed (a
 # best-effort RAPIDS dependency that is frequently absent — see
-# ``vtscore/gpu_backends.py``), so it usually still runs on CPU ``sklearn``.
+# ``vtscore/config/gpu_backends.py``), so it usually still runs on CPU ``sklearn``.
 # The net effect on a GPU host is that finalize dominates wall-clock instead of
 # embedding, so it gets a much larger slice of the bar. Without this the bar
 # raced to ~90% during the fast embed phase and then crawled through the last

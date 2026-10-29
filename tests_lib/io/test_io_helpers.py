@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.io``: the shared JSON read / atomic-write / CSV-cell helpers."""
+"""Tests for ``vtscore.utils.io``: the shared JSON read / atomic-write / CSV-cell helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from vtscore.io import (
+from vtscore.utils.io import (
     atomic_write_json,
     atomic_write_stream,
     atomic_write_text,
@@ -110,7 +110,7 @@ class TestAtomicWriteStream:
         assert list(tmp_path.iterdir()) == []
 
     def test_tmp_cleaned_up_when_rename_fails(self, tmp_path, monkeypatch):
-        from vtscore import io as vtio
+        from vtscore.utils import io as vtio
 
         p = tmp_path / "out.txt"
 
@@ -178,7 +178,7 @@ class TestAtomicWriteText:
         assert p.read_bytes() == b"a,b\r\n1,2\r\n"
 
     def test_tmp_cleaned_up_on_error(self, tmp_path, monkeypatch):
-        from vtscore import io as vtio
+        from vtscore.utils import io as vtio
 
         p = tmp_path / "out.txt"
 

@@ -11,7 +11,7 @@ from typing import Generator
 from flask import Blueprint, Response, jsonify, stream_with_context
 
 from vtscore.concurrency.events import acquire_sse_slot, release_sse_slot, stream_progress_events
-from vtsearch.hooks import state_sync_exempt
+from vtsearch.runtime.request_hooks import state_sync_exempt
 
 events_bp = Blueprint("events", __name__)
 

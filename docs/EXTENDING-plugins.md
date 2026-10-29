@@ -1744,7 +1744,7 @@ checkpoint (beside the path `resumable_stream_path()` returns); the exporter
 keeps its destination in step with it:
 
 ```python
-from vtscore.io import commit_write_stream, resumable_write_stream
+from vtscore.utils.io import commit_write_stream, resumable_write_stream
 
 def resumable_stream_path(self, field_values):
     return str(field_values["filepath"])
@@ -2354,8 +2354,8 @@ A settings source is not a one-shot import. Once configured it is
 consulted on an ongoing basis from three places:
 
 1. **On every settings read**, through `_ensure_user_loaded`
-   (`vtsearch/settings.py`) and the `UserSettingsStore.ensure_user_loaded`
-   it delegates to (`vtsearch/settings_store.py`) — rate-limited, see [the freshness
+   (`vtsearch/settings/tiers.py`) and the `UserSettingsStore.ensure_user_loaded`
+   it delegates to (`vtsearch/settings/store.py`) — rate-limited, see [the freshness
    probe](#what-the-sync-engine-expects-of-a-source) below. This is what makes a
    source pick up an out-of-band edit without a restart, and it is also
    what performs the *first* import: the first settings access after a
@@ -2381,7 +2381,7 @@ The endpoints that manage the binding itself are listed under
 ### What the sync engine expects of a source
 
 The engine that drives a settings source is app-internal (`UserSettingsStore`
-in `vtsearch/settings_store.py`), and its internals — binding precedence, the
+in `vtsearch/settings/store.py`), and its internals — binding precedence, the
 freshness tiers, dirty keys, the `.syncmark` marker, lock ordering — are
 documented in [ARCHITECTURE.md § The settings sync engine](ARCHITECTURE.md#the-settings-sync-engine).
 What a source must honor, because one that violates it will appear to work

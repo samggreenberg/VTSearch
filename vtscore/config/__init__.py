@@ -22,6 +22,10 @@ it:
 * :mod:`~vtscore.config.core_config` - :class:`CoreConfig`, :func:`get_setting`
   and the hooks a host installs to answer it.  Reads the projection defaults
   from :mod:`~vtscore.config.runtime`.
+* :mod:`~vtscore.config.gpu_backends` - whether UMAP and k-means run on cuML
+  (a usable GPU with RAPIDS installed) or the CPU libraries, and the two fits
+  that route between them.  Reads :mod:`~vtscore.config.device`.  It moved here
+  from ``vtscore.config.gpu_backends`` (#5398), which is now a deprecated alias.
 
 Everything public is re-exported here, so ``vtscore.config.X`` resolves exactly
 as it did when this was one module.  **Two things the split does change**, both
@@ -72,6 +76,7 @@ from vtscore.config.device import (
     embed_weight_dtype,
     resolve_device,
 )
+from vtscore.config.gpu_backends import cuml_enabled, kmeans_fit_predict, umap_fit_transform
 from vtscore.config.models import (
     AST_MODEL_ID,
     AST_SAMPLE_RATE,
@@ -154,8 +159,9 @@ from vtscore.config.runtime import (
 
 
 #: Every public name the pre-split module exposed, so ``vtscore.config.X``
-#: and ``from vtscore.config import X`` keep resolving unchanged.  Grouped by
-#: submodule, in the order they are imported above.
+#: and ``from vtscore.config import X`` keep resolving unchanged, plus the
+#: three :mod:`~vtscore.config.gpu_backends` names that joined them (#5398).
+#: Grouped by submodule, in the order they are imported above.
 __all__ = [
     "DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL",
     "CoreConfig",
@@ -170,6 +176,9 @@ __all__ = [
     "embed_precision",
     "embed_weight_dtype",
     "resolve_device",
+    "cuml_enabled",
+    "kmeans_fit_predict",
+    "umap_fit_transform",
     "AST_MODEL_ID",
     "AST_SAMPLE_RATE",
     "BEATS_CHECKPOINT_FILE",
@@ -249,9 +258,9 @@ __all__ = [
 
 #: Every submodule of this package, in dependency order (a module only reads
 #: from ones earlier in the tuple).  ``tests_lib/core/test_config_package.py``
-#: pins it against the files on disk, so a seventh module cannot be added
+#: pins it against the files on disk, so a new module cannot be added
 #: without landing here.
-_RELOAD_ORDER = ("paths", "runtime", "models", "device", "processor_backend", "core_config")
+_RELOAD_ORDER = ("paths", "runtime", "models", "device", "processor_backend", "core_config", "gpu_backends")
 
 
 def _reload_all() -> ModuleType:

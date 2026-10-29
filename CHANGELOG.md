@@ -48,6 +48,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Server log lines carry the new module names** (issue #5398). The loose top-level modules of `vtsearch/` moved
+  into `runtime/`, `cli/`, `openapi/` and `settings/`, and each logs under its module's name, so a filter or alert
+  keyed on a logger name needs the new one: the slow-request and request-phase lines that came from `vtsearch.hooks`
+  now come from `vtsearch.runtime.request_hooks`, and `vtsearch.autofind`, `vtsearch.import_hooks`,
+  `vtsearch.diagnose` and `vtsearch.settings_store` are `vtsearch.runtime.autofind`, `vtsearch.runtime.import_hooks`,
+  `vtsearch.runtime.diagnose` and `vtsearch.settings.store`. The cuML fallback warning moved from
+  `vtscore.gpu_backends` to `vtscore.config.gpu_backends`. Nothing else an operator sees changes.
 - **Toasty's hints are bigger, and you can drag them out of the way** (issue #5462). Toasty stands a little larger
   beside every hint. Drag him or his speech bubble to move the hint; the next hint appears in its usual spot. Point at
   Toasty and he changes his face. On the dataset a detector was trained on he now looks surprised rather than happy,

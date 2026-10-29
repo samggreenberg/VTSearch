@@ -541,7 +541,7 @@ class TestSourceMediaType:
 
 
 def _run_main(monkeypatch, argv):
-    from vtsearch import cli_main
+    from vtsearch.cli import main as cli_main
 
     monkeypatch.setattr("sys.argv", ["app.py", *argv])
     monkeypatch.setattr(cli_main, "_run_server", lambda *a, **k: pytest.fail("server started"))
@@ -639,7 +639,7 @@ class TestFlagWiring:
 
     @pytest.mark.parametrize(("argv", "given"), [([], []), (["--media-type", "audio"], ["media_type"])])
     def test_telling_a_typed_flag_from_its_default_puts_the_default_back(self, monkeypatch, argv, given):
-        from vtsearch import cli_main
+        from vtsearch.cli import main as cli_main
 
         parser = cli_main._build_parser()
         parser.add_argument("--media-type", dest="media_type", default="audio")

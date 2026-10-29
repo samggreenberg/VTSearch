@@ -303,7 +303,7 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
 #: plainly.
 #:
 #: This must track the app's shipped default for ``enrich_descriptions``
-#: (``vtsearch/settings_models.py``), which is ``False``: the opening and the
+#: (``vtsearch/settings/models.py``), which is ``False``: the opening and the
 #: click-0 anchor are supposed to be the sort a real user sees, and a harness
 #: that quietly embeds plainly while the app enriches is measuring a different
 #: opening than the one it reports.  Every ``embed_text_query`` call in this

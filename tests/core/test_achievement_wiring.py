@@ -1,7 +1,7 @@
 """The app must actually wire itself into the library's achievement seam.
 
 `vtscore` raises achievement events through
-:func:`vtscore.achievements_hooks.record_achievement`, and the recorders
+:func:`vtscore.host.achievements.record_achievement`, and the recorders
 that persist them are installed by
 ``vtsearch.seam_wiring.register_app_achievement_recorders()`` at startup.  That
 indirection buys the library its Flask-free layering, but it trades a
@@ -22,8 +22,8 @@ from __future__ import annotations
 import pytest
 
 from vtsearch import achievements
-from vtscore import achievements_hooks
-from vtscore.achievements_hooks import KNOWN_EVENTS
+from vtscore.host import achievements as achievement_seam
+from vtscore.host.achievements import KNOWN_EVENTS
 
 
 class TestStartupWiring:
@@ -34,12 +34,12 @@ class TestStartupWiring:
         ``register_achievement_recorder`` call in the shim fails here
         rather than silently never crediting.
         """
-        assert set(achievements_hooks._recorders) == set(KNOWN_EVENTS)
+        assert set(achievement_seam._recorders) == set(KNOWN_EVENTS)
 
     @pytest.mark.parametrize("event", sorted(KNOWN_EVENTS))
     def test_each_recorder_targets_the_app_implementation(self, event):
         """Each hook must reach ``vtsearch.achievements``, not a stub."""
-        recorder = achievements_hooks._recorders[event]
+        recorder = achievement_seam._recorders[event]
         assert callable(recorder)
         assert recorder.__module__ == "vtsearch.seam_wiring"
 

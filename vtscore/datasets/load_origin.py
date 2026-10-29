@@ -218,7 +218,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     # save above necessarily predates the pass.
     start_archive_thumbnail_warm(ctx)
 
-    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
+    from vtscore.host.achievements import record_achievement  # noqa: PLC0415
 
     record_achievement("dataset_load", str(spec.origin.get("importer", "")))
 

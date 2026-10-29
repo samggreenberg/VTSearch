@@ -6,7 +6,7 @@
 
 ## App Settings
 
-The settings model is defined once, in `vtsearch/settings_models.py`
+The settings model is defined once, in `vtsearch/settings/models.py`
 (`ServerSettings` / `UserSettings`: types, defaults, clamps), and exposed
 through the marshmallow schemas in `vtsearch/schemas/settings.py`. The
 **`AppSettings`** and **`SettingsUpdate`** schemas in the
@@ -34,7 +34,7 @@ is seeded from it on first read; a detector that keeps one ignores it. It is nev
 | Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |
 | Browse panel sizes | `browse_graphics`, `browse_panel_width`, `browse_details_panel_width`, `browse_details_metadata_width` | `browse_graphics`: `auto` / `full` / `reduced`. Widths are clamped CSS px. |
 | Embedders | `solo_embedder_per_media_type`, `last_embedder_per_media_type` | `solo_embedder_per_media_type` locks a media type to one embedder (`""` opts that type out of a CLI-set lock); invalid type/embedder pairs are a 400. `last_embedder_per_media_type` is written by the load pipeline — accepted by `PUT` but ignored. |
-| **Read-only** (admin / computed) | `saved_datasets_dir`, `detectors_dir`, `solo_media_type`, `semantic_only`, `autopilot_only`, `hidden_plugins`, `dataset_max_age_days`, `support_email`, `docs_links`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `browse_signpost_vocab`, `effective_solo_embedder_per_media_type`, `import_hooks_configured` | Returned by `GET`, not accepted by `PUT` (dropped like any unknown key), and skipped by a settings import or sync. Set by the operator via CLI flags, env vars, or the settings file; each override reports the value actually in force (see `vtsearch/admin_overrides.py`). `import_hooks_configured` is whether the admin named any `--on-dataset-imported` hooks; the hooks themselves are not published. |
+| **Read-only** (admin / computed) | `saved_datasets_dir`, `detectors_dir`, `solo_media_type`, `semantic_only`, `autopilot_only`, `hidden_plugins`, `dataset_max_age_days`, `support_email`, `docs_links`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `browse_signpost_vocab`, `effective_solo_embedder_per_media_type`, `import_hooks_configured` | Returned by `GET`, not accepted by `PUT` (dropped like any unknown key), and skipped by a settings import or sync. Set by the operator via CLI flags, env vars, or the settings file; each override reports the value actually in force (see `vtsearch/settings/admin_overrides.py`). `import_hooks_configured` is whether the admin named any `--on-dataset-imported` hooks; the hooks themselves are not published. |
 
 ### Update settings
 
@@ -63,7 +63,7 @@ PUT /api/settings
 - **The same rule covers an import and a sync.** A
   [settings import](io.md#run-settings-import) or a settings-source sync
   writes each key through the checks `PUT` runs (`plan_user_write` in
-  `vtsearch/settings.py`), so neither can store a value `PUT` would refuse.
+  `vtsearch/settings/sync.py`), so neither can store a value `PUT` would refuse.
   A file's `beta`, `calibrate_count` or `calibration_fraction` drops stale
   thresholds/heads on loaded detectors as `PUT` does, except that an imported
   `beta` is the user's balance, not a balance pick on the active detector.

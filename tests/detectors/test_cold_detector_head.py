@@ -281,7 +281,7 @@ class TestColdHeadIsScoredAtItsGeometry:
         mismatch inverted, so the route now scores the shared
         ``scoring_rows_for_snap`` stack like every other scorer.
         """
-        import vtsearch.autofind as autofind_mod
+        import vtsearch.runtime.autofind as autofind_mod
         from vtsearch.settings import add_autofind_detector
 
         corpus = _patch_corpus()

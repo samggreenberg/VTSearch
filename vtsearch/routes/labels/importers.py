@@ -203,7 +203,7 @@ def _start_auto_resolve(missing: list[dict]) -> str:
     """
     from vtscore.datasets.ingest_task import start_ingest_task
     from vtscore.state.core import get_active_detector_context
-    from vtsearch.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     det_ctx = get_active_detector_context()
     detector_id = det_ctx.detector_id or ""

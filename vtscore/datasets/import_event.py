@@ -4,7 +4,7 @@ The load pipeline (:func:`vtscore.datasets.load_origin._run_origin_load_in_backg
 reports the end of an import through its ``on_finished`` callback with one
 :class:`DatasetImported`.  The app passes that event on to the functions a
 server admin names with ``--on-dataset-imported`` (see
-:mod:`vtsearch.import_hooks`), which is how a deployment sends an email, posts
+:mod:`vtsearch.runtime.import_hooks`), which is how a deployment sends an email, posts
 to a chat channel, or does anything else when a user's import completes.
 
 The pipeline leaves :attr:`DatasetImported.notify` at its default; the app

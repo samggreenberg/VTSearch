@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from vtsearch.settings import USER_SETTINGS_FILENAME
-from vtsearch.settings_models import ServerSettings, UserSettings
+from vtsearch.settings.models import ServerSettings, UserSettings
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "install" / "seed_labbench_settings.py"
 
