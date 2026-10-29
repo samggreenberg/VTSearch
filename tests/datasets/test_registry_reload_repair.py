@@ -88,6 +88,7 @@ class TestRegistryReloadRepair:
             assert list(get_embedding_matrix(ctx, embedder_name=SECOND)[0]) == [1, 2, 4, 5]
 
             repaired = get_dataset(dataset_id)
+            assert repaired is not None
             assert repaired["num_items"] == 4
             assert repaired["num_dropped"] == 1
             (group,) = repaired["dropped_groups"]
@@ -111,8 +112,10 @@ class TestRegistryReloadRepair:
             client.post(f"/api/datasets/registry/{dataset_id}/unload")
             received.clear()
             _load(client, monkeypatch, dataset_id)
-            assert sorted(get_context(dataset_id).medias) == [1, 2, 4, 5]
-            assert get_dataset(dataset_id)["num_dropped"] == 1
+            reloaded_ctx, reloaded_entry = get_context(dataset_id), get_dataset(dataset_id)
+            assert reloaded_ctx is not None and reloaded_entry is not None
+            assert sorted(reloaded_ctx.medias) == [1, 2, 4, 5]
+            assert reloaded_entry["num_dropped"] == 1
             assert [n for n in received if n.source == "Dataset load"] == []
         finally:
             notifications.unsubscribe(received.append)
@@ -136,7 +139,9 @@ class TestRegistryReloadRepair:
         )
         try:
             _load(client, monkeypatch, entry["id"])
-            assert get_dataset(entry["id"])["num_dropped"] == 0
+            loaded = get_dataset(entry["id"])
+            assert loaded is not None
+            assert loaded["num_dropped"] == 0
             assert pkl_path.stat().st_mtime_ns == before
         finally:
             client.post(f"/api/datasets/registry/{entry['id']}/unload")

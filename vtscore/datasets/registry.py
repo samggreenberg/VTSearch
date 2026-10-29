@@ -15,7 +15,7 @@ import json
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -199,7 +199,7 @@ def register_dataset(
     expires_at: float | None = None,
     import_group: str | None = None,
     output_category: str = "",
-    dropped_groups: list[dict[str, Any]] | None = None,
+    dropped_groups: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -271,7 +271,7 @@ def register_dataset(
         "import_group": import_group,
         "output_category": output_category,
         "num_dropped": sum(int(g["count"]) for g in dropped_groups or []),
-        "dropped_groups": list(dropped_groups or []),
+        "dropped_groups": [dict(g) for g in dropped_groups or []],
     }
     _read_modify_write(lambda entries: entries.append(entry))
 

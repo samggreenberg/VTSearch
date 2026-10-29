@@ -8,6 +8,7 @@ exact-duplicate media are collapsed, and the coverage atlas is built.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
@@ -96,24 +97,24 @@ def _dropped_groups(labels: list[str], reasons: list[str]) -> list[DroppedGroup]
     return list(groups.values())
 
 
-def merge_dropped_groups(recorded: list[DroppedGroup], new: list[DroppedGroup]) -> list[DroppedGroup]:
+def merge_dropped_groups(recorded: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> list[DroppedGroup]:
     """Add *new* to the *recorded* groups of a registry entry, keeping the name cap.
 
     A group whose reason is already recorded is folded into it; the others are
     appended.  Names stop at :data:`MAX_RECORDED_DROPS` across every group,
-    counts never do.
+    counts never do.  Neither input is modified.
     """
     merged: list[DroppedGroup] = [
-        {"reason": g["reason"], "count": int(g["count"]), "items": list(g["items"])} for g in recorded
+        DroppedGroup(reason=str(g["reason"]), count=int(g["count"]), items=list(g["items"])) for g in recorded
     ]
     by_reason = {g["reason"]: g for g in merged}
     kept = sum(len(g["items"]) for g in merged)
     for group in new:
         target = by_reason.get(group["reason"])
         if target is None:
-            target = {"reason": group["reason"], "count": 0, "items": []}
+            target = DroppedGroup(reason=str(group["reason"]), count=0, items=[])
             merged.append(target)
-            by_reason[group["reason"]] = target
+            by_reason[target["reason"]] = target
         target["count"] += int(group["count"])
         room = max(0, MAX_RECORDED_DROPS - kept)
         target["items"].extend(group["items"][:room])
