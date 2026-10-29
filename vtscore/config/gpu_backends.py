@@ -61,7 +61,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import numpy as np
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Process-global kill switch, flipped the first time a cuML op fails at runtime
 # (typically an nvrtc compile error surfaced from ``fit``).  Once a GPU is known
@@ -116,7 +116,7 @@ def _disable_cuml_after_failure(op: str, exc: Exception) -> None:
     _cuml_runtime_failed = True
     # warning() once (the kill switch ensures we never reach here a second time
     # while emitting); debug-level detail on the off chance someone re-enables.
-    log = logger.warning if first else logger.debug
+    log = _logger.warning if first else _logger.debug
     log(
         "cuML %s failed (%s: %s); falling back to the CPU library and disabling "
         "cuML for the rest of this process. This is usually a CUDA toolchain "
