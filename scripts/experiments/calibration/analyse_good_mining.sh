@@ -37,7 +37,7 @@ case "$MODE" in
 esac
 
 # shellcheck disable=SC1091
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 cd "$HERE" || exit 2

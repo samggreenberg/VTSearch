@@ -143,7 +143,7 @@ fi
 X=$(sbatch --parsable --dependency=afterany:"$CUT_JOB" --job-name=cal-transfer \
   --mem="${CALIB_ANALYZE_MEM:-24G}" --cpus-per-task=4 --time="${CALIB_ANALYZE_TIME:-0:40:00}" \
   --partition=cpu --export=ALL --output="$LOGS/transfer-%j.out" \
-  --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME && cd $HERE && python analyze_transfer.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME && cd $HERE && python analyze_transfer.py")
 echo "transfer analyze: $X (after $CUT_JOB)"
 echo "Pre-registration -> $WT/docs/experiments/2026-08-24-transfer-2883/PREREG.md"
 echo "Report           -> $CALIB_RESULTS/REPORT_TRANSFER.md"

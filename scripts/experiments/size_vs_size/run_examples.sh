@@ -3,7 +3,7 @@
 set -u
 E=/expscratch/sgreenberg/size-vs-size-4160
 cd /expscratch/sgreenberg/worktrees/vts-4160/scripts/experiments/calibration
-source ../../../gridenv.sh >/dev/null 2>&1; source ../pile/pile_env.sh >/dev/null 2>&1
+source ../../grid/gridenv.sh >/dev/null 2>&1; source ../pile/pile_env.sh >/dev/null 2>&1
 export CALIB_EXP=$E/examples CALIB_RESULTS=$E/examples CALIB_DATASETS=coco_better CALIB_COCO_BETTER_EMBEDDERS=siglip \
   CALIB_CATEGORY_MODE=all CALIB_N_SEEDS=20 CALIB_CELL_ORDER=seed CALIB_TRAIN_MIXES=equal,natural \
   CALIB_MIX_SHARES=$E/mix_shares.json CALIB_TEST_BANDS=all CALIB_TEST_BAND_AUROC=1 CALIB_MAX_STEPS=150 \

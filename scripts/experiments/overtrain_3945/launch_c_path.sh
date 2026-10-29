@@ -33,6 +33,6 @@ echo "$N tasks -> $OUT (commit $(cat "$OUT/commit.txt"))"
 J=$(sbatch --parsable --job-name="ovt-R-$ARM" --array=0-$((N-1))%60 --partition=cpu \
   --cpus-per-task=1 --mem="${R_MEM:-6G}" --time="${R_TIME:-3:00:00}" --output="$OUT/logs/%A_%a.out" \
   --export=ALL,OMP_NUM_THREADS=1,MKL_NUM_THREADS=1,OPENBLAS_NUM_THREADS=1 \
-  --wrap="source $WT/gridenv.sh >/dev/null 2>&1 && IFS=\$'\t' read -r DS EMB CAT < <(sed -n \"\$((SLURM_ARRAY_TASK_ID+1))p\" $TASKS) && python $HERE/c_path.py --dataset \"\$DS\" --embedder \"\$EMB\" --category \"\$CAT\" --replay-root $ROOT --arm $ARM --out $OUT")
+  --wrap="source $WT/scripts/grid/gridenv.sh >/dev/null 2>&1 && IFS=\$'\t' read -r DS EMB CAT < <(sed -n \"\$((SLURM_ARRAY_TASK_ID+1))p\" $TASKS) && python $HERE/c_path.py --dataset \"\$DS\" --embedder \"\$EMB\" --category \"\$CAT\" --replay-root $ROOT --arm $ARM --out $OUT")
 [[ "$J" =~ ^[0-9]+$ ]] || { echo "sbatch refused: $J" >&2; exit 1; }
 echo "array: $J"

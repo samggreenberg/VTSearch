@@ -100,7 +100,7 @@ bash "$WT/scripts/experiments/preflight.sh" "${PREFLIGHT_ARGS[@]}" || exit 1
 if [[ -n "${TAIL_WITH_THEORY:-}" ]]; then
   T=$(sbatch --parsable --job-name=tail-theory --mem=8G --cpus-per-task=4 \
     --time="${TAIL_THEORY_TIME:-3:00:00}" --partition=cpu --export=ALL --output="$LOGS/theory-%j.out" \
-    --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python theory_bench.py --reps ${TAIL_THEORY_REPS:-40}")
+    --wrap="source $WT/scripts/grid/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python theory_bench.py --reps ${TAIL_THEORY_REPS:-40}")
   echo "theory bench job: $T   -> $CALIB_RESULTS/theory/"
 fi
 

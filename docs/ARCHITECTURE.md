@@ -121,7 +121,12 @@ settings, auth, and the app-side state shim). A third, **`imagekit/`**, is
 the face localisation + embedding package with the pluggable provider seam
 ([`imagekit/README.md`](../imagekit/README.md)); it imports neither of the
 other two, and `vtscore` reaches it through
-`vtscore/media/face/imagekit_bridge.py` alone.
+`vtscore/media/face/imagekit_bridge.py` alone. It is a package of its own
+rather than a `vtscore` subpackage because it is used on its own (`import
+imagekit`, two CLIs) and its import path is a contract: a third-party face
+provider registers through `imagekit.face.register_provider` or the
+`imagekit.face_providers` entry-point group, so moving it would break code
+outside this repository.
 
 This map stops at the package level and names only the files you need to find
 your way in. Each module's docstring says what it is for, so read the directory
@@ -206,11 +211,20 @@ VTSearch/
 ├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*)
 ├── tests_shared/           Conftest machinery both suites import
 ├── typings/               Local stubs pyright reads in place of an installed package
-│                           (transformers; see docs/TESTING.md)
-├── scripts/                Repo tooling: run-tests.sh gates, doc generators, experiments
+│                           (transformers; see docs/TESTING.md). At the root because it
+│                           is pyright's stubPath, which resolves there (pyrightconfig.json)
+├── scripts/                Repo tooling: run-tests.sh gates, doc generators, experiments;
+│                           grid/ holds the GRID glue (gridenv.sh, the worktree guards)
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
-├── docker/, gunicorn.conf.py  Container images and the production WSGI config
+├── docker/, gunicorn.conf.py  Container images and the production WSGI config. The config
+│                           stays at the root, not in docker/: gunicorn looks for
+│                           ./gunicorn.conf.py by default, bare-metal deploys run it from
+│                           here too, and .dockerignore drops docker/ from every image
+├── model_cache/            Gated-model weights for the image-embedders images, filled by
+│                           scripts/cache_gated_models.sh; gitignored bar a .gitkeep. At
+│                           the root because the Dockerfile COPYs it and the build
+│                           context excludes data/
 ├── requirements/           pip install sets: base, gpu, an AGPL-free *-no-agpl mirror of each,
 │                           and the image-embedders / slim LabBench sets (docs/DEPLOYMENT.md)
 └── run-tests.sh            The test + gate runner (docs/TESTING.md)

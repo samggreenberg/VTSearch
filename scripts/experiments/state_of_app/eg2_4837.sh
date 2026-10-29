@@ -77,7 +77,7 @@ analyze)
   b="${2:?beta (0.25, 1 or 4)}"
   EXP="$S/$D-eg2-4837-b$(btag "$b")"
   WT="$(cd "$HERE/../../.." && pwd)"
-  source "$WT/gridenv.sh"
+  source "$WT/scripts/grid/gridenv.sh"
   source "$WT/scripts/experiments/pile/pile_env.sh"
   export VTS_REPO="$WT" CALIB_EXP="$EXP" CALIB_RESULTS="$EXP/results" CALIB_DATASETS=coco_better
   export CALIB_COCO_BETTER_EMBEDDERS="$EMBEDDERS" CALIB_CATEGORY_MODE=all CALIB_N_SEEDS="$SEEDS"

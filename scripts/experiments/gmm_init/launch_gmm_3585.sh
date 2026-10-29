@@ -55,7 +55,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -182,7 +182,7 @@ size)
     submit "size$idx" --job-name="gmm-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time="$TIME" --partition="$PARTITION" --export=ALL \
       --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python capture_folds_3585.py --index $idx --stride $CAPTURE_STRIDE --out $CALIB_EXP/sizing/cell_$(printf '%04d' "$idx").npz"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python capture_folds_3585.py --index $idx --stride $CAPTURE_STRIDE --out $CALIB_EXP/sizing/cell_$(printf '%04d' "$idx").npz"
   done
   echo "when these finish: sacct -j <id> --format=Elapsed,MaxRSS,State"
   ;;
@@ -221,7 +221,7 @@ PYSHAPE
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL \
     --output="$LOGS/capture-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_folds_3585.py --index \$SLURM_ARRAY_TASK_ID --stride $CAPTURE_STRIDE --out $CORPUS/cell_\$(printf '%04d' \$SLURM_ARRAY_TASK_ID).npz"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python capture_folds_3585.py --index \$SLURM_ARRAY_TASK_ID --stride $CAPTURE_STRIDE --out $CORPUS/cell_\$(printf '%04d' \$SLURM_ARRAY_TASK_ID).npz"
   ;;
 
 sorts)
@@ -244,11 +244,11 @@ sorts)
   submit sorts --job-name="$JOB_NAME-sorts" --mem=32G --cpus-per-task=4 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/sorts-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $REUSE_PREPARE --out $CORPUS/sorts_overview.npz"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $REUSE_PREPARE --out $CORPUS/sorts_overview.npz"
   submit sortscale --job-name="$JOB_NAME-sortscale" --mem=32G --cpus-per-task=4 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/sortscale-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $SCALE_PREPARE --embedders siglip,clip --max-categories 10 --out $CORPUS/sorts_vgscale.npz"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $SCALE_PREPARE --embedders siglip,clip --max-categories 10 --out $CORPUS/sorts_vgscale.npz"
   ;;
 
 ab)
@@ -267,7 +267,7 @@ ab)
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/ab-$arm-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS GMM_FIT_ARM=$arm && cd $HERE && python run_cells_arm_3585.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS GMM_FIT_ARM=$arm && cd $HERE && python run_cells_arm_3585.py"
   done
   ;;
 
@@ -275,7 +275,7 @@ analyse)
   submit analyse --job-name="$JOB_NAME-analyse" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=1:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/analyse-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python analyze_3585.py --analysis $ANALYSIS --corpus $CORPUS && python figures_3585.py --analysis $ANALYSIS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python analyze_3585.py --analysis $ANALYSIS --corpus $CORPUS && python figures_3585.py --analysis $ANALYSIS"
   ;;
 
 baseline)
@@ -283,7 +283,7 @@ baseline)
   submit baseline --job-name="$JOB_NAME-baseline" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/baseline-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python text_baseline.py --results $CALIB_RESULTS --out $ANALYSIS/text_baseline.csv"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python text_baseline.py --results $CALIB_RESULTS --out $ANALYSIS/text_baseline.csv"
   ;;
 
 abfigures)
@@ -301,28 +301,28 @@ abfigures)
   submit abfigures --job-name="$JOB_NAME-abfigures" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/abfigures-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python curves.py --results $ARMS_ROOT --arms sklearn,native --out $ANALYSIS/figures $BASE_ARG && python viewer.py --results $ARMS_ROOT --arms sklearn=sklearn,native=native --out $ANALYSIS/viewer.html --title 'The mixture fit: sklearn vs ours (#3585)' $BASE_ARG"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python curves.py --results $ARMS_ROOT --arms sklearn,native --out $ANALYSIS/figures $BASE_ARG && python viewer.py --results $ARMS_ROOT --arms sklearn=sklearn,native=native --out $ANALYSIS/viewer.html --title 'The mixture fit: sklearn vs ours (#3585)' $BASE_ARG"
   ;;
 
 abanalyze)
   submit abanalyze --job-name="$JOB_NAME-abanalyze" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/abanalyze-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_native/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab && mkdir -p $ANALYSIS/ab && cd $CALIB && python analyze_ab.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_native/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab && mkdir -p $ANALYSIS/ab && cd $CALIB && python analyze_ab.py"
   ;;
 
 gate)
   submit gate --job-name="$JOB_NAME-gate" "${DEP_ARG[@]}" --mem="${GATE_MEM:-32G}" --cpus-per-task=2 \
     --time="${GATE_TIME:-8:00:00}" --partition="$PARTITION" --export=ALL \
     --output="$LOGS/gate-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python gate_3585.py --corpus $CORPUS --out $ANALYSIS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python gate_3585.py --corpus $CORPUS --out $ANALYSIS"
   ;;
 
 bench)
   submit bench --job-name="$JOB_NAME-bench" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/bench-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python bench_3585.py --corpus $CORPUS --out $ANALYSIS/bench.csv"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python bench_3585.py --corpus $CORPUS --out $ANALYSIS/bench.csv"
   ;;
 
 status)
