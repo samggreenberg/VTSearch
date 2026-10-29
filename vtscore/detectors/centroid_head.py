@@ -59,7 +59,7 @@ CENTROID_THRESHOLD = 0.5
 _MARK = "vtsearch_centroid_goods"
 
 
-def goods_centroid(vectors: Sequence[np.ndarray], weights: Sequence[float] | None = None) -> np.ndarray:
+def goods_centroid(vectors: Sequence[np.ndarray], weights: "Sequence[float] | np.ndarray | None" = None) -> np.ndarray:
     """The unit mean of the L2-normalised *vectors*: every Good weighs the same, or its *weights* entry.
 
     The same mean :func:`~vtscore.training.query_sort.example_sort_from_paths`
