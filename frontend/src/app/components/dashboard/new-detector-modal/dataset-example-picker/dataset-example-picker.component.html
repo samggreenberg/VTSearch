@@ -11,7 +11,7 @@
         aria-label="Search this dataset’s items by name"
         [value]="query()"
         (input)="onQuery($any($event.target).value)" />
-      <vt-view-controls side="picker" [currentMediaType]="mediaType()" [showFocus]="false" />
+      <vt-view-controls class="pick-size" side="picker" [currentMediaType]="mediaType()" [showFocus]="false" />
     </div>
     <p class="info-text">
       @if (searchActive()) {

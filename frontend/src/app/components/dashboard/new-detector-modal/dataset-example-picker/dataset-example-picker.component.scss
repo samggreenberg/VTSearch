@@ -23,6 +23,12 @@
   min-width: 0;
 }
 
+// The search box gives way, never the buttons: a shrunk control overflows
+// its own box and gives the dialog a sideways scroll.
+.pick-size {
+  flex-shrink: 0;
+}
+
 // A CDK virtual viewport needs a definite height (it lays out with
 // `contain: strict`), so this one is fixed rather than sized to its content.
 .pick-scroll {
