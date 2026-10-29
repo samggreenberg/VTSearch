@@ -49,7 +49,7 @@ def boot(x: np.ndarray, rng: np.random.Generator, n: int = 4000) -> tuple[float,
     return float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))
 
 
-def figure(summary: pd.DataFrame, arms: list[str], path: Path) -> None:
+def figure(summary: pd.DataFrame, arms: list[str], path: Path, title: str) -> None:
     import matplotlib  # noqa: PLC0415
 
     matplotlib.use("Agg")
@@ -72,7 +72,7 @@ def figure(summary: pd.DataFrame, arms: list[str], path: Path) -> None:
     axes[0].set_ylabel("F at 50 votes")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=len(cols), fontsize=8, frameon=False)
-    fig.suptitle("Four-photo sessions with one hard-view start: its weight in the example centroid")
+    fig.suptitle(title)
     fig.tight_layout(rect=(0, 0.1, 1, 1))
     fig.savefig(path, dpi=120)
 
@@ -83,6 +83,9 @@ def main() -> int:
     ap.add_argument("--arm", action="append", required=True, help="TAG=<analysis dir>; the first is the control")
     ap.add_argument("--swap", help="#5376's leave-it-out analysis, a reference level only")
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument(
+        "--title", default="Four-photo sessions with one hard-view start: its weight in the example centroid"
+    )
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     arms = dict(a.split("=", 1) for a in args.arm)
@@ -134,7 +137,7 @@ def main() -> int:
     paired.to_csv(args.out / "paired.csv", index=False)
     out = pd.DataFrame(summary)
     out.to_csv(args.out / "summary.csv", index=False)
-    figure(out, names, args.out / "f50.png")
+    figure(out, names, args.out / "f50.png", args.title)
     key = out[out.metric.isin(("thr_fbeta_50", "thr_precision_50", "thr_returned_50", "thr_recall_50"))]
     with pd.option_context("display.width", 220, "display.max_rows", 400):
         print(key.round(3).to_string(index=False))
