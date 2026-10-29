@@ -10,7 +10,7 @@ another without knowing anything about the backend behind it.
 
 :func:`_style_train_and_calibrate` is the **production-faithful** trainer and is
 pinned against ``vtscore.detectors.training.train_and_threshold`` by
-`scripts/check-eval-app-sync.py`; it and :func:`_app_train_and_calibrate` are the
+`scripts/gates/check-eval-app-sync.py`; it and :func:`_app_train_and_calibrate` are the
 two halves of the app-pipeline arm (:data:`~vtscore.eval.step_model.APP_TRAINER`
 - style-aware and single-vector respectively), while
 :func:`_svm_train_and_calibrate` runs a standalone estimator instead.  See the

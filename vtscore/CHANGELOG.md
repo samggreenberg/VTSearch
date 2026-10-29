@@ -912,7 +912,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   beta=None)` now draws the line at the balance (the new
   `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
   of `line_knobs` and the `thresholds.line_preference_default` mirror of
-  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `scripts/gates/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
   `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
   under a balance as it was under a floor. `aim_words(state)` says which
   preference an unchecked set was exported at ("aiming at 25% right" / "at

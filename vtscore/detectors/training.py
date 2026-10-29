@@ -513,7 +513,7 @@ def resolve_calibration_fraction(calibration_fraction: float | None, embedder_na
     whether the dataset carries a ``patch_grid`` (its spelling of "built by a
     patch embedder").  If the predicate here changes, the harness's has to
     move with it - the ``training.split_fraction_default`` mirror in
-    ``scripts/check-eval-app-sync.py`` pins this function for that reason.
+    ``scripts/gates/check-eval-app-sync.py`` pins this function for that reason.
     """
     if calibration_fraction is not None:
         return float(calibration_fraction)

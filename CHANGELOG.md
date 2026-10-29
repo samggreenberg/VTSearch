@@ -141,7 +141,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   one, and Face turns on, with no restart. Without one, Face is left out of every picker, an import that asks for
   faces anyway fails naming what is missing, and the startup log says which
   ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#face-models)). `IMAGEKIT_FACE_PROVIDER` picks the backend. Two CLIs,
-  `scripts/detect_faces.py` and `scripts/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
+  `scripts/data/detect_faces.py` and `scripts/data/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
   now a runtime dependency.
 
 - **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the

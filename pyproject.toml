@@ -181,7 +181,7 @@ include = ["vtsearch*", "vtscore*", "imagekit*"]
 
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
-# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
+# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/data/build_vlad_codebook.py.
 "vtscore.media" = ["assets/*.npy", "assets/*.json"]
 # The imagekit face models' JSON configs: the SCRFD defaults the detector falls
 # back to, and the reference configs a deployment copies beside its weights.
@@ -234,7 +234,7 @@ max-complexity = 10
 # Intentional `git` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
-"scripts/gen-docs-inventories.py" = ["S603", "S607"]
+"scripts/gates/gen-docs-inventories.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
 "vtscore/media/audio/decode.py" = ["S603"]
 "vtscore/media/video/decode.py" = ["S603"]

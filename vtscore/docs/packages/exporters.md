@@ -300,7 +300,7 @@ It carries the full walkthrough - a worked third-party exporter, the
 payload-method split, template variables, URL and server-path
 validation, entry-point packaging, and the testing pattern - and it is
 the copy that stays current, because
-`scripts/check-extension-docs.py` holds its contract table to the
+`scripts/gates/check-extension-docs.py` holds its contract table to the
 members `ResultsExporter` actually defines.
 
 Only two things are specific to adding an exporter *to this package*

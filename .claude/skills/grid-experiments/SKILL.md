@@ -330,7 +330,7 @@ date is the *study's*, not its last edit: a report that is later corrected,
 re-skinned or extended keeps the name it was filed under, because every link in
 the tree points at that name. These directories are **the record of what a run
 produced**: archives, not plans, and not pruned when the work they justified
-ships. (`docs/plans/` holds work still owed.) `scripts/check-docs.py` enforces
+ships. (`docs/plans/` holds work still owed.) `scripts/gates/check-docs.py` enforces
 the name shape.
 
 **A finished study's bulk data leaves the tree (#5404).** Cell CSVs, measurement
@@ -669,7 +669,7 @@ from, so a reader never has to look in a second place for the same study.
 **Generate it, never hand-write it:** a second copy of the narrative drifts from
 the first, and the point is that both renderings say the same thing.
 
-Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
+Reports cite only analysis code that is **in the tree**: `scripts/gates/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got
 committed cannot be reproduced or extended, however good its numbers were.
 
@@ -736,7 +736,7 @@ step 6c sweeps the queue at each release for anything this missed.
 ## When something breaks
 
 **Add a file to `scripts/experiments/lessons/`**, named `YYYY-MM-DD-short-slug.md` — same day, while
-the mechanism is still clear — then re-run `python scripts/gen-docs-inventories.py`
+the mechanism is still clear — then re-run `python scripts/gates/gen-docs-inventories.py`
 to refresh the index in `LESSONS.md`. One incident per file, so that two studies
 recording lessons in parallel do not conflict. Keep the cost in it, and say
 plainly whether it is now *prevented* (a preflight check, a code change) or still

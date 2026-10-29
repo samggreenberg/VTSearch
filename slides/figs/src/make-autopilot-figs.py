@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the steps, and every target it
+  `scripts/gates/check-eval-app-sync.py`) through the steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` is Smart's idea, a student's Spanish classes, and
   `autopilot-smart-trend` runs the shipped `rising_status_from_scores` on a

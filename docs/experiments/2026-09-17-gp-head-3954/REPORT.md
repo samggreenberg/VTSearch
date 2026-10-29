@@ -355,4 +355,4 @@ the per-step fit cost.
   fold models. Without the second, any GRID run measures the rule again.
 - **Nothing ships from this pilot.** The GP arms, the `standalone_cut` knob and
   the two strategies stay in the harness as measured arms; the default arm is
-  untouched (`scripts/check-eval-app-sync.py` is green with no re-pin).
+  untouched (`scripts/gates/check-eval-app-sync.py` is green with no re-pin).
