@@ -42,7 +42,7 @@ class TestDatasourceImportersList:
 
     def test_hidden_plugins_filtered(self, client, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.settings.get_effective_hidden_plugins",
+            "vtsearch.settings.overrides.get_effective_hidden_plugins",
             lambda: {"datasource_importers": {"url_download"}},
         )
         resp = client.get("/api/datasource-importers")

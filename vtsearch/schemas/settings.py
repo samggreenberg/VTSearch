@@ -328,7 +328,7 @@ class SettingsUpdateSchema(Schema):
     browse_details_metadata_width = fields.Integer()
     browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
 
-    # Per-media-type dicts; the setters in ``settings.py`` validate each
+    # Per-media-type dicts; the setters in ``vtsearch.settings`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are
     # declared ``Raw`` here like the other per-media settings.
     browse_colormap = fields.Raw()
@@ -388,7 +388,7 @@ class SettingsUpdateSchema(Schema):
 # Note: per-side dict fields (grid_icon_size_left etc.) are declared as
 # ``fields.Raw`` on the *update* schema because the existing setters
 # accept either ``"M"``/``{media_type: "M"}`` and the validators
-# inside ``settings.py`` are the source of truth. Tightening these to
+# inside ``vtsearch.settings`` are the source of truth. Tightening these to
 # ``fields.Dict(...)`` is a follow-up once the per-side setters are
 # unified.
 

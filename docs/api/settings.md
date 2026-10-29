@@ -63,7 +63,7 @@ PUT /api/settings
 - **The same rule covers an import and a sync.** A
   [settings import](io.md#run-settings-import) or a settings-source sync
   writes each key through the checks `PUT` runs (`plan_user_write` in
-  `vtsearch/settings/__init__.py`), so neither can store a value `PUT` would refuse.
+  `vtsearch/settings/sync.py`), so neither can store a value `PUT` would refuse.
   A file's `beta`, `calibrate_count` or `calibration_fraction` drops stale
   thresholds/heads on loaded detectors as `PUT` does, except that an imported
   `beta` is the user's balance, not a balance pick on the active detector.

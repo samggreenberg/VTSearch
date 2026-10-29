@@ -260,6 +260,7 @@ class _MergedSettingsPath:
     def write_text(self, content: str, *args, **kwargs) -> int:
         import json as _json
         from vtsearch import settings as _settings
+        from vtsearch.settings import schema as settings_schema
 
         try:
             data = _json.loads(content)
@@ -272,8 +273,8 @@ class _MergedSettingsPath:
             self._server.parent.mkdir(parents=True, exist_ok=True)
             return self._server.write_text(content, *args, **kwargs)
 
-        server_data = {k: v for k, v in data.items() if k in _settings._SERVER_KEYS}
-        user_data = {k: v for k, v in data.items() if k not in _settings._SERVER_KEYS}
+        server_data = {k: v for k, v in data.items() if k in settings_schema._SERVER_KEYS}
+        user_data = {k: v for k, v in data.items() if k not in settings_schema._SERVER_KEYS}
 
         self._server.parent.mkdir(parents=True, exist_ok=True)
         self._server.write_text(_json.dumps(server_data, indent=2) + "\n")
@@ -330,10 +331,11 @@ def isolated_settings(tmp_path, monkeypatch):
     see a merged view of both tiers.
     """
     from vtsearch import settings as settings_mod
+    from vtsearch.settings import tiers as settings_tiers
 
     test_settings_path = tmp_path / "settings.json"
     user_default_path = tmp_path / "users" / "default" / "user_settings.json"
-    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
+    monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", test_settings_path)
     # Redirect per-user settings files under tmp_path/users/<username>/.
     settings_mod.set_user_data_dir_override(tmp_path / "users")
     settings_mod.reset()

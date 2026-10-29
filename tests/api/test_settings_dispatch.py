@@ -34,6 +34,8 @@ from vtsearch import settings
 from vtsearch.routes.settings import api
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.settings.models import ServerSettings, UserSettings
+from vtsearch.settings import schema as settings_schema
+from vtsearch.settings import sync as settings_sync
 
 
 def _loadable_update_keys() -> set[str]:
@@ -86,7 +88,7 @@ class TestOneUserTierRule:
     :func:`vtsearch.settings.plan_user_write`; these pin the route to it."""
 
     def test_put_accepts_no_server_tier_key(self):
-        server_keys = _loadable_update_keys() & settings._SERVER_KEYS
+        server_keys = _loadable_update_keys() & settings_schema._SERVER_KEYS
         assert not server_keys, (
             f"SettingsUpdateSchema accepts server-tier keys: {sorted(server_keys)}. They are the operator's "
             "(settings file / CLI / env); a user's PUT, import or sync must not set them."
@@ -94,13 +96,13 @@ class TestOneUserTierRule:
 
     def test_put_dispatches_user_tier_keys_only(self):
         dispatchable = set(api._SCALAR_SETTERS) | set(api._CUSTOM_SETTERS)
-        assert dispatchable <= settings._USER_KEYS, sorted(dispatchable - settings._USER_KEYS)
+        assert dispatchable <= settings_schema._USER_KEYS, sorted(dispatchable - settings_schema._USER_KEYS)
 
     def test_put_and_import_share_the_bespoke_checks(self):
         assert api._CUSTOM_SETTERS is settings.CUSTOM_USER_WRITES
 
     def test_put_and_import_share_the_plain_setters(self):
-        setter_map = settings._get_setter_map()
+        setter_map = settings_sync._get_setter_map()
         for key, setter in api._SCALAR_SETTERS.items():
             if key in api._STATE_TIER_SETTERS:
                 continue
@@ -109,7 +111,7 @@ class TestOneUserTierRule:
     def test_state_tier_keys_reach_detectors_on_import(self):
         # PUT sends these to the vtsearch.state setters; an import or a sync
         # carries the same change to loaded detectors through its own hook.
-        assert set(api._STATE_TIER_SETTERS) == set(settings._DETECTOR_KEYS)
+        assert set(api._STATE_TIER_SETTERS) == set(settings_sync._DETECTOR_KEYS)
 
 
 class TestSchemaBackedByModels:

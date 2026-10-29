@@ -21,6 +21,7 @@ import pytest
 from vtsearch.settings import admin_overrides
 from vtsearch.cli import main as cli_main
 from vtsearch import settings as settings_mod
+from vtsearch.settings import tiers as settings_tiers
 
 
 @pytest.fixture(autouse=True)
@@ -1242,7 +1243,7 @@ class TestRunServer:
         cli_main._run_server(
             argparse.Namespace(login=None, port=5055, local=True, settings=str(settings_file)),
             _FakeApp(),
-            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+            lambda **kw: seen.update(path=settings_tiers.SETTINGS_PATH),
         )
         assert seen["path"] == settings_file
         assert str(settings_file) in capsys.readouterr().out
@@ -1251,12 +1252,12 @@ class TestRunServer:
         import argparse
 
         self._patch_preflight(monkeypatch)
-        before = settings_mod.SETTINGS_PATH
+        before = settings_tiers.SETTINGS_PATH
         seen = {}
         cli_main._run_server(
             argparse.Namespace(login=None, port=5055, local=True, settings=None),
             _FakeApp(),
-            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+            lambda **kw: seen.update(path=settings_tiers.SETTINGS_PATH),
         )
         assert seen["path"] == before
 

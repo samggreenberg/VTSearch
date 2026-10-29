@@ -216,6 +216,9 @@ api = VTSearchApi(app)
 # see operations tagged with their Flask view function name. The patch is
 # safe to apply now because ``to_dict`` is only called lazily; blueprints
 # registered later in this module are picked up automatically.
+# ``Api(app)`` builds the spec in its constructor; flask-smorest types it as
+# optional only for the deferred ``init_app`` form.
+assert api.spec is not None
 _apispec_to_dict = api.spec.to_dict
 
 

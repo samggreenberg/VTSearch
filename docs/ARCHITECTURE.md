@@ -358,7 +358,7 @@ modules on the right.
 | `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
 | `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |
 | `vtscore/eval/` | No | No | **Yes**: needs media + datasets |
-| `vtsearch/settings/__init__.py` | No | Yes (per-user caches, current user) | Partially: JSON file I/O, but app-tier (imports `vtsearch.*`) |
+| `vtsearch/settings/` | No | Yes (per-user caches, current user) | Partially: JSON file I/O, but app-tier (imports `vtsearch.*`) |
 | `vtscore/media/base.py` | No | No | **Yes**: abstract only |
 | `vtscore/media/{audio,image,text,video,document,face}` | No | No | **Yes**: torch + HF models |
 | `vtscore/converters/` | No | No | **Yes**: pure media conversion |
@@ -633,7 +633,8 @@ own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).
 
-Persistent settings live in `vtsearch/settings/__init__.py`, split across two tiers.
+Persistent settings live in the `vtsearch/settings/` package, split across two tiers
+(its `__init__` docstring maps the modules, and says where to patch what).
 The two Pydantic models in `vtsearch/settings/models.py` are the authoritative
 field lists — this document names the tiers and the shape, not every key.
 
@@ -672,7 +673,7 @@ flag, its env-var equivalent (so the gunicorn images, which never parse `argv`,
 can set it too), the validator both entry paths share, how it combines with the
 persisted value, and the key `/api/settings` publishes the result under. The
 argparse arguments, the env fallbacks, the `get_effective_*` resolvers in
-`settings.py` and the response overlay all derive from that registry rather
+`vtsearch/settings/overrides.py` and the response overlay all derive from that registry rather
 than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
@@ -681,7 +682,7 @@ What `achievement_state` holds is in [achievements.md](achievements.md#state).
 Four AutoFind keys (`autofind_detectors`, `autofind_exporter`,
 `autofind_exporter_field_values`, `autofind_cli_delete_dataset`) read through
 to the server file for the built-in `default` user (CLI / single-user); see
-`_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings/__init__.py`.
+`_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings/schema.py`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
 
@@ -1051,7 +1052,7 @@ route) reads it, so they cannot disagree about which source a user is on:
 
 Two keys are never exported to a source: `settings_source` and
 `default_settings_source` (`_EXCLUDE_FROM_SOURCE_EXPORT` in
-`vtsearch/settings/__init__.py`). Pushing the binding through the binding would
+`vtsearch/settings/schema.py`). Pushing the binding through the binding would
 let a source rewrite which source is active.
 
 ### The freshness probe and its cost

@@ -16,6 +16,8 @@ import app as app_module
 import vtsearch.settings as settings_mod
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.settings.models import ServerSettings, UserSettings, partition_docs_links
+from vtsearch.settings import schema as settings_schema
+from vtsearch.settings import tiers as settings_tiers
 
 ACME = {"label": "Acme plugin guide", "url": "https://acme.example/docs"}
 WIKI = {"label": "Lab wiki", "url": "/wiki/vtsearch"}
@@ -23,7 +25,7 @@ WIKI = {"label": "Lab wiki", "url": "/wiki/vtsearch"}
 
 def _hand_edit_server_file(docs_links) -> None:
     """Write *docs_links* into the server settings file, as an operator would."""
-    path = settings_mod.SETTINGS_PATH
+    path = settings_tiers.SETTINGS_PATH
     data = json.loads(path.read_text()) if path.exists() else {}
     data["docs_links"] = docs_links
     path.write_text(json.dumps(data) + "\n")
@@ -34,7 +36,7 @@ class TestTier:
     def test_lives_on_the_server_model(self):
         assert "docs_links" in ServerSettings.model_fields
         assert "docs_links" not in UserSettings.model_fields
-        assert "docs_links" in settings_mod._SERVER_KEYS
+        assert "docs_links" in settings_schema._SERVER_KEYS
 
     def test_defaults_to_no_links(self, isolated_settings):
         assert settings_mod.get_docs_links() == []

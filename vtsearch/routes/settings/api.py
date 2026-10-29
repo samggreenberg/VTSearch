@@ -162,7 +162,7 @@ _CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 #
 # Only this route dispatches here. A settings import or a settings-source sync
 # writes these keys through the plain setters and then hands the change to
-# loaded detectors itself (``settings._refresh_loaded_detectors``): ``set_beta``
+# loaded detectors itself (``settings.sync._refresh_loaded_detectors``): ``set_beta``
 # also makes the value the *active* detector's own balance, which is a balance
 # pick, and a bulk import of the user's settings is not one.
 _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {

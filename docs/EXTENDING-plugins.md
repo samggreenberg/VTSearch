@@ -2360,7 +2360,7 @@ A settings source is not a one-shot import. Once configured it is
 consulted on an ongoing basis from three places:
 
 1. **On every settings read**, through `_ensure_user_loaded`
-   (`vtsearch/settings/__init__.py`) and the `UserSettingsStore.ensure_user_loaded`
+   (`vtsearch/settings/tiers.py`) and the `UserSettingsStore.ensure_user_loaded`
    it delegates to (`vtsearch/settings/store.py`) — rate-limited, see [the freshness
    probe](#what-the-sync-engine-expects-of-a-source) below. This is what makes a
    source pick up an out-of-band edit without a restart, and it is also

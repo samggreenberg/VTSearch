@@ -498,7 +498,7 @@ class UserSettings(BaseModel):
     # built-in "default" user, reads fall back to the server settings file when
     # absent here, so the CLI ``--settings`` flat file and single-user
     # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
-    # read-through in ``vtsearch.settings._read_value``).
+    # read-through in ``vtsearch.settings.tiers._read_value``).
     #
     # - ``autofind_detectors``: detector names flagged for AutoFind (each maps
     #   to a JSON file under ``data/detectors/``).
