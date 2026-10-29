@@ -3,7 +3,7 @@
 Covers:
 - ``VTSEARCH_TORCH_THREADS`` env-var override drives ``torch.set_num_threads``
   via :data:`vtscore.config.TORCH_THREADS` (read by
-  :func:`vtscore.media.torch_setup.ensure_torch_configured`).
+  :func:`vtscore.media.torch_utils.torch_setup.ensure_torch_configured`).
 - ``get_torch_device()`` selection delegates to
   :func:`vtscore.config.resolve_device`, honouring ``VTSEARCH_DEVICE``.
 - ``train_model`` returning a model on the selected device.
@@ -70,7 +70,7 @@ def restore_reloaded_modules():
 @pytest.fixture(autouse=True)
 def reset_torch_configured_flag():
     """Force ``ensure_torch_configured`` to re-run on each test."""
-    import vtscore.media.torch_setup as torch_setup
+    import vtscore.media.torch_utils.torch_setup as torch_setup
 
     torch_setup._torch_configured = False
     yield
@@ -206,7 +206,7 @@ def test_max_upload_mb_negative_clamps_to_zero(monkeypatch):
 
 def test_ensure_torch_configured_applies_constant(monkeypatch):
     """``ensure_torch_configured`` passes ``TORCH_THREADS`` to torch."""
-    import vtscore.media.torch_setup as torch_setup
+    import vtscore.media.torch_utils.torch_setup as torch_setup
 
     monkeypatch.setattr(torch_setup, "TORCH_THREADS", 2)
     with mock.patch.object(torch, "set_num_threads") as set_threads:

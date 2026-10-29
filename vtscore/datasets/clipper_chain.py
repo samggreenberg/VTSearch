@@ -229,7 +229,7 @@ def _resolved_clipper_params(clipper) -> dict[str, Any]:
     """Return the clipper's *effective* parameter dict (post ``with_params``).
 
     Reads from ``to_dict()`` and strips the base/metadata keys, matching the
-    convention already used by ``_apply_clipper`` in ``load_pipeline.py``.
+    convention already used by ``_apply_clipper`` in ``stages/clipper.py``.
     """
     d = clipper.to_dict()
     return {k: v for k, v in d.items() if k not in CLIPPER_BASE_KEYS}
@@ -508,11 +508,11 @@ def has_original_payload(media: dict[str, Any]) -> bool:
     (the ``original_media_*`` keys; ``original_duration`` alone does not
     count, being metadata *about* the original rather than something the
     variant routes can stream) or, for a cleaned unit of a reference import,
-    a replay recipe (:func:`vtscore.media.lazy_clip.has_lazy_original`).
+    a replay recipe (:func:`vtscore.media.clipping.lazy_clip.has_lazy_original`).
     """
     if media.get("original_media_bytes") is not None or media.get("original_media_string") is not None:
         return True
-    from vtscore.media.lazy_clip import has_lazy_original  # noqa: PLC0415
+    from vtscore.media.clipping.lazy_clip import has_lazy_original  # noqa: PLC0415
 
     return has_lazy_original(media)
 
@@ -568,7 +568,7 @@ def apply_chain_to_clips(  # noqa: C901
 
     Like the legacy single-clipper path, this **does not** recompute MD5s,
     thumbnails, or embeddings; the caller (``_apply_clipper`` in
-    ``load_pipeline.py``) handles those in a single batched pass over the
+    ``stages/clipper.py``) handles those in a single batched pass over the
     final clip list.
     """
     if not steps:
@@ -890,7 +890,7 @@ def replay_chain_on_media(
     is no sibling to confuse it with.  Whether that output still matches the
     recording is the caller's call: the label resolver accepts drift (re-running
     the same gate beats embedding the uncleaned file), and the lazy recipe in
-    :mod:`vtscore.media.lazy_clip` refuses it.
+    :mod:`vtscore.media.clipping.lazy_clip` refuses it.
     """
     from vtscore.media import get_cleaner
 

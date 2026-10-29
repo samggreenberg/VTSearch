@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from vtscore.media.image._demo_categories import CELEBRITY_TOGETHER_CATEGORIES
+from vtscore.media.image.demo._demo_categories import CELEBRITY_TOGETHER_CATEGORIES
 
 
 def _photo(i: int, folder: int = 1) -> str:
@@ -132,7 +132,7 @@ class TestLoadDemoSourceCelebrityTogether:
 
     def _load(self, tmp_path, slice_end: int) -> tuple[dict, list[str]]:
         from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image import _demo_sources
+        from vtscore.media.image.demo import _demo_sources
         from vtscore.media.image.media_type import ImageMediaType
 
         requested: list[str] = []
@@ -188,12 +188,12 @@ class TestShippedManifest:
     """The pinned photo list the demo slices (``vtscore/media/assets/celebrity_together.json``)."""
 
     def test_covers_exactly_the_demo_people(self):
-        from vtscore.media.image._demo_sources import celebrity_together_photos
+        from vtscore.media.image.demo._demo_sources import celebrity_together_photos
 
         assert sorted(celebrity_together_photos()) == sorted(CELEBRITY_TOGETHER_CATEGORIES)
 
     def test_every_variant_fits_in_every_persons_list(self):
-        from vtscore.media.image._demo_sources import build_demo_datasets, celebrity_together_photos
+        from vtscore.media.image.demo._demo_sources import build_demo_datasets, celebrity_together_photos
 
         variants = [d for d in build_demo_datasets() if d.source == "celebrity_together"]
         assert {d.id for d in variants} == {"celebrity_together_s", "celebrity_together_m"}
@@ -202,7 +202,7 @@ class TestShippedManifest:
 
     def test_photos_are_mirror_paths_and_never_repeat(self):
         """No photo twice, even filed under two folders: the app finds a demo photo by its filename."""
-        from vtscore.media.image._demo_sources import celebrity_together_photos
+        from vtscore.media.image.demo._demo_sources import celebrity_together_photos
 
         photos = [p for listed in celebrity_together_photos().values() for p in listed]
         assert all(re.fullmatch(r"n\d+/[0-9a-f]{32}\.jpg", p) for p in photos)
@@ -211,7 +211,7 @@ class TestShippedManifest:
 
     def test_names_the_repo_the_downloader_reads(self):
         from vtscore.datasets.downloader.core import CELEBRITY_TOGETHER_REPO_ID
-        from vtscore.media.image import _demo_sources
+        from vtscore.media.image.demo import _demo_sources
 
         manifest = json.loads(Path(_demo_sources._CELEBRITY_TOGETHER_MANIFEST).read_text())
         assert manifest["repo_id"] == CELEBRITY_TOGETHER_REPO_ID

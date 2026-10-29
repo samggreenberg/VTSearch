@@ -235,7 +235,7 @@ in force. There is deliberately no settings-file key for this: a
 settings file that could name code to run would let anyone who can
 import settings run code on the server. The wiring is
 `vtsearch/import_hooks.py`; the pipeline side is the `on_finished`
-callback in `vtscore/datasets/load_pipeline.py`.
+callback in `vtscore/datasets/load_origin.py`.
 
 ---
 

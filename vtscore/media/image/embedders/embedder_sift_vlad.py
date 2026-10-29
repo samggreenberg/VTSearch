@@ -14,7 +14,7 @@ into VLAD space; the text sort greys out via the existing gate).
 
 from __future__ import annotations
 
-from vtscore.media.image._structural_shared import _StructuralImageBase
+from vtscore.media.image.embedders._structural_shared import _StructuralImageBase
 from vtscore.media.structural import SiftMatcher, StructuralMatcher
 
 

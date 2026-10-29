@@ -7,7 +7,7 @@ import wave
 import pytest
 
 from vtscore.media.audio.audio_generator import generate_wav
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.clipper import MediaClipper
 
 
 # ---------------------------------------------------------------------------

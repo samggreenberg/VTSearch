@@ -25,7 +25,7 @@ from vtscore.embedding.media_vectors import (
     set_media_embedding,
 )
 from vtscore.embedding.precomputed import require_dim
-from vtscore.media.lazy_clip import embed_view
+from vtscore.media.clipping.lazy_clip import embed_view
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 

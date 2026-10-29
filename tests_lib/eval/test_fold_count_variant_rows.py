@@ -27,7 +27,7 @@ import pytest
 
 from vtscore.eval.voting_columns import CALIBRATION_COLUMNS
 from vtscore.eval.voting_iterations import simulate_voting_iterations
-from vtscore.training.thresholds import conformal as _thresholds
+from vtscore.training.thresholds import fold_orderings as _fold_orderings
 
 # Reuse the synthetic planted-patch dataset builder from the Max-Patch tests.
 from .sweep_cache import memoize_sweep
@@ -48,7 +48,7 @@ _STUB_FOLD_SECONDS = 1000.0
 class _StubClock:
     """A ``time`` stand-in whose every reading is *seconds* later than the last.
 
-    Installed over ``vtscore.training.thresholds.conformal.time`` — whose only clock user
+    Installed over ``vtscore.training.thresholds.fold_orderings.time`` — whose only clock user
     is the per-fold stopwatch, exactly two readings per fold — this prices every
     calibration fold at exactly *seconds*, turning the seconds a row reports
     into a count of the folds it was billed for.  Nothing else in that module
@@ -177,7 +177,7 @@ class TestFoldCountArms:
         scheduler stall.  Both fold-timing sinks are covered — the bag-aware
         grouped calibrator and the row-wise one.
         """
-        monkeypatch.setattr(_thresholds, "time", _StubClock(_STUB_FOLD_SECONDS))
+        monkeypatch.setattr(_fold_orderings, "time", _StubClock(_STUB_FOLD_SECONDS))
         # Uncached on purpose: these rows are billed by a stubbed clock, so they
         # must not be memoized where a later test could pick them up.
         rows = _run_uncached(fold_counts=[1, 2, 8], calibrate_count=2, region_voting=region_voting, style=style)

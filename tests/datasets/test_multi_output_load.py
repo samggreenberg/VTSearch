@@ -251,7 +251,7 @@ class TestImportGroup:
     def test_a_single_dataset_import_has_no_group(self, isolated_settings):
         from vtscore.datasets.load_pipeline import _run_importer_in_background
 
-        with mock.patch("vtscore.datasets.load_pipeline.threading.Thread", side_effect=_sync_thread_factory()):
+        with mock.patch("vtscore.datasets.load_workers.threading.Thread", side_effect=_sync_thread_factory()):
             _run_importer_in_background(
                 _MultiImporter(),
                 {"url": "http://example.com/solo.zip", "dataset_name": "solo", "media_type": "audio"},
@@ -354,11 +354,11 @@ class TestCancellation:
 class TestEmbedderMemory:
     def test_each_output_remembers_its_embedder_pick(self, isolated_settings, monkeypatch):
         """The per-media-type "last embedder" memory sees the hook the app installs after import."""
-        from vtscore.datasets import load_pipeline
+        from vtscore.datasets import load_workers
 
         remembered: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            load_pipeline, "_last_embedder_persistence_hook", lambda mt, emb: remembered.append((mt, emb))
+            load_workers, "_last_embedder_persistence_hook", lambda mt, emb: remembered.append((mt, emb))
         )
 
         _run(_MultiImporter(), [OutputSpec("audio", embedder="clap"), OutputSpec("image", embedder="siglip")])
