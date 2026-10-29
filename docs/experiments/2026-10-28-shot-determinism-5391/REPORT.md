@@ -9,6 +9,11 @@ the full build, which `scripts/screenshots/launch.mjs` falls back to because the
 pins (148.0.7778.96) is not installed there. The GRID drew in that pinned 148 build. No GRID render
 has used the container's build yet, and that comparison is what is owed next.**
 
+**GRID update, 2026-10-29: in 153 the GRID draws `autofind-tab.light` byte for byte like the
+baseline. The version was the cause. `export-server-csv.dark` keeps its 220 px in every browser.
+The full build also needs a fontconfig without hinting on the GRID. See
+[On the GRID, in 153](#on-the-grid-in-153-2026-10-29).**
+
 | Run | Browser | Harness | Shots byte-identical to the baselines | `autofind-tab.light`, px past 0% / 5% | `export-server-csv.dark` |
 |---|---|---|---:|---:|---|
 | 1 | 153, full build | `dev` | 162 of 162 | 0 / 0 | identical |
@@ -99,16 +104,46 @@ than the text's own position. The other 160 shots stayed byte-identical. Arm B r
 stability is already settled by the four runs above. [`renders/nudge/`](renders/nudge/) holds both
 themes.
 
-## Owed on the GRID
+## On the GRID, in 153 (2026-10-29)
 
-#5391 closes once a GRID session has rendered in the container's build:
+Four full `check.sh` runs on the GRID, `dev` at cffe6773a, each drawn in Chrome for Testing
+153.0.8010.12, which Playwright 1.63.0 pins (revision 1243) and the container already carries. Every
+log printed `[launch] Chromium 153.0.8010.12`. All four ran on AMD EPYC 7713 nodes (rack8n09,
+rack8n10). [`grid-check.sbatch`](grid-check.sbatch) is the job script. Its argument names the
+arm, and a second worktree keeps two concurrent arms from sharing `refresh.sh`'s app data
+directory.
 
-1. Fetch Chrome for Testing 153.0.8010.12, the full `chrome-linux64` build, and run
-   `scripts/screenshots/check.sh` in full with `CHROMIUM_PATH` pointing at its `chrome`. The log's
-   `[launch] Chromium 153.0.8010.12` line confirms the build. If the version is the cause,
-   `autofind-tab.light` and `export-server-csv.dark` should pass past 5% with nothing left over.
-2. Only if the header's residual survives that: apply `nudge.patch` on the GRID, render, and compare
-   `autofind-tab` with [`renders/nudge/`](renders/nudge/).
+| Arm | Browser | Fontconfig | Shots that pass `check.sh` | `autofind-tab.light`, px past 5% | `export-server-csv.dark`, px past 5% |
+|---|---|---|---:|---:|---:|
+| a | 153, full build | the GRID's own (`hintstyle` slight) | 20 of 162 | 8 198 | 27 210 |
+| b | 153, full build, on another node | the GRID's own | 20 of 162 | 8 198 | 27 210 |
+| c | 153, full build | #5385's `pinned.conf` (no hinting) | **161 of 162** | **0** | 220 |
+| d | 153, headless shell | the GRID's own | **161 of 162** | **0** | 220 |
+
+**The version was the header's cause. In 153, the GRID draws `autofind-tab.light` byte for byte
+like the container** (sha256 `14016baa…`, the committed baseline), with no nudge, so step 2 was not
+run. Arms c and d agree with each other in every byte of all 162 renders, and arms a and b agree
+with each other in every byte as well. So the GRID is deterministic in 153, as it was in 148.
+
+**The full build ignores `--font-render-hinting=none` on the GRID.** Arms a and b drift on 142
+shots (median 7 718 px past 5%, at most 29 515). The difference is the anti-aliasing of every
+glyph and border, with layout unchanged: the same symptom #5302 found for 148 before the flag.
+The full build takes the GRID's fontconfig hinting regardless of the flag. The headless shell
+honours the flag (arm d), and the full build matches once fontconfig itself turns hinting off (arm
+c). The container's fontconfig evidently does not hint, which is why arm C there found the flag a
+no-op. [`renders/grid-153-full/`](renders/grid-153-full/) holds arm a's two shots. Its
+`autofind-tab.light` differs from the baseline in 116 031 px at 0%, 151 of them past 5% in the
+`TYPE` / `# TRAINING` labels' box.
+
+**`export-server-csv.dark` does not depend on the browser.** Its 220 px past 5% are the same in
+every arm, and arm c's render is byte-identical to the GRID's 148 render from #5378
+(`/expscratch/sgreenberg/runs/5378/renders/`). It is the same #5385 residual: edge anti-aliasing
+on the step-1 callout's outline and on one dimmed thumbnail's left edge, invisible at 4x. A browser
+change will not move it.
+
+What follows, for #5385: drawing in 153's headless shell on both machines (Playwright 1.63.0, whose
+pin the container already holds) leaves one residual, `export-server-csv.dark`, instead of two. A
+full build on a hinting machine needs a fontconfig without hinting as well.
 
 ## Setup
 
