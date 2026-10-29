@@ -60,10 +60,10 @@ export type Media = MediaIdsListResponse &
  * The unified shape every long-running operation emits over the SSE stream
  * (`/api/events`; see `progress-events.service.ts`).
  *
- * Backend: every singleton `ProgressTracker` (dataset, sort, eval, find) and
+ * Backend: every singleton `ProgressTracker` (sort, eval, find) and
  * every per-task tracker created by `LoadingTasksTracker` carries the same
  * base fields plus the shared optional extras `step`/`total_steps`/`error`.
- * See `vtsearch/concurrency/progress.py:_PROGRESS_COMMON_EXTRAS`.
+ * See `PROGRESS_COMMON_EXTRAS` in `vtscore/concurrency/progress_tracker.py`.
  *
  * Frontend: a single component/helper (`utils/format-progress.ts`) can render
  * any payload regardless of which operation produced it.
