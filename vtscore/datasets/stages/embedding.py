@@ -557,7 +557,7 @@ def embed_missing(
     embedder_name: str = "",
     on_progress: Callable[[str, str, int, int], None] | None = None,
     failures: EmbedFailures | None = None,
-) -> None:
+) -> str | None:
     """Embed media items in *medias* that don't already have an embedding.
 
     Importers are not responsible for calling the embedder; they emit
@@ -589,6 +589,9 @@ def embed_missing(
     via :func:`media_embedding`).  So a second bound embedder run over an
     already-text-embedded dataset still embeds every item (it has no vector
     under its own key yet) without disturbing the first embedder's vectors.
+
+    Returns the name of the embedder it resolved and ran, or ``None`` when no
+    embedder resolved for the media type.
     """
     # Resolve the media type from any media so the patch-region back-fill
     # below can run even when every image already carries an embedding (e.g. a
@@ -596,12 +599,12 @@ def embed_missing(
     # embedder).  Homogeneous datasets share one media type.
     media_type = _first_media_type(medias.items())
     if not media_type:
-        return
+        return None
 
     emb = _resolve_embedder(medias, embedder_name, media_type)
     if emb is None:
         _warn_no_embedder(medias, media_type, failures)
-        return
+        return None
 
     _stamp_load_embedder(medias, embedder_name, emb.name)
 
@@ -610,7 +613,7 @@ def embed_missing(
 
     passes = _side_channel_passes(emb)
     if not missing and not any(p.needs(m) for p in passes for m in medias.values()):
-        return
+        return emb.name
 
     if on_progress is None:
         on_progress = noop_progress
@@ -640,6 +643,71 @@ def embed_missing(
     # media["embeddings"] is the sole per-media vector store.
     for media in medias.values():
         ensure_embeddings_dict(media)
+    return emb.name
+
+
+def _clear_incomplete_vectors(
+    medias: dict[int, dict[str, Any]],
+    embedder_names: Iterable[str],
+    failures: EmbedFailures | None = None,
+) -> None:
+    """Strip every vector from a media one of the load's embedders could not embed.
+
+    A dataset is one vector space per bound embedder, and every consumer of a
+    space needs every media's vector in it: the embedding matrix raises ``has
+    no embedding for embedder`` on the first media without one, and the
+    binding is read off whichever media comes first.  But in a multi-embedder
+    load an item the first embedder declined can still be embedded by the
+    second - :func:`~vtscore.embedding.media_vectors.set_media_embedding` then
+    records the second as its primary - and an item that shipped with an
+    importer's vector keeps that one when this load's embedder declines it.
+    Either way the item still has *a* vector, so the finalize stage's drop
+    (which looks for a primary) kept it, and the dataset it was saved into
+    could not be browsed, sorted or trained against that embedder ever after
+    (issue #3798).
+
+    So after every embedder has run, an item missing the vector of any of them
+    is emptied, which hands it to the drop stage like any item no embedder
+    could read.  *embedder_names* are the embedders this load ran; one that
+    produced no vector for any item is not part of the dataset, so missing it
+    is no fault of the item's.  The item keeps the reason its embedder
+    recorded in *failures*.
+    """
+    names = list(dict.fromkeys(embedder_names))
+    required = [n for n in names if any(media_embedding(m, n) is not None for m in medias.values())]
+    if not required:
+        return
+    cleared: dict[str, int] = {}
+    for mid, media in medias.items():
+        absent = [n for n in required if media_embedding(media, n) is None]
+        if not absent:
+            continue
+        for name in absent:
+            cleared[name] = cleared.get(name, 0) + 1
+        _record_failures(failures, (mid,), f"{_embedder_label_for(absent[0])} produced no vector for it")
+        media[EMBEDDINGS_KEY] = {}
+    for name, count in cleared.items():
+        logging.getLogger(__name__).warning(
+            "%d item(s) have no vector from embedder %r, which the rest of the dataset was embedded with; "
+            "they will be dropped at the end of the load",
+            count,
+            name,
+        )
+
+
+def _embedder_label_for(name: str) -> str:
+    """``"The <label> embedder"`` for the registered embedder *name*, or its slug when unregistered."""
+    return f"The {embedder_display_name(name)} embedder"
+
+
+def embedder_display_name(name: str) -> str:
+    """The friendly name of the registered embedder *name*, or *name* itself when it is not registered."""
+    from vtscore.media import get_embedder  # noqa: PLC0415
+
+    try:
+        return _embedder_label(get_embedder(name))
+    except KeyError:
+        return name
 
 
 def _attach_patch_grid_to_media(media: dict, patch_out) -> None:
@@ -773,6 +841,11 @@ def _embed_missing_stage(
     loop reports cumulative progress across the embed step rather than restarting
     the bar at 0 for each embedder.
 
+    An item that any of the embedders it ran could not embed comes out with
+    no vector at all, even when another embedder (or the importer) gave it one
+    (see :func:`_clear_incomplete_vectors`), so the drop stage removes it
+    rather than saving a dataset with a hole in one of its spaces.
+
     Returns why each item that came out without a vector did so (see
     :data:`EmbedFailures`), for :func:`_drop_none_embeddings_stage` to show.
     """
@@ -780,8 +853,12 @@ def _embed_missing_stage(
     names = _ordered_load_embedders(ctx.medias, requested_embedders)
     progress = EmbedLoopProgress(tracker, len(names))
     failures: EmbedFailures = {}
+    ran: list[str] = []
     for idx, name in enumerate(names):
         progress.begin(idx)
-        embed_missing(ctx.medias, name, on_progress=progress, failures=failures)
+        resolved = embed_missing(ctx.medias, name, on_progress=progress, failures=failures)
+        if resolved:
+            ran.append(resolved)
+    _clear_incomplete_vectors(ctx.medias, ran, failures)
     invalidate_embedding_matrix(ctx)
     return failures
