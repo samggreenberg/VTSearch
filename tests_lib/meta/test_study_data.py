@@ -4,8 +4,10 @@ A study's cell CSVs and unlinked figures leave ``docs/experiments/`` for a
 tarball on the ``experiments-data`` release (#5404). Two failures would be
 silent: archiving a file something still reads (a report link breaks, or a
 slide script stops finding its CSV), and an archive whose bytes cannot be put
-back. The first is covered by the keep rule's tests, the second by a full
-archive -> publish -> fetch round trip in a throwaway repository.
+back. The first is covered by the keep rule's tests, the second by full
+round trips in a throwaway repository: archive -> publish -> fetch for a study
+whose data went through a commit, and archive --upload -> fetch for one whose
+data never did, against a release faked as a directory.
 """
 
 from __future__ import annotations
@@ -179,6 +181,119 @@ def test_webp_converts_linked_figures_losslessly_and_repoints_links(repo: Path) 
     assert "A  docs/experiments/2026-01-01-demo/figures/linked.webp" in staged
 
 
+class FakeRelease:
+    """The experiments-data release as a directory, standing in for `gh release`."""
+
+    def __init__(self, store: Path, *, exists: bool = True) -> None:
+        self.store, self.exists, self.uploads = store, exists, []
+
+    def __call__(self, *args: str) -> str:
+        if args[:2] == ("release", "view"):
+            if not self.exists:
+                raise RuntimeError("release not found")
+            return "".join(f"{p.name}\n" for p in sorted(self.store.iterdir()))
+        if args[:2] == ("release", "create"):
+            self.exists = True
+            return ""
+        if args[:2] == ("release", "upload"):
+            source = Path(args[3])
+            (self.store / source.name).write_bytes(source.read_bytes())
+            self.uploads.append(source.name)
+            return ""
+        raise AssertionError(f"unexpected gh call: {args}")
+
+
+FRESH = "2026-01-02-fresh"
+
+
+def _fresh_study(repo: Path) -> Path:
+    """A study straight off the GRID: written, nothing committed yet."""
+    study = repo / "docs/experiments" / FRESH
+    _write(study / "REPORT.md", "# Fresh\n\n![curve](figures/curve.png)\n")
+    _png(study / "figures/curve.png", (30, 60, 90))
+    _write(study / "cells/a.csv", "cell,cost\na,0.2\n")
+    _write(study / "summary.json", '{"cost": 0.2}\n')
+    return study
+
+
+def test_upload_route_keeps_the_data_out_of_git(repo: Path, tmp_path_factory, monkeypatch) -> None:
+    study = _fresh_study(repo)
+    data = {name: (study / name).read_bytes() for name in ("cells/a.csv", "summary.json")}
+    release = FakeRelease(tmp_path_factory.mktemp("release"), exists=False)
+    monkeypatch.setattr(sd, "gh", release)
+
+    assert sd.main(["webp", FRESH]) == 0
+    assert not (study / "figures/curve.png").exists()
+    assert "![curve](figures/curve.webp)" in (study / "REPORT.md").read_text(), "an uncommitted report is repointed"
+    assert sd.main(["archive", "--upload", FRESH]) == 0
+
+    (asset,) = release.uploads
+    (batch,) = json.loads((study / "archived-data.json").read_text())["batches"]
+    assert batch["asset"] == asset
+    assert batch["source_commit"] is None
+    assert set(batch["files"]) == set(data)
+    assert not any((study / name).exists() for name in data)
+    assert not (study / "cells").exists(), "the directory the data left is pruned"
+
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "fresh study")
+    assert _git(repo, "log", "--all", "--format=%h", "--", f"docs/experiments/{FRESH}/cells/a.csv") == ""
+    assert sd.main(["archive", "--upload", FRESH]) == 0
+    assert len(release.uploads) == 1, "nothing is left to upload twice"
+
+    assert sd.main(["fetch", FRESH, "--asset-dir", str(release.store)]) == 0
+    assert {name: (study / name).read_bytes() for name in data} == data
+    assert _status(repo) == ""
+    sd.main(["clean", FRESH])
+    with pytest.raises(SystemExit, match="no copy in git"):
+        sd.main(["fetch", FRESH, "--from-git"])
+
+
+def test_a_failed_upload_changes_nothing(repo: Path, tmp_path_factory, monkeypatch) -> None:
+    study = _fresh_study(repo)
+    release = FakeRelease(tmp_path_factory.mktemp("release"))
+
+    def refuse(*args: str) -> str:
+        if args[:2] == ("release", "upload"):
+            raise RuntimeError("HTTP 403")
+        return release(*args)
+
+    monkeypatch.setattr(sd, "gh", refuse)
+    with pytest.raises(SystemExit, match="nothing was changed"):
+        sd.main(["archive", "--upload", FRESH])
+    assert (study / "cells/a.csv").exists()
+    assert not (study / "archived-data.json").exists()
+
+
+def test_publish_rebuilds_from_git_and_flags_a_lost_upload(repo: Path, tmp_path_factory, monkeypatch, capsys) -> None:
+    sd.main(["archive", STUDY])
+    _git(repo, "commit", "-qm", "archive")
+    release = FakeRelease(tmp_path_factory.mktemp("release"))
+    monkeypatch.setattr(sd, "gh", release)
+    _fresh_study(repo)
+    sd.main(["archive", "--upload", FRESH])
+    (uploaded,) = release.uploads
+
+    out = tmp_path_factory.mktemp("out")
+    assert sd.main(["publish", "--out", str(out)]) == 0
+    assert [p.name.split(".")[0] for p in out.iterdir()] == [STUDY], "an uploaded batch has nothing in git to pack"
+
+    assert sd.main(["publish"]) == 0
+    assert len(release.uploads) == 2, "the committed batch is packed from git and uploaded"
+    assert sd.main(["publish"]) == 0
+    assert len(release.uploads) == 2
+
+    (release.store / uploaded).unlink()
+    assert sd.main(["publish"]) == 1
+    assert uploaded in capsys.readouterr().err
+
+
+def test_the_gate_reads_only_what_git_holds(repo: Path) -> None:
+    _fresh_study(repo)
+    assert FRESH in sd.Tree.load().studies
+    assert FRESH not in sd.Tree.load(untracked=False).studies
+
+
 def test_workflow_publishes_from_dev_with_write_access() -> None:
     workflow = yaml.safe_load(WORKFLOW.read_text())
     on = workflow.get("on", workflow.get(True))  # PyYAML reads a bare `on:` key as True
@@ -217,13 +332,14 @@ def test_no_study_has_data_left_to_archive() -> None:
     no live code reads (a cell table, a measurement dump, an unembedded figure),
     which is what `study_data.py plan` lists and `archive` moves.
     """
-    tree = sd.Tree.load()
+    tree = sd.Tree.load(untracked=False)
     left = {study: tree.archivable(study) for study in sorted(tree.studies)}
     left = {study: paths for study, paths in left.items() if paths}
     assert not left, (
         "these studies still track data the experiments-data release should hold:\n"
         + "".join(f"  {study}: {len(paths)} file(s), e.g. {paths[0]}\n" for study, paths in left.items())
-        + "Commit them, then run `python scripts/experiments/study_data.py archive <study>` and commit again "
-        "(grid-experiments skill, 'Where a study lives'). If live code reads one, name the study and the "
+        + "Run `python scripts/experiments/study_data.py archive --upload <study>` where gh is logged in, or "
+        "`archive <study>` after committing them, and commit (grid-experiments skill, 'Where a study lives'). "
+        "If live code reads one, name the study and the "
         "file in that code, or add it to KEEP_PATHS in study_data.py."
     )

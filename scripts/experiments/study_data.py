@@ -9,31 +9,39 @@ tree and lives in one tarball per study on the rolling ``experiments-data``
 release, so every checkout, grep and file search stops paying for it (#5404).
 
 Nothing is lost by archiving. The study's ``archived-data.json`` names each file
-it moved, its git blob id, and the commit that last held it, so the same bytes
-come back either from the release or straight from git history.
+it moved and its git blob id, so ``fetch`` checks every byte it puts back.
 
 Subcommands::
 
     study_data.py plan [STUDY ...]            what `archive` would move (dry run)
     study_data.py webp STUDY ...              linked PNG figures -> lossless WebP, links repointed
-    study_data.py archive STUDY ...           move the bulk data out of the tree (git rm)
+    study_data.py archive --upload STUDY ...  pack the bulk data, upload it, remove it (needs gh)
+    study_data.py archive STUDY ...           the same from a commit, for CI to upload (no gh)
     study_data.py fetch STUDY ... | --all     put archived data back in place
     study_data.py clean STUDY ... | --all     remove fetched data again
     study_data.py publish                     upload missing tarballs (CI; needs gh)
 
 A study is named by its directory (``2026-08-27-good-mining-3267``) or its
-path. Finishing a study is::
+path. Finishing a study, on a machine where ``gh`` is logged in (the GRID)::
 
-    python scripts/experiments/study_data.py webp <study>     # figures -> WebP
+    python scripts/experiments/study_data.py webp <study>               # figures -> WebP
+    python scripts/experiments/study_data.py archive --upload <study>   # data -> the release
+    git add docs/experiments/<study> && git commit                        # report, figures, manifest
+
+The data never enters git: ``--upload`` packs it from the working tree, uploads
+the tarball, and only then writes the manifest and deletes the files. Without
+``gh`` (a cloud session), the data goes through one commit instead::
+
+    python scripts/experiments/study_data.py webp <study>
     git add docs/experiments/<study> && git commit              # data now in a commit
     python scripts/experiments/study_data.py archive <study>  # data -> archived-data.json
     git commit                                                  # and out of the tree
 
-``archive`` records ``HEAD`` as the commit the files came from, so the data must
-be committed, unmodified, first. When the branch merges into ``dev``,
-``.github/workflows/publish-experiment-data.yml`` packs each new tarball from
-that commit and uploads it. Until then, ``fetch --from-git`` restores the files
-from history.
+That ``archive`` records ``HEAD`` as the commit the files came from, so the data
+must be committed, unmodified, first. When the branch merges into ``dev``,
+``.github/workflows/publish-experiment-data.yml`` packs the tarball from that
+commit and uploads it; until then, ``fetch --from-git`` restores the files from
+history. An uploaded batch has no copy in git, so the release is its only home.
 
 **What stays in the tree** (everything else under the study is archived):
 
@@ -136,8 +144,10 @@ def blob_oid(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
-def tracked(*paths: str) -> list[str]:
-    out = git("-c", "core.quotepath=off", "ls-files", "-z", "--", *paths)
+def tracked(*paths: str, untracked: bool = False) -> list[str]:
+    """Tracked files under `paths`; with `untracked`, also the files not yet added (ignored ones never)."""
+    others = ["--cached", "--others", "--exclude-standard"] if untracked else []
+    out = git("-c", "core.quotepath=off", "ls-files", "-z", *others, "--", *paths)
     return [p for p in out.decode().split("\0") if p]
 
 
@@ -148,7 +158,7 @@ def tracked(*paths: str) -> list[str]:
 
 @dataclass
 class Tree:
-    """The tracked files, and the experiment files something in the tree points at."""
+    """The checkout's files, and the experiment files something in it points at."""
 
     files: list[str]
     studies: frozenset[str]
@@ -158,8 +168,10 @@ class Tree:
     read_by_code: set[str] = field(default_factory=set)
 
     @classmethod
-    def load(cls) -> Tree:
-        files = tracked()
+    def load(cls, *, untracked: bool = True) -> Tree:
+        """Read the checkout. `untracked` includes the files a study has not committed yet,
+        which a new study's `webp` and `archive --upload` work on; off, only what git holds."""
+        files = [p for p in tracked(untracked=untracked) if (ROOT / p).is_file()]
         by_study: dict[str, list[str]] = {}
         for path in files:
             parts = path.split("/")
@@ -244,7 +256,7 @@ class Tree:
                     self.read_by_code.add(path)
 
     def archivable(self, study: str) -> list[str]:
-        """The study's tracked files that `archive` moves out of the tree."""
+        """The study's files that `archive` moves out of the tree."""
         out = []
         for path in self.by_study.get(study, []):
             name = path.rsplit("/", 1)[-1]
@@ -318,40 +330,86 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def commit_batch(study: str, paths: list[str], head: str) -> dict:
+    """A batch whose files `HEAD` holds, for publish-experiment-data.yml to pack and upload."""
+    dirty = git("status", "--porcelain", "--", *paths).decode().strip()
+    if dirty:
+        sys.exit(
+            f"{study}: commit these first, since `archive` records HEAD as their source "
+            f"(or pass --upload to send them straight to the release):\n{dirty}"
+        )
+    oids = {}
+    for line in git("-c", "core.quotepath=off", "ls-tree", "-r", "-z", "HEAD", "--", *paths).decode().split("\0"):
+        if line:
+            meta, path = line.split("\t", 1)
+            oids[path] = meta.split()[2]
+    prefix = f"{EXPERIMENTS}/{study}/"
+    return {
+        "asset": f"{study}.{head[:12]}.tar.gz",
+        "source_commit": head,
+        "files": {p.removeprefix(prefix): {"bytes": (ROOT / p).stat().st_size, "oid": oids[p]} for p in sorted(paths)},
+    }
+
+
+def upload_batch(study: str, paths: list[str], present: set[str]) -> dict:
+    """A batch packed from the files on disk and uploaded now, so its bytes never enter git.
+
+    The asset is named by its content, so a re-run after a failed step finds the
+    upload already made and does not repeat it.
+    """
+    prefix = f"{EXPERIMENTS}/{study}/"
+    blobs = [(p.removeprefix(prefix), (ROOT / p).read_bytes()) for p in sorted(paths)]
+    files = {name: {"bytes": len(data), "oid": blob_oid(data)} for name, data in blobs}
+    digest = hashlib.sha256("".join(f"{n}\0{f['oid']}\n" for n, f in sorted(files.items())).encode()).hexdigest()
+    asset = f"{study}.{digest[:12]}.tar.gz"
+    if asset not in present:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / asset
+            path.write_bytes(pack(blobs))
+            try:
+                gh("release", "upload", RELEASE, str(path))
+            except RuntimeError as exc:
+                sys.exit(f"{study}: the upload failed, and nothing was changed:\n{exc}")
+        present.add(asset)
+    return {"asset": asset, "source_commit": None, "files": files}
+
+
 def cmd_archive(args: argparse.Namespace) -> int:
     tree = Tree.load()
-    head = git("rev-parse", "HEAD").decode().strip()
+    head = "" if args.upload else git("rev-parse", "HEAD").decode().strip()
+    present: set[str] | None = None
     for study in [study_name(s) for s in args.studies]:
         paths = tree.archivable(study)
         if not paths:
             print(f"{study}: nothing to archive")
             continue
-        dirty = git("status", "--porcelain", "--", *paths).decode().strip()
-        if dirty:
-            sys.exit(f"{study}: commit these first; `archive` records HEAD as their source:\n{dirty}")
-        oids = {}
-        for line in git("-c", "core.quotepath=off", "ls-tree", "-r", "-z", "HEAD", "--", *paths).decode().split("\0"):
-            if line:
-                meta, path = line.split("\t", 1)
-                oids[path] = meta.split()[2]
-        prefix = f"{EXPERIMENTS}/{study}/"
+        if args.upload:
+            if present is None:
+                try:
+                    present = release_assets()
+                except RuntimeError as exc:
+                    sys.exit(f"--upload needs gh logged in with write access to {REPO}:\n{exc}")
+            batch = upload_batch(study, paths, present)
+        else:
+            batch = commit_batch(study, paths, head)
         manifest = load_manifest(study)
-        manifest["batches"].append(
-            {
-                "asset": f"{study}.{head[:12]}.tar.gz",
-                "source_commit": head,
-                "files": {
-                    p.removeprefix(prefix): {"bytes": (ROOT / p).stat().st_size, "oid": oids[p]} for p in sorted(paths)
-                },
-            }
-        )
+        manifest["batches"].append(batch)
         manifest_path(study).write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
-        git("rm", "-q", *(["--cached"] if args.keep_local else []), "--", *paths)
-        git("add", "--", str(manifest_path(study).relative_to(ROOT)))
+        # The bytes are safe (uploaded, or in HEAD), so a tracked file's local edits cannot be lost here.
+        in_git = set(tracked(*paths))
+        if in_git:
+            git("rm", "-q", "-f", *(["--cached"] if args.keep_local else []), "--", *sorted(in_git))
         if args.keep_local:
             exclude_paths(paths, add=True)
-        size = sum(f["bytes"] for f in manifest["batches"][-1]["files"].values())
-        print(f"{study}: archived {len(paths)} files ({human(size)})")
+        else:
+            for path in paths:
+                if path not in in_git:
+                    (ROOT / path).unlink()
+            prune_empty_dirs(paths)
+        git("add", "--", str(manifest_path(study).relative_to(ROOT)))
+        size = sum(f["bytes"] for f in batch["files"].values())
+        where = "uploaded" if args.upload else "archived"
+        print(f"{study}: {where} {len(paths)} files ({human(size)})")
     return 0
 
 
@@ -393,6 +451,8 @@ def ensure_commit(commit: str) -> None:
 
 def blobs_from_git(study: str, batch: dict) -> Iterator[tuple[str, bytes]]:
     """Each file of `batch`, read out of the commit that held it."""
+    if not batch.get("source_commit"):
+        sys.exit(f"{batch['asset']} was uploaded straight to the release and has no copy in git; fetch it from there")
     ensure_commit(batch["source_commit"])
     names = list(batch["files"])
     specs = "".join(f"{batch['source_commit']}:{EXPERIMENTS}/{study}/{n}\n" for n in names).encode()
@@ -480,11 +540,16 @@ def cmd_clean(args: argparse.Namespace) -> int:
                     (ROOT / path).unlink()
                     removed.append(path)
         exclude_paths(removed, add=False)
-        for directory in sorted({(ROOT / p).parent for p in removed}, key=lambda d: -len(d.parts)):
-            if directory.is_dir() and not any(directory.iterdir()):
-                directory.rmdir()
+        prune_empty_dirs(removed)
         print(f"{study}: removed {len(removed)} fetched files")
     return 0
+
+
+def prune_empty_dirs(paths: Iterable[str]) -> None:
+    """Remove the directories that deleting `paths` left empty, deepest first."""
+    for directory in sorted({(ROOT / p).parent for p in paths}, key=lambda d: -len(d.parts)):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
 
 
 # --------------------------------------------------------------------------
@@ -492,47 +557,53 @@ def cmd_clean(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 
-def tarball(study: str, batch: dict) -> bytes:
-    """The batch's tarball, byte-for-byte reproducible from git: sorted, zero mtimes, no owners."""
+def pack(blobs: Iterable[tuple[str, bytes]]) -> bytes:
+    """A tarball that is byte-for-byte reproducible from its contents: sorted, zero mtimes, no owners."""
     buffer = io.BytesIO()
     with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as gz, tarfile.open(fileobj=gz, mode="w") as tar:
-        for name, data in sorted(blobs_from_git(study, batch)):
-            if blob_oid(data) != batch["files"][name]["oid"]:
-                sys.exit(f"{study}/{name}: {batch['source_commit']} holds other bytes than the manifest records")
+        for name, data in sorted(blobs):
             info = tarfile.TarInfo(name)
             info.size, info.mode, info.mtime = len(data), 0o644, 0
             tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
 
 
+def tarball(study: str, batch: dict) -> bytes:
+    """The batch's tarball, rebuilt from the commit that held its files."""
+    blobs = list(blobs_from_git(study, batch))
+    for name, data in blobs:
+        if blob_oid(data) != batch["files"][name]["oid"]:
+            sys.exit(f"{study}/{name}: {batch['source_commit']} holds other bytes than the manifest records")
+    return pack(blobs)
+
+
 def gh(*args: str) -> str:
-    proc = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)  # noqa: S603, S607
+    """Run gh against this repo (GH_REPO, which CI's GITHUB_REPOSITORY overrides); a failure raises."""
+    repo = os.environ.get("GH_REPO") or os.environ.get("GITHUB_REPOSITORY") or REPO
+    proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["gh", *args],  # noqa: S607 - gh resolves on PATH
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "GH_REPO": repo},
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args)}: {proc.stderr.strip()}")
     return proc.stdout
 
 
-def cmd_publish(args: argparse.Namespace) -> int:
-    batches = [(study, batch) for study, m in manifests() for batch in m["batches"]]
-    if args.out:
-        out = Path(args.out)
-        out.mkdir(parents=True, exist_ok=True)
-        for study, batch in batches:
-            (out / batch["asset"]).write_bytes(tarball(study, batch))
-        print(f"wrote {len(batches)} tarballs to {out}")
-        return 0
+def release_assets() -> set[str]:
+    """The names of the release's assets, creating the release on first use."""
     try:
         listed = gh("release", "view", RELEASE, "--json", "assets", "--jq", ".assets[].name")
     except RuntimeError:
-        if not batches:
-            return 0
         gh(
             "release",
             "create",
             RELEASE,
             "--prerelease",
             "--target",
-            batches[0][1]["source_commit"],
+            "dev",
             "--title",
             "Experiment data",
             "--notes",
@@ -540,9 +611,28 @@ def cmd_publish(args: argparse.Namespace) -> int:
             "Not a version of VTSearch. Restore a study's files in place with "
             "`python scripts/experiments/study_data.py fetch <study>`.",
         )
-        listed = ""
-    present = set(listed.split())
-    todo = [(s, b) for s, b in batches if b["asset"] not in present]
+        return set()
+    return set(listed.split())
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    batches = [(study, batch) for study, m in manifests() for batch in m["batches"]]
+    # An uploaded batch has no git copy to rebuild from: the release already holds it.
+    rebuildable = [(s, b) for s, b in batches if b.get("source_commit")]
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        for study, batch in rebuildable:
+            (out / batch["asset"]).write_bytes(tarball(study, batch))
+        print(
+            f"wrote {len(rebuildable)} tarballs to {out} ({len(batches) - len(rebuildable)} uploaded batches skipped)"
+        )
+        return 0
+    if not batches:
+        return 0
+    present = release_assets()
+    todo = [(s, b) for s, b in rebuildable if b["asset"] not in present]
+    lost = sorted(b["asset"] for _, b in batches if not b.get("source_commit") and b["asset"] not in present)
     print(f"{len(batches)} archive batches, {len(todo)} to upload")
     with tempfile.TemporaryDirectory() as tmp:
         for study, batch in todo:
@@ -551,6 +641,13 @@ def cmd_publish(args: argparse.Namespace) -> int:
             gh("release", "upload", RELEASE, str(path))
             print(f"  uploaded {batch['asset']} ({human(path.stat().st_size)})")
             path.unlink()
+    if lost:
+        print(
+            f"ERROR: {len(lost)} uploaded tarball(s) are missing from the release, and git holds no copy to "
+            "rebuild them from:\n" + "".join(f"  {asset}\n" for asset in lost),
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -634,9 +731,11 @@ def cmd_webp(args: argparse.Namespace) -> int:
         else:
             renamed[path] = webp.relative_to(ROOT).as_posix()
     converted = len(renamed)
-    if renamed:
-        git("rm", "-q", "--cached", "--", *renamed)
-        git("add", "--", *renamed.values())
+    # Swap a committed figure in the index too; a new study's are not added yet.
+    in_git = sorted(set(tracked(*renamed))) if renamed else []
+    if in_git:
+        git("rm", "-q", "--cached", "--", *in_git)
+        git("add", "--", *(renamed[p] for p in in_git))
     # A link a report generator wrote to a PNG that an earlier run already converted.
     for study in studies:
         for path in tree.by_study.get(study, []):
@@ -681,7 +780,10 @@ def main(argv: list[str] | None = None) -> int:
 
     archive = sub.add_parser("archive", help="move a study's bulk data out of the tree")
     archive.add_argument("studies", nargs="+")
-    archive.add_argument("--keep-local", action="store_true", help="untrack the files but leave them on disk")
+    archive.add_argument(
+        "--upload", action="store_true", help="upload the files now (needs gh), so they never enter git history"
+    )
+    archive.add_argument("--keep-local", action="store_true", help="remove the files from git but leave them on disk")
     archive.set_defaults(run=cmd_archive)
 
     for name, run, text in (("fetch", cmd_fetch, "put archived data back"), ("clean", cmd_clean, "remove it again")):

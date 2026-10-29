@@ -336,28 +336,39 @@ the name shape.
 **A finished study's bulk data leaves the tree (#5404).** Cell CSVs, measurement
 tables, JSON dumps and figures no report embeds cost every checkout and every
 grep, and a reader on GitHub never opens them. So the last step before a study's
-PR merges is:
+PR merges sends them to the `experiments-data` release. **On the GRID, where
+`gh` is logged in, upload them so they never enter git history:**
 
 ```bash
-python scripts/experiments/study_data.py webp <study>     # linked PNGs -> lossless WebP, links repointed
+python scripts/experiments/study_data.py webp <study>              # linked PNGs -> lossless WebP, links repointed
+python scripts/experiments/study_data.py plan --files <study>      # what archive would move: check it
+python scripts/experiments/study_data.py archive --upload <study>  # tarball -> release; files -> archived-data.json
+git add docs/experiments/<study> && git commit -q -m "..."           # report, figures, manifest: no data
+```
+
+`--upload` packs the files from disk, uploads the tarball, and only then writes
+the manifest and deletes them, so a failed upload changes nothing. Once it is
+done the release is the data's only copy. **Where `gh` does not work** (a cloud
+session), the data goes through one commit instead, and
+`publish-experiment-data.yml` uploads it from that commit after the merge:
+
+```bash
+python scripts/experiments/study_data.py webp <study>
 git add docs/experiments/<study> && git commit -q -m "..."  # the data is now in a commit
-python scripts/experiments/study_data.py plan <study>     # what archive would move: check it
 python scripts/experiments/study_data.py archive <study>  # -> archived-data.json, git rm
 git commit -q -m "..."
 ```
 
 `archive` keeps every file a markdown file links to or names by full path, the
 viewer and report pages, and every file a test, slide figure source or the app
-reads; the rest goes into the study's `archived-data.json` with the commit that
-held it. After the merge, `publish-experiment-data.yml` uploads it to the
-`experiments-data` release. **To work on an archived study's data**, run
-`study_data.py fetch <study>` (or `--from-git` before its PR has merged); the
-files land back in place and stay out of `git status`, and
-`study_data.py clean <study>` removes them. Archive *after* anything that reads
-the data in the same session (`compare_paths.py`, a figure script), or archive
-with `--keep-local`. `tests_lib/meta/test_study_data.py` fails `./run-tests.sh`
-while any study still tracks data `archive` would move, so a study cannot merge
-without this step.
+reads; the rest goes into the study's `archived-data.json`. **To work on an
+archived study's data**, run `study_data.py fetch <study>` (or `--from-git`, for
+a committed batch whose PR has not merged yet); the files land back in place and
+stay out of `git status`, and `study_data.py clean <study>` removes them.
+Archive *after* anything that reads the data in the same session
+(`compare_paths.py`, a figure script), or archive with `--keep-local`.
+`tests_lib/meta/test_study_data.py` fails `./run-tests.sh` while any study still
+tracks data `archive` would move, so a study cannot merge without this step.
 
 **There is no index file.** The date prefix makes `ls docs/experiments/` sort
 chronologically, and a report opens with its question as the H1 and its verdict
