@@ -1,0 +1,33 @@
+diff --git a/docs/user/screenshots.manifest.ts b/docs/user/screenshots.manifest.ts
+index 26cc7687d..c7d92b2b5 100644
+--- a/docs/user/screenshots.manifest.ts
++++ b/docs/user/screenshots.manifest.ts
+@@ -1931,8 +1931,27 @@ export const SHOTS: Shot[] = [
+       await page.locator('tr[vt-detector-card]').first().waitFor({ timeout: 10000 });
+       await page.mouse.move(700, 60);
+       await h.wait(700);
++      // #5391 experiment, not for merge: shift the Detectors card down to a whole CSS px.
++      const geom = await page.evaluate(() => {
++        const card = document.querySelectorAll('.dashboard-section-wrap')[1] as HTMLElement;
++        const head = card.querySelector('thead') as HTMLElement;
++        const before = { card: card.getBoundingClientRect().top, head: head.getBoundingClientRect().top };
++        card.style.position = 'relative';
++        card.style.top = `${Math.ceil(before.head) - before.head}px`;
++        const after = { card: card.getBoundingClientRect().top, head: head.getBoundingClientRect().top };
++        return { before, after };
++      });
++      console.log(`[5391] Detectors card/thead top: ${JSON.stringify(geom)}`);
++      await h.wait(300);
++    },
++    after: async (page, h) => {
++      await page.evaluate(() => {
++        const card = document.querySelectorAll('.dashboard-section-wrap')[1] as HTMLElement | undefined;
++        card?.style.removeProperty('position');
++        card?.style.removeProperty('top');
++      });
++      await setAutoFind(h, false);
+     },
+-    after: async (_page, h) => setAutoFind(h, false),
+   },
+   {
+     id: 'autofind-settings',

@@ -20,7 +20,6 @@ import { join } from 'node:path';
 
 /** Any chromium executable under PLAYWRIGHT_BROWSERS_PATH, newest revision first. */
 function discoverChromium() {
-  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
   if (!root || !existsSync(root)) return null;
   // Prefer full chromium over the headless shell: the shell cannot do a headed
@@ -44,8 +43,16 @@ function discoverChromium() {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-/** Launch chromium, falling back to a discovered build if the pinned one is absent. */
+/**
+ * Launch chromium: `CHROMIUM_PATH` when set, else the pinned build, else a
+ * discovered one. The override wins even where the pinned build is installed,
+ * so a machine that has it can still draw in the container's build (#5391).
+ */
 export async function launchChromium(options = {}) {
+  if (process.env.CHROMIUM_PATH) {
+    console.log(`[launch] CHROMIUM_PATH: using ${process.env.CHROMIUM_PATH}`);
+    return await chromium.launch({ ...options, executablePath: process.env.CHROMIUM_PATH });
+  }
   try {
     return await chromium.launch(options);
   } catch (err) {

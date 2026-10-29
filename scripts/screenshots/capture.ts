@@ -845,6 +845,9 @@ async function main() {
   // glyph advances a whole pixel: the GRID's `hintstyle: slight` set every line
   // wider than the container's, which hints none (#5302).
   const browser: Browser = await launchChromium({ args: ['--font-render-hinting=none'] });
+  // A render compares like for like only in the build that drew the baselines,
+  // and the container's is not the one Playwright pins (#5391), so name it.
+  console.log(`[launch] Chromium ${browser.version()}`);
   const started = Date.now();
   const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];
   const runs: { label: string; total: number }[] = [];
