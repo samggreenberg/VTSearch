@@ -293,6 +293,20 @@ def score_embedder_for_active(snap=None) -> tuple[MediaEmbedder | None, str | No
     return embedder_for_medias(snap), score_name
 
 
+def _example_weights(file_paths: list[Path], snap: dict) -> list[float] | None:
+    """The example centroid's weights on a face dataset (:func:`~vtscore.media.face.imagekit_bridge.example_weights`).
+
+    ``None`` (a plain mean) on any other dataset: a face picked out of a scene
+    photo says nothing about how well that photo shows what the user wants.
+    """
+    first = next(iter(snap.values()), None)
+    if not isinstance(first, dict) or first.get("media_type") != "face":
+        return None
+    from vtscore.media.face import imagekit_bridge  # noqa: PLC0415
+
+    return imagekit_bridge.example_weights([imagekit_bridge.hard_view_of_file(p) for p in file_paths])
+
+
 def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
     """:func:`example_sort_cuts_from_paths` with the display line alone: ``(results_list, threshold)``."""
     results, cuts = example_sort_cuts_from_paths(file_paths)
@@ -311,7 +325,8 @@ def example_sort_cuts_from_paths(file_paths: list[Path]) -> tuple[list[dict], Te
     dataset.  A single example sorts by cosine similarity to its vector;
     multiple examples sort against their centroid (the mean of the
     L2-normalised example vectors), so each example contributes equally
-    regardless of its embedding norm.  On a structural (SIFT/VLAD) dataset
+    regardless of its embedding norm.  On a face dataset a hard-view face
+    among clear ones weighs less (:func:`_example_weights`, #5389).  On a structural (SIFT/VLAD) dataset
     that Stage-1 order is then geometrically re-ranked against *every*
     example as a template, max-over-templates, exactly as the voted path
     treats its RegionYes templates.
@@ -345,8 +360,9 @@ def example_sort_cuts_from_paths(file_paths: list[Path]) -> tuple[list[dict], Te
     if len(embeddings) == 1:
         query_vec = embeddings[0]
     else:
-        normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
-        query_vec = np.mean(np.stack(normed), axis=0)
+        normed = np.stack([v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings])
+        weights = _example_weights(file_paths, snap)
+        query_vec = np.mean(normed, axis=0) if weights is None else np.average(normed, axis=0, weights=weights)
 
     results, cuts = cosine_sort_cuts(query_vec, snap=snap)
 

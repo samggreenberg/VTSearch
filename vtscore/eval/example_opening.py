@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import media_is_positive
+from vtscore.media.face.imagekit_bridge import example_weights, media_hard_view
 
 if TYPE_CHECKING:
     import numpy as np
@@ -156,7 +157,8 @@ def example_sort(clips_dict: dict[int, dict[str, Any]], examples: list[int]) -> 
     """``{media_id: cosine}`` to the centroid of *examples*, as the app's example sort ranks.
 
     One example ranks by cosine to its own vector. Several rank by cosine to the mean of their
-    L2-normalised vectors, so each counts equally whatever its norm
+    L2-normalised vectors, so each counts equally whatever its norm, except that a hard-view face
+    among clear ones weighs less (:func:`~vtscore.media.face.imagekit_bridge.example_weights`, #5389)
     (:func:`~vtscore.training.query_sort.example_sort_from_paths`).
 
     Raises:
@@ -175,7 +177,9 @@ def example_sort(clips_dict: dict[int, dict[str, Any]], examples: list[int]) -> 
     missing = [cid for cid, v in vectors.items() if v is None]
     if missing:
         raise ValueError(f"{len(missing)} media(s) carry no vector to rank, e.g. {missing[:5]}")
-    query = _unit(np.mean(np.stack([_unit(vectors[c]) for c in examples]), axis=0))
+    units = np.stack([_unit(vectors[c]) for c in examples])
+    weights = example_weights([media_hard_view(clips_dict[c]) for c in examples])
+    query = _unit(np.mean(units, axis=0) if weights is None else np.average(units, axis=0, weights=weights))
     matrix = np.stack([_unit(vectors[c]) for c in ids])
     cos = matrix @ query
     return {cid: float(cos[k]) for k, cid in enumerate(ids)}
