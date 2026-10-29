@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test_types`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -714,7 +714,13 @@ never trained on what share of what its line ships would be right and what
 share of the real matches it would ship, as likely ranges from uniform picks
 within rank bands; this module is the sample, its estimators, the allocation
 rule and the phase machine, pure statistics over ids, ranks and labels that
-the app's routes and the eval harness both call.
+the app's routes and the eval harness both call. Its vocabulary (the
+constants, `LineBudgets`, `Band` and `line_bands`, the estimates and
+`found_words`, `PhaseReport`, `RoundAhead`) lives in `line_test_types.py`,
+which never reads the sample, and `line_test` re-exports all of it. The
+pool's knobs (`POOLED_WEIGHT`, `POOL_RADIUS`, `FIRST_PASS_BEFORE_BUDGET`,
+`pooled_weight`) stay in `line_test`, where the sample looks them up, so a
+study that rebinds one patches `line_test`.
 
 **Why it is shaped this way.** AutoFind ships the set above the line unchecked,
 and nobody downstream can tell a wrong match from a missed one, so a test

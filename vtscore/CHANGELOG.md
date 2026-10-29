@@ -24,6 +24,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
 
+- **The test sample's vocabulary is its own module, `vtscore.training.thresholds.line_test_types`** (issue
+  #5427). The constants (`TEST_ALPHA`, `TEST_DRAWS`, `TEST_DRAW_SEED`, `JEFFREYS`, `MODEL_FLOOR`,
+  `TEST_PROVENANCE`, the sides, phases and stop reasons, `FOUND_WORDS`), `LineBudgets` and `DEFAULT_BUDGETS`,
+  `Band` and `line_bands`, `Estimate`, `EdgeEstimate`, `LineEstimates` and `found_words`, `PhaseReport` and
+  `RoundAhead` moved there unchanged. `LineTest`, `line_phase` and the pool's knobs (`POOLED_WEIGHT`,
+  `POOL_RADIUS`, `FIRST_PASS_BEFORE_BUDGET`, `pooled_weight`) stay in `line_test`, which re-exports every
+  moved name, so `vtscore.training.thresholds.line_test.X` and `vtscore.training.thresholds.X` resolve as
+  before, and a study that rebinds a pool knob still patches `line_test`. The one name lost is `band_edges`,
+  which `line_test` only imported: take it from `vtscore.training.thresholds.spot_check`. See
+  `packages/training.md`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss

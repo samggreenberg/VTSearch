@@ -49,7 +49,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, Mapping, Sequence
 
-from vtscore.training.thresholds.line_test import Estimate, found_words
+from vtscore.training.thresholds.line_test_types import Estimate, found_words
 
 if TYPE_CHECKING:
     from vtscore.datasets.labelset import LabelSet
