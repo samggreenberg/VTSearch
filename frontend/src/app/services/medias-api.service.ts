@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
+import type { MediaPickerListing } from '../generated/api-client/models/media-picker-listing';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
 import type { MediaParagraphResponse } from '../generated/api-client/models/media-paragraph-response';
 import type { MediaVoteRequest } from '../generated/api-client/models/media-vote-request';
@@ -15,6 +16,7 @@ import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 import type { PayloadVariant } from '../models/api.models';
 import type { VoteProvenance } from './vote-provenance.service';
 import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
+import { mediaPickerListing } from '../generated/api-client/fn/medias/media-picker-listing';
 import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
 import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
 import { voteMedia } from '../generated/api-client/fn/medias/vote-media';
@@ -35,13 +37,16 @@ export class MediasApiService {
   }
 
   /**
-   * {@link getMediaIds} out of *datasetId* rather than the active dataset,
-   * with no detector (`DATASET_OVERRIDE`): New Detector lists the items of
-   * the dataset it was opened for, which need not be the active one (#5205).
+   * The items New Detector's *Pick from Dataset* grid lists, out of
+   * *datasetId* rather than the active dataset, with no detector
+   * (`DATASET_OVERRIDE`): the modal lists the dataset it was opened for, which
+   * need not be the active one (#5205). A Face dataset's ids come in
+   * similarity order, look-alikes together (#5465); a non-empty *q* keeps only
+   * the items whose name holds every word of it.
    */
-  getMediaIdsIn(datasetId: string): Observable<MediaIdsListResponse[]> {
+  getPickerListingIn(datasetId: string, q = ''): Observable<MediaPickerListing> {
     const context = new HttpContext().set(DATASET_OVERRIDE, datasetId);
-    return listMediaIds(this.http, this.config.rootUrl, undefined, context).pipe(map((r) => r.body));
+    return mediaPickerListing(this.http, this.config.rootUrl, q ? { q } : undefined, context).pipe(map((r) => r.body));
   }
 
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {
