@@ -502,14 +502,14 @@ class TestCrossDatasetMLPTraining:
         def _fake_resolve_ctx(origin, origin_name="", filename=""):
             yield files.get(origin_name) or files.get(filename)
 
-        # labelset_training imports resolve_file_context inside _embed_one,
+        # labelset_embeddings imports resolve_file_context inside _embed_one,
         # so patching the resolver symbol is enough; the function-level
         # import picks the patched value.
-        import vtscore.detectors.labelset_training as lt_mod
+        import vtscore.detectors.labelset_embeddings as lt_mod
         import vtscore.detectors.resolver as resolver_mod
 
         monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_resolve_ctx)
-        # Defensive: patch the binding inside labelset_training too in case
+        # Defensive: patch the binding inside labelset_embeddings too in case
         # it ever moves to a top-level import.
         if hasattr(lt_mod, "resolve_file_context"):
             monkeypatch.setattr(lt_mod, "resolve_file_context", _fake_resolve_ctx)
