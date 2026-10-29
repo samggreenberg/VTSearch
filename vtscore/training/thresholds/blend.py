@@ -15,7 +15,8 @@ from __future__ import annotations
 import math
 
 from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_schedule
-from vtscore.training.thresholds.gmm import GmmFit1D, fit_gmm_threshold
+from vtscore.training.thresholds.gmm_core import GmmFit1D
+from vtscore.training.thresholds.gmm_threshold import fit_gmm_threshold
 from vtscore.training.thresholds.knobs import scored_only
 
 

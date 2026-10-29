@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm_core`, `gmm_em`, `gmm_threshold`, `text_sort` (`gmm` re-exports those four), `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `check_schedule`, `ranges`, `spot_check`, `balance`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -339,7 +339,7 @@ drops the same positions from both.
 
 ### `text_sort_cuts(scores, rule=None, beta=None)`
 
-`vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
+`vtscore/training/thresholds/text_sort.py` (import from `vtscore.training.thresholds`).
 The two lines a **typed-query** sort carries (issue #4136), as a frozen
 `TextSortCuts(threshold, acq_threshold, branch)`, drawn from one mixture fit.
 Called by `vtscore/training/query_sort.py::text_sort_active`, which the
@@ -382,14 +382,14 @@ bit-identical to `calculate_gmm_threshold`.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds/gmm.py`. Fits a 2-component 1-D Gaussian
+`vtscore/training/thresholds/gmm_threshold.py`. Fits a 2-component 1-D Gaussian
 mixture to the score list and returns the **midpoint between the two
 component means**. Used to produce a reasonable operating point even when
 only a few labels exist - the score distribution still tends to be bimodal
 because the embedder space already separates "kind of like X" from "kind of
 not like X".
 
-The fit is `fit_score_gmm`: a deterministic 2-means init and EM, stopping
+The fit is `fit_score_gmm` (`gmm_em.py`): a deterministic 2-means init and EM, stopping
 when an iteration improves the mean log-likelihood by less than 1e-3 (the
 same criterion as sklearn's `GaussianMixture`, which `fit_score_gmm_sklearn`
 keeps available for comparison but which production no longer calls).
@@ -445,7 +445,9 @@ single-class. (`INCLUSION_MIN` / `INCLUSION_MAX` live in `thresholds/knobs.py`.)
 
 `vtscore/training/thresholds/conformal.py::calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion_value=0, rng=None, calibrate_count=2, calibration_fraction=0.5, hidden_dim=None, groups=None, score_rows_by_group=None)`.
 Cross-calibration in one call (the interactive path uses the split form
-below). For each of `calibrate_count` rounds:
+below). The folds come from `compute_fold_orderings`
+(`vtscore/training/thresholds/fold_orderings.py`, also importable from
+`conformal`). For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
@@ -685,7 +687,13 @@ follow that.
 
 `vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
 stopped at the F-beta peak by #4413 and priced in
-[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)),
+split along its seams in #5425: `check_schedule.py` holds the balance's
+presets, the bands and the schedule, `ranges.py` the likely range,
+`spot_check.py` `LineRanking` and `SpotCheck`, and `balance.py` the mixture's
+counts, the count rule and the balance's state. Every name below still
+imports from `vtscore.training.thresholds.spot_check` as well as from the
+package.
 The line's preference is a **balance**: F-beta's *beta*, with the presets
 `BALANCE_PRESETS` (0.25, 1, 4; `DEFAULT_BETA` 1) and any value in
 `[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps
@@ -766,7 +774,7 @@ range comes only from those picks, never from a model.
   `kept_at_check`). `aim_words(state)` names the balance in a
   message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
+`scripts/gates/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
 ### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`

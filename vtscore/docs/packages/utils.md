@@ -221,7 +221,7 @@ name alone, and where they actually live:
 | runtime config            | `vtscore.config`                              |
 | hit dicts (`build_media_hit`, `hit_custom_metadata`) | `vtscore.datasets.labelset` ([`datasets.md`](datasets.md#hits)); `vtscore.utils.hits` is a deprecated alias |
 | non-finite score sentinel, `scored_only` / `scored_mask` | `vtscore.training.thresholds.knobs` ([`training.md`](training.md#unscorable-media-non_finite_score_sentinel-scored_only)); `vtscore.utils.scores` is a deprecated alias |
-| the stat-free `packages_distributions` seed | `vtscore.media.torch_setup` ([`media.md`](media.md#stat-free-package-metadata)); `vtscore.utils.import_metadata` is a deprecated alias |
+| the stat-free `packages_distributions` seed | `vtscore.media.torch_utils.torch_setup` ([`media.md`](media.md#stat-free-package-metadata)); `vtscore.utils.import_metadata` is a deprecated alias |
 
 This package is small on purpose: new helpers should land in the topical
 package they belong to.

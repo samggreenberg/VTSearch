@@ -7,7 +7,7 @@ return a single float threshold. Detector-specific glue (sourcing ``X_list`` / `
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across ten submodules, layered so that each one
+The implementation is split across these submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -17,22 +17,36 @@ only reads from those above it:
 * :mod:`~vtscore.training.thresholds.costs` - what a cut *costs* on a labelled
   sample, under the weights the knob names.  Numpy only; the one definition the
   shipped Smart indicator and the eval harness both score through.
-* :mod:`~vtscore.training.thresholds.gmm` - the 1-D two-component mixture, its
-  anchored variant, and the rules that read a cut off a fit.  Reads only the
-  unscorable-score filter from the knobs.
+* The 1-D two-component mixture, in four layers that read nothing else in
+  the package but the knobs' unscorable-score filter (#5424, #5399), with :mod:`~vtscore.training.thresholds.gmm` a
+  re-export facade over all four:
+
+  * :mod:`~vtscore.training.thresholds.gmm_core` - the fit type, the
+    density-crossing solvers that read a cut off a fit, and the sample
+    handling every fit shares.
+  * :mod:`~vtscore.training.thresholds.gmm_em` - the plain and
+    label-anchored EM fits, and their stopping rules.
+  * :mod:`~vtscore.training.thresholds.gmm_threshold` - the named cut rules
+    and :func:`calculate_gmm_threshold`.
+  * :mod:`~vtscore.training.thresholds.text_sort` - the typed-query sort's
+    display and acquisition lines.
 * :mod:`~vtscore.training.thresholds.anchored` - the fold-anchored cut, the
   line with no balance and the fallback under one where the labels support no
   class model: per-fold anchored mixtures combined in quantile space, plus the
   voted-media haystack exclusion.
-* :mod:`~vtscore.training.thresholds.conformal` - the rival estimator: fold
-  splits and split-conformal quantiles over pooled held-out scores.
+* :mod:`~vtscore.training.thresholds.fold_orderings` - the calibration
+  folds: the Train/Calibrate splits, the per-fold fits, and each fold's
+  held-out scores.  Reads :mod:`~vtscore.training.thresholds.knobs` only.
+* :mod:`~vtscore.training.thresholds.conformal` - the rival estimator:
+  split-conformal quantiles over the folds' pooled held-out scores, and the
+  fold cache the detector pipeline calibrates through.
 * :mod:`~vtscore.training.thresholds.blend` - the retired safe-threshold blend,
   kept as the anchored path's small-label fallback.
 * :mod:`~vtscore.training.thresholds.precision_floor` - the precision-floor
   cut (#4224): the largest top-k whose estimated precision clears a floor, from
   the calibration folds' held-out votes, and :func:`reporting_line`, which
   decides whether a detector's line is the floor's or the Inclusion knob's.
-  Reads :mod:`~vtscore.training.thresholds.gmm` for its sampling and
+  Reads :mod:`~vtscore.training.thresholds.gmm_core` for its sampling and
   sentinel filtering; otherwise numpy and scikit-learn.
 * :mod:`~vtscore.training.thresholds.labels_line` - the line under a balance
   (#4452): the class model the calibration folds' held-out votes imply, cut
@@ -45,16 +59,31 @@ only reads from those above it:
   line and the cues Autopilot reads beside the line).  Every public name of
   the four stays importable from ``labels_line``.  Reads nothing above it;
   numpy and SciPy.
-* :mod:`~vtscore.training.thresholds.spot_check` - the balance (its presets
-  and the count rule a context with no trained head falls back to) and the spot
-  check, a walk of uniform picks in rank bands that audits the line and
-  reports a likely range without moving it.  Reads
-  :mod:`~vtscore.training.thresholds.knobs` and
-  :mod:`~vtscore.training.thresholds.gmm`.
+* :mod:`~vtscore.training.thresholds.check_schedule` - the balance's presets
+  and range, the bands a check walks, and the schedule and shape of a check
+  at one balance.  Plain Python; reads no sibling.
+* :mod:`~vtscore.training.thresholds.ranges` - the likely range: the exact
+  bound on how much of a set is right, from the uniform picks inside it.
+  Reads :mod:`~vtscore.training.thresholds.check_schedule`.
+* :mod:`~vtscore.training.thresholds.spot_check` - the spot check, a walk of
+  uniform picks in rank bands that audits the line and reports a likely range
+  without moving it, and the ranking it walks.  Reads the two modules above
+  it, and re-exports every public name of those two and of
+  :mod:`~vtscore.training.thresholds.balance`, as it did when the four were
+  one module (#5425).
+* :mod:`~vtscore.training.thresholds.balance` - the mixture's counts, the
+  count rule a context with no trained head falls back to, and the state a
+  balance reports beside a line.  Reads
+  :mod:`~vtscore.training.thresholds.knobs`,
+  :mod:`~vtscore.training.thresholds.check_schedule` and
+  :mod:`~vtscore.training.thresholds.ranges`, and
+  :mod:`~vtscore.training.thresholds.gmm` on first use; the spot check's
+  classes as types only.
 * :mod:`~vtscore.training.thresholds.line_test` - Test mode's sample of a
   line (#4527): band picks on both sides of it and the precision, recall and
   F-beta ranges they give.  Reads
-  :mod:`~vtscore.training.thresholds.spot_check`'s bands.
+  :mod:`~vtscore.training.thresholds.check_schedule`'s bands and
+  :mod:`~vtscore.training.thresholds.ranges`' bound.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
@@ -72,6 +101,16 @@ name up, and the split moved some of those lookups:
   :func:`~vtscore.training.thresholds.conformal.calculate_cross_calibration_threshold`,
   means patching ``thresholds.blend`` / ``thresholds.conformal`` - not this
   package, where the rebind is silently ignored.
+* A submodule that re-exports a sibling's name holds one more copy, so the
+  same rule applies to it.  ``thresholds.conformal`` re-exports the fold
+  module's public names, but the fold code reads its own globals: the per-fold
+  clock (``time``) and the split sizing (``_split_train_counts``) are patched
+  on ``thresholds.fold_orderings``.
+* The same holds for the :mod:`~vtscore.training.thresholds.gmm` facade: an
+  EM stopping rule is patched on ``thresholds.gmm_em``, the sort's
+  ``TEXT_SORT_CUT_RULE`` on ``thresholds.text_sort`` and the fit's
+  ``_GMM_MAX_SAMPLES`` on ``thresholds.gmm_core`` - the modules whose
+  functions read them.
 """
 
 from __future__ import annotations
@@ -99,12 +138,23 @@ from vtscore.training.thresholds.blend import (
     safe_blend_weight,
 )
 from vtscore.training.thresholds.conformal import (
-    CALIBRATION_SPLIT_SEED,
     CONFORMAL_BASE_BUDGET,
     CONFORMAL_QPOS_MAX,
     FOLD_CONFORMAL_COMBINES,
     CalibrationFolds,
     _calibration_cache_key,
+    _score_rows_digest,
+    calculate_cross_calibration_threshold,
+    calibration_folds,
+    calibration_folds_cached,
+    combined_fold_conformal_threshold,
+    conformal_threshold,
+    per_fold_conformal_cuts,
+    threshold_from_fold_orderings,
+    threshold_from_folds,
+)
+from vtscore.training.thresholds.fold_orderings import (
+    CALIBRATION_SPLIT_SEED,
     _compute_fold_orderings_grouped,
     _fold_fit_ordering,
     _group_node_blocks,
@@ -112,43 +162,57 @@ from vtscore.training.thresholds.conformal import (
     _per_bag_fit_weights,
     _pooled_group_scores,
     _row_wise_fold_ordering,
-    _score_rows_digest,
     _split_train_counts,
     _torch_fold_ordering,
-    calculate_cross_calibration_threshold,
-    calibration_folds,
-    calibration_folds_cached,
-    combined_fold_conformal_threshold,
     compute_fold_orderings,
     compute_grouped_fold_node_scores,
-    conformal_threshold,
     nearest_holdout,
-    per_fold_conformal_cuts,
-    threshold_from_fold_orderings,
-    threshold_from_folds,
 )
-from vtscore.training.thresholds.gmm import (
+from vtscore.training.thresholds.gmm_core import (
+    _GMM_MAX_SAMPLES,
+    CUT_KIND_CONTINUED,
+    CUT_KIND_DEGENERATE_MIDPOINT,
+    CUT_KIND_INTERIOR,
+    GmmFit1D,
+    _quadratic_roots,
+    _rate_cut,
+    _weighted_gaussian_crossing,
+    gmm_fit_array,
+    scored_ordering,
+    snap_cut_to_sample,
+)
+from vtscore.training.thresholds.gmm_em import (
     _ANCHOR_MIN_WEIGHT,
     _ANCHOR_VAR_FLOOR_FRAC,
     _ANCHORED_EM_LOGLIK_TOL,
     _ANCHORED_EM_MAX_ITER,
     _ANCHORED_EM_TOL,
-    _GMM_MAX_SAMPLES,
     ANCHOR_WEIGHT_DEFAULT,
-    CUT_KIND_CONTINUED,
-    CUT_KIND_DEGENERATE_MIDPOINT,
-    CUT_KIND_INTERIOR,
-    GmmFit1D,
     _anchor_loglik_terms,
     _anchored_em,
-    _quadratic_roots,
     _record_stopping,
-    _rate_cut,
-    _weighted_gaussian_crossing,
+    anchored_gmm_fit,
+    fit_anchored_score_gmm,
+    _EM_LOGLIK_TOL,
+    _EM_MAX_ITER,
+    _EM_TOL,
+    _KMEANS_MAX_ITER,
+    _NO_ANCHORS,
+    _plain_em,
+    _two_means_init,
+    fit_score_gmm,
+    fit_score_gmm_sklearn,
+)
+from vtscore.training.thresholds.gmm_threshold import (
+    calculate_gmm_threshold,
+    _fit_gmm_threshold_with_array,
+    fit_gmm_threshold,
+    gmm_cut_from_fit,
+)
+from vtscore.training.thresholds.text_sort import (
     _count_estimate,
     _count_keep_line,
     _count_line,
-    anchored_gmm_fit,
     TEXT_SORT_COUNT_EXPONENT,
     TEXT_SORT_COUNT_MAX_BETA,
     TEXT_SORT_COUNT_MIN_SCORES,
@@ -161,7 +225,6 @@ from vtscore.training.thresholds.gmm import (
     TextSortCuts,
     ashman_d,
     bulk_location_scale,
-    calculate_gmm_threshold,
     converge_score_gmm,
     resolve_text_sort_cut_rule,
     _guarded_line_from_fit,
@@ -169,28 +232,12 @@ from vtscore.training.thresholds.gmm import (
     text_sort_acquisition_threshold,
     text_sort_cuts,
     text_sort_threshold,
-    fit_anchored_score_gmm,
-    _fit_gmm_threshold_with_array,
-    fit_gmm_threshold,
-    _EM_LOGLIK_TOL,
-    _EM_MAX_ITER,
-    _EM_TOL,
     _TEXT_SORT_CONVERGED_MAX_ITER,
     _TEXT_SORT_CONVERGED_TOL,
-    _KMEANS_MAX_ITER,
-    _NO_ANCHORS,
-    _plain_em,
-    _two_means_init,
-    fit_score_gmm,
-    fit_score_gmm_sklearn,
-    gmm_cut_from_fit,
-    gmm_fit_array,
-    scored_ordering,
-    snap_cut_to_sample,
 )
 from vtscore.training.thresholds.costs import weighted_error_cost
 
-from vtscore.training.thresholds.spot_check import (
+from vtscore.training.thresholds.check_schedule import (
     CHECK_ALPHA,
     CHECK_BASE_CANDIDATE,
     CHECK_CANCELLED,
@@ -199,17 +246,8 @@ from vtscore.training.thresholds.spot_check import (
     CHECK_RECALL_CANDIDATE,
     CHECK_RUNNING,
     CheckSchedule,
-    LikelyRange,
-    LineRanking,
     NO_BALANCE,
-    SpotCheck,
-    clopper_pearson_lower,
-    clopper_pearson_upper,
-    hypergeometric_lower,
-    hypergeometric_upper,
-    likely_range,
     line_under,
-    range_tail,
     rounds_for,
     BAND_BASE,
     WALK_DEEPER,
@@ -217,25 +255,11 @@ from vtscore.training.thresholds.spot_check import (
     WALK_START,
     band_edges,
     bands_for,
-    MIXTURE_MIN_STD_SHARE,
-    acquisition_count,
-    acquisition_threshold,
-    mixture_positives,
-    mixture_posterior,
-    walk_positives,
-    fbeta_count,
     fbeta_score,
     balance_schedule,
     check_shape,
-    balance_count,
-    balance_line,
-    aim_words,
     band_edges_fine,
-    balance_state,
-    gate_balance_state,
     resolve_line_knobs,
-    applicable_balance,
-    BalanceState,
     BALANCE_CHECKED,
     BALANCE_GATE,
     BALANCE_PRESETS,
@@ -247,6 +271,35 @@ from vtscore.training.thresholds.spot_check import (
     BETA_MAX,
     BETA_MIN,
     DEFAULT_BETA,
+)
+from vtscore.training.thresholds.ranges import (
+    LikelyRange,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    hypergeometric_lower,
+    hypergeometric_upper,
+    likely_range,
+    range_tail,
+)
+from vtscore.training.thresholds.spot_check import (
+    LineRanking,
+    SpotCheck,
+)
+from vtscore.training.thresholds.balance import (
+    MIXTURE_MIN_STD_SHARE,
+    acquisition_count,
+    acquisition_threshold,
+    mixture_positives,
+    mixture_posterior,
+    walk_positives,
+    fbeta_count,
+    balance_count,
+    balance_line,
+    aim_words,
+    balance_state,
+    gate_balance_state,
+    applicable_balance,
+    BalanceState,
 )
 from vtscore.training.thresholds.line_test import (
     ABOVE,
@@ -616,12 +669,21 @@ __all__ = [
     "fold_anchored_gmm_threshold",
     "rank_transfer",
     "resolve_exclusion_floor",
-    "CALIBRATION_SPLIT_SEED",
     "CONFORMAL_BASE_BUDGET",
     "CONFORMAL_QPOS_MAX",
     "CalibrationFolds",
     "FOLD_CONFORMAL_COMBINES",
     "_calibration_cache_key",
+    "_score_rows_digest",
+    "calculate_cross_calibration_threshold",
+    "calibration_folds",
+    "calibration_folds_cached",
+    "combined_fold_conformal_threshold",
+    "conformal_threshold",
+    "per_fold_conformal_cuts",
+    "threshold_from_fold_orderings",
+    "threshold_from_folds",
+    "CALIBRATION_SPLIT_SEED",
     "_compute_fold_orderings_grouped",
     "_fold_fit_ordering",
     "_group_node_blocks",
@@ -629,20 +691,11 @@ __all__ = [
     "_per_bag_fit_weights",
     "_pooled_group_scores",
     "_row_wise_fold_ordering",
-    "_score_rows_digest",
     "_split_train_counts",
     "_torch_fold_ordering",
-    "calculate_cross_calibration_threshold",
-    "calibration_folds",
-    "calibration_folds_cached",
-    "combined_fold_conformal_threshold",
     "compute_fold_orderings",
     "compute_grouped_fold_node_scores",
-    "conformal_threshold",
     "nearest_holdout",
-    "per_fold_conformal_cuts",
-    "threshold_from_fold_orderings",
-    "threshold_from_folds",
     "_as_context",
     "blend_gmm_threshold",
     "calculate_safe_threshold",

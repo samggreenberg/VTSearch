@@ -343,7 +343,7 @@ class _FakeVisionTextModel:
 
 class TestSiglip2Wrapper:
     def _make(self, dim=768):
-        from vtscore.media.image.embedder_siglip2 import ImageSiglip2Embedder
+        from vtscore.media.image.embedders.embedder_siglip2 import ImageSiglip2Embedder
 
         emb = ImageSiglip2Embedder()
         emb._model = _FakeVisionTextModel(dim)
@@ -393,7 +393,7 @@ class TestSiglip2LWrapper:
     """
 
     def _make(self, dim=1152):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         emb = ImageSiglip2LEmbedder()
         emb._model = _FakeVisionTextModel(dim)
@@ -455,8 +455,8 @@ class _FakeViTModel:
 @pytest.mark.parametrize(
     "module_path, class_name",
     [
-        ("vtscore.media.image.embedder_dinov2_single", "ImageDinov2SingleEmbedder"),
-        ("vtscore.media.image.embedder_dinov3_single", "ImageDinov3SingleEmbedder"),
+        ("vtscore.media.image.embedders.embedder_dinov2_single", "ImageDinov2SingleEmbedder"),
+        ("vtscore.media.image.embedders.embedder_dinov3_single", "ImageDinov3SingleEmbedder"),
     ],
 )
 class TestDinoWrapper:
@@ -515,7 +515,7 @@ class _FakeEupeModel:
 
 class TestEupeWrapper:
     def _make(self, dim=768):
-        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_single import ImageEupeSingleEmbedder
 
         emb = ImageEupeSingleEmbedder()
         emb._model = _FakeEupeModel(dim)

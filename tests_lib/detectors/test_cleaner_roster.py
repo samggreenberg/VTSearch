@@ -1,4 +1,4 @@
-"""Tests for the shipped roster of :class:`~vtscore.media.cleaner.MediaCleaner`s.
+"""Tests for the shipped roster of :class:`~vtscore.media.clipping.cleaner.MediaCleaner`s.
 
 The framework itself (registry, chain placement, dual payload, replay) is
 covered by ``test_media_cleaners.py``; this file exercises what each concrete

@@ -471,7 +471,7 @@ def _clip_image_to_bytes(file_path: Path, clip_box: Any) -> tuple[bytes, str] | 
     """Crop an image to ``clip_box``.  Returns ``(bytes, suffix)``, or ``None`` if unparseable.
 
     The box is read with the same parser the lazy-clip byte route uses
-    (:func:`~vtscore.media.clip_recipe.parse_clip_box`), so a region that
+    (:func:`~vtscore.media.clipping.clip_recipe.parse_clip_box`), so a region that
     replays for display replays identically for embedding.  A malformed box
     returns ``None``, which the caller turns into a whole-file embed — the
     same "better the parent than the wrong region" stance the other branches
@@ -479,7 +479,7 @@ def _clip_image_to_bytes(file_path: Path, clip_box: Any) -> tuple[bytes, str] | 
     """
     import io as _io
 
-    from vtscore.media.clip_recipe import parse_clip_box
+    from vtscore.media.clipping.clip_recipe import parse_clip_box
     from vtscore.media.image.decode import open_upright
 
     box = parse_clip_box(clip_box)
@@ -556,7 +556,7 @@ def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] |
     follows the converter step rather than running on the file.
 
     The dialect and the composition both come from
-    :func:`~vtscore.media.clip_recipe.converter_trail`, which the lazy-clip
+    :func:`~vtscore.media.clipping.clip_recipe.converter_trail`, which the lazy-clip
     byte route reads them with too, so the two replay paths cannot disagree
     about what a given origin records.
 
@@ -565,7 +565,7 @@ def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] |
     anyway, so there is nothing to gain from running the converter first - or
     when the recorded chain is malformed.
     """
-    from vtscore.media.clip_recipe import converter_trail
+    from vtscore.media.clipping.clip_recipe import converter_trail
 
     return converter_trail(params)
 

@@ -6,7 +6,7 @@ import io
 import math
 from typing import Any, Optional
 
-from vtscore.media.clipper import DefaultClipper, MediaClipper
+from vtscore.media.clipping.clipper import DefaultClipper, MediaClipper
 from vtscore.utils.optional_deps import agpl_import_error
 
 

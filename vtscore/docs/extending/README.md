@@ -24,7 +24,7 @@ The repo's own front door is
 `EXTENDING-*.md` guides cover the same ABCs plus the app-tier wiring
 (routes, forms, the pickers the frontend renders) that an in-repo
 contributor needs. Every page here names its app-side counterpart, and
-`scripts/check-extension-docs.py` holds both sets to the code so they
+`scripts/gates/check-extension-docs.py` holds both sets to the code so they
 cannot drift apart unnoticed.
 
 If you're contributing a plugin to the `vtscore` source tree, drop it
@@ -32,7 +32,7 @@ in the family's package; if you're shipping a separate distribution,
 declare an `importlib.metadata` entry point in the family's group. Both
 discovery paths converge on the same registry, and built-ins win on
 name clashes so a stray third-party package can't silently shadow a
-core plugin. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+core plugin. See [`vtscore/plugins/registry.py`](../../plugins/registry.py)
 for the registry and its entry-point loader (`PluginRegistry`), and the
 [plugins package doc](../packages/plugins.md) for the lower-level API
 surface.
@@ -115,7 +115,7 @@ third-party plugins.
 re-exports `PluginField` so you can import it alongside the family's
 base class. The frontend renders a form from `fields`, the CLI
 derives `argparse` flags from `fields`, and the marshmallow schema
-builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+builder validates POST bodies against `fields`. See [`vtscore/plugins/field.py`](../../plugins/field.py)
 for the full dataclass and the [plugins package doc](../packages/plugins.md#pluginfield)
 for the field-type matrix.
 
@@ -215,7 +215,7 @@ validators by hand keeps working; it is simply doing no additional work.
 | HTTP, flat plugin body | `validate_plugin_args()` (`vtsearch/routes/_plugins.py`) |
 | HTTP, `{"..._name", "field_values"}` body | `validate_exporter_field_values()` (same module) |
 | CLI | `PluginBase.validate_cli_field_values()` |
-| Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync/__init__.py`](../../sync/__init__.py)) |
+| Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync.py`](../../sync.py)) |
 | Saved settings | The app's AutoFind results exporter runs with a persisted `field_values` map and no schema in the loop, so this pass is the only one it gets |
 
 **Two families are outside it.** Media converter `params` and media
@@ -322,7 +322,7 @@ for the autouse fixtures every test inherits (`reset_contexts`,
 plugin grouped by family - useful for tooling, shell completion, and
 the `python app.py --list-plugins` CLI. Library families
 self-register at module import; app-only families are injected via
-`vtsearch.shim.register_app_plugin_families()` so the inventory module
+`vtsearch.seam_wiring.register_app_plugin_families()` so the inventory module
 stays free of cross-tier imports. See [`vtscore/plugins/inventory.py`](../../plugins/inventory.py)
 and the [plugins package doc](../packages/plugins.md#inventory) for
 the public API.

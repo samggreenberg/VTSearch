@@ -15,7 +15,7 @@ import sys
 import pytest
 
 from vtscore.datasets import labelset
-from vtscore.media import torch_setup
+from vtscore.media.torch_utils import torch_setup
 from vtscore.state import votes
 from vtscore.training.thresholds import knobs
 

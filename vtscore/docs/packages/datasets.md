@@ -37,7 +37,10 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/chunks.py` | `DeferredChunk`, a chunk walked but not built (a resumed CLI run's skip) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
-| `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
+| `vtscore/datasets/load_pipeline.py` | Load entry points: an importer's form values in, a background load out; chunking (`consume_chunks_into`, `auto_chunk_size`) |
+| `vtscore/datasets/load_workers.py` | What every load flow shares: the download / embed gates and their controller, the task harness, field parsers, failure handling |
+| `vtscore/datasets/load_origin.py` | The single-dataset load: the importer under the gates, then every post-import stage |
+| `vtscore/datasets/load_staging.py` | The combine flow's staging import, saved to a temporary pkl under `STAGING_DIR` |
 | `vtscore/datasets/load_multi.py` | Multi-dataset imports: one importer run fanned out into one dataset per `OutputSpec` |
 | `vtscore/datasets/import_event.py` | `DatasetImported`, the frozen event a finished import hands its `on_finished` callback |
 | `vtscore/datasets/stages/` | The post-import stages the pipeline runs - see below |
@@ -697,7 +700,7 @@ simulate, test = split_dataset(medias, test_fraction=0.2, seed=42)
 
 ## Concurrency gates
 
-`vtscore/datasets/load_pipeline.py` holds two module-level
+`vtscore/datasets/load_workers.py` holds two module-level
 [`ConcurrencyGate`](concurrency.md#concurrencygate)s (semaphores whose
 limit is re-read on every `acquire()`) that drive dataset loading:
 
@@ -713,6 +716,15 @@ under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
 gates directly; they're driven by the load orchestrator and read
 their limits with `vtscore.config.get_setting`.
+
+`reset_load_gates_for_tests()` rebinds both gates to fresh instances
+between tests, so code outside `load_workers` reads them through the
+module (`load_workers._embed_gate`), never through a `from ... import`
+copy; the same holds for the hook
+`register_last_embedder_persistence_hook` installs. The public names
+(`reset_load_gates_for_tests`, `register_last_embedder_persistence_hook`,
+`clear_dataset`, `STAGING_DIR`) still import from
+`vtscore.datasets.load_pipeline`.
 
 **Several datasets from one import** (`load_multi.py`). A multi-dataset
 load runs the importer's acquire phase once, under the download gate,

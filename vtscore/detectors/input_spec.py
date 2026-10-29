@@ -171,7 +171,7 @@ def resolve_clipper_spec(name: str, params: dict[str, Any] | None = None) -> dic
     """Validate a clipper choice and return it as an ``input_spec``.
 
     *name* must be a registered clipper, and every key of *params* one of its
-    declared :attr:`~vtscore.media.clipper.MediaClipper.parameters` (a typo
+    declared :attr:`~vtscore.media.clipping.clipper.MediaClipper.parameters` (a typo
     would otherwise be dropped by ``with_params`` without a word).  The values
     go through the clipper's own ``with_params``, so a value it cannot take
     (``duration=abc``, a zero-length tile) is refused here with its message.

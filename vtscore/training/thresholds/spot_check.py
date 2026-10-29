@@ -50,7 +50,18 @@ The bands, the picks and the likely range are the ``grow-fine`` reference in
 ``scripts/experiments/calibration/analyze_line_estimate_4383.py``
 (``band_edges``, ``draw_audits``, ``Audits.union_estimate``), and the walk's
 stop is ``rule_fb_walk`` in ``analyze_fbeta_line_4411.py``;
-``scripts/check-eval-app-sync.py`` pins this module against them.
+``scripts/gates/check-eval-app-sync.py`` pins the schedule, the likely range
+and the walk against them.
+
+The spot check is four modules, split along its seams in #5425, each reading
+only the ones before it: :mod:`~vtscore.training.thresholds.check_schedule`
+(the knobs, the bands and the schedule),
+:mod:`~vtscore.training.thresholds.ranges` (the likely range), this one (the
+ranking and the walk), and :mod:`~vtscore.training.thresholds.balance` (the
+mixture's counts and the balance's state; it reads this module's two classes
+as types only).  Every public name of the four still imports from here.  A
+stub goes on the module that defines the name: the other three never read
+the copy here.
 
 Everything here is scores, ids and labels - never a vector - so a
 :class:`SpotCheck` and a :class:`LineRanking` may live on a detector context
@@ -59,348 +70,73 @@ for the life of the process (CLAUDE.md, "No Persisted Vectors").
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from decimal import ROUND_FLOOR, Decimal
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR, scored_mask
-
-#: The level the likely range is drawn at: each band's tail (#4257's alpha).
-#: #4272 split it over the bands in the set; #4483 dropped the split.
-CHECK_ALPHA = 0.05
-
-#: The balance's cap at beta <= 1: the top 32 (#4257's ``a:top32``, the #4267
-#: ruling).  Above beta 1 it is :data:`CHECK_RECALL_CANDIDATE`.
-CHECK_BASE_CANDIDATE = 32
-#: The balance's cap above beta 1, where recall weighs more: the top 128.
-CHECK_RECALL_CANDIDATE = 128
-
-#: The first band's size, and the smallest set a walk can keep (#4383).
-BAND_BASE = 8
-
-#: The picks a band is audited with (owner, 2026-09-30: 5 picks a band).
-CHECK_MIN_PICKS = 5
-
-#: The balance (#4413): the user's precision/recall preference as F-beta's beta.
-#: The presets are precision-leaning, balanced and recall-leaning; any beta in
-#: ``[BETA_MIN, BETA_MAX]`` is accepted.  The ends are the range's own ends, 1/4
-#: and 4 (the owner's pick of 2026-10-03 on #4448, priced on #4452's line: past
-#: 1/3 and 3 each end buys at most 0.02 more of what it leans toward); they were
-#: 0.5 and 2.  A line no check has measured is ``unchecked``; a finished walk is
-#: ``checked``.
-BALANCE_PRESETS: tuple[float, ...] = (0.25, 1.0, 4.0)
-DEFAULT_BETA = 1.0
-BETA_MIN, BETA_MAX = 0.25, 4.0
-#: How a check treats the line at a balance (:func:`check_shape`):
-#: ``advisory``, the app's at every preset (#4452) - the walk runs and its
-#: votes train, but the line stays where the labels (or, with no trained head,
-#: the unchecked count rule) put it - and ``trim`` (#4427's pricing), which the
-#: eval harness can force - the walk audits the bands holding the line, may
-#: only step shallower, and the line takes its end.
-CHECK_ADVISORY = "advisory"
-CHECK_TRIM = "trim"
-CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
-BALANCE_UNCHECKED = "unchecked"
-BALANCE_CHECKED = "checked"
-#: A structural detector's line (#4505): the verification gate's boundary, not a
-#: cut on a ranking, so no check applies to it and it is neither unchecked nor
-#: checked.  Its count is what the gate passes (:func:`gate_balance_state`).
-BALANCE_GATE = "gate"
-BALANCE_STATES = (BALANCE_UNCHECKED, BALANCE_CHECKED, BALANCE_GATE)
-
-#: The surfacing provenance a check's vote is recorded with
-#: (:mod:`vtscore.datasets.vote_provenance`): the app's route and the eval
-#: harness both write this one dict, so the two cannot drift.
-CHECK_PROVENANCE: dict[str, str] = {"flow": "check"}
-
-#: A check's status while its bands are still being voted on, and once it was
-#: abandoned (its votes so far stay ordinary votes; the line's state is as it was).
-CHECK_RUNNING = "running"
-CHECK_CANCELLED = "cancelled"
-
-#: Which way the walk last moved: where it started, one band deeper, or one
-#: band shallower.
-WALK_START = "start"
-WALK_DEEPER = "deeper"
-WALK_SHALLOWER = "shallower"
-
-_EPS = 1e-9
-
-#: Every response rounds a score to this many decimals (``round(score, 4)``),
-#: and a threshold to the same.  The line is placed on that grid so the last
-#: item of the set it keeps clears it whether a consumer compares the raw score
-#: or the rounded one.
-LINE_DECIMALS = 4
-
-
-def line_under(score: float) -> float:
-    """*score* floored to :data:`LINE_DECIMALS`: the highest response-grid value the item still clears.
-
-    ``math.floor(score * 1e4) / 1e4`` can land a decimal short (``0.4657``
-    reads as ``4656.999...``), so this goes through :class:`~decimal.Decimal`.
-    """
-    quantum = Decimal(1).scaleb(-LINE_DECIMALS)
-    return float(Decimal(repr(float(score))).quantize(quantum, rounding=ROUND_FLOOR))
-
-
-# ------------------------------------------------------------------ the bands
-
-
-def band_edges(n: int, base: int = BAND_BASE) -> tuple[int, ...]:
-    """``(0, 8, 16, 32, 64, ..., n)``: where the bands of a ranking of *n* items start and end.
-
-    Band ``b`` is the ranks ``[edges[b], edges[b + 1])``.  The last band runs
-    to the end of the ranking, however short that leaves it; a ranking of
-    fewer than *base* items is one band.  The reference's ``band_edges``.
-    """
-    if n <= 0:
-        return (0,)
-    edges = [0]
-    e = base
-    while e < n:
-        edges.append(e)
-        e *= 2
-    edges.append(n)
-    return tuple(edges)
-
-
-def band_edges_fine(n: int, start: int, base: int = BAND_BASE) -> tuple[int, ...]:
-    """:func:`band_edges` with each band past *start* split in two (#4427's ``fine`` walk arm).
-
-    The bands up to the edge holding *start* are the shipped ones; beyond it
-    the midpoint of every band is an edge too, so a walk from 32 steps 48, 64,
-    96, 128, ... and can end between the shipped edges, where the best cut's
-    size sits on the bench (median ~46 at beta 1).
-    """
-    edges = list(band_edges(n, base))
-    out: list[int] = []
-    for a, b in zip(edges, edges[1:]):
-        out.append(a)
-        if a >= start and b - a >= 2:
-            out.append(a + (b - a) // 2)
-    out.append(edges[-1])
-    return tuple(out)
-
-
-def bands_for(count: int, edges: Sequence[int]) -> int:
-    """How many bands from the top it takes to hold the top *count*: at least one."""
-    for b in range(1, len(edges)):
-        if edges[b] >= count:
-            return b
-    return max(1, len(edges) - 1)
-
-
-# ------------------------------------------------------------------ the schedule
-
-
-@dataclass(frozen=True)
-class CheckSchedule:
-    """What a check at one balance costs: its starting candidate, rounds and picks a round."""
-
-    candidate: int
-    rounds: int
-    picks: int
-
-    def as_dict(self) -> dict[str, int]:
-        return {"candidate": self.candidate, "rounds": self.rounds, "picks": self.picks}
-
-
-def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
-    """``(K, bands, m)`` for a balance *beta* (#4413): the unchecked cap, the bands that hold it, the picks a band.
-
-    *K* is :data:`CHECK_BASE_CANDIDATE` (the top 32) at beta <= 1 and
-    :data:`CHECK_RECALL_CANDIDATE` (the top 128) above it: the counts the
-    precision floor's schedule kept at 50% and at 10% (the #4267 ruling),
-    which the balance inherited for the preset it leans toward.  It is what
-    holds the mixture's F-beta argmax on a large sparse corpus, where the
-    mixture over-counts the positives and would return 2-4x too much (#4411);
-    the walk starts from the same bands.  ``rounds`` is how many bands the walk
-    audits before its first verdict, the bands that hold *K*
-    (:func:`rounds_for`); ``picks`` is what each band costs,
-    :data:`CHECK_MIN_PICKS`.
-    """
-    if not (BETA_MIN - _EPS <= float(beta) <= BETA_MAX + _EPS):
-        raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {beta!r}")
-    candidate = CHECK_BASE_CANDIDATE if float(beta) <= 1.0 + _EPS else CHECK_RECALL_CANDIDATE
-    return CheckSchedule(candidate, rounds_for(candidate), CHECK_MIN_PICKS)
-
-
-def check_shape(beta: float) -> str:
-    """How a check at *beta* treats the line: ``advisory`` at every preset since #4452.
-
-    Since #4452 the app's line comes from the labelset alone (the class model
-    the calibration folds imply, at the prevalence the detector's evidence
-    pools; :mod:`~vtscore.training.thresholds.labels_line`), so a walk's end -
-    a count on the corpus it walked - cannot be the line: an exported labelset
-    would not reproduce it.  The check audits and reports, its picks are
-    ordinary votes the next retrain learns from (uniform picks within bands,
-    the least biased evidence the labels hold), and the line stays where the
-    labels put it.  ``trim`` remains a shape the eval harness can force.
-
-    #4427's pricing, which set ``trim`` above beta 1 for the count-based line:
-
-    Priced on the objective (the withheld set's F-beta above the app's
-    threshold; Binary, 5 seeds, every preset): the full walk that moved the
-    line to its peak lost at beta 0.5 and 1 (-0.06 and -0.03 against the
-    unchecked line) by buying recall with bands that were mostly wrong.  An
-    advisory check - its votes train, the line stays at the unchecked rule -
-    was the best there (+0.09 and +0.04 over the walk) and the worst at beta
-    2 (-0.02), where its votes tighten the model and the re-drawn line
-    returns too few for a recall-leaning balance.  A walk that may only trim
-    the line was never worse than the full walk and the best at beta 2
-    (+0.01).  So the check's direction follows the preset the user chose.
-    """
-    del beta  # every preset (#4452)
-    return CHECK_ADVISORY
-
-
-#: How an eval arm whose ``None`` already means "the shipped default" spells
-#: *no balance*: the Inclusion arm, whose line is the fold-anchored cut at the
-#: arm's ``inclusion``.
-NO_BALANCE = "off"
-
-
-def resolve_line_knobs(beta: float | str | None) -> float | None:
-    """The balance an eval arm draws its line at; ``None`` (unpinned) is the app's default (#4413).
-
-    The harness's counterpart of :func:`vtscore.state.line_knobs`, which is
-    what the app hands every retrain and re-cut.  ``None`` - the default arm -
-    resolves to :data:`DEFAULT_BETA`, what an unset user setting resolves to;
-    :data:`NO_BALANCE` is the Inclusion arm (``None``: no balance draws the
-    line); a number pins the balance arm.  Validated here, so a malformed arm
-    fails before anything expensive runs.
-    """
-    if beta is None:
-        return DEFAULT_BETA
-    if beta == NO_BALANCE:
-        return None
-    if isinstance(beta, (str, bool)):
-        raise ValueError(f"beta must be a number in [{BETA_MIN}, {BETA_MAX}], None or {NO_BALANCE!r}; got {beta!r}")
-    balance_schedule(float(beta))
-    return float(beta)
-
-
-def fbeta_score(tp: float, k: float, n_pos: float, beta: float) -> float:
-    """F-beta of a set of *k* items holding *tp* positives, out of *n_pos* in the corpus."""
-    denominator = beta * beta * n_pos + k
-    return (1.0 + beta * beta) * tp / denominator if denominator > 0 else 0.0
-
-
-def rounds_for(candidate: int, base: int = BAND_BASE) -> int:
-    """How many bands a walk audits before its first verdict: the bands from the top that hold *candidate*.
-
-    3 for the top 32 (8, 8, 16), 4 for 64, 5 for 128; a corpus smaller than
-    the candidate is its own last band.
-    """
-    return bands_for(candidate, band_edges(max(candidate, 1), base))
-
-
-def range_tail(rounds: int, alpha: float = CHECK_ALPHA) -> float:
-    """Each tail of a band's bound when *rounds* bands make up the set: ``alpha``, whatever the bands (#4483).
-
-    #4272 split *alpha* over the bands (the union bound) because, under the
-    precision floor, the same labels decided a pass and drew its range: a plain
-    90% range sat above the truth 11% of the time after a first pass.  The
-    check has been advisory since #4452, and with exact band bounds and no
-    split the range held the truth in at least 98.9% of 3,568 real checks and
-    of simulated checks at clicks 25-100, every preset, for 0.01-0.08 less
-    width (``docs/experiments/2026-10-15-check-range-4483/REPORT.md``).
-    """
-    del rounds
-    return alpha
-
-
-# ---------------------------------------------------------------- the bound
-
-
-def clopper_pearson_lower(right: int, labelled: int, level: float) -> float:
-    """One-sided Clopper-Pearson lower bound on a proportion at confidence ``1 - level``."""
-    if labelled <= 0 or right <= 0:
-        return 0.0
-    from scipy.stats import beta  # noqa: PLC0415
-
-    return float(beta.ppf(level, right, labelled - right + 1))
-
-
-def clopper_pearson_upper(right: int, labelled: int, level: float) -> float:
-    """One-sided Clopper-Pearson upper bound on a proportion at confidence ``1 - level``."""
-    if labelled <= 0 or right >= labelled:
-        return 1.0
-    from scipy.stats import beta  # noqa: PLC0415
-
-    return float(beta.ppf(1.0 - level, right + 1, labelled - right))
-
-
-def hypergeometric_lower(right: int, labelled: int, size: int, level: float) -> int:
-    """The fewest right items a set of *size* can hold, at confidence ``1 - level``, when *right* of *labelled* uniform picks were.
-
-    The least K under which drawing *right* or more right ones has
-    probability above *level* (the exact one-sided bound for sampling without
-    replacement from a set of known size).  It is never below *right*.
-    """
-    if labelled <= 0 or right <= 0:
-        return 0
-    from scipy.stats import hypergeom  # noqa: PLC0415
-
-    k = np.arange(right, size - (labelled - right) + 1)
-    return int(k[np.argmax(hypergeom.sf(right - 1, size, k, labelled) > level)])
-
-
-def hypergeometric_upper(right: int, labelled: int, size: int, level: float) -> int:
-    """The most right items a set of *size* can hold, at confidence ``1 - level``, when *right* of *labelled* uniform picks were.
-
-    The greatest K under which drawing *right* or fewer right ones has
-    probability above *level*.  It is never above ``size - (labelled - right)``.
-    """
-    if labelled <= 0:
-        return size
-    if right >= labelled:
-        return size
-    from scipy.stats import hypergeom  # noqa: PLC0415
-
-    k = np.arange(right, size - (labelled - right) + 1)
-    return int(k[np.flatnonzero(hypergeom.cdf(right, size, k, labelled) > level)[-1]])
-
-
-@dataclass(frozen=True)
-class LikelyRange:
-    """How much of a set is likely right, from the check's labels inside it.
-
-    ``lo`` / ``hi`` bound the set's precision; ``labelled`` is how many of the
-    set's items the check labelled and ``right`` how many of those were right.
-    """
-
-    lo: float
-    hi: float
-    labelled: int
-    right: int
-
-    def as_dict(self) -> dict[str, Any]:
-        return {"lo": round(self.lo, 4), "hi": round(self.hi, 4), "labelled": self.labelled, "right": self.right}
-
-
-def likely_range(right: int, labelled: int, candidate: int, tail: float) -> LikelyRange:
-    """The range shown for a set of *candidate* items whose *labelled* uniform labels hold *right*.
-
-    Exact (``right / candidate``) for a census; otherwise the exact bound for a
-    set of known size (:func:`hypergeometric_lower` / :func:`hypergeometric_upper`,
-    each tail at *tail*), 0-100% with no labels.  #4483 replaced the
-    Clopper-Pearson interval, which bounds an endless list: a band of 8 with 4
-    of 5 right holds 4 to 7 right items, which it read as 34-99% and this reads
-    as 50-88%.  The reference is ``hg_bounds`` in
-    ``scripts/experiments/state_of_app/check_range_4483.py``.
-    """
-    if candidate > 0 and labelled >= candidate:
-        exact = right / candidate
-        return LikelyRange(exact, exact, labelled, right)
-    if candidate <= 0 or labelled <= 0:
-        return LikelyRange(0.0, 1.0, max(0, labelled), max(0, right))
-    lo = hypergeometric_lower(right, labelled, candidate, tail)
-    hi = hypergeometric_upper(right, labelled, candidate, tail)
-    return LikelyRange(lo / candidate, hi / candidate, labelled, right)
+from vtscore.training.thresholds.balance import (
+    MIXTURE_MIN_STD_SHARE,
+    BalanceState,
+    acquisition_count,
+    acquisition_threshold,
+    aim_words,
+    applicable_balance,
+    balance_count,
+    balance_line,
+    balance_state,
+    fbeta_count,
+    gate_balance_state,
+    mixture_positives,
+    mixture_posterior,
+    walk_positives,
+)
+from vtscore.training.thresholds.check_schedule import (
+    _EPS,
+    BALANCE_CHECKED,
+    BALANCE_GATE,
+    BALANCE_PRESETS,
+    BALANCE_STATES,
+    BALANCE_UNCHECKED,
+    BAND_BASE,
+    BETA_MAX,
+    BETA_MIN,
+    CHECK_ADVISORY,
+    CHECK_ALPHA,
+    CHECK_BASE_CANDIDATE,
+    CHECK_CANCELLED,
+    CHECK_MIN_PICKS,
+    CHECK_PROVENANCE,
+    CHECK_RECALL_CANDIDATE,
+    CHECK_RUNNING,
+    CHECK_SHAPES,
+    CHECK_TRIM,
+    DEFAULT_BETA,
+    LINE_DECIMALS,
+    NO_BALANCE,
+    WALK_DEEPER,
+    WALK_SHALLOWER,
+    WALK_START,
+    CheckSchedule,
+    balance_schedule,
+    band_edges,
+    band_edges_fine,
+    bands_for,
+    check_shape,
+    fbeta_score,
+    line_under,
+    resolve_line_knobs,
+    rounds_for,
+)
+from vtscore.training.thresholds.ranges import (
+    LikelyRange,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    hypergeometric_lower,
+    hypergeometric_upper,
+    likely_range,
+    range_tail,
+)
 
 
 # ---------------------------------------------------------------- the ranking
@@ -436,6 +172,8 @@ class LineRanking:
     def from_scores(
         cls, ids: Sequence[int], scores: Sequence[float] | np.ndarray, voted: Iterable[int] | None = None
     ) -> "LineRanking":
+        from vtscore.training.thresholds.knobs import scored_mask  # noqa: PLC0415
+
         id_arr = np.asarray(list(ids), dtype=np.int64)
         score_arr = np.asarray(scores, dtype=np.float64)
         if id_arr.shape != score_arr.shape:
@@ -1015,382 +753,6 @@ class SpotCheck:
         }
 
 
-# ------------------------------------------------------------ the mixture
-
-
-#: A mixture component whose spread is under this share of the ranking's
-#: score range has collapsed onto a few near-duplicate scores (#4419): its
-#: posterior puts no mass on anything else, so the fit is no estimate and the
-#: counts that read it keep the schedule's cap instead.
-MIXTURE_MIN_STD_SHARE = 1e-2
-
-
-def _mixture_is_sound(fit: Any, scores: np.ndarray) -> bool:
-    """True when both components of *fit* spread over a real share of *scores*' range (#4419)."""
-    if fit is None or not (fit.var_hi > 0 and fit.var_lo > 0):
-        return False
-    spread = float(scores.max() - scores.min()) if scores.size else 0.0
-    if not spread > 0:
-        return False
-    least = MIXTURE_MIN_STD_SHARE * spread
-    return math.sqrt(float(fit.var_hi)) >= least and math.sqrt(float(fit.var_lo)) >= least
-
-
-def mixture_posterior(
-    ranking: LineRanking | None,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-) -> np.ndarray | None:
-    """The mixture's high-component posterior at each unvoted item of *ranking*, best first; ``None`` when none fits.
-
-    A 2-component mixture is fitted on the ranking's scores
-    (:func:`~vtscore.training.thresholds.gmm.anchored_gmm_fit`, which
-    subsamples a large ranking), anchored by the scores of the items in
-    *labels* (``True`` = Good) that the ranking holds; this is the read every
-    mixture-based count shares (#4389, #4413).  **Fitted once per ranking**,
-    on the anchors of the first caller - the retrain's training labels, or
-    the human votes for a ranking a cold Find built - and memoised on it, so
-    the re-cut and every response that reports the line's state read the same
-    fit; only the unvoted set the posterior is read over follows the live
-    votes, as the ranking's own line does.  A retrain parks a new ranking,
-    and with it a new fit on the votes it trained on.  A fit with a collapsed component
-    (:data:`MIXTURE_MIN_STD_SHARE`, #4419) is no fit: on a tiny ranking the
-    high component can land on the top two scores alone, and its posterior
-    then says nothing about the rest.
-    """
-    if ranking is None or ranking.size == 0:
-        return None
-    excluded = ranking.voted.union(int(v) for v in also_voted)
-    mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
-    scores = ranking.scores[mask]  # already best first
-    if scores.size == 0:
-        return None
-    from scipy.stats import norm  # noqa: PLC0415
-
-    if not ranking.mixture:
-        from vtscore.training.thresholds.gmm import anchored_gmm_fit  # noqa: PLC0415
-
-        anchor_scores: list[float] = []
-        anchor_labels: list[float] = []
-        if labels:
-            index = {int(cid): i for i, cid in enumerate(ranking.ids.tolist())}
-            for cid, is_good in labels.items():
-                row = index.get(int(cid))
-                if row is not None:
-                    anchor_scores.append(float(ranking.scores[row]))
-                    anchor_labels.append(1.0 if is_good else 0.0)
-        fit, _provenance = anchored_gmm_fit(ranking.scores, anchor_scores, anchor_labels)
-        ranking.mixture.append(fit if _mixture_is_sound(fit, ranking.scores) else None)
-    fit = ranking.mixture[0]
-    if fit is None:
-        return None
-    hi = fit.w_hi * norm.pdf(scores, fit.mu_hi, math.sqrt(fit.var_hi))
-    lo = fit.w_lo * norm.pdf(scores, fit.mu_lo, math.sqrt(fit.var_lo))
-    with np.errstate(invalid="ignore", divide="ignore"):
-        return np.nan_to_num(hi / (hi + lo), nan=0.5)
-
-
-def mixture_positives(
-    ranking: LineRanking | None,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-) -> float | None:
-    """The mixture's count of positives among the unvoted items: the posterior's total (#4413).
-
-    What a balance walk turns audited shares into recall with.  Over-counts
-    on large sparse corpora (10-28x at 0.1%, #3827), which is why the
-    unchecked balance line is capped and the walk audits.
-    """
-    posterior = mixture_posterior(ranking, labels, also_voted)
-    return None if posterior is None else float(posterior.sum())
-
-
-def walk_positives(
-    ranking: LineRanking | None,
-    beta: float,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-) -> float:
-    """The positives a balance walk reads recall against: the mixture's count, else the balance's cap (#4419).
-
-    The mixture (:func:`mixture_positives`) is the estimate when it has one.
-    When it does not - nothing fits, or the fit collapsed - the walk still
-    has to start, so the denominator is the set the unchecked line would keep
-    anyway: the balance's cap (:func:`balance_schedule`), lowered to what is
-    unvoted.  Against that denominator the walk goes deeper while the audited
-    share right holds up.  A sound fit that counts fewer than one positive (every positive
-    already voted Good, say) takes the cap too: the walk's recall is its
-    audited positives over this count, so a near-zero count would report
-    every check as having found them all.  Always at least one.  The app's
-    check route and the harness's end-of-run check both read this, so a
-    check starts in the same cases.
-    """
-    n_pos = mixture_positives(ranking, labels, also_voted)
-    if n_pos is not None and n_pos >= 1.0:
-        return n_pos
-    cap = balance_schedule(beta).candidate
-    unvoted = ranking.unvoted_ids(also_voted).size if ranking is not None else 0
-    return float(max(1, min(cap, unvoted) if unvoted else cap))
-
-
-def acquisition_count(
-    ranking: LineRanking | None,
-    beta: float,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-    factor: float | None = ACQUISITION_ARGMAX_FACTOR,
-) -> int | None:
-    """How deep Autopilot's acquisition cut sits under a balance: *factor* of the F-beta argmax's depth (#4409).
-
-    The argmax is :func:`fbeta_count`'s, uncapped; the count is at least one.
-    ``None`` with no *factor* (the shipped value since the #4427 revert: the
-    caller keeps the line - 4 cut), no ranking or no mixture estimate.
-    :data:`~vtscore.training.thresholds.knobs.ACQUISITION_ARGMAX_FACTOR` is
-    what ships; the harness's ``acq_p_crossing`` arm passes a number.
-    """
-    if factor is None:
-        return None
-    k = fbeta_count(ranking, beta, labels, also_voted)
-    return None if k is None else max(1, round(float(factor) * k))
-
-
-def acquisition_threshold(
-    ranking: LineRanking | None,
-    beta: float,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-    factor: float | None = ACQUISITION_ARGMAX_FACTOR,
-) -> float | None:
-    """The score the acquisition cut sits at under a balance (#4409): the last unvoted item :func:`acquisition_count` keeps."""
-    k = acquisition_count(ranking, beta, labels, also_voted, factor)
-    if k is None or ranking is None:
-        return None
-    cut = ranking.threshold_for(k, also_voted)
-    return None if cut is None or not math.isfinite(float(cut)) else float(cut)
-
-
-def fbeta_count(
-    ranking: LineRanking | None,
-    beta: float,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-) -> int | None:
-    """How many unvoted items the mixture says maximise F-*beta*: the ``fb-gmm`` rule of #4411.
-
-    The posterior's cumulative sum is the positives in the top *k*, its total
-    the corpus's; the count is the argmax of the F-beta those give.  ``None``
-    when nothing fits.  Right-sized at 5% and on small corpora, 2-4x too deep
-    on large sparse ones, so the unchecked line caps it (:func:`balance_count`).
-    """
-    posterior = mixture_posterior(ranking, labels, also_voted)
-    if posterior is None:
-        return None
-    tp = np.cumsum(posterior)
-    b2 = float(beta) * float(beta)
-    est = (1.0 + b2) * tp / (b2 * float(tp[-1]) + np.arange(1, posterior.size + 1))
-    return int(np.argmax(est)) + 1
-
-
-# ------------------------------------------------------------------- the line
-
-
-def aim_words(state: Mapping[str, Any]) -> str:
-    """The balance a line's state was drawn at, in words for a log line (#4413): ``at F1``.
-
-    What a headless run says beside the unchecked set it exports.
-    """
-    return f"at F{state['beta']:g}"
-
-
-@dataclass(frozen=True)
-class BalanceState:
-    """What the balance says about a detector's line: its state, the set's size and what the check estimated (#4413).
-
-    The wire shape every response that carries a line carries beside its
-    ``threshold`` (:func:`vtscore.state.core.detector_balance_state`):
-    ``status`` is ``unchecked``, ``checked``, or ``gate`` on a structural
-    detector's line (:func:`gate_balance_state`); ``precision``
-    and ``recall`` are the likely ranges of the set the line kept when the
-    check started (``kept_at_check``, #4483), or of the audited set where the
-    check recorded no count; ``fbeta`` is the walk's estimate for its own set.
-    Under the ``advisory`` shape (the app's, :func:`check_shape`) the audited
-    set is the walk's end and the kept ``count`` is the line's - what a drawn
-    line keeps (the labels' line, #4452), else the unchecked count rule's;
-    under ``trim`` they coincide.
-    """
-
-    beta: float
-    status: str
-    count: int
-    precision: LikelyRange | None
-    recall: LikelyRange | None
-    fbeta: float | None
-    stale: bool
-    schedule: CheckSchedule
-    #: How a check treats the line at this beta (:func:`check_shape`):
-    #: ``advisory``, the app's at every preset (the ranges inform, the count
-    #: stays the line's), or ``trim``, an eval arm (the walk's end is the count).
-    shape: str = CHECK_TRIM
-    #: The set the last check audited (the walk's end), which under ``advisory``
-    #: is not the set the line keeps; ``None`` while unchecked.
-    audited: int | None = None
-    #: Whether a check has anything to walk (#4489): an unvoted item in the
-    #: ranking.  ``False`` with no ranking - a structural detector, whose line
-    #: is the verification gate's boundary rather than a cut on a ranking, or
-    #: one not trained on this corpus yet - or with every item in it voted.
-    #: A check cannot start on such a line, so a client offers none.
-    checkable: bool = True
-    #: How many unvoted items the line kept when the last check started: the
-    #: set ``precision`` and ``recall`` describe (#4483).  ``None`` while
-    #: unchecked, and where the ranges describe the audited set instead.
-    kept_at_check: int | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "beta": self.beta,
-            "status": self.status,
-            "count": self.count,
-            "precision": None if self.precision is None else {**self.precision.as_dict(), "stale": self.stale},
-            "recall": None if self.recall is None else {**self.recall.as_dict(), "stale": self.stale},
-            "fbeta": None if self.fbeta is None else round(self.fbeta, 4),
-            "schedule": self.schedule.as_dict(),
-            "shape": self.shape,
-            "audited": self.audited,
-            "checkable": self.checkable,
-            "kept_at_check": self.kept_at_check,
-        }
-
-
-def applicable_balance(beta: float, result: SpotCheck | None) -> SpotCheck | None:
-    """*result* when it is a finished walk at *beta*; ``None`` otherwise.
-
-    A result is about the balance it was run at: a different balance is
-    unchecked until it is checked itself (the old result waits, and shows
-    again if the balance moves back).
-    """
-    if result is None or not result.finished:
-        return None
-    if abs(result.beta - float(beta)) > _EPS:
-        return None
-    return result
-
-
-def balance_count(beta: float, result: SpotCheck | None, proposal: int | None = None, shape: str | None = None) -> int:
-    """The count the line keeps at *beta*: the finished walk's end where the check's shape lets it move the line, else the unchecked count.
-
-    The unchecked count is the balance's cap (:func:`balance_schedule`),
-    lowered to *proposal* when the caller has one: the mixture's F-beta argmax
-    (:func:`fbeta_count`).  Under the ``advisory`` shape (:func:`check_shape`,
-    every preset; #4452) a finished walk informs the line and never moves it;
-    *shape* overrides the preset's (the harness's ``walk_shape`` arms).
-    """
-    applicable = applicable_balance(beta, result)
-    if applicable is not None and (shape or check_shape(beta)) != CHECK_ADVISORY:
-        return applicable.k
-    count = balance_schedule(beta).candidate
-    if proposal is not None:
-        count = max(1, min(count, int(proposal)))
-    return count
-
-
-def balance_line(
-    ranking: LineRanking | None,
-    beta: float,
-    result: SpotCheck | None = None,
-    also_voted: Iterable[int] = (),
-    proposal: int | None = None,
-    shape: str | None = None,
-) -> float | None:
-    """The threshold the line sits at under a balance: the last item of the set it keeps (``None``: no ranking)."""
-    if ranking is None:
-        return None
-    return ranking.threshold_for(balance_count(beta, result, proposal, shape), also_voted)
-
-
-def balance_state(
-    beta: float,
-    result: SpotCheck | None = None,
-    ranking: LineRanking | None = None,
-    also_voted: Iterable[int] = (),
-    proposal: int | None = None,
-    shape: str | None = None,
-    threshold: float | None = None,
-) -> BalanceState:
-    """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
-
-    With *threshold* (the detector's line: the labels' line, #4452, a
-    centroid or typed-query head's line, or a trained head's fallback cut) the
-    count is how many unvoted items of *ranking* score at or above it - the set
-    the line keeps there, which may be none - rather than the count rule's.
-
-    *shape* overrides the preset's check shape (:func:`check_shape`); the
-    harness's full-walk arm passes ``trim`` so the walk's end is the count.
-    """
-    schedule = balance_schedule(beta)
-    shape = shape or check_shape(beta)
-    applicable = applicable_balance(beta, result)
-    count = balance_count(beta, result, proposal, shape)
-    also_voted = frozenset(int(v) for v in also_voted)
-    checkable = ranking is not None and ranking.unvoted_ids(also_voted).size > 0
-    if threshold is not None and ranking is not None:
-        excluded = ranking.voted.union(int(v) for v in also_voted)
-        mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
-        count = int((ranking.scores[mask] >= float(threshold)).sum())
-    elif ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
-        # The unchecked rule's count, capped by what is unvoted; a walk's end
-        # under ``trim`` is a band edge of the ranking it walked, kept as is.
-        count = min(count, len(ranking.candidate(count, also_voted)))
-    if applicable is None:
-        return BalanceState(
-            float(beta), BALANCE_UNCHECKED, count, None, None, None, False, schedule, shape, None, checkable
-        )
-    stale = ranking is not None and applicable.is_stale(ranking, also_voted)
-    # The ranges describe the set the line kept when the check started (#4483),
-    # or the walk's own set where the check recorded no count.
-    top = applicable.range_count
-    return BalanceState(
-        float(beta),
-        BALANCE_CHECKED,
-        count,
-        applicable.range_over(top),
-        applicable.recall_range_over(top),
-        applicable.fbeta_estimate(),
-        stale,
-        schedule,
-        shape,
-        applicable.k,
-        checkable,
-        applicable.kept,
-    )
-
-
-def gate_balance_state(beta: float, passed: Iterable[int], also_voted: Iterable[int] = ()) -> BalanceState:
-    """The balance's state on a line the structural verification gate draws (#4505).
-
-    On a structural dataset the line is the gate's boundary, not a cut on a
-    ranking (:func:`~vtscore.training.structural_similarity.maybe_structural_rerank`
-    drops the ranking), so the count rule's 32 says nothing about it.  The
-    count is what the gate keeps: the *passed* items (those at or above its
-    threshold) that are not in *also_voted*.  ``status`` is ``gate``: no check
-    applies, so it carries no ranges, and ``checkable`` is ``False``.
-    """
-    voted = frozenset(int(v) for v in also_voted)
-    count = sum(1 for i in passed if int(i) not in voted)
-    return BalanceState(
-        float(beta),
-        BALANCE_GATE,
-        count,
-        None,
-        None,
-        None,
-        False,
-        balance_schedule(beta),
-        check_shape(beta),
-        None,
-        False,
-    )
-
-
 __all__ = [
     "BALANCE_CHECKED",
     "BALANCE_GATE",
@@ -1441,4 +803,12 @@ __all__ = [
     "DEFAULT_BETA",
     "range_tail",
     "rounds_for",
+    "LINE_DECIMALS",
+    "MIXTURE_MIN_STD_SHARE",
+    "acquisition_count",
+    "acquisition_threshold",
+    "aim_words",
+    "band_edges_fine",
+    "resolve_line_knobs",
+    "walk_positives",
 ]

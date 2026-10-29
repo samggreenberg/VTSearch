@@ -1,9 +1,9 @@
 """Small leftover helpers.
 
 State, plugins, sync, concurrency, security, and audio helpers have moved
-to their own top-level packages - see ``vtscore/state``, ``vtscore/plugins``,
-``vtscore/sync``, ``vtscore/concurrency``, ``vtscore/security``, and
-``vtscore/media/audio``.
+to their own top-level modules - see :mod:`vtscore.state`, :mod:`vtscore.plugins`,
+:mod:`vtscore.sync`, :mod:`vtscore.concurrency`, :mod:`vtscore.security`, and
+:mod:`vtscore.media.audio`.
 
 Remaining here:
 - :mod:`vtscore.utils.hashing` - ``content_md5``/``content_sha1``/``file_md5``
@@ -19,6 +19,6 @@ Deprecated aliases (#5399), each handing back the module its helpers were
 folded into:
 
 - :mod:`vtscore.utils.hits` - now :mod:`vtscore.datasets.labelset`.
-- :mod:`vtscore.utils.import_metadata` - now :mod:`vtscore.media.torch_setup`.
+- :mod:`vtscore.utils.import_metadata` - now :mod:`vtscore.media.torch_utils.torch_setup`.
 - :mod:`vtscore.utils.scores` - now :mod:`vtscore.training.thresholds.knobs`.
 """

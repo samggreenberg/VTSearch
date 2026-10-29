@@ -191,7 +191,7 @@ than in its place.
   - **One encoder each.** Each half loads only the encoder it needs: the image half 440M parameters, the audio
     half 570M.
   - **Audio input** is decoded to 16 kHz mono and embedded from its first 30 s, zero-padded to 1 s.
-  - **Code:** `vtscore/media/_embeddinggemma2.py`, `vtscore/media/image/embedder_embeddinggemma2.py`,
+  - **Code:** `vtscore/media/_embeddinggemma2.py`, `vtscore/media/image/embedders/embedder_embeddinggemma2.py`,
     `vtscore/media/audio/embedder_embeddinggemma2_audio.py`.
 - **The environment.**
   - **Patched transformers overlay:** EmbeddingGemma 2 needs transformers ≥ 5.18. Both arms ran on the app venv

@@ -26,7 +26,7 @@ class TestDownloadRvlCdip:
     def test_labels_map_to_class_folders(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
         from vtscore.datasets.downloader import _hf_parquet
-        from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES
 
         # canonical order: label 2 -> "email", 6 -> "scientific publication";
         # 99 is out of range -> skipped.
@@ -63,7 +63,7 @@ class TestDownloadRvlCdip:
     def test_cached_skips_download_when_all_classes_present(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
         from vtscore.datasets.downloader import _hf_parquet
-        from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES
 
         # A *complete* tree has every one of the 16 class folders populated.
         images = tmp_path / "rvl_cdip" / "images"
@@ -86,7 +86,7 @@ class TestDownloadRvlCdip:
         """An interrupted decode (only some class folders) must NOT look complete."""
         from vtscore.datasets import downloader as dl_module
         from vtscore.datasets.downloader import _hf_parquet
-        from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES
 
         # Only one class present -> the old any-png probe would false-positive.
         images = tmp_path / "rvl_cdip" / "images" / RVL_CDIP_CATEGORIES[11]  # invoice
@@ -114,7 +114,7 @@ class TestDownloadRvlCdip:
             result = dl_module.download_rvl_cdip(on_progress=lambda *a: None)
 
         # Re-download ran and every class folder is now populated.
-        from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES as CATS
+        from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES as CATS
 
         assert all(next((result / c).glob("*.png"), None) is not None for c in CATS)
 
@@ -158,7 +158,7 @@ class TestLoadDemoSourceRvl:
 
 class TestRvlCategoriesList:
     def test_has_16_unique_in_mirror_order(self):
-        from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES
 
         assert len(RVL_CDIP_CATEGORIES) == 16
         assert len(set(RVL_CDIP_CATEGORIES)) == 16

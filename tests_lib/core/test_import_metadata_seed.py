@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vtscore.media.torch_setup import (
+from vtscore.media.torch_utils.torch_setup import (
     fast_packages_distributions,
     original_packages_distributions,
     seed_packages_distributions,

@@ -332,7 +332,7 @@ Status strings are conventional, not enforced: `"downloading"`,
 `"loading"` (what the default per-record loop emits), `"embedding"`,
 `"importing"`. The dataset-loading pipeline keys on the
 first `"embedding"` status to swap between the download
-concurrency-gate and the embed concurrency-gate ([`vtscore/datasets/load_pipeline.py`](../../datasets/load_pipeline.py)),
+concurrency-gate and the embed concurrency-gate ([`vtscore/datasets/load_workers.py`](../../datasets/load_workers.py)),
 so service-style importers that interleave both phases should emit the
 right status string at each step.
 
