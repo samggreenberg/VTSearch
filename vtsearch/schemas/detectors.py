@@ -71,7 +71,7 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
-from vtsearch.schemas.datasets import DatasetDomainShiftResponseSchema
+from vtsearch.schemas.datasets.registry import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
@@ -758,7 +758,7 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
     the base is enumerated and the rest passed through, same as the clipper
-    descriptors in :mod:`vtsearch.schemas.datasets`.
+    descriptors in :mod:`vtsearch.schemas.datasets.listings`.
     """
 
     exporter = fields.String(required=True)

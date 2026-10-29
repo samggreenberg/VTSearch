@@ -417,23 +417,25 @@ plugin families:
 
 A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`python app.py --list-plugins`): 12 library families self-register when the library imports, and 3 app-tier families (settings importers/exporters/sources) are added by `vtsearch.shim.register_app_plugin_families()` at app startup — 15 in total. Counts below are the built-in plugins shipped in-tree; third-party entry-point plugins add to them.
 
-| Family | Tier | Registry | Built-in plugins |
-|---|---|---|---|
-| `importers` | library | Dataset importers | 10 |
-| `datasource_importers` | library | Datasource importers | 2 |
-| `exporters` | library | Results exporters | 7 |
-| `label_importers` | library | Label importers | 2 |
-| `seed_importers` | library | Seed importers | 0 |
-| `labelset_sources` | library | Labelset sources | 1 |
-| `converters` | library | Media converters | 8 |
-| `media_sources` | library | Media sources | 6 |
-| `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 29 |
-| `clippers` | library | Media clippers | 16 |
-| `cleaners` | library | Media cleaners | 8 |
-| `settings_importers` | app | Settings importers | 2 |
-| `settings_exporters` | app | Settings exporters | 2 |
-| `settings_sources` | app | Settings sources | 1 |
+| Family | Tier | Package | Sentinel | Base class | Third-party hook | Built-in plugins |
+|---|---|---|---|---|---|---|
+| Dataset importers (`importers`) | library | `vtscore.datasets.importers` | `IMPORTER` | `ImporterBase` / `DatasetImporter` | entry-point group `vtscore.importers` | 10 |
+| Datasource importers (`datasource_importers`) | library | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | entry-point group `vtscore.datasource_importers` | 2 |
+| Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
+| Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
+| Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
+| Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
+| Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |
+| Media embedders (`embedders`) | library | `vtscore.media` | `EMBEDDER` | `MediaEmbedder` | call `vtscore.media.register_embedder()` | 29 |
+| Media clippers (`clippers`) | library | `vtscore.media` | `CLIPPERS` | `MediaClipper` | call `vtscore.media.register_clipper()` | 16 |
+| Media cleaners (`cleaners`) | library | `vtscore.media` | `CLEANERS` | `MediaCleaner` | call `vtscore.media.register_cleaner()` | 8 |
+| Settings importers (`settings_importers`) | app | `vtsearch.settings_io.importers` | `SETTINGS_IMPORTER` | `SettingsImporter` | entry-point group `vtsearch.settings_importers` | 2 |
+| Settings exporters (`settings_exporters`) | app | `vtsearch.settings_io.exporters` | `SETTINGS_EXPORTER` | `SettingsExporter` | entry-point group `vtsearch.settings_exporters` | 2 |
+| Settings sources (`settings_sources`) | app | `vtsearch.settings_io.sources` | `SETTINGS_SOURCE` | `SettingsSource` | entry-point group `vtsearch.settings_sources` | 1 |
+
+Package, sentinel and entry-point group are read off each family's live `PluginRegistry`. The four media registries are not `PluginRegistry` families: they scan `vtscore/media/` sub-packages, and out-of-tree code calls the `register*` function named in the table instead of declaring an entry point.
 
 <!-- END GENERATED: plugin-families -->
 

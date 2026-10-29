@@ -330,7 +330,7 @@ class LabelImporterSuggestedNameResponseSchema(Schema):
     ``detector_name`` is what the importer would name a detector created
     from the supplied form values, i.e. the value the New Detector ›
     Trained form prefills its Detector name box with.  The body is the
-    shared :class:`~vtsearch.schemas.datasets.ImporterSuggestedNameRequestSchema`.
+    shared :class:`~vtsearch.schemas.datasets.importer_fields.ImporterSuggestedNameRequestSchema`.
     """
 
     detector_name = fields.String(required=True)
