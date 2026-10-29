@@ -355,7 +355,9 @@ held it. After the merge, `publish-experiment-data.yml` uploads it to the
 files land back in place and stay out of `git status`, and
 `study_data.py clean <study>` removes them. Archive *after* anything that reads
 the data in the same session (`compare_paths.py`, a figure script), or archive
-with `--keep-local`.
+with `--keep-local`. `tests_lib/meta/test_study_data.py` fails `./run-tests.sh`
+while any study still tracks data `archive` would move, so a study cannot merge
+without this step.
 
 **There is no index file.** The date prefix makes `ls docs/experiments/` sort
 chronologically, and a report opens with its question as the H1 and its verdict

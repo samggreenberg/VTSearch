@@ -208,3 +208,22 @@ def test_archived_files_stay_out_of_the_tree() -> None:
         if f"docs/experiments/{study}/{name}" in tracked
     ]
     assert back == []
+
+
+def test_no_study_has_data_left_to_archive() -> None:
+    """The tree does not regrow: a finished study archives its bulk data before it merges.
+
+    Fails on a study whose directory still tracks a file no markdown links and
+    no live code reads (a cell table, a measurement dump, an unembedded figure),
+    which is what `study_data.py plan` lists and `archive` moves.
+    """
+    tree = sd.Tree.load()
+    left = {study: tree.archivable(study) for study in sorted(tree.studies)}
+    left = {study: paths for study, paths in left.items() if paths}
+    assert not left, (
+        "these studies still track data the experiments-data release should hold:\n"
+        + "".join(f"  {study}: {len(paths)} file(s), e.g. {paths[0]}\n" for study, paths in left.items())
+        + "Commit them, then run `python scripts/experiments/study_data.py archive <study>` and commit again "
+        "(grid-experiments skill, 'Where a study lives'). If live code reads one, name the study and the "
+        "file in that code, or add it to KEEP_PATHS in study_data.py."
+    )
