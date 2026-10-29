@@ -25,7 +25,7 @@ class TestIterFiftyoneSamples:
 
     def test_yields_samples_without_materializing_the_document(self, tmp_path):
         """Samples come out one at a time, in file order."""
-        from vtscore.media.image._demo_sources import _iter_fiftyone_samples
+        from vtscore.media.image.demo._demo_sources import _iter_fiftyone_samples
 
         p = tmp_path / "samples.json"
         p.write_text(json.dumps({"samples": [{"filepath": f"data/data_0/{i}.jpg"} for i in range(5)]}))
@@ -40,7 +40,7 @@ class TestIterFiftyoneSamples:
         straight out of an Android view hierarchy, so they really do contain
         brackets, braces, quotes and backslashes.
         """
-        from vtscore.media.image._demo_sources import _iter_fiftyone_samples
+        from vtscore.media.image.demo._demo_sources import _iter_fiftyone_samples
 
         p = tmp_path / "samples.json"
         p.write_text(
@@ -57,7 +57,7 @@ class TestIterFiftyoneSamples:
         assert [s["filepath"] for s in _iter_fiftyone_samples(p)] == ["a.jpg", "b.jpg"]
 
     def test_empty_sample_list(self, tmp_path):
-        from vtscore.media.image._demo_sources import _iter_fiftyone_samples
+        from vtscore.media.image.demo._demo_sources import _iter_fiftyone_samples
 
         p = tmp_path / "samples.json"
         p.write_text('{"samples": []}')
@@ -65,7 +65,7 @@ class TestIterFiftyoneSamples:
 
     def test_falls_back_to_whole_document_parse(self, tmp_path):
         """A bare top-level array (no ``samples`` envelope) still loads."""
-        from vtscore.media.image._demo_sources import _iter_fiftyone_samples
+        from vtscore.media.image.demo._demo_sources import _iter_fiftyone_samples
 
         p = tmp_path / "samples.json"
         p.write_text(json.dumps([{"filepath": "a.jpg"}]))
@@ -74,13 +74,13 @@ class TestIterFiftyoneSamples:
 
 class TestRelpathNormalisation:
     def test_repo_relative_path_passes_through(self):
-        from vtscore.media.image._demo_sources import _rico_icons_relpath
+        from vtscore.media.image.demo._demo_sources import _rico_icons_relpath
 
         assert _rico_icons_relpath("data/data_17/8022.jpg") == "data/data_17/8022.jpg"
 
     def test_absolute_export_path_is_rebuilt(self):
         """FiftyOne manifests can carry the exporting machine's absolute path."""
-        from vtscore.media.image._demo_sources import _rico_icons_relpath
+        from vtscore.media.image.demo._demo_sources import _rico_icons_relpath
 
         assert _rico_icons_relpath("/home/someone/fiftyone/rico/data/data_3/99.jpg") == "data/data_3/99.jpg"
 

@@ -83,7 +83,7 @@ class _StructuralImageBase(MediaEmbedder):
         return DEFAULT_MAX_FEATURES
 
     def tile_vectors_forward_bulk(self, medias: list[dict]) -> list:
-        """Each media's :class:`~vtscore.media.structural_tiles.TileVectors`, from its ``local_features``.
+        """Each media's :class:`~vtscore.media.structural.structural_tiles.TileVectors`, from its ``local_features``.
 
         No image is re-read: tiles are aggregated from the stored keypoints. A
         missing cached projection is logged once as a WARNING that names the
@@ -94,7 +94,7 @@ class _StructuralImageBase(MediaEmbedder):
         import os  # noqa: PLC0415
         from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
 
-        from vtscore.media.structural_tiles import (  # noqa: PLC0415
+        from vtscore.media.structural.structural_tiles import (  # noqa: PLC0415
             TileProjectionMissing,
             load_tile_projection,
             tile_vectors,

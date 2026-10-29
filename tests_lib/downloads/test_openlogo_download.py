@@ -236,7 +236,7 @@ class TestLoadDemoSourceOpenlogo:
 
 class TestOpenlogoCategoriesList:
     def test_has_32_unique_entries(self):
-        from vtscore.media.image._demo_categories import OPENLOGO_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import OPENLOGO_CATEGORIES
 
         cats = OPENLOGO_CATEGORIES
         assert len(cats) == 32
@@ -246,7 +246,7 @@ class TestOpenlogoCategoriesList:
         assert "Stella Artois" in cats
 
     def test_normalize_helper_folds_punctuation_and_case(self):
-        from vtscore.media.image._demo_sources import _openlogo_norm
+        from vtscore.media.image.demo._demo_sources import _openlogo_norm
 
         assert _openlogo_norm("Coca-Cola") == "cocacola"
         assert _openlogo_norm("Stella Artois") == "stellaartois"

@@ -3431,7 +3431,7 @@ class TestSiglipClusterBackend:
     def test_the_embedder_exposes_the_method_the_backend_calls(self, mods):
         import inspect
 
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         src = inspect.getsource(mods["cluster"].describe_marks)
         assert "embed_pil_image" in src

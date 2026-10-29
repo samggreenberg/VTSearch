@@ -81,27 +81,27 @@ _VOCAB = ["man", "dog", "banana", "car", "tree"]
 
 class TestVgCategoryFor:
     def test_exact_match(self):
-        from vtscore.media.image._demo_sources import _vg_category_for
+        from vtscore.media.image.demo._demo_sources import _vg_category_for
 
         assert _vg_category_for("dog", frozenset(_VOCAB)) == "dog"
 
     def test_case_and_whitespace(self):
-        from vtscore.media.image._demo_sources import _vg_category_for
+        from vtscore.media.image.demo._demo_sources import _vg_category_for
 
         assert _vg_category_for("  Dog ", frozenset(_VOCAB)) == "dog"
 
     def test_regular_plural(self):
-        from vtscore.media.image._demo_sources import _vg_category_for
+        from vtscore.media.image.demo._demo_sources import _vg_category_for
 
         assert _vg_category_for("cars", frozenset(_VOCAB)) == "car"
 
     def test_irregular_plural(self):
-        from vtscore.media.image._demo_sources import _vg_category_for
+        from vtscore.media.image.demo._demo_sources import _vg_category_for
 
         assert _vg_category_for("men", frozenset(_VOCAB)) == "man"
 
     def test_out_of_vocab(self):
-        from vtscore.media.image._demo_sources import _vg_category_for
+        from vtscore.media.image.demo._demo_sources import _vg_category_for
 
         assert _vg_category_for("unicorn", frozenset(_VOCAB)) is None
 
@@ -114,7 +114,7 @@ class TestVgCategoryFor:
 class TestCollectVisualGenome:
     def test_builds_multilabel_records(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image._demo_sources import _collect_visual_genome_files
+        from vtscore.media.image.demo._demo_sources import _collect_visual_genome_files
 
         vg_dir = _make_vg_fixture(tmp_path)
         with patch.object(dl_module, "download_visual_genome", return_value=vg_dir):
@@ -133,7 +133,7 @@ class TestCollectVisualGenome:
 
     def test_out_of_vocab_object_excluded_from_regions(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image._demo_sources import _collect_visual_genome_files
+        from vtscore.media.image.demo._demo_sources import _collect_visual_genome_files
 
         vg_dir = _make_vg_fixture(tmp_path)
         with patch.object(dl_module, "download_visual_genome", return_value=vg_dir):
@@ -146,7 +146,7 @@ class TestCollectVisualGenome:
 
     def test_category_filter_restricts_vocab(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image._demo_sources import _collect_visual_genome_files
+        from vtscore.media.image.demo._demo_sources import _collect_visual_genome_files
 
         vg_dir = _make_vg_fixture(tmp_path)
         # Only "banana" in the active vocab -> only image 2 qualifies.
@@ -157,7 +157,7 @@ class TestCollectVisualGenome:
 
     def test_flat_slice_is_applied(self, tmp_path):
         from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image._demo_sources import _collect_visual_genome_files
+        from vtscore.media.image.demo._demo_sources import _collect_visual_genome_files
 
         vg_dir = _make_vg_fixture(tmp_path)
         # Records are sorted by image id; a flat [1:3) slice yields images 2 and 3.

@@ -293,7 +293,7 @@ class TestWindowedManifest:
 class TestArchiveMemberClipRecipe:
     def test_archive_member_audio_never_lazy_slices(self, tmp_path):
         """A windowed audio archive member must not trigger WAV byte-slicing."""
-        from vtscore.media.lazy_clip import clip_recipe
+        from vtscore.media.clipping.lazy_clip import clip_recipe
 
         archive = _make_tar(tmp_path)
         media = {
@@ -362,7 +362,7 @@ class TestMergedArchiveMember:
         assert media_registry.get("video")._resolve_media_bytes(back) == MEMBERS["chunk_a.mp4"]
 
     def test_merged_window_never_lazy_slices(self, tmp_path):
-        from vtscore.media.lazy_clip import clip_recipe
+        from vtscore.media.clipping.lazy_clip import clip_recipe
 
         archive = _make_audio_tar(tmp_path)
         rng = np.random.default_rng(5)

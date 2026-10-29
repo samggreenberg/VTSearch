@@ -22,7 +22,7 @@ Integration notes
   path absorbs it (both axes normalised independently).
 * ``geometry_model`` picks the RANSAC fit: ``similarity`` (production 4-DoF)
   or ``scale_translation`` (3-DoF, no rotation — screenshots/documents; see
-  vtscore.media.structural_geometry).
+  vtscore.media.structural.structural_geometry).
 * Extraction resizes the long side to ``extract_long_side`` (default 1536)
   before SuperPoint; normalised coordinates make this transparent.
 * Weights: first use downloads SuperPoint (~5 MB) + LightGlue (~45 MB)
@@ -38,7 +38,7 @@ from __future__ import annotations
 import numpy as np
 
 from vtscore.media.structural import MatchStats, StructuralFeatures
-from vtscore.media.structural_geometry import fit_model
+from vtscore.media.structural.structural_geometry import fit_model
 
 DEFAULT_MAX_FEATURES = 2048
 DEFAULT_LONG_SIDE = 1536

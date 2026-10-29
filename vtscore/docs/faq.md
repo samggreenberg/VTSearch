@@ -488,7 +488,7 @@ dropping it is `invalidate_embedding_matrix(ctx)`.
 
 `VTSEARCH_TORCH_THREADS` defaults to `1` as a memory-saving default (each
 extra thread allocates its own scratch buffers), and
-`vtscore.media.torch_setup.ensure_torch_configured()` applies it with
+`vtscore.media.torch_utils.torch_setup.ensure_torch_configured()` applies it with
 `torch.set_num_threads()` the first time an embedder loads or a head
 trains. Set
 `$VTSEARCH_TORCH_THREADS` before importing `vtscore` to raise it. (The

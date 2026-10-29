@@ -18,7 +18,7 @@ import numpy as np
 from vtscore.config import EMBEDDINGGEMMA2_MODEL_ID, verify_image_processor_backend
 from vtscore.media._embeddinggemma2 import load_embeddinggemma2, media_messages, pooled_forward, query_messages
 from vtscore.media.embedder import resolve_embed_batch_size
-from vtscore.media.image._cross_modal_shared import _CrossModalHFEmbedder
+from vtscore.media.image.embedders._cross_modal_shared import _CrossModalHFEmbedder
 
 if TYPE_CHECKING:
     from PIL import Image

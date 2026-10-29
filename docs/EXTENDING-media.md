@@ -44,7 +44,10 @@ module-level sentinel attributes:
 
 Embedders use **one module per embedder**: any `embedder_<name>.py` file
 (or `embedder_<name>/__init__.py` sub-package) inside a media-type package
-is auto-loaded and its module-level `EMBEDDER` sentinel is registered.
+is auto-loaded and its module-level `EMBEDDER` sentinel is registered. So is
+one inside the package's `embedders/` sub-package: that name is reserved for a
+container of embedders (`image/embedders/` holds the shipped image ones), and
+is scanned rather than loaded as an embedder itself.
 Names starting with `_` are skipped, which is how shared helpers such as
 `_dinov3_shared.py` stay out of the scan. Symlinked directories **and**
 symlinked embedder files are both supported, so a custom embedder can live
@@ -269,21 +272,21 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` |  |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` |  |
 | `face/embedder_imagekit.py` | `ImagekitFaceEmbedder` | `face` | `face` | ✅ |
-| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
-| `image/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
-| `image/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |
-| `image/embedder_dinov2_patch.py` | `ImageDinov2PatchEmbedder` | `dinov2_patch` | `image` |  |
-| `image/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
-| `image/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
-| `image/embedder_dinov3_single.py` | `ImageDinov3SingleEmbedder` | `dinov3_single` | `image` |  |
-| `image/embedder_embeddinggemma2.py` | `ImageEmbeddingGemma2Embedder` | `embeddinggemma2` | `image` |  |
-| `image/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
-| `image/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
-| `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
-| `image/embedder_sift_vlad_doc.py` | `ImageSiftVladDocEmbedder` | `sift_vlad_doc` | `image` |  |
-| `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | `siglip2` | `image` |  |
-| `image/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | `siglip2_l` | `image` |  |
-| `image/embedder_siglip_l.py` | `ImageSiglipLEmbedder` | `siglip_l` | `image` |  |
+| `image/embedders/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
+| `image/embedders/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
+| `image/embedders/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |
+| `image/embedders/embedder_dinov2_patch.py` | `ImageDinov2PatchEmbedder` | `dinov2_patch` | `image` |  |
+| `image/embedders/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
+| `image/embedders/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
+| `image/embedders/embedder_dinov3_single.py` | `ImageDinov3SingleEmbedder` | `dinov3_single` | `image` |  |
+| `image/embedders/embedder_embeddinggemma2.py` | `ImageEmbeddingGemma2Embedder` | `embeddinggemma2` | `image` |  |
+| `image/embedders/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
+| `image/embedders/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
+| `image/embedders/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
+| `image/embedders/embedder_sift_vlad_doc.py` | `ImageSiftVladDocEmbedder` | `sift_vlad_doc` | `image` |  |
+| `image/embedders/embedder_siglip2.py` | `ImageSiglip2Embedder` | `siglip2` | `image` |  |
+| `image/embedders/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | `siglip2_l` | `image` |  |
+| `image/embedders/embedder_siglip_l.py` | `ImageSiglipLEmbedder` | `siglip_l` | `image` |  |
 | `text/embedder_e5.py` | `TextE5Embedder` | `e5` | `text` | ✅ |
 | `text/embedder_bge.py` | `TextBGEEmbedder` | `bge` | `text` |  |
 | `video/embedder_xclip.py` | `VideoXClipEmbedder` | `xclip` | `video` | ✅ |
@@ -630,13 +633,13 @@ class and the user re-parameterises it through `with_params()`.
 
 ### What to implement
 
-Subclass `MediaClipper` from `vtscore.media.clipper` (also re-exported
+Subclass `MediaClipper` from `vtscore.media.clipping.clipper` (also re-exported
 from `vtscore.media`).
 
 ```python
 # vtscore/media/audio/clipper.py  (or a new file)
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.clipper import MediaClipper
 from typing import Any
 
 
@@ -696,7 +699,7 @@ class SoundOverlapClipper(MediaClipper):
 
 ### Shared helpers
 
-Don't hand-roll what `vtscore/media/clipper.py` already exports.
+Don't hand-roll what `vtscore/media/clipping/clipper.py` already exports.
 `clip_with_bounds(media, index, start, end)` returns a copy of *media*
 stamped with the standard `duration` / `clip_index` / `clip_start` /
 `clip_end` fields (add your own on top); `tile_starts(total, duration,
@@ -848,7 +851,7 @@ cleaner.
 
 ### What to implement
 
-Subclass `MediaCleaner` from `vtscore.media.cleaner` and implement `clean()`;
+Subclass `MediaCleaner` from `vtscore.media.clipping.cleaner` and implement `clean()`;
 the inherited `clip()` wraps it as a single-output chain step.
 
 ```python
@@ -856,7 +859,7 @@ the inherited `clip()` wraps it as a single-output chain step.
 
 from typing import Any
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 
 
 class TextWhitespaceCleaner(MediaCleaner):

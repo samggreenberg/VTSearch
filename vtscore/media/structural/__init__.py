@@ -22,6 +22,12 @@ any image-specific assumption (keypoints are just ``(x, y, scale, orientation)``
 rows in normalised coordinates) so an audio constellation-fingerprint backend -
 the next media target - drops in without reshaping the interface.
 
+The package's other modules build on this core:
+:mod:`~vtscore.media.structural.structural_geometry` (parametrised verification
+models), :mod:`~vtscore.media.structural.structural_splg` (the SuperPoint +
+LightGlue backend) and :mod:`~vtscore.media.structural.structural_tiles` (tiled
+VLAD, the Stage 1 for document pages).
+
 No Flask, no app-tier imports: this module lives under ``vtscore`` and stays
 import-clean.  Heavy optional deps (``cv2``) are imported lazily inside the
 functions that need them so the dataclasses/protocol import without OpenCV.
@@ -75,7 +81,7 @@ on FullMarks (23 classes, 721 instances): retrieval AP **0.88** at this budget
 against **0.16** at ``DEFAULT_MAX_FEATURES`` with the shipped 2 MP detection cap,
 and 0.12 for SigLIP.
 
-Used by :mod:`vtscore.media.image.embedder_sift_vlad_doc`, which is a separate
+Used by :mod:`vtscore.media.image.embedders.embedder_sift_vlad_doc`, which is a separate
 embedder so that binding it is recorded per dataset and no existing ``sift_vlad``
 cell changes meaning.
 
@@ -96,7 +102,7 @@ centroid until its labels meet the label quota,
 :mod:`vtscore.detectors.label_quota`).
 """
 
-_CODEBOOK_ASSET = Path(__file__).resolve().parent / "assets" / "vlad_codebook_v1.npy"
+_CODEBOOK_ASSET = Path(__file__).resolve().parents[1] / "assets" / "vlad_codebook_v1.npy"
 """Shipped, fixed VLAD vocabulary (a pre-computed k-means codebook).
 
 A code asset, not per-dataset state: it is loaded like model weights and never
