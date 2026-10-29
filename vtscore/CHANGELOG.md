@@ -12,8 +12,8 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
-- **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore/cli.py`
-  is now `vtscore/cli/`: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
+- **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
+  module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
   `cli_progress` and `cli_resume` moved in as `vtscore.cli.pipeline`, `.progress` and `.resume`. The
   public names - `autodetect_main`, `autodetect_importer_main`, `autodetect_main_chunked`,
