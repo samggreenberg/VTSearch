@@ -1,6 +1,7 @@
 """Schemas for the media-handling routes (list / server / embed).
 
-Listing / per-media routes (``vtsearch/routes/media/list.py``):
+Listing / per-media routes (``vtsearch/routes/media/list.py``, ``content.py``,
+``vote.py``, ``pile.py``):
 
 * ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
 * ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
