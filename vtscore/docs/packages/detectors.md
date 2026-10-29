@@ -37,6 +37,10 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/training_votes.py`        | A vote's training rows: `pool_box_from_media`, `bad_negative_vecs`  |
 | `vtscore/detectors/training_calibration.py`  | The bag-aware fold context, the Train/Calibrate split, the line     |
 | `vtscore/detectors/labelset_training.py`     | Train and score from the saved labelset (cross-dataset)             |
+| `vtscore/detectors/labelset_embeddings.py`   | Resolve the labelset into the label-embedding caches                |
+| `vtscore/detectors/labelset_matrix.py`       | Training rows from those caches; which labelled media a snap holds  |
+| `vtscore/detectors/labelset_structural.py`   | Cross-dataset local features and the labelset's structural re-rank  |
+| `vtscore/detectors/labelset_heads.py`        | The heads the label quota gives: the Goods' centroid, a typed query |
 | `vtscore/detectors/learned_sort.py`          | Learned-sort orchestration: resolve labelset → train → score → reconcile |
 | `vtscore/detectors/model_loading.py`         | Resolve a detector's scoring model, training it on demand           |
 | `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry       |
@@ -514,12 +518,14 @@ and box passed to the embedder, as the dataset embedded it.
 The detector's saved labelset is dataset-agnostic - every element is
 keyed by origin / md5. At load time, the labelset has to be resolved
 into a concrete embedding cache so the head can train. This is what
-`labelset_training.py` does, and it's why one labelset trained on
-dataset A can score dataset B.
+`labelset_training.py` and its helper modules do, and it's why one
+labelset trained on dataset A can score dataset B. The two training entry
+points live in `labelset_training.py`, which re-exports every public name
+of the helpers, so `labelset_training.X` still resolves for each of them.
 
 ### `populate_label_embeddings(det_ctx, labelset, *, media_type, snap, on_progress=None)`
 
-`vtscore/detectors/labelset_training.py`. For each element in the
+`vtscore/detectors/labelset_embeddings.py`. For each element in the
 labelset, ensure `det_ctx.label_embeddings[stable_element_id(elem)]` is
 populated:
 
@@ -541,7 +547,7 @@ Returns the number of elements with a cached vector after the pass.
 
 ### `build_xy_from_labelset(det_ctx, labelset)`
 
-`vtscore/detectors/labelset_training.py`. Walk the labelset
+`vtscore/detectors/labelset_matrix.py`. Walk the labelset
 elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list, groups, score_rows)` - the same shape
 `_build_vote_xy` produces for live votes.

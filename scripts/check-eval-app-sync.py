@@ -958,7 +958,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="detectors.label_quota_centroid",
-        app="py:vtscore.detectors.labelset_training.install_centroid_head",
+        app="py:vtscore.detectors.labelset_heads.install_centroid_head",
         harness="vtscore/eval/step_trainers.py::_centroid_step",
         kind="ported",
         note=(
@@ -984,7 +984,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.hard_view_goods",
-        app="py:vtscore.detectors.labelset_training.hard_view_good_vectors",
+        app="py:vtscore.detectors.labelset_matrix.hard_view_good_vectors",
         harness="vtscore/eval/voting_iterations.py::_fits_weigh_hard_views",
         kind="ported",
         note=(
@@ -1017,7 +1017,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="detectors.label_quota_query",
-        app="py:vtscore.detectors.labelset_training.install_query_head",
+        app="py:vtscore.detectors.labelset_heads.install_query_head",
         harness="vtscore/eval/step_trainers.py::_query_step",
         kind="ported",
         note=(

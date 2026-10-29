@@ -61,17 +61,17 @@ ZS = (3.0, 4.0, 5.0, 6.0)
 
 @contextmanager
 def candidate(z: float | None, scale: float | None):
-    from vtscore.training.thresholds import labels_line, text_sort
+    from vtscore.training.thresholds import head_count, text_sort
 
-    z0, s0 = text_sort.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE
+    z0, s0 = text_sort.TEXT_SORT_COUNT_Z, head_count.HEAD_COUNT_PRECISION_SCALE
     try:
         if z is not None:
             text_sort.TEXT_SORT_COUNT_Z = float(z)
         if scale is not None:
-            labels_line.HEAD_COUNT_PRECISION_SCALE = float(scale)
+            head_count.HEAD_COUNT_PRECISION_SCALE = float(scale)
         yield
     finally:
-        text_sort.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE = z0, s0
+        text_sort.TEXT_SORT_COUNT_Z, head_count.HEAD_COUNT_PRECISION_SCALE = z0, s0
 
 
 def _snapshots(npz: str) -> dict[str, dict]:
@@ -86,9 +86,9 @@ def _snapshots(npz: str) -> dict[str, dict]:
 
 
 def _cell(args) -> list[dict]:
+    from vtscore.training.thresholds.class_model import _finite_unit
     from vtscore.training.thresholds.labels_line import (
         HEAD_COUNT_GOODS,
-        _finite_unit,
         _logit,
         fit_labels_line,
         head_count_cut,
