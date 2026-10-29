@@ -60,7 +60,7 @@ they define the library's interface boundary.
 
 | # | Seam | What used to leak | How the library decouples it |
 |---|------|-------------------|-----|
-| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`) plus the current-user resolver (`register_request_user_resolver`, backing `vtscore.state.current_user.get_current_user`); the Flask wiring lives in `vtsearch/shim/` and `vtsearch/auth/`. |
+| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`) plus the current-user resolver (`register_request_user_resolver`, backing `vtscore.state.current_user.get_current_user`); the Flask wiring lives in `vtsearch/seam_wiring.py` and `vtsearch/auth/`. |
 | 2 | **Settings** | Library code read `vtsearch.settings.get_*` directly | `CoreConfig` dataclass carries every knob library code consumes; `CoreConfig.from_settings()` is the bridge the app installs via `register_core_config_builder()`. |
 | 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
@@ -168,7 +168,7 @@ names. It answers from the getter a host registered for that knob with
 `register_setting_getter()`, else that field of the `CoreConfig` a
 builder registered with `register_core_config_builder()` returns, else
 the field's default. In the VTSearch app the getters are installed by
-`register_app_setting_getters` in `vtsearch/shim/__init__.py`, one per
+`register_app_setting_getters` in `vtsearch/seam_wiring.py`, one per
 knob, each reading `vtsearch.settings` live for the current user - so a
 read costs the one setting it asks about, not a snapshot of all of them.
 
@@ -398,7 +398,7 @@ never the reverse.
 │  ├── routes/                                │
 │  ├── settings.py                            │
 │  ├── auth/                                  │
-│  ├── shim/   ← installs hooks into vtscore  │
+│  ├── seam_wiring.py ← fills vtscore's seams │
 │  └── …                                      │
 └──────────────────┬──────────────────────────┘
                    │ imports
@@ -424,18 +424,18 @@ one of them, since the library registers its own families through it too):
 1. **Context resolvers** - `register_dataset_context_resolver`,
    `register_detector_context_resolver`, plus
    `register_request_context_predicate` (the "inside a request?" test the
-   request-missing sentinel needs). Wired in `vtsearch/shim/`.
+   request-missing sentinel needs). Wired in `vtsearch/seam_wiring.py`.
 2. **Setting getters** - `register_setting_getter`, one per knob, plus
    `register_settings_path_redirect` for the CLI's `--settings`. Map
    `vtsearch.settings` to the knobs `get_setting()` reads. Wired in
-   `vtsearch/shim/`. (A library-only consumer answers the same reads
+   `vtsearch/seam_wiring.py`. (A library-only consumer answers the same reads
    with a `register_core_config_builder` builder instead.)
 3. **Plugin families** - `register_plugin_family(provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
    `python app.py --list-plugins`) enumerate. The family key comes off
    the `FamilyProvider` object itself; there is no separate positional.
-   Wired in `vtsearch/shim/`.
+   Wired in `vtsearch/seam_wiring.py`.
 4. **Current-user resolver** - `register_request_user_resolver`. Tells
    `vtscore.state.current_user.get_current_user()` how to read the
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
@@ -451,12 +451,12 @@ one of them, since the library registers its own families through it too):
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
    library raises. The counters are per-user settings state, so the
    recording itself lives in `vtsearch.achievements`. Wired in
-   `vtsearch/shim/`.
+   `vtsearch/seam_wiring.py`.
 6. **Setting persisters** - `vtscore.state.register_setting_persister(key, fn)`
    (the balance and the calibration knobs) and
    `vtscore.datasets.load_pipeline.register_last_embedder_persistence_hook(fn)`
    hand a preference the library changed back to the host to save. Wired in
-   `vtsearch/shim/`.
+   `vtsearch/seam_wiring.py`.
 
 If you're embedding `vtscore` in your own application, you'll typically
 install your own variants of the first two and the fourth -

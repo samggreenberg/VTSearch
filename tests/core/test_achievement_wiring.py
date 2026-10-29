@@ -3,7 +3,7 @@
 `vtscore` raises achievement events through
 :func:`vtscore.achievements_hooks.record_achievement`, and the recorders
 that persist them are installed by
-``vtsearch.shim.register_app_achievement_recorders()`` at startup.  That
+``vtsearch.seam_wiring.register_app_achievement_recorders()`` at startup.  That
 indirection buys the library its Flask-free layering, but it trades a
 *loud* failure for a *silent* one: before the seam, a broken import
 raised; now a missing registration just means the event quietly credits
@@ -41,7 +41,7 @@ class TestStartupWiring:
         """Each hook must reach ``vtsearch.achievements``, not a stub."""
         recorder = achievements_hooks._recorders[event]
         assert callable(recorder)
-        assert recorder.__module__ == "vtsearch.shim"
+        assert recorder.__module__ == "vtsearch.seam_wiring"
 
 
 class TestVoteCreditsEndToEnd:

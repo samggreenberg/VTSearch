@@ -66,7 +66,7 @@ def register_request_context_predicate(fn: Callable[[], bool]) -> None:
 # **pluggable resolver**: a callable that returns the current request's
 # DatasetContext / DetectorContext, or ``None`` if there is no request.
 #
-# The Flask integration lives in ``vtsearch/shim/`` and registers Flask-
+# The Flask integration lives in ``vtsearch/seam_wiring.py`` and registers Flask-
 # aware resolvers at app startup.  By default both resolvers return
 # ``None``; callers fall back to the thread-local context (set by
 # ``set_thread_*_context`` for background threads and tests).
