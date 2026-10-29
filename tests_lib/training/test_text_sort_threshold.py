@@ -27,6 +27,7 @@ import numpy as np
 import pytest
 
 from vtscore.training.thresholds import gmm as G
+from vtscore.training.thresholds import text_sort
 from vtscore.training.thresholds import (
     TEXT_SORT_CUT_DEFAULT,
     TEXT_SORT_CUT_RULES,
@@ -68,7 +69,7 @@ class TestTheDefaultRule:
 
     def test_the_default_rule_is_the_guarded_line(self):
         assert TEXT_SORT_CUT_DEFAULT == "guarded_tail"
-        assert G.TEXT_SORT_CUT_RULE == "guarded_tail"
+        assert text_sort.TEXT_SORT_CUT_RULE == "guarded_tail"
 
     @pytest.mark.parametrize("seed", range(5))
     def test_the_default_display_line_is_the_guarded_one(self, seed):
@@ -95,7 +96,7 @@ class TestTheDefaultRule:
     def test_an_explicit_rule_overrides_the_module_default(self, monkeypatch):
         scores, _ = _shoulder()
         values = scores.tolist()
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "gmm_midpoint")
+        monkeypatch.setattr(text_sort, "TEXT_SORT_CUT_RULE", "gmm_midpoint")
         assert text_sort_threshold(values) == calculate_gmm_threshold(values)
         assert text_sort_threshold(values, rule="guarded_tail") == guarded_text_sort_threshold(values)[0]
 
@@ -308,7 +309,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
 
         scores, _ = _shoulder()
         ranking = dict(enumerate(scores.tolist()))
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+        monkeypatch.setattr(text_sort, "TEXT_SORT_CUT_RULE", rule)
         assert _sort_threshold(ranking, typed_query=True) == calculate_gmm_threshold(list(ranking.values()))
         # A known-good centroid sort is not a typed query and keeps the midpoint.
         assert _sort_threshold(ranking) == calculate_gmm_threshold(list(ranking.values()))
@@ -318,7 +319,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
 
         scores, _ = _shoulder()
         ranking = dict(enumerate(scores.tolist()))
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", "guarded_tail")
+        monkeypatch.setattr(text_sort, "TEXT_SORT_CUT_RULE", "guarded_tail")
         assert _sort_threshold(ranking, typed_query=True) != text_sort_threshold(list(ranking.values()))
 
     @pytest.mark.parametrize("rule", TEXT_SORT_CUT_RULES)
@@ -327,7 +328,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
 
         scores, _ = _shoulder()
         (rnd,) = parse_startup_schedule("n1@mid")
-        monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+        monkeypatch.setattr(text_sort, "TEXT_SORT_CUT_RULE", rule)
         assert round_cut(scores.tolist(), rnd) == text_sort_acquisition_threshold(scores.tolist())
 
     def test_cosine_sort_active_uses_the_text_rule_only_for_text(self, monkeypatch):
@@ -442,7 +443,7 @@ class TestTheOpeningIsBlindToTheDisplayRule:
         spec = PRODUCTION_STARTUP if schedule else None
         picks: dict[str, list[tuple[str, int, int]]] = {}
         for rule in TEXT_SORT_CUT_RULES:
-            monkeypatch.setattr(G, "TEXT_SORT_CUT_RULE", rule)
+            monkeypatch.setattr(text_sort, "TEXT_SORT_CUT_RULE", rule)
             picks[rule] = self._picks(spec)
         assert picks["guarded_tail"] == picks["gmm_midpoint"]
         phases = [ph for ph, _, _ in picks["gmm_midpoint"]]
