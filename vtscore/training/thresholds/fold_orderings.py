@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.training.thresholds.knobs import NO_GOOD_THRESHOLD
+from vtscore.training.thresholds.knobs import NO_GOOD_THRESHOLD, NON_FINITE_SCORE_SENTINEL, sigmoid_to_finite_scores
 
 # Seed of the Train/Calibrate fold splits when a caller passes no ``rng``.
 # The splits must be reproducible: the same labelset has to yield the same fold
@@ -73,8 +73,6 @@ def _pooled_group_scores(
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
-
     device = next(model.parameters()).device
     if score_rows_by_group is not None:
         blocks = [np.asarray(score_rows_by_group[g], dtype=np.float32) for g in cal_groups]
@@ -113,8 +111,6 @@ def _group_node_blocks(
     reproduces :func:`_pooled_group_scores` value-for-value.
     """
     import torch  # noqa: PLC0415
-
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     device = next(model.parameters()).device
     if score_rows_by_group is not None:
@@ -382,7 +378,6 @@ def _torch_fold_ordering(
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
     y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
@@ -414,10 +409,9 @@ def _fold_fit_ordering(
     """One fold of :func:`compute_fold_orderings` under a caller-supplied estimator.
 
     Fits on the fold's training rows, scores its held-out rows, and replaces a
-    non-finite score with :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`
+    non-finite score with :data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL`
     as the torch path does, so a degenerate fit cannot leak NaN into the cut.
     """
-    from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL  # noqa: PLC0415
 
     predict = fold_fit(X_np[train_idx], y_np[train_idx])
     if model_sink is not None:

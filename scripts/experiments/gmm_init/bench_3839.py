@@ -45,7 +45,7 @@ def main(argv: "list[str] | None" = None) -> int:
 
     from vtscore.training.thresholds import FOLD_ANCHOR_WEIGHT, fit_anchored_score_gmm, gmm_fit_array, scored_ordering
     from vtscore.training.thresholds.gmm import _GMM_MAX_SAMPLES
-    from vtscore.utils.scores import scored_only
+    from vtscore.training.thresholds.knobs import scored_only
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--corpus", required=True)

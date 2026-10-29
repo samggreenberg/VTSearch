@@ -527,11 +527,11 @@ class TestTheFindCorpusFlagsArePinned:
 
     HARNESS = "vtscore/eval/find_corpus.py"
     APPS = {
-        "find.training_domain": "vtsearch/training_domain.py",
+        "find.training_domain": "vtsearch/domain_overlap.py",
         "find.evidence_coverage": "vtsearch/routes/detectors/scoring.py",
     }
     PROBES = [
-        ("find.training_domain", "app", "vtsearch/training_domain.py", "domain_shift_against"),
+        ("find.training_domain", "app", "vtsearch/domain_overlap.py", "domain_shift_against"),
         ("find.training_domain", "harness", HARNESS, "training_domain_flags"),
         ("find.training_domain", "harness", HARNESS, "FindCorpus.matrix"),
         ("find.training_domain", "harness", HARNESS, "FindCorpus.pool_matrix"),

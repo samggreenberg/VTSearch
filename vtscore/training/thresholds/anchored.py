@@ -23,8 +23,7 @@ import numpy as np
 from vtscore.training.thresholds.gmm_core import GmmFit1D, gmm_fit_array, scored_ordering, snap_cut_to_sample
 from vtscore.training.thresholds.gmm_em import fit_anchored_score_gmm, fit_score_gmm
 from vtscore.training.thresholds.gmm_threshold import gmm_cut_from_fit
-from vtscore.training.thresholds.knobs import INCLUSION_SEARCH_SPAN, inclusion_cost_weights
-from vtscore.utils.scores import scored_only
+from vtscore.training.thresholds.knobs import INCLUSION_SEARCH_SPAN, inclusion_cost_weights, scored_only
 
 
 def rank_transfer(
@@ -599,8 +598,8 @@ def fit_fold_anchored_cut(
     distribution instead, never 0.5.
 
     Every score that reaches a fit - haystack and anchor alike - is first put
-    through :func:`~vtscore.utils.scores.scored_only`, so an item the head
-    could not score (:data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`,
+    through :func:`~vtscore.training.thresholds.knobs.scored_only`, so an item the head
+    could not score (:data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL`,
     ``-1.0``) is *absent* rather than treated as an observation a full unit
     below the sigmoid range.  Without that, a couple of unreadable media drag
     the fitted cut - and, through the quantile realised on the final haystack,

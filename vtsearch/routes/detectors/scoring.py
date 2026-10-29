@@ -560,7 +560,7 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path
     from vtscore.state.core import get_active_context
-    from vtsearch.training_domain import infer_training_reference
+    from vtsearch.domain_overlap import infer_training_reference
 
     active_id = get_active_context().dataset_id
     stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
@@ -766,7 +766,7 @@ def find_training_domain():
     check cannot run, including every refusal of the domain-shift route.
     Pure read; no new state.
     """
-    from vtsearch.training_domain import training_domain_check
+    from vtsearch.domain_overlap import training_domain_check
 
     return training_domain_check()
 

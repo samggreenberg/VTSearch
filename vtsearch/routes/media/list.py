@@ -29,7 +29,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import media_embedder_names
 from vtscore.media.provenance import CLIP_WINDOW_FIELDS
-from vtscore.utils.hits import hit_custom_metadata
+from vtscore.datasets.labelset import hit_custom_metadata
 from vtsearch.routes._source import abort_source_not_loaded, source_locator
 from vtsearch.schemas.media import (
     MediaBatchRequestSchema,

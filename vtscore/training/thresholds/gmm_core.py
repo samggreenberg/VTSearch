@@ -11,7 +11,8 @@ subsample a fit is made on (:func:`gmm_fit_array`), the unscored-item filter
 Nothing is fitted here: :mod:`~vtscore.training.thresholds.gmm_em` estimates a
 :class:`GmmFit1D`, and :mod:`~vtscore.training.thresholds.gmm_threshold` names
 the rules that cut one.  This module imports nothing else from
-:mod:`vtscore.training.thresholds`.
+:mod:`vtscore.training.thresholds` but the knobs' unscorable-score filter
+(:func:`~vtscore.training.thresholds.knobs.scored_mask`).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vtscore.utils.scores import scored_mask
+from vtscore.training.thresholds.knobs import scored_mask
 
 # Above this many scores, fit the GMM on a random subsample instead of the full
 # set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
@@ -341,7 +342,7 @@ def scored_ordering(
     """A fold's ``(scores, labels)`` ordering with the unscored items dropped.
 
     A held-out item whose fold model produced a non-finite logit is recorded at
-    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL` (``-1.0``) - the
+    :data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL` (``-1.0``) - the
     orderings are cached and swept, so they cannot hold ``NaN``.  As a
     *calibration anchor* that sentinel is worse than useless: the rules here
     read the anchors as positions on the sigmoid scale, and a labelled item
