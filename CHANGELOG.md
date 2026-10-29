@@ -52,6 +52,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   repairs away) are kept with the dataset: its Dashboard row shows **N dropped**, which opens the Stats window, and
   its new **Dropped items** row lists each one with its reason, with **Copy** to take the list elsewhere.
 
+- **A failed AutoFind export names its exporter and says where to fix it** (issue #5463). The toast and the Find
+  Results dialog said an export "via webhook" (or `email_smtp`, `server_json_file`) failed, by the exporter's
+  internal name. They now name it as the exporter picker does, **Webhook (HTTP POST)** say, and end with "Check the
+  exporter in Settings › AutoFind.", the tab where it is set up or paused. A successful export names it the same way.
+  `auto_export` in the API carries the new `exporter_display_name`.
+
 - **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
   emailed the Good and Bad rows as one list with nothing to tell them apart, and so did a `--stream-results
   --keep-negatives` run. Each row now carries its label: a `[good]` / `[bad]` tag in the plain text and a Label

@@ -7884,6 +7884,10 @@
           "exporter": {
             "type": "string"
           },
+          "exporter_display_name": {
+            "description": "The exporter's display name, for messages to the user (#5463); the ``exporter`` name itself when that names no registered exporter.",
+            "type": "string"
+          },
           "message": {
             "description": "Human-readable outcome; present on success.",
             "type": "string"
@@ -7898,6 +7902,7 @@
         },
         "required": [
           "exporter",
+          "exporter_display_name",
           "success"
         ],
         "type": "object"
