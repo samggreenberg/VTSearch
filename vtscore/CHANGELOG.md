@@ -87,6 +87,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
   `packages/detectors.md`.
 
+- **`vtscore.plugins` is split into `field`, `base` and `registry` modules** (issue #5417). `PluginField`,
+  its value types, `parse_checkbox` and `inactive_field_keys` now live in `vtscore.plugins.field`;
+  `PluginBase` in `vtscore.plugins.base`; `PluginRegistry`, `make_plugin_registry` and `EntryPointTombstone`
+  in `vtscore.plugins.registry`. Every name in `vtscore.plugins.__all__` still imports from
+  `vtscore.plugins` and behaves as before; only the moved classes' `__module__` changes. The private
+  name-derivation helpers (`_LEGACY_PLUGIN_NAME_SUFFIXES`, `_default_plugin_name`, `_snake_case`, ...) moved
+  to `vtscore.plugins.base` and are no longer reachable as `vtscore.plugins._name`. See `packages/plugins.md`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss
