@@ -173,6 +173,8 @@ def test_finalize_progress_composes_with_pacer(clock):
     assert _overall(tracker) > at_finalize_start
     fin.begin("projection")
     fin.update("loading", "Projecting…", 1, 1)
+    fin.begin("similarity_order")
+    fin.update("loading", "Ordering by similarity…", 1, 1)
     assert _overall(tracker) == pytest.approx(1.0, abs=1e-6)
 
 

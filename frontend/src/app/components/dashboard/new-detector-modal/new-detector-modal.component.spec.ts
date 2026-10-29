@@ -1309,9 +1309,9 @@ describe('NewDetectorModalComponent', () => {
       expect(el.querySelector('vt-dataset-example-picker')).toBeTruthy();
       expect(el.querySelector('.media-picker .back-btn')?.textContent).toContain('Back');
       httpMock.expectOne('/api/media-types').flush({ media_types: [] });
-      const ids = httpMock.expectOne('/api/medias/ids');
-      expect(ids.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
-      ids.flush([]);
+      const listing = httpMock.expectOne('/api/medias/picker');
+      expect(listing.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
+      listing.flush({ ids: [], total: 0, order: 'dataset' });
       await settleResource();
 
       component.backToMain();

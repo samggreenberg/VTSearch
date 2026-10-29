@@ -22,6 +22,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
+  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
+  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
+  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
+  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
+  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
+  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
+  on request; a Face dataset built before this gets its thumbnails on its next save.
+
 - **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
   chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
   `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,

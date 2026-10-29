@@ -1598,6 +1598,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.projection.similarity_order`: a 1-D similarity order over a dataset** (issue #5465).
+  `fit_similarity_order(matrix, ids, *, n_neighbors, min_dist, random_state=None)` sorts the ids by a 1-D UMAP of
+  their embeddings (PCA-1 below ten points, as given below three) and returns a `SimilarityOrder(ids, method)`;
+  `ordered_ids(order, ids)` merges an order with the live ids, skipping removed ones and appending new ones.
+  `similarity_order_for(ctx, *, fit=True)` serves a dataset's order from `DatasetContext._similarity_order`, else from
+  the container's new `similarity_order.json` entry (`container.append_similarity_order` /
+  `read_similarity_order`), else fits, caches and persists one, for the media types in `ORDERED_MEDIA_TYPES`
+  (Face); it answers `None` for every other type. The load pipeline fits it for a freshly built Face dataset, in a new
+  `similarity_order` finalize slot. `DatasetContext.reset_derived_caches` takes a matching `order=` family flag
+  (default `True`, like the others).
+- **Face crops carry a grid thumbnail** (issue #5465). `image2face` emits `thumbnail_bytes` for each crop (the
+  converter runner now carries that key onto the media), `FaceMediaType.ensure_thumbnail_bytes` builds one for a face
+  without it, and `export_dataset_to_file` backfills a missing face thumbnail as it already did for images.
 - **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
   dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
   `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it

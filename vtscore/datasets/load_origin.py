@@ -63,7 +63,11 @@ from vtscore.datasets.stages.finalize import (
     _drop_none_embeddings_stage,
     _follow_source_merges_stage,
 )
-from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
+from vtscore.datasets.stages.projection import (
+    _build_projection_stage,
+    _build_similarity_order_stage,
+    _maybe_signpost_texts_stage,
+)
 from vtscore.datasets.stages.registry import _register_and_migrate
 from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
 
@@ -185,6 +189,15 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
             _build_projection_stage(ctx, fin)
         except Exception:
             traceback.print_exc()
+    # Face only: the 1-D order the example picker lists the faces in, so the
+    # crops of one person sit together (#5465).  Not opt-in like the 2-D
+    # layout: the picker is a Face dataset's main way to start a detector.
+    # Best-effort for the same reason as the projection.
+    fin.begin("similarity_order")
+    try:
+        _build_similarity_order_stage(ctx, fin)
+    except Exception:
+        traceback.print_exc()
     # Embedder warm-up is fire-and-forget so the dashboard row goes
     # green immediately.  Text sort waits behind its own progress
     # bar on first use if the model isn't ready yet.

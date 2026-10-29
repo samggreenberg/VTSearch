@@ -423,6 +423,9 @@ class TestFinalizeProgress:
         fin.begin("projection")
         fin.update("loading", "Projection ready", current=1, total=1)
         rec()
+        fin.begin("similarity_order")
+        fin.update("loading", "Similarity order ready", current=1, total=1)
+        rec()
 
         # Never rewinds, starts no earlier than the finalize floor, ends full.
         assert overalls == sorted(overalls)
