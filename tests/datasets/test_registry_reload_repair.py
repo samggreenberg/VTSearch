@@ -32,17 +32,28 @@ def _saved_medias(n: int, *, missing_second: tuple[int, ...]) -> dict[int, dict]
     return medias
 
 
-def _load(client, dataset_id: str) -> None:
+def _load(client, monkeypatch, dataset_id: str) -> None:
     """Load *dataset_id* from the registry and wait for its worker to finish."""
+    import vtsearch.threading as vts_threading
+
+    spawned: list[threading.Thread] = []
+    real_spawn = vts_threading.spawn
+
+    def _spawn(*args, **kwargs):
+        thread = real_spawn(*args, **kwargs)
+        spawned.append(thread)
+        return thread
+
+    monkeypatch.setattr(vts_threading, "spawn", _spawn)
     resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
     assert resp.status_code == 200
-    worker = next(t for t in threading.enumerate() if t.name == f"ds-load-{dataset_id[:8]}")
+    (worker,) = [t for t in spawned if t.name == f"ds-load-{dataset_id[:8]}"]
     worker.join(timeout=30)
     assert not worker.is_alive()
 
 
 class TestRegistryReloadRepair:
-    def test_an_incomplete_item_is_removed_listed_and_saved_away(self, client):
+    def test_an_incomplete_item_is_removed_listed_and_saved_away(self, client, monkeypatch):
         from vtscore.concurrency.notifications import notifications
         from vtscore.datasets.container import write_container
         from vtscore.datasets.loader import load_dataset_from_pickle
@@ -68,13 +79,13 @@ class TestRegistryReloadRepair:
         received = []
         notifications.subscribe(received.append)
         try:
-            _load(client, dataset_id)
+            _load(client, monkeypatch, dataset_id)
 
             ctx = get_context(dataset_id)
             assert ctx is not None
             assert sorted(ctx.medias) == [1, 2, 4, 5]
             # The space the item was missing builds again.
-            assert list(get_embedding_matrix(ctx, embedder_name=SECOND)[1]) == [1, 2, 4, 5]
+            assert list(get_embedding_matrix(ctx, embedder_name=SECOND)[0]) == [1, 2, 4, 5]
 
             repaired = get_dataset(dataset_id)
             assert repaired["num_items"] == 4
@@ -99,7 +110,7 @@ class TestRegistryReloadRepair:
             # ...so the next load has nothing to repair, and lists nothing twice.
             client.post(f"/api/datasets/registry/{dataset_id}/unload")
             received.clear()
-            _load(client, dataset_id)
+            _load(client, monkeypatch, dataset_id)
             assert sorted(get_context(dataset_id).medias) == [1, 2, 4, 5]
             assert get_dataset(dataset_id)["num_dropped"] == 1
             assert [n for n in received if n.source == "Dataset load"] == []
@@ -109,7 +120,7 @@ class TestRegistryReloadRepair:
             unregister_dataset(dataset_id)
             pkl_path.unlink(missing_ok=True)
 
-    def test_a_complete_dataset_loads_untouched(self, client):
+    def test_a_complete_dataset_loads_untouched(self, client, monkeypatch):
         from vtscore.datasets.container import write_container
         from vtscore.datasets.registry import get_dataset, register_dataset, unregister_dataset
         from vtsearch.settings import get_saved_datasets_dir
@@ -124,7 +135,7 @@ class TestRegistryReloadRepair:
             name="Complete", media_type="image", num_items=3, pkl_path=str(pkl_path), created_by="default"
         )
         try:
-            _load(client, entry["id"])
+            _load(client, monkeypatch, entry["id"])
             assert get_dataset(entry["id"])["num_dropped"] == 0
             assert pkl_path.stat().st_mtime_ns == before
         finally:

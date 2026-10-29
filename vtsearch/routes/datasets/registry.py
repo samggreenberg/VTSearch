@@ -172,9 +172,7 @@ def _save_load_repair(dataset_id: str, entry: dict, ctx: DatasetContext, repaire
         groups = merge_dropped_groups(recorded, repaired)
         _reg_update(dataset_id, dropped_groups=groups, num_dropped=sum(g["count"] for g in groups))
         outcome = "The dataset was saved without them; its Stats window lists them."
-    items = [
-        f"{item} — {g['reason']}" if len(repaired) > 1 else item for g in repaired for item in g["items"]
-    ]
+    items = [f"{item} — {g['reason']}" if len(repaired) > 1 else item for g in repaired for item in g["items"]]
     reasons = " ".join(f"{g['reason']} ({g['count']:,} item(s))." for g in repaired)
     notify(
         f"Removed {n_removed} item(s) missing a vector",

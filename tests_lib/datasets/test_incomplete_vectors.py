@@ -155,7 +155,7 @@ class TestImportDropsIncompleteItems:
 
         assert sorted(ctx.medias) == [1, 3, 5]
         for name in (FIRST, SECOND):
-            matrix, ids = get_embedding_matrix(ctx, embedder_name=name)[:2]
+            ids, matrix = get_embedding_matrix(ctx, embedder_name=name)
             assert list(ids) == [1, 3, 5]
             assert matrix.shape == (3, DIM)
 
@@ -263,6 +263,8 @@ def _saved_shape(n: int, *, holes: dict[int, str]) -> dict[int, dict]:
         embs = {FIRST: _vec(i), SECOND: _vec(i)}
         embs.pop(holes.get(i, ""), None)
         medias[i] = _media(i, embs)
+        # Inline bytes, so a full (non-thin) reload of the saved file keeps the item.
+        medias[i]["media_bytes"] = f"bytes-{i}".encode()
     return medias
 
 
