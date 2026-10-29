@@ -7,12 +7,14 @@ Three things had to survive that split and are pinned here:
    harness all say ``vtscore.training.thresholds.X``; the ``__init__``
    re-export is what keeps that true, and it is easy to forget a name when a
    submodule grows one.
-2. **The layering stays a DAG.**  ``knobs -> gmm -> {anchored, conformal} ->
-   blend`` is the whole point of the split: the mixture layer knows nothing of
-   folds, and the two rival estimators know nothing of each other.  A back edge
-   would quietly restore the tangle.  The mixture layer is itself four layers
-   since #5424 (``gmm_core -> gmm_em -> gmm_threshold -> text_sort``), with
-   ``gmm`` a re-export facade over them that must keep resolving every name.
+2. **The layering stays a DAG.**  ``knobs -> {gmm, fold_orderings} ->
+   {anchored, conformal} -> blend`` is the whole point of the split: the
+   mixture layer knows nothing of folds, the fold fitting knows nothing of the
+   conformal rule that reads it (#5428), and the two rival estimators know
+   nothing of each other.  A back edge would quietly restore the tangle.  The
+   mixture layer is itself four layers since #5424 (``gmm_core -> gmm_em ->
+   gmm_threshold -> text_sort``), with ``gmm`` a re-export facade over them
+   that must keep resolving every name.
 3. **``calculate_gmm_threshold`` is ``fit_gmm_threshold`` with the fit
    discarded.**  The two carried byte-identical bodies before the split; the
    delegation is what stops them drifting apart again.
@@ -33,6 +35,7 @@ from vtscore.training.thresholds import (
     calculate_gmm_threshold,
     conformal,
     fit_gmm_threshold,
+    fold_orderings,
     gmm,
     gmm_core,
     gmm_em,
@@ -44,9 +47,11 @@ from vtscore.training.thresholds import (
 #: The layer each submodule sits in.  A submodule may import from a *lower*
 #: number only; ``anchored`` and ``conformal`` share a rank because they are
 #: rival estimators rather than layers, and neither may import the other.
+#: ``fold_orderings`` shares ``gmm_core``'s: it reads only the knobs.
 LAYER = {
     "knobs": 0,
     "gmm_core": 1,
+    "fold_orderings": 1,
     "gmm_em": 2,
     "gmm_threshold": 3,
     "text_sort": 4,
@@ -62,7 +67,14 @@ MIXTURE_LAYERS = {"gmm_core": gmm_core, "gmm_em": gmm_em, "gmm_threshold": gmm_t
 
 #: The submodules that define names.  The ``gmm`` facade defines none of its
 #: own, so its contract is pinned separately (:class:`TestGmmFacade`).
-SUBMODULES = {"knobs": knobs, **MIXTURE_LAYERS, "anchored": anchored, "conformal": conformal, "blend": blend}
+SUBMODULES = {
+    "knobs": knobs,
+    **MIXTURE_LAYERS,
+    "fold_orderings": fold_orderings,
+    "anchored": anchored,
+    "conformal": conformal,
+    "blend": blend,
+}
 
 PKG_DIR = Path(thresholds.__file__).parent
 
@@ -114,6 +126,27 @@ class TestGmmFacade:
     def test_the_facade_defines_nothing_of_its_own(self):
         """A body here would be a second home for a name, and patching it would reach no caller."""
         assert _top_level_names("gmm") == ["__all__"]
+
+
+class TestConformalReExportsTheFolds:
+    def test_every_public_fold_name_imports_from_conformal(self):
+        """The fold code left ``conformal`` (#5428); its public names still import from there."""
+        tree = ast.parse((PKG_DIR / "fold_orderings.py").read_text(encoding="utf-8"))
+        public = [
+            name
+            for node in tree.body
+            for name in (
+                [node.name]
+                if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+                else [t.id for t in node.targets if isinstance(t, ast.Name)]
+                if isinstance(node, ast.Assign)
+                else []
+            )
+            if not name.startswith("_")
+        ]
+        assert "compute_fold_orderings" in public
+        for name in public:
+            assert getattr(conformal, name, None) is getattr(fold_orderings, name), name
 
 
 class TestLayering:
