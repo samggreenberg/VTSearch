@@ -105,7 +105,8 @@ class TestConvert:
         ]
         (out,) = conv.convert_normalized({"filename": "big.png", "media_bytes": big}, _params())
         # The tile the thumbnail route would have generated, built once here.
-        assert out["thumbnail_bytes"] == make_image_thumbnail(out["media_bytes"])[0]
+        expected = make_image_thumbnail(out["media_bytes"])
+        assert expected is not None and out["thumbnail_bytes"] == expected[0]
         with Image.open(io.BytesIO(out["thumbnail_bytes"])) as thumb:
             assert max(thumb.size) == DEFAULT_MAX_DIM
         assert (out["width"], out["height"]) == (800, 900)

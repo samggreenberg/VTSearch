@@ -29,6 +29,13 @@ def _crop_png(side: int = 900) -> bytes:
     return buf.getvalue()
 
 
+def _thumb(data: bytes) -> bytes:
+    """The tile the thumbnail route builds for *data*."""
+    result = make_image_thumbnail(data)
+    assert result is not None
+    return result[0]
+
+
 def _face(**extra: Any) -> dict[str, Any]:
     return {
         "id": 1,
@@ -54,7 +61,7 @@ class TestEnsureThumbnailBytes:
     def test_builds_and_keeps_the_tile_the_route_would(self):
         media = _face()
         thumb = FaceMediaType().ensure_thumbnail_bytes(media)
-        assert thumb == make_image_thumbnail(media["media_bytes"])[0]
+        assert thumb is not None and thumb == _thumb(media["media_bytes"])
         assert media["thumbnail_bytes"] == thumb
         with Image.open(io.BytesIO(thumb)) as img:
             assert max(img.size) == DEFAULT_MAX_DIM
@@ -76,4 +83,4 @@ class TestSaveBackfillsTheThumbnail:
         pkl.write_bytes(export_dataset_to_file({1: media}, embedder="face", media_type="face"))
         loaded: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl, loaded)
-        assert loaded[1]["thumbnail_bytes"] == make_image_thumbnail(media["media_bytes"])[0]
+        assert loaded[1]["thumbnail_bytes"] == _thumb(media["media_bytes"])

@@ -163,7 +163,8 @@ class TestLifecycle:
         ctx = _ctx(n=4)
         order = so.similarity_order_for(ctx)
         assert order is not None and sorted(order.ids) == [1, 2, 3, 4]
-        assert sorted(read_similarity_order(container)[0]) == [1, 2, 3, 4]
+        stored = read_similarity_order(container)
+        assert stored is not None and sorted(stored[0]) == [1, 2, 3, 4]
 
     def test_concurrent_asks_fit_once(self, container):
         ctx = _ctx()
@@ -215,7 +216,8 @@ class TestLoadStage:
 
         tracker = _Tracker()
         _build_similarity_order_stage(_ctx(), tracker)
-        assert sorted(read_similarity_order(container)[0]) == [1, 2, 3, 4, 5, 6]
+        stored = read_similarity_order(container)
+        assert stored is not None and sorted(stored[0]) == [1, 2, 3, 4, 5, 6]
         assert tracker.messages[0] == "Ordering 6 items by similarity…"
         assert tracker.messages[-1] == "Similarity order ready"
 
