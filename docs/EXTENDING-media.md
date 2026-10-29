@@ -272,21 +272,21 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` |  |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` |  |
 | `face/embedder_imagekit.py` | `ImagekitFaceEmbedder` | `face` | `face` | ✅ |
-| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
-| `image/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
-| `image/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |
-| `image/embedder_dinov2_patch.py` | `ImageDinov2PatchEmbedder` | `dinov2_patch` | `image` |  |
-| `image/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
-| `image/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
-| `image/embedder_dinov3_single.py` | `ImageDinov3SingleEmbedder` | `dinov3_single` | `image` |  |
-| `image/embedder_embeddinggemma2.py` | `ImageEmbeddingGemma2Embedder` | `embeddinggemma2` | `image` |  |
-| `image/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
-| `image/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
-| `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
-| `image/embedder_sift_vlad_doc.py` | `ImageSiftVladDocEmbedder` | `sift_vlad_doc` | `image` |  |
-| `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | `siglip2` | `image` |  |
-| `image/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | `siglip2_l` | `image` |  |
-| `image/embedder_siglip_l.py` | `ImageSiglipLEmbedder` | `siglip_l` | `image` |  |
+| `image/embedders/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
+| `image/embedders/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
+| `image/embedders/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |
+| `image/embedders/embedder_dinov2_patch.py` | `ImageDinov2PatchEmbedder` | `dinov2_patch` | `image` |  |
+| `image/embedders/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
+| `image/embedders/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
+| `image/embedders/embedder_dinov3_single.py` | `ImageDinov3SingleEmbedder` | `dinov3_single` | `image` |  |
+| `image/embedders/embedder_embeddinggemma2.py` | `ImageEmbeddingGemma2Embedder` | `embeddinggemma2` | `image` |  |
+| `image/embedders/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
+| `image/embedders/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
+| `image/embedders/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
+| `image/embedders/embedder_sift_vlad_doc.py` | `ImageSiftVladDocEmbedder` | `sift_vlad_doc` | `image` |  |
+| `image/embedders/embedder_siglip2.py` | `ImageSiglip2Embedder` | `siglip2` | `image` |  |
+| `image/embedders/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | `siglip2_l` | `image` |  |
+| `image/embedders/embedder_siglip_l.py` | `ImageSiglipLEmbedder` | `siglip_l` | `image` |  |
 | `text/embedder_e5.py` | `TextE5Embedder` | `e5` | `text` | ✅ |
 | `text/embedder_bge.py` | `TextBGEEmbedder` | `bge` | `text` |  |
 | `video/embedder_xclip.py` | `VideoXClipEmbedder` | `xclip` | `video` | ✅ |
