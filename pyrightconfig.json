@@ -29,7 +29,8 @@
   // `typings/` holds the local `transformers` stub (#5077; see docs/TESTING.md).
   // It is pyright's default stubPath, which resolves against this file's
   // directory -- that is why the directory sits at the repo root. Named here so
-  // it has a visible owner; scripts/pyright-incremental.py reads the same key.
+  // it has a visible owner; scripts/gates/pyright-incremental.py reads the same
+  // key.
   "stubPath": "typings",
   "pythonVersion": "3.11",
   "typeCheckingMode": "basic",

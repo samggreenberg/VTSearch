@@ -101,7 +101,7 @@ _CODEBOOK_ASSET = Path(__file__).resolve().parent / "assets" / "vlad_codebook_v1
 
 A code asset, not per-dataset state: it is loaded like model weights and never
 written to a detector JSON, ``settings.json``, or the dataset pickle.  Rebuild
-with ``scripts/build_vlad_codebook.py``.
+with ``scripts/data/build_vlad_codebook.py``.
 """
 
 
@@ -356,7 +356,7 @@ def load_vlad_codebook() -> np.ndarray:
     """
     if not _CODEBOOK_ASSET.exists():
         raise FileNotFoundError(
-            f"VLAD codebook asset missing: {_CODEBOOK_ASSET}. Build it with `python scripts/build_vlad_codebook.py`."
+            f"VLAD codebook asset missing: {_CODEBOOK_ASSET}. Build it with `python scripts/data/build_vlad_codebook.py`."
         )
     return np.load(_CODEBOOK_ASSET).astype(np.float32)
 

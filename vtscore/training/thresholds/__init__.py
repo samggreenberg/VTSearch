@@ -7,7 +7,7 @@ return a single float threshold. Detector-specific glue (sourcing ``X_list`` / `
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across ten submodules, layered so that each one
+The implementation is split across eleven submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -21,8 +21,12 @@ only reads from those above it:
   line with no balance and the fallback under one where the labels support no
   class model: per-fold anchored mixtures combined in quantile space, plus the
   voted-media haystack exclusion.
-* :mod:`~vtscore.training.thresholds.conformal` - the rival estimator: fold
-  splits and split-conformal quantiles over pooled held-out scores.
+* :mod:`~vtscore.training.thresholds.fold_orderings` - the calibration
+  folds: the Train/Calibrate splits, the per-fold fits, and each fold's
+  held-out scores.  Reads :mod:`~vtscore.training.thresholds.knobs` only.
+* :mod:`~vtscore.training.thresholds.conformal` - the rival estimator:
+  split-conformal quantiles over the folds' pooled held-out scores, and the
+  fold cache the detector pipeline calibrates through.
 * :mod:`~vtscore.training.thresholds.blend` - the retired safe-threshold blend,
   kept as the anchored path's small-label fallback.
 * :mod:`~vtscore.training.thresholds.precision_floor` - the precision-floor
@@ -35,7 +39,13 @@ only reads from those above it:
   (#4452): the class model the calibration folds' held-out votes imply, cut
   where the expected F-beta of the kept set peaks at the prevalence it
   estimates on the corpus being decided, and the head's count line while that
-  model is thin.  Reads nothing above it; numpy and SciPy.
+  model is thin.  Drawn from three modules below it (#5426):
+  :mod:`~vtscore.training.thresholds.class_model` (the class model),
+  :mod:`~vtscore.training.thresholds.corpus_model` (the corpus fits and the
+  cut) and :mod:`~vtscore.training.thresholds.head_count` (the head's count
+  line and the cues Autopilot reads beside the line).  Every public name of
+  the four stays importable from ``labels_line``.  Reads nothing above it;
+  numpy and SciPy.
 * :mod:`~vtscore.training.thresholds.spot_check` - the balance (its presets
   and the count rule a context with no trained head falls back to) and the spot
   check, a walk of uniform picks in rank bands that audits the line and
@@ -63,6 +73,11 @@ name up, and the split moved some of those lookups:
   :func:`~vtscore.training.thresholds.conformal.calculate_cross_calibration_threshold`,
   means patching ``thresholds.blend`` / ``thresholds.conformal`` - not this
   package, where the rebind is silently ignored.
+* A submodule that re-exports a sibling's name holds one more copy, so the
+  same rule applies to it.  ``thresholds.conformal`` re-exports the fold
+  module's public names, but the fold code reads its own globals: the per-fold
+  clock (``time``) and the split sizing (``_split_train_counts``) are patched
+  on ``thresholds.fold_orderings``.
 """
 
 from __future__ import annotations
@@ -90,12 +105,23 @@ from vtscore.training.thresholds.blend import (
     safe_blend_weight,
 )
 from vtscore.training.thresholds.conformal import (
-    CALIBRATION_SPLIT_SEED,
     CONFORMAL_BASE_BUDGET,
     CONFORMAL_QPOS_MAX,
     FOLD_CONFORMAL_COMBINES,
     CalibrationFolds,
     _calibration_cache_key,
+    _score_rows_digest,
+    calculate_cross_calibration_threshold,
+    calibration_folds,
+    calibration_folds_cached,
+    combined_fold_conformal_threshold,
+    conformal_threshold,
+    per_fold_conformal_cuts,
+    threshold_from_fold_orderings,
+    threshold_from_folds,
+)
+from vtscore.training.thresholds.fold_orderings import (
+    CALIBRATION_SPLIT_SEED,
     _compute_fold_orderings_grouped,
     _fold_fit_ordering,
     _group_node_blocks,
@@ -103,20 +129,11 @@ from vtscore.training.thresholds.conformal import (
     _per_bag_fit_weights,
     _pooled_group_scores,
     _row_wise_fold_ordering,
-    _score_rows_digest,
     _split_train_counts,
     _torch_fold_ordering,
-    calculate_cross_calibration_threshold,
-    calibration_folds,
-    calibration_folds_cached,
-    combined_fold_conformal_threshold,
     compute_fold_orderings,
     compute_grouped_fold_node_scores,
-    conformal_threshold,
     nearest_holdout,
-    per_fold_conformal_cuts,
-    threshold_from_fold_orderings,
-    threshold_from_folds,
 )
 from vtscore.training.thresholds.gmm import (
     _ANCHOR_MIN_WEIGHT,
@@ -300,22 +317,31 @@ from vtscore.training.thresholds.precision_floor import (
     reporting_line,
     unpromised,
 )
-from vtscore.training.thresholds.labels_line import (
+from vtscore.training.thresholds.class_model import (
     ClassScoreModel,
-    LabelsLine,
     class_score_model,
+)
+from vtscore.training.thresholds.corpus_model import (
     CorpusNegatives,
     corpus_cut,
     corpus_expected_fbeta,
-    corpus_fit,
     corpus_posteriors,
-    corpus_prevalence,
     corpus_sigma_floor,
+    RELATIVE_SIGMA_FLOOR,
+    estimate_positives,
+    FOLD_SCALES,
+    fold_transfer_clipped,
+    fold_transfer_shift,
+    labels_line_threshold,
+    parametric_expected_fbeta,
+    target_precision_threshold,
+    transfer_fold_orderings,
+)
+from vtscore.training.thresholds.head_count import (
     HEAD_COUNT_BADS,
     HEAD_COUNT_GOODS,
     head_count_cut,
     head_count_serves,
-    RELATIVE_SIGMA_FLOOR,
     STOP_LEVEL,
     stop_level_met,
     stop_level_reading,
@@ -325,17 +351,14 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     done_check_due,
-    estimate_positives,
-    fit_labels_line,
-    FOLD_SCALES,
-    fold_transfer_clipped,
-    fold_transfer_shift,
-    labels_line_threshold,
-    parametric_expected_fbeta,
-    target_precision_threshold,
-    transfer_fold_orderings,
     weak_check_due,
     weak_check_prompts,
+)
+from vtscore.training.thresholds.labels_line import (
+    LabelsLine,
+    corpus_fit,
+    corpus_prevalence,
+    fit_labels_line,
 )
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_ARGMAX_FACTOR,
@@ -589,12 +612,21 @@ __all__ = [
     "fold_anchored_gmm_threshold",
     "rank_transfer",
     "resolve_exclusion_floor",
-    "CALIBRATION_SPLIT_SEED",
     "CONFORMAL_BASE_BUDGET",
     "CONFORMAL_QPOS_MAX",
     "CalibrationFolds",
     "FOLD_CONFORMAL_COMBINES",
     "_calibration_cache_key",
+    "_score_rows_digest",
+    "calculate_cross_calibration_threshold",
+    "calibration_folds",
+    "calibration_folds_cached",
+    "combined_fold_conformal_threshold",
+    "conformal_threshold",
+    "per_fold_conformal_cuts",
+    "threshold_from_fold_orderings",
+    "threshold_from_folds",
+    "CALIBRATION_SPLIT_SEED",
     "_compute_fold_orderings_grouped",
     "_fold_fit_ordering",
     "_group_node_blocks",
@@ -602,20 +634,11 @@ __all__ = [
     "_per_bag_fit_weights",
     "_pooled_group_scores",
     "_row_wise_fold_ordering",
-    "_score_rows_digest",
     "_split_train_counts",
     "_torch_fold_ordering",
-    "calculate_cross_calibration_threshold",
-    "calibration_folds",
-    "calibration_folds_cached",
-    "combined_fold_conformal_threshold",
     "compute_fold_orderings",
     "compute_grouped_fold_node_scores",
-    "conformal_threshold",
     "nearest_holdout",
-    "per_fold_conformal_cuts",
-    "threshold_from_fold_orderings",
-    "threshold_from_folds",
     "_as_context",
     "blend_gmm_threshold",
     "calculate_safe_threshold",

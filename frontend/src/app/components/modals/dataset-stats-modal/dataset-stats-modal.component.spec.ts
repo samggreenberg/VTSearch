@@ -20,6 +20,8 @@ describe('DatasetStatsModalComponent', () => {
     media_type: 'audio',
     num_items: 100,
     num_dupes: 3,
+    num_dropped: 0,
+    dropped_groups: [],
     created_at: 1700000075,
     expires_at: null,
     created_by: 'alice',
@@ -96,6 +98,40 @@ describe('DatasetStatsModalComponent', () => {
     httpMock.expectOne('/api/datasets/registry/ds1/stats').flush({ ...mockStats, num_dupes: 0 });
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.view-dupes-btn')).toBeFalsy();
+  });
+
+  // Issue #3798: what the import dropped outlives its toast.
+  describe('Dropped items row', () => {
+    const dropped = {
+      num_dropped: 3,
+      dropped_groups: [
+        { reason: 'The SigLIP embedder returned no vector', count: 2, items: ['a.jpg', 'b.jpg'] },
+        { reason: 'Missing the DINOv3 vector the rest of the dataset has', count: 1, items: ['c.jpg'] },
+      ],
+    };
+
+    it('is hidden when nothing was dropped', async () => {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.view-dropped-btn')).toBeFalsy();
+      expect(fixture.nativeElement.textContent).not.toContain('Dropped items');
+    });
+
+    it('shows the count and opens the list from its View button', async () => {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/datasets/registry/ds1/stats').flush({ ...mockStats, ...dropped });
+      await settleZoneless(fixture);
+
+      expect(fixture.nativeElement.textContent).toContain('Dropped items');
+      (fixture.nativeElement.querySelector('.view-dropped-btn') as HTMLButtonElement).click();
+      await settleZoneless(fixture);
+
+      // The groups ride along on the stats response: the child fetches nothing.
+      const child = fixture.nativeElement.querySelector('vt-dropped-items-modal') as HTMLElement;
+      expect(child).toBeTruthy();
+      expect(child.textContent).toContain('c.jpg');
+    });
   });
 
   // Issue #2698: the Stats window covers the Dashboard grid, so it has to

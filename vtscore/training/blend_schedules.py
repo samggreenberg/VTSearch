@@ -48,7 +48,7 @@ class BlendContext:
     Counts are in **votes** (bags), not training rows: region flooding turns one
     Bad vote into many rows, and a schedule that read rows would hand off to
     x-cal the instant a single Bad vote flooded.  See
-    :func:`vtscore.detectors.training._flood_context`.
+    :func:`vtscore.detectors.training_calibration._flood_context`.
 
     ``n_good``/``n_bad`` are carried alongside ``n_labels`` because the binding
     constraint on conformal calibration is the **rarer** class, not the total:

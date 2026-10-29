@@ -473,7 +473,7 @@ def learned_sort(body: dict):
         run_learned_sort,
     )
     from vtscore.detectors.query_head import is_quota_head
-    from vtscore.detectors.training import _patch_space_for
+    from vtscore.detectors.training_calibration import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
         detector_balance_state,

@@ -1,4 +1,4 @@
-"""The two CLIs (imagekit.cli behind scripts/detect_faces.py and scripts/process_faces.py)."""
+"""The two CLIs (imagekit.cli behind scripts/data/detect_faces.py and scripts/data/process_faces.py)."""
 
 from __future__ import annotations
 

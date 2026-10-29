@@ -4,7 +4,7 @@ The LabBench image installs only its media types' dependencies (one type's,
 or with no ``MEDIA_TYPE`` every supported type's), so the media types it can
 be built for are spelled in three places that must agree: one
 ``requirements/labbench-<type>.txt`` each (what the Dockerfile installs),
-:data:`HIDDEN_BY_TYPE` in ``scripts/seed_labbench_settings.py`` (what the
+:data:`HIDDEN_BY_TYPE` in ``scripts/install/seed_labbench_settings.py`` (what the
 seeded settings hide for that type), and the compose files' ``MEDIA_TYPE``
 build args. A type in one but not another fails minutes into a build, or
 worse, builds an image whose settings were seeded for nothing.
@@ -31,7 +31,7 @@ from vtscore.plugins.inventory import gather_plugins
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DOCKERFILE = _ROOT / "docker" / "Dockerfile.labbench"
-_SCRIPT = _ROOT / "scripts" / "seed_labbench_settings.py"
+_SCRIPT = _ROOT / "scripts" / "install" / "seed_labbench_settings.py"
 #: Where the Dockerfile writes the media types it resolved, for the later steps.
 _TYPES = re.escape("$(cat /opt/vtsearch/labbench-media-types)")
 
@@ -85,7 +85,7 @@ def _compose_files_building_labbench() -> list[Path]:
 
 def test_requirements_and_seed_name_the_same_media_types(seed) -> None:
     assert _requirement_types() == set(seed.HIDDEN_BY_TYPE), (
-        "requirements/labbench-<type>.txt and HIDDEN_BY_TYPE in scripts/seed_labbench_settings.py "
+        "requirements/labbench-<type>.txt and HIDDEN_BY_TYPE in scripts/install/seed_labbench_settings.py "
         "must name the same media types: a type with requirements but no seed entry fails the "
         "seed step at the end of the build, and an entry without requirements is unbuildable."
     )
@@ -138,8 +138,8 @@ def test_dockerfile_installs_bakes_and_seeds_the_same_media_types() -> None:
     """All three read the list the Dockerfile resolved once, so the image is the same types end to end."""
     text = _dockerfile_text()
     assert re.search(rf'for t in {_TYPES}; do echo "-r requirements/labbench-\$t\.txt"; done', text)
-    assert re.search(rf"^RUN .*python -u scripts/preload_default_embedder\.py {_TYPES}", text, re.MULTILINE)
-    assert re.search(rf"^RUN python scripts/seed_labbench_settings\.py {_TYPES} /app/data", text, re.MULTILINE)
+    assert re.search(rf"^RUN .*python -u scripts/install/preload_default_embedder\.py {_TYPES}", text, re.MULTILINE)
+    assert re.search(rf"^RUN python scripts/install/seed_labbench_settings\.py {_TYPES} /app/data", text, re.MULTILINE)
 
 
 def test_only_a_one_type_image_is_locked() -> None:

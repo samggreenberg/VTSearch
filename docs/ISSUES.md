@@ -158,7 +158,7 @@ view, so the rules most often missed are enforced in code. There are two layers:
   the issue up do it through `gh`, and they let the call through whenever they
   cannot get an answer (no `gh`, unauthenticated, offline). So those guards are
   awake on the laptop, and in a web container they catch nothing.
-- **`scripts/reconcile-solved-labels.py`** is the backstop for whatever got
+- **`scripts/release/reconcile-solved-labels.py`** is the backstop for whatever got
   past the hook. It is a pure function of PR and issue JSON that you gather and
   pipe in: with `gh` on the laptop, or with the `github` MCP tools in a web
   container, where `gh` is absent and the ambient `GH_TOKEN` gets a 403. It

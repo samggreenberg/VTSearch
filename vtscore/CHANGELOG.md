@@ -12,6 +12,52 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The load pipeline drops an item any of its embedders could not read** (issue #3798). In a multi-embedder load
+  an item one embedder declined kept another's vector (or the one its importer shipped), passed the finalize
+  stage's check for a primary vector, and was saved with a hole in one of the dataset's spaces, so
+  `get_embedding_matrix` raised for that embedder on every load. `_embed_missing_stage` now empties such an item
+  (keeping the reason its embedder recorded), and the finalize stage drops it with the rest. An embedder that
+  produced no vector for any item is not counted as one of the dataset's spaces, and a vector the load never ran
+  (one an importer shipped for a few items) marks nobody incomplete. `embed_missing` now returns the name of the
+  embedder it resolved and ran, or `None`.
+
+- **`vtscore.concurrency.progress` is split along its seams** (issue #5429). `ProgressTracker`,
+  `CancelledError`, `PROGRESS_COMMON_EXTRAS` and the `sort_progress` / `eval_progress` / `find_progress`
+  singletons now live in `vtscore.concurrency.progress_tracker`; `LoadingTasksTracker`, `CANCELLED_ERROR`,
+  `DEFAULT_MAX_KEPT_FAILURES`, `ingest_eta_hidden` and the `loading_tasks` / `detector_loading_tasks` singletons
+  in `vtscore.concurrency.loading_tracker`; `cancel_dataset_progress`, `cancel_dataset_task` and
+  `CANCEL_ACK_GRACE_SECONDS` in `vtscore.concurrency.progress_cancel`. `vtscore.concurrency.progress` keeps the
+  per-thread sink and the free-function API, and re-exports every one of those names as the same object, so
+  imports from it are unchanged and its singletons are still the only ones. The private helpers (`_ETA_LADDER`,
+  `_cancel_report`, `_CANCEL_POLL_SECONDS`, ...) moved with their code and are no longer reachable as
+  `vtscore.concurrency.progress._name`; a test that patches one patches the module that defines it. The module
+  no longer imports `time`, so a patch through `vtscore.concurrency.progress.time.monotonic` raises; patch
+  `time.monotonic`, which is what that string reached. See `packages/concurrency.md`.
+
+- **The labels line is four modules** (issue #5426). The 1,300-line `vtscore.training.thresholds.labels_line`
+  is split along its layers: `class_model` (`ClassScoreModel`, `class_score_model`, the logit helpers and the
+  prevalence range), `corpus_model` (the corpus fits, `corpus_posteriors`, `corpus_cut`, the parametric cut and
+  the folds' scale transfer), `head_count` (the head's count line and the cues Autopilot reads beside the line:
+  `STOP_LEVEL`, `weak_check_due`, `done_check_due`) and `labels_line` itself (`LabelsLine`, `fit_labels_line`).
+  Every public name still imports from `labels_line` (its `__all__` now lists all of them) and from
+  `vtscore.training.thresholds`, and behaves as before. Two things change for code that reaches further in:
+  the private helpers (`_finite_unit`, `_norm_pdf`, `_excess_depth`, `_top_under`, ...) import from their new
+  module only, and a knob swapped at run time must be swapped where it is read. `BAD_COMPONENT` is read in
+  `corpus_model`, the `HEAD_COUNT_*` knobs in `head_count`, and `_BOUND_MARGIN` and `corpus_sigma_floor` in
+  `labels_line`; setting `labels_line.HEAD_COUNT_BADS` now changes nothing. The eval harness's swaps
+  (`vtscore.eval.live_threshold_rules`) do this already. See `packages/training.md`.
+
+- **The calibration folds left `thresholds.conformal` for `thresholds.fold_orderings`** (issue #5428).
+  The Train/Calibrate splits and the per-fold fits (`compute_fold_orderings`,
+  `compute_grouped_fold_node_scores`, `nearest_holdout`, `CALIBRATION_SPLIT_SEED` and their private helpers)
+  now live in `vtscore.training.thresholds.fold_orderings`; `conformal` keeps the quantile rule, the fold
+  combiners and the fold cache. Every name still imports from `vtscore.training.thresholds`, and the public
+  fold names still import from `vtscore.training.thresholds.conformal`. The private helpers (`_grouped_folds`,
+  `_split_train_counts`, ...) and the module's `time` are no longer reachable as `conformal._name`: a stub for
+  anything the fold code reads (its per-fold clock, the split sizing) patches `fold_orderings`, while a stub for
+  `compute_fold_orderings` that should reach `calibration_folds` still patches `conformal`. Behaviour is
+  unchanged.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
@@ -23,6 +69,42 @@ instead, since every commit on `dev` is effectively a new app release.)
   ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
+
+- **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
+  module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
+  helpers move verbatim to four sibling modules, none of which reads back: `labelset_embeddings`
+  (`populate_label_embeddings` and the label-embedding caches it fills, plus `ProgressCallback`),
+  `labelset_matrix` (`build_xy_from_labelset`, `labeled_media_ids`, `labeled_media_labels`,
+  `hard_view_good_vectors`, `labelset_resolution_report`, `labelset_calibrating_groups`),
+  `labelset_structural` (`populate_label_local_features`, `maybe_labelset_structural_rerank`) and
+  `labelset_heads` (`Haystack`, `install_centroid_head`, `install_query_head`). Every public name is
+  re-exported, so `labelset_training.X` imports and behaves as before. The private helpers (`_embed_one`,
+  `_resolve_uncached_embedding`, `_LabelVector`, `_labelset_feature_snapshot`, ...) live in their new
+  module only; a test that stubs one patches the module that calls it (the module docstring says which).
+  The cross-dataset embedding and local-feature warnings now log under
+  `vtscore.detectors.labelset_embeddings` and `vtscore.detectors.labelset_structural`, prefixed with the
+  same names. See `packages/detectors.md`.
+
+- **`vtscore.detectors.training` is split into its stages** (issue #5418). The 1,770-line module keeps the
+  pipeline entry points (`train_and_threshold`, `train_and_score`, `train_detector_from_origins`,
+  `collect_media_origins`, `serialize_weights`), and the stages they call move to four sibling modules:
+  `training_snap` (which embedding space a snapshot trains and scores in: `detector_score_embedder`,
+  `validate_good_bad_split`), `training_scoring` (`ScoringRows`, `scoring_rows_for_snap`,
+  `score_rows_with_model`, `scoring_progress`, `score_media_with_model`), `training_votes`
+  (`pool_box_from_media`, `bad_negative_vecs`, `inference_score_rows`) and `training_calibration`
+  (`resolve_calibration_fraction`, and the deprecated `calibration_rows_for` and `vote_calibrating_groups`).
+  Every public name still imports from `vtscore.detectors.training` and behaves as before. The private
+  helpers moved with their stage; a test that stubs one patches the module that looks it up, which for
+  `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
+  `packages/detectors.md`.
+
+- **`vtscore.plugins` is split into `field`, `base` and `registry` modules** (issue #5417). `PluginField`,
+  its value types, `parse_checkbox` and `inactive_field_keys` now live in `vtscore.plugins.field`;
+  `PluginBase` in `vtscore.plugins.base`; `PluginRegistry`, `make_plugin_registry` and `EntryPointTombstone`
+  in `vtscore.plugins.registry`. Every name in `vtscore.plugins.__all__` still imports from
+  `vtscore.plugins` and behaves as before; only the moved classes' `__module__` changes. The private
+  name-derivation helpers (`_LEGACY_PLUGIN_NAME_SUFFIXES`, `_default_plugin_name`, `_snake_case`, ...) moved
+  to `vtscore.plugins.base` and are no longer reachable as `vtscore.plugins._name`. See `packages/plugins.md`.
 
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
@@ -912,7 +994,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   beta=None)` now draws the line at the balance (the new
   `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
   of `line_knobs` and the `thresholds.line_preference_default` mirror of
-  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `scripts/gates/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
   `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
   under a balance as it was under a floor. `aim_words(state)` says which
   preference an unchecked set was exported at ("aiming at 25% right" / "at
@@ -1449,6 +1531,20 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
+  dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
+  `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it
+  with its total as `num_dropped`. `merge_dropped_groups` adds to a recorded list under the same cap.
+- **`drop_incomplete_medias(medias)` repairs a dataset saved with an incomplete item** (issue #3798). It removes
+  every media missing a vector that more than half of them carry, returns them grouped by reason, and removes
+  nothing when that would be half the dataset or more. `resave_registered_dataset(entry, medias, coverage_atlas)`
+  rewrites a registered dataset's file atomically, with the writer the import uses.
+
+- **`PluginRegistry.package`, `.sentinel` and `.entry_point_group`** (issue #5402): read-only properties echoing
+  the constructor arguments, so tooling can say where a family's plugins come from without reaching into private
+  attributes. The generated plugin-families table in the docs now reads each family's package, sentinel and
+  entry-point group off them. Additive: no package moved, and every documented import path is unchanged.
 
 - **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
   new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,

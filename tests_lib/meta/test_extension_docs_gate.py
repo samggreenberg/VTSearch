@@ -1,4 +1,4 @@
-"""The extension-doc drift gate itself: `scripts/check-extension-docs.py`.
+"""The extension-doc drift gate itself: `scripts/gates/check-extension-docs.py`.
 
 Two doc sets state the contract for the same plugin ABCs in their own words,
 so each can drift from the code and from the other with nothing failing. The
@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "check-extension-docs.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "check-extension-docs.py"
 
 
 def _load_gate():
