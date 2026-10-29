@@ -7,8 +7,8 @@ multi-step job, subscribers, and the cooperative-cancellation flag.  The
 defined here, beside their class, so each exists exactly once.
 
 Import these names from :mod:`vtscore.concurrency.progress`, which re-exports
-every public one; this module is the bottom of that package's layering and
-imports nothing from ``vtscore``.
+every public one.  This is the bottom layer of the progress modules: it
+imports only the standard library.
 """
 
 import math

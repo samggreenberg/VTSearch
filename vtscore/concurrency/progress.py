@@ -1,6 +1,6 @@
 """Progress tracking for long-running operations.
 
-The public face of the progress package: the per-thread progress sink
+The public face of the progress modules: the per-thread progress sink
 (:func:`set_thread_progress`, :func:`resolve_progress_callback`,
 :func:`update_progress`) and the free-function API over the shared trackers
 live here, and every public name of the modules below is re-exported, as the
