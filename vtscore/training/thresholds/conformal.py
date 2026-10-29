@@ -774,6 +774,35 @@ def _row_wise_fold_ordering(
     return _torch_fold_ordering(X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink)
 
 
+class FoldOrdering(tuple):
+    """One fold's ``(cal_scores, cal_labels)``, carrying which held-out rows are hard-view faces (#5409).
+
+    A plain pair everywhere it is unpacked; :attr:`hard_views` (one flag per
+    held-out row, in ordering order) is what the labels line reads to keep a
+    hard-view Good out of the head's count line's reach
+    (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`).
+    """
+
+    hard_views: "tuple[bool, ...] | None" = None
+
+
+def _tag_hard_views(ordering: tuple[list[float], list[float]], X_cal: np.ndarray) -> tuple[list[float], list[float]]:
+    """*ordering* as a :class:`FoldOrdering` naming its hard-view rows, or unchanged when none is one (#5409).
+
+    The rows are the training pass's hard views (:func:`~vtscore.training.svm_prior.hard_view_mask`);
+    outside a :func:`~vtscore.training.svm_prior.hard_view_rows` block, and on every
+    media type with no Face Quality verdicts, nothing is tagged.
+    """
+    from vtscore.training.svm_prior import hard_view_mask  # noqa: PLC0415
+
+    hard = hard_view_mask(X_cal) if len(X_cal) else None
+    if hard is None or not hard.any():
+        return ordering
+    tagged = FoldOrdering(ordering)
+    tagged.hard_views = tuple(bool(h) for h in hard)
+    return tagged
+
+
 def compute_fold_orderings(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -903,7 +932,10 @@ def compute_fold_orderings(
         cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
 
         orderings.append(
-            _row_wise_fold_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink)
+            _tag_hard_views(
+                _row_wise_fold_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink),
+                X_np[cal_idx],
+            )
         )
         if holdout_sink is not None:
             holdout_sink.append([int(i) for i in cal_idx])
