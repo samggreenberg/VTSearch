@@ -173,10 +173,14 @@ stub randomness the UI exposes (never rely on unseeded draws).
   (above). Its defaults were measured between two Linux Chromiums, not yet
   against a Mac's rasteriser. A render elsewhere compares like for like only
   in the build that drew the baselines, which `capture.ts` names at launch
-  (`[launch] Chromium …`). The container has no copy of the build Playwright
-  pins, so `launch.mjs` falls back to the newest one it carries: Chrome for
-  Testing 153.0.8010.12, the full build, in October 2026. Point
-  `CHROMIUM_PATH` at the same build to use it in place of the pin (#5391).
+  (`[launch] Chromium …`): Chrome for Testing 153.0.8010.12, which
+  Playwright 1.63.0 pins (revision 1243) and `npx playwright install
+  chromium-headless-shell` fetches. Where the pinned build is missing,
+  `launch.mjs` falls back to the newest revision under
+  `PLAYWRIGHT_BROWSERS_PATH`, the headless shell before the full build: the
+  full build takes the machine's fontconfig hinting whatever
+  `--font-render-hinting=none` says, and drifted on 142 of 162 shots on the
+  GRID where the shell matched (#5391, #5412). `CHROMIUM_PATH` overrides both.
   The container draws every shot the same on every run, so its baselines
   are a reference, not a sample. What the app computes in floating point moves
   with the CPU (the Browse map's layout, the training-domain percentages, which

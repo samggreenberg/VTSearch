@@ -31,7 +31,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.datasource_importers import get_datasource_importer, list_datasource_importers
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
 )

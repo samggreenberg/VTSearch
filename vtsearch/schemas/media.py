@@ -51,7 +51,7 @@ from marshmallow import Schema, fields, validate
 
 from vtscore.datasets import vote_provenance
 
-from vtsearch.schemas.datasets import ImporterPickerTabSchema
+from vtsearch.schemas.datasets.listings import ImporterPickerTabSchema
 from vtsearch.schemas.sorting import _WINDOW_META_FIELDS
 
 

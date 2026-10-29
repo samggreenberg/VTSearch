@@ -32,6 +32,10 @@ Every module in the package, grouped by what it is for.
 | Module                                       | Concern                                                             |
 |----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/training.py`              | `train_and_threshold`, `train_and_score`, `train_detector_from_origins` |
+| `vtscore/detectors/training_snap.py`         | Which embedding space a snapshot trains and scores in; the patch gate |
+| `vtscore/detectors/training_scoring.py`      | `scoring_rows_for_snap`, `score_rows_with_model`, `score_media_with_model` |
+| `vtscore/detectors/training_votes.py`        | A vote's training rows: `pool_box_from_media`, `bad_negative_vecs`  |
+| `vtscore/detectors/training_calibration.py`  | The bag-aware fold context, the Train/Calibrate split, the line     |
 | `vtscore/detectors/labelset_training.py`     | Train and score from the saved labelset (cross-dataset)             |
 | `vtscore/detectors/labelset_embeddings.py`   | Resolve the labelset into the label-embedding caches                |
 | `vtscore/detectors/labelset_matrix.py`       | Training rows from those caches; which labelled media a snap holds  |
@@ -279,7 +283,12 @@ see `vtscore.state.detector_beta` ([state.md](state.md)).
 
 `vtscore/detectors/training.py` consolidates the canonical detector
 training pipeline. Three public entry points cover three different
-contexts.
+contexts. Its stages live in four sibling modules, each reading only the
+ones above it: `training_snap` (which embedding space a snapshot trains and
+scores in), `training_scoring` and `training_votes` (scoring a snapshot, and
+the training rows a vote contributes), then `training_calibration` (the
+fold context, the split, and the line). Their public names are re-exported
+from `vtscore.detectors.training`, so import from there.
 
 ### `train_and_threshold(X_list, y_list, snap=None, embedder_name=None, det_ctx=None, ...)`
 
@@ -337,7 +346,7 @@ is **deprecated** (#4269): leave it unset; `0` is accepted with a
 
 The function is the per-vote hot path:
 
-- `vtscore/detectors/training.py::_build_vote_xy` gathers
+- `vtscore/detectors/training_votes.py::_build_vote_xy` gathers
   `(X_list, y_list, groups, score_rows)` from the votes. A good vote with
   a `region_box` on a media with a stored `patch_grid` trains on the
   nearest patch (`pool_box_from_media` →
@@ -347,7 +356,7 @@ The function is the per-vote hot path:
 - The cross-calibration folds always train: the fold-anchored
   population estimator needs them. A degenerate path leaves
   `NO_GOOD_THRESHOLD` ("admit nothing") as the cut.
-- `vtscore/detectors/training.py::_score_all_media` is **the** definition
+- `vtscore/detectors/training_scoring.py::_score_all_media` is **the** definition
   of a media's score: `scoring_rows_for_snap` (patch rows on a region
   dataset, else the cached `(N, D)` matrix from
   `vtscore.embedding.matrix.get_embedding_matrix_for_snap`) composed with
@@ -593,7 +602,7 @@ whose labels meet the quota, the hold below is why, and `hold_owed` is the
 labels still owed to it (`0` otherwise, #4889).
 `query_holds(n_good, n_bad, *, patch_space, hold=QUERY_HOLD_LABELS)` is the
 typed query's hold (#4736): on a known single-vector space (`patch_space`
-`False`, from `training._patch_space_for`) a typed-query detector keeps its
+`False`, from `training_calibration._patch_space_for`) a typed-query detector keeps its
 query's head past the quota until its labels number `QUERY_HOLD_LABELS` (30).
 A patch space, or an embedder the registry does not know, has no hold.
 `_query_tier` and `cached_head_is_current` read it, and the learned-sort

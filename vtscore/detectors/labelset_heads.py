@@ -146,7 +146,7 @@ def _query_tier(resolved_tier: str, labelset: LabelSet, embedder: str | None) ->
     *embedder* is the space the labels were embedded in.
     """
     from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, labelset_quota, query_holds, query_missed
-    from vtscore.detectors.training import _patch_space_for
+    from vtscore.detectors.training_calibration import _patch_space_for
 
     quota = labelset_quota(labelset)
     if resolved_tier != TIER_TRAINED and quota.tier != TIER_TRAINED:
