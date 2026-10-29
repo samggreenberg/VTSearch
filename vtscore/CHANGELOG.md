@@ -1476,6 +1476,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`PluginRegistry.package`, `.sentinel` and `.entry_point_group`** (issue #5402): read-only properties echoing
+  the constructor arguments, so tooling can say where a family's plugins come from without reaching into private
+  attributes. The generated plugin-families table in the docs now reads each family's package, sentinel and
+  entry-point group off them. Additive: no package moved, and every documented import path is unchanged.
+
 - **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
   new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,
   sorted by score, once the last chunk is scored, instead of every record in chunk order. The header
