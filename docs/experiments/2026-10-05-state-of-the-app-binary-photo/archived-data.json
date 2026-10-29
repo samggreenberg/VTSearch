@@ -5,14 +5,6 @@
    "asset": "2026-10-05-state-of-the-app-binary-photo.894f5a3d9f87.tar.gz",
    "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
    "files": {
-    "objective_by_click.csv": {
-     "bytes": 33073,
-     "oid": "9bac9d3b7dfc495ba6241ba011bdc1af19e317b4"
-    },
-    "precision_recall_path.csv": {
-     "bytes": 1571,
-     "oid": "d569670397e14cbf9049bd3a365c69cd1bb259d4"
-    },
     "viewer_survivors.csv": {
      "bytes": 7798,
      "oid": "4f85d3dce50e53c7388840fbcd600fdbebe4f3e5"

@@ -38,7 +38,8 @@ from history.
 **What stays in the tree** (everything else under the study is archived):
 
 - markdown, and code (``.py``, ``.sh``, ``.sbatch``, ...);
-- ``viewer*.html`` and ``report*.html``, the study's interactive record;
+- ``viewer*.html`` and ``report*.html``, the study's interactive record, and
+  the two tables ``compare_paths.py`` reads from a State of the App review;
 - any file a tracked markdown file links to or embeds, anywhere in the repo, or
   names by its full repo path in backticks (``scripts/check-docs.py`` checks
   those), and any file a kept page links to;
@@ -71,7 +72,7 @@ import tarfile
 import tempfile
 import urllib.request
 from collections.abc import Iterable, Iterator
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
@@ -85,8 +86,18 @@ DOWNLOAD_URL = "https://github.com/{repo}/releases/download/{release}/{asset}"
 
 #: Prose and code: what a study's directory is *for*, never archived.
 KEEP_SUFFIXES = frozenset({".md", ".py", ".sh", ".sbatch", ".slurm", ".patch", ".mjs", ".js", ".ts", ".ipynb"})
-#: The interactive record a long study carries beside its REPORT.md.
-KEEP_NAMES = ("viewer*.html", "report*.html")
+#: Paths under docs/experiments/ that stay whoever reads them: the interactive
+#: record a long study carries beside its REPORT.md, and the two tables
+#: compare_paths.py reads from any State of the App report (a Region Photo
+#: review compares against an earlier Binary Photo one, and
+#: tests_lib/meta/test_state_of_app_compare_paths.py re-derives each committed
+#: comparison from them).
+KEEP_PATHS = (
+    "*/viewer*.html",
+    "*/report*.html",
+    "*-state-of-the-app-*/objective_by_click.csv",
+    "*-state-of-the-app-*/precision_recall_path.csv",
+)
 #: Code that counts as a live reader of a study's data. Experiment analysis
 #: code under these prefixes does not: it re-reads a finished study only to
 #: rebuild it, and ``fetch`` serves that.
@@ -192,7 +203,7 @@ class Tree:
                     self._keep(re.sub(r":\d[\d,-]*$", "", span).rstrip(".,;:"))
         for study, paths in self.by_study.items():
             for path in paths:
-                if any(fnmatch.fnmatchcase(path.rsplit("/", 1)[-1], pat) for pat in KEEP_NAMES):
+                if any(fnmatch.fnmatchcase(path.removeprefix(f"{EXPERIMENTS}/"), pat) for pat in KEEP_PATHS):
                     self.kept.add(path)
             pages += [p for p in paths if p.endswith(".html")]
         # A kept page's own images and links (the narrative report.html pages).
@@ -614,8 +625,9 @@ def cmd_webp(args: argparse.Namespace) -> int:
     ]
     skipped = [p for p in figures if p in tree.read_by_code]
     todo = [p for p in figures if p not in tree.read_by_code]
-    with ProcessPoolExecutor() as pool:
-        results = list(pool.map(to_webp, [ROOT / p for p in todo], chunksize=4))
+    # Threads, not processes: Pillow encodes with the GIL released.
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
+        results = list(pool.map(to_webp, [ROOT / p for p in todo]))
     for path, webp in zip(todo, results, strict=True):
         if webp is None:
             skipped.append(path)
