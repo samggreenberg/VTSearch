@@ -55,7 +55,7 @@
   @if (data().auto_export; as ax) {
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
       @if (ax.success) {
-        <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
+        <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter_display_name }}{{ ax.message ? ' — ' + ax.message : '' }}
         <!-- An exporter can format the results into a third-party site's URL
              and hand it back (#2898). Offered as a click rather than opened
              automatically: the results arrive from an async response, so a
@@ -66,7 +66,7 @@
           </button>
         }
       } @else {
-        &#9888; Auto-export via {{ ax.exporter }} failed{{ ax.error ? ': ' + ax.error : '' }}
+        &#9888; {{ autoExportFailure(ax) }}
       }
     </div>
   }

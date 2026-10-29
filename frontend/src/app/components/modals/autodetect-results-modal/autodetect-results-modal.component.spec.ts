@@ -325,6 +325,35 @@ describe('AutoDetectResultsModalComponent', () => {
     });
   });
 
+  // The exporter by the name the user picked it under, not its registry name,
+  // and on a failure where to fix it (#5463).
+  describe('auto-export status', () => {
+    function statusText(): string {
+      return (fixture.nativeElement.querySelector('.auto-export-status') as HTMLElement).textContent ?? '';
+    }
+
+    it('names a failed exporter by its display name and points at Settings › AutoFind', async () => {
+      fixture.componentRef.setInput('data', {
+        ...mockData,
+        auto_export: { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: false, error: 'Connection refused' },
+      });
+      await flushInit();
+      const text = statusText();
+      expect(text).toContain('via Webhook (HTTP POST) failed: Connection refused.');
+      expect(text).not.toContain('via webhook');
+      expect(text).toContain('Settings › AutoFind');
+    });
+
+    it('names a successful exporter by its display name', async () => {
+      fixture.componentRef.setInput('data', {
+        ...mockData,
+        auto_export: { exporter: 'server_json_file', exporter_display_name: 'Server JSON File', success: true },
+      });
+      await flushInit();
+      expect(statusText()).toContain('Auto-exported via Server JSON File');
+    });
+  });
+
   // The dialog used to render an exporter picker with no button to run it.
   describe('Export', () => {
     it('renders an Export button for the chosen exporter', async () => {

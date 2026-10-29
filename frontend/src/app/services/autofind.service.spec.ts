@@ -193,9 +193,26 @@ describe('AutoFindService', () => {
   });
 
   it('warns rather than congratulates when the auto-export failed', () => {
-    loadingTasks$.next([finished({}, info({ auto_export: { exporter: 'email_smtp', success: false, error: 'no MX' } }))]);
+    loadingTasks$.next([
+      finished(
+        {},
+        info({ auto_export: { exporter: 'email_smtp', exporter_display_name: 'Send by Email', success: false, error: 'no MX' } }),
+      ),
+    ]);
     expect(toast.success).not.toHaveBeenCalled();
-    expect(toast.warning.mock.calls[0][0].detail).toContain('no MX');
+    const detail = toast.warning.mock.calls[0][0].detail;
+    expect(detail).toContain('no MX');
+    // The exporter as the user picked it, and where to fix it (#5463).
+    expect(detail).toContain('via Send by Email');
+    expect(detail).not.toContain('email_smtp');
+    expect(detail).toContain('Settings › AutoFind');
+  });
+
+  it('names the exporter by its display name when the auto-export worked', () => {
+    loadingTasks$.next([
+      finished({}, info({ auto_export: { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: true } })),
+    ]);
+    expect(toast.success.mock.calls[0][0].detail).toContain('Sent via Webhook (HTTP POST).');
   });
 
   it('says so when the results have expired', () => {

@@ -43,6 +43,7 @@ import {
 import type { AutoFindBrowsePrepResponse } from '../../../generated/api-client/models/auto-find-browse-prep-response';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
+import { autoExportFailure } from '../../../utils/auto-export-status';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { labelsOwed } from '../../../utils/label-quota';
@@ -168,6 +169,9 @@ export class AutoDetectResultsModalComponent implements OnInit {
   openExternal(url: string): void {
     openExternalUrl(url);
   }
+
+  /** The failed auto-export's line, worded as the run's toast words it. */
+  readonly autoExportFailure = autoExportFailure;
 
   /**
    * The detectors that ran as the Goods' centroid (#4643): too few labels for
