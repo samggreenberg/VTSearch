@@ -16,12 +16,12 @@ from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
     RequestMissingContextError,
-    _iter_slots,
     _request_missing_dataset_context,
     _request_missing_detector_context,
     is_request_missing_dataset_context,
     is_request_missing_detector_context,
 )
+from vtscore.state.primitives import _iter_slots
 
 
 class TestSentinelSlotParity:
@@ -111,13 +111,14 @@ class TestSetFindModeIgnoresSentinel:
 
     def test_set_find_mode_is_a_noop_on_the_sentinel(self):
         import vtscore.state.core as core
+        import vtscore.state.resolution as resolution
         from vtscore.detectors.registry import set_find_mode
 
-        prev_detector = getattr(core._thread_local, "detector_context", None)
-        prev_forced = getattr(core._thread_local, "forced_detector_context", None)
-        prev_predicate = core._request_context_predicate
-        core._thread_local.detector_context = None
-        core._thread_local.forced_detector_context = None
+        prev_detector = getattr(resolution._thread_local, "detector_context", None)
+        prev_forced = getattr(resolution._thread_local, "forced_detector_context", None)
+        prev_predicate = resolution._request_context_predicate
+        resolution._thread_local.detector_context = None
+        resolution._thread_local.forced_detector_context = None
         core.register_request_context_predicate(lambda: True)
         try:
             assert core.get_active_detector_context() is _request_missing_detector_context
@@ -125,5 +126,5 @@ class TestSetFindModeIgnoresSentinel:
             assert _request_missing_detector_context.find_mode is False
         finally:
             core.register_request_context_predicate(prev_predicate)
-            core._thread_local.detector_context = prev_detector
-            core._thread_local.forced_detector_context = prev_forced
+            resolution._thread_local.detector_context = prev_detector
+            resolution._thread_local.forced_detector_context = prev_forced

@@ -15,7 +15,14 @@ protected by a single re-entrant lock; there is no implicit global
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/state/core.py` | `DatasetContext`, `DetectorContext`, `MediasDict`, `_state_lock`, the resolution chain, both registries |
+| `vtscore/state/core.py` | The context system's import path: re-exports every public name from the seven modules below, plus `is_request_missing_context`, the scalar accessors and `with_dataset_context` / `with_detector_context` |
+| `vtscore/state/primitives.py` | `_state_lock`, `_context_registry_lock` and their ordering rule, `DatasetNotLoadedError` / `DetectorNotLoadedError` / `RequestMissingContextError`, the frozen containers |
+| `vtscore/state/resolution.py` | The host hooks (`register_request_context_predicate`, `register_*_context_resolver`) and the shared thread-local |
+| `vtscore/state/dataset_context.py` | `DatasetContext`, `MediasDict` |
+| `vtscore/state/detector_context.py` | `DetectorContext` |
+| `vtscore/state/dataset_registry.py` | The loaded-dataset registry, the dataset request-missing sentinel, `get_active_context`, `thread_dataset_context` |
+| `vtscore/state/detector_registry.py` | The detector mirror of the above, plus `override_detector_context`, `loaded_detector_contexts`, `invalidate_loaded_detector_models` |
+| `vtscore/state/detector_lines.py` | A detector's line re-derived from its cached estimators: `recut_detector_threshold`, `recompute_detector_thresholds`, `detector_balance_state`, `detector_acquisition_threshold`, `human_voted_ids`, `user_beta` |
 | `vtscore/state/votes.py` | Vote / label operations, click-time ordinals (`assign_click_time`, `remove_click_time`, `get_vote_click_times`), label history, text-sort suggestions, learned scores, the Find queue |
 | `vtscore/state/clicks.py` | Deprecated alias for `vtscore.state.votes` (#5399) |
 | `vtscore/state/coverage.py` | Build / restore / mutate the active dataset's coverage atlas |
@@ -33,6 +40,8 @@ submodule: the request-missing tier (`register_request_context_predicate`,
 line and balance helpers in `core` (`recut_detector_threshold`,
 `recompute_detector_thresholds`, `user_beta`, `detector_balance_state`,
 `human_voted_ids`), everything in `sort_results_cache` and `current_user`.
+Import from `vtscore.state.core` rather than from the module that defines a
+name: `core` is the stable path, and the split behind it is free to move.
 
 - [The two context classes](#the-two-context-classes)
 - [The resolution chain](#the-resolution-chain)
@@ -53,7 +62,9 @@ line and balance helpers in `core` (`recut_detector_threshold`,
 
 ## The two context classes
 
-`DatasetContext` and `DetectorContext` live in `vtscore/state/core.py`.
+`DatasetContext` and `DetectorContext` live in `vtscore/state/dataset_context.py`
+and `vtscore/state/detector_context.py`, and are imported from `vtscore.state`
+or `vtscore.state.core`.
 Both use `__slots__` so accidentally shadowing an attribute raises
 immediately. Every field is in-memory only; datasets persist via pickle,
 detectors via labelset JSON (origins + labels only, never model weights -
@@ -176,8 +187,9 @@ is treating the dict as a set.
 
 The library never carries a global "currently active" pointer. Helpers
 that operate on "the" active context walk the chain in
-`get_active_detector_context` (`vtscore/state/core.py`); the dataset side
-(`get_active_context`) is identical minus the forced-override tier.
+`get_active_detector_context` (`vtscore/state/detector_registry.py`); the
+dataset side (`get_active_context`, `vtscore/state/dataset_registry.py`) is
+identical minus the forced-override tier.
 Highest precedence wins.
 
 | Tier | Source | How it's set | Lifetime |
@@ -269,7 +281,8 @@ source of truth.
 
 `vtscore` must not import a web framework, so a host installs a
 request-aware resolver (VTSearch's reads the request's context headers
-out of `flask.g`). The hooks are in `vtscore/state/core.py`:
+out of `flask.g`). The hooks are defined in `vtscore/state/resolution.py` and
+re-exported from `vtscore.state.core`:
 
 ```python
 from vtscore.state.core import (
@@ -294,6 +307,14 @@ restore the previous thread-local on exit (or calls
 `set_thread_*_context(ctx)` at the start and `set_thread_*_context(None)`
 at the end). There is no
 "unregister resolver" - installing a new one replaces the previous.
+
+Each `register_*` call *rebinds* a module global in
+`vtscore.state.resolution`, which the resolution chain reads at call time.
+Code that reads or restores the installed hook directly (as
+`vtscore.host_seams` does for tests) must go through that module
+(`resolution._dataset_context_resolver`), never a `from … import` copy, and
+not through `vtscore.state.core`, which deliberately does not re-export the
+three globals.
 
 ---
 
@@ -678,7 +699,7 @@ Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 
 ## Thread-safety invariants
 
-- **One re-entrant lock** (`vtscore/state/core.py`,
+- **One re-entrant lock** (`vtscore/state/primitives.py`,
   `_state_lock = threading.RLock()`) guards every mutation across both
   context registries, every per-context dict, the coverage atlas, and
   the setting cache. RLock so that compound operations like

@@ -74,7 +74,7 @@ not a dataclass.  See
 ### Votes
 
 Users vote items **good** or **bad**.  Votes are stored as `dict[int, None]`
-(never sets), per detector, on `DetectorContext` (`vtscore/state/core.py`,
+(never sets), per detector, on `DetectorContext` (`vtscore/state/detector_context.py`,
 re-exported from `vtsearch/state.py`).  Add a vote with
 `votes[media_id] = None` and remove one with `del votes[media_id]`; the dict
 shape preserves insertion order and serialises consistently.  Votes drive both
@@ -244,7 +244,7 @@ aspirational.**  No module under `vtscore/` imports `flask` — there is no
 exception, not even for request-scoped context resolution.  Library code that
 needs to run against a particular dataset or detector takes an explicit context
 and scopes it with `override_detector_context()` /
-`thread_dataset_context()` (`vtscore/state/core.py`); the Flask `g` lookup lives
+`thread_dataset_context()` (both imported from `vtscore.state.core`); the Flask `g` lookup lives
 one tier up, in the resolvers `vtsearch/seam_wiring.py` registers and the `vtsearch/hooks.py`
 handler that fills `g` (the proxies in `vtsearch/state_proxies.py` are themselves
 Flask-free).
@@ -788,7 +788,7 @@ aliases, warning on import, for `vtscore.coverage.atlas`,
 ### Multi-dataset support
 
 Multiple datasets can be loaded simultaneously. Per-dataset state is
-bundled in `DatasetContext` objects (`vtscore/state/core.py`), and
+bundled in `DatasetContext` objects (`vtscore/state/dataset_context.py`), and
 per-detector state in `DetectorContext` objects.  The groups below are a
 summary; the field-by-field tables are in
 [vtscore/docs/packages/state.md § The two context classes](../vtscore/docs/packages/state.md#the-two-context-classes).
@@ -805,7 +805,7 @@ form; the caches are rebuilt from them.
 The module-level names (`medias`, `good_votes`, etc.) are **proxy
 objects** (`_ProxyDict` / `_ProxyList`) that call
 `get_active_context()` / `get_active_detector_context()`
-(`vtscore/state/core.py`) on every access.  Those resolve, in order:
+(`vtscore/state/dataset_registry.py` / `vtscore/state/detector_registry.py`) on every access.  Those resolve, in order:
 
 1. **A request-scoped context.** The app registers Flask resolvers
    (`vtsearch/seam_wiring.py`, `register_flask_context_resolvers()`) that read what the

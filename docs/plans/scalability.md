@@ -118,7 +118,7 @@ rather than windowed.
 
 ### S4: `medias` dict — one Python dict entry per item
 
-**File:** `vtscore/state/core.py` (`DatasetContext.medias`, a `MediasDict`)
+**File:** `vtscore/state/dataset_context.py` (`DatasetContext.medias`, a `MediasDict`)
 
 Each item is a Python `dict` with ~10 keys, embeddings stored inline
 (`loader_pickle._build_pickle_full_media` writes `"embeddings"` into each entry).
@@ -137,11 +137,11 @@ arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 ### S6: epoch counter for embedding-matrix invalidation — ⏸ GATED (partly shipped)
 
-**File:** `vtscore/state/core.py`, `vtscore/embedding/matrix.py`
+**File:** `vtscore/state/dataset_context.py`, `vtscore/embedding/matrix.py`
 
 > **Verdict (re-confirmed): defer.** The invalidation half already shipped safely
 > — `media_revision`, bumped automatically by the `MediasDict` subclass on every
-> structural change (`MediasDict` in `core.py`), keys the matrix cache's *validity*
+> structural change (`MediasDict` in `dataset_context.py`), keys the matrix cache's *validity*
 > via an O(1) revision compare in `get_embedding_matrix`, and the original O(N) id-list
 > comparison is gone. Crucially, the auto-bumping `MediasDict` removes the
 > staleness risk the earlier gating flagged (a manual invariant every mutation

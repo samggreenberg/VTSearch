@@ -38,6 +38,26 @@ instead, since every commit on `dev` is effectively a new app release.)
   (one an importer shipped for a few items) marks nobody incomplete. `embed_missing` now returns the name of the
   embedder it resolved and ran, or `None`.
 
+- **`vtscore.state.core` is split into sibling modules and kept as their re-export hub** (issue #5416).
+  The two locks, the errors and the frozen containers moved to `vtscore.state.primitives`; the host hooks and
+  the thread-local to `vtscore.state.resolution`; `DatasetContext` / `MediasDict` and `DetectorContext` to
+  `vtscore.state.dataset_context` and `vtscore.state.detector_context`; the two registries and their
+  request-missing sentinels to `vtscore.state.dataset_registry` and `vtscore.state.detector_registry`; the
+  line helpers (`recut_detector_threshold`, `detector_balance_state`, `detector_acquisition_threshold`, …) to
+  `vtscore.state.detector_lines`. Every public name still imports from `vtscore.state.core` (and
+  `vtscore.state` re-exports what it did), so a caller that only imports needs no change. Two things do:
+  - **The resolver hook globals moved, and `core` no longer carries them.** `register_request_context_predicate`
+    / `register_dataset_context_resolver` / `register_detector_context_resolver` rebind
+    `_request_context_predicate` / `_dataset_context_resolver` / `_detector_context_resolver` in
+    `vtscore.state.resolution`. Code that read or assigned them as `vtscore.state.core._…` now gets an
+    `AttributeError` rather than a copy that goes stale on the next `register_*`; read them from `resolution`.
+    `_thread_local` and `_default_context_resolver` live there too.
+  - **A `monkeypatch` of a `core` attribute applies only where the caller looks it up through `core`.**
+    `recompute_detector_thresholds` now finds `recut_detector_threshold` in `vtscore.state.detector_lines`, so
+    patch it there. The private helpers `_iter_slots`, `_empty_dataset_context`, `_contexts` and
+    `_detector_contexts` are reachable only from their own modules; `_state_lock` and
+    `_empty_detector_context` are still re-exported from `core`.
+
 - **`vtscore.concurrency.progress` is split along its seams** (issue #5429). `ProgressTracker`,
   `CancelledError`, `PROGRESS_COMMON_EXTRAS` and the `sort_progress` / `eval_progress` / `find_progress`
   singletons now live in `vtscore.concurrency.progress_tracker`; `LoadingTasksTracker`, `CANCELLED_ERROR`,
