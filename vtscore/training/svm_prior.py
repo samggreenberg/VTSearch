@@ -48,7 +48,7 @@ never takes it.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
@@ -74,6 +74,19 @@ _TYPED_QUERY: ContextVar[tuple[np.ndarray, str] | None] = ContextVar("vtsearch_t
 #: The attribute a head fitted under a typed query's prior carries: that query's text.
 QUERY_PRIOR_TEXT_ATTR = "vtsearch_query_prior_text"
 
+#: The weight a hard-view Good (a face under its space's Face Quality cut,
+#: :func:`vtscore.media.face.imagekit_bridge.is_hard_view`) takes in the head's fit
+#: while some Good is clear, where a clear Good weighs 1 (#5413).  On FHIBE's
+#: four-photo sessions with one hard starting face it raised F at 50 votes by
+#: +0.02 / +0.04 at beta 4 and +0.01 / +0.02 at beta 1 (1024 / 640 px), and
+#: changed nothing where no Good is hard.  0.1 did as well; 0 (out of the fit)
+#: and weighting hard Bads too did no better
+#: (``docs/experiments/2026-10-29-hard-face-train-weight-5413``).
+HARD_VIEW_GOOD_WEIGHT: float = 0.25
+
+#: The training pass's hard-view rows, as their float32 bytes (:func:`hard_view_rows`).
+_HARD_VIEW_ROWS: ContextVar[frozenset[bytes] | None] = ContextVar("vtsearch_hard_view_rows", default=None)
+
 
 @contextmanager
 def typed_query_prior(direction: "np.ndarray | None", text: str = "") -> Iterator[None]:
@@ -95,6 +108,49 @@ def typed_query_prior(direction: "np.ndarray | None", text: str = "") -> Iterato
         yield
     finally:
         _TYPED_QUERY.reset(token)
+
+
+def _row_key(row: np.ndarray) -> bytes:
+    return np.asarray(row, dtype=np.float32).ravel().tobytes()
+
+
+@contextmanager
+def hard_view_rows(vectors: "Iterable[np.ndarray] | None") -> Iterator[None]:
+    """Within the block, a fitted row equal to one of *vectors* is a hard-view face (#5413).
+
+    The caller names the vectors of its hard-view faces; every centroid-prior fit
+    in the block, the calibration folds' included, weights such a row when it is
+    a Good (:func:`hard_view_good_weights`).  Rows are matched by value, so a fold
+    that fits on a subset of the rows needs nothing threaded through.  ``None``
+    or no vectors changes nothing.  Scoped to the calling context, as
+    :func:`typed_query_prior` is.
+    """
+    keys = frozenset(_row_key(v) for v in vectors) if vectors is not None else frozenset()
+    if not keys:
+        yield
+        return
+    token = _HARD_VIEW_ROWS.set(keys)
+    try:
+        yield
+    finally:
+        _HARD_VIEW_ROWS.reset(token)
+
+
+def hard_view_good_weights(X: np.ndarray, y: np.ndarray) -> np.ndarray | None:
+    """Each Good row's weight in the fit (:data:`HARD_VIEW_GOOD_WEIGHT` for a hard view, else 1), or ``None``.
+
+    ``None`` when no Good row is a hard view (:func:`hard_view_rows`), or every
+    one is, so there is no clear Good to lean on: the fit is then the plain one.
+    The weights are the Goods' alone, in row order; a Bad is never weighted.
+    """
+    keys = _HARD_VIEW_ROWS.get()
+    if keys is None or HARD_VIEW_GOOD_WEIGHT == 1.0:
+        return None
+    goods = np.asarray(X)[np.asarray(y).reshape(-1) > 0.5]
+    hard = np.array([_row_key(row) in keys for row in goods], dtype=bool)
+    if not hard.any() or hard.all():
+        return None
+    return np.where(hard, HARD_VIEW_GOOD_WEIGHT, 1.0)
 
 
 def active_query_prior() -> tuple[np.ndarray, float] | None:
@@ -144,10 +200,15 @@ def centroid_prior_direction(
 
     X = np.asarray(X, dtype=np.float64)
     y = np.asarray(y).reshape(-1)
-    goods = X[y > 0.5]
+    pos = y > 0.5
+    goods = X[pos]
     if not len(goods) or len(goods) == len(X):
         raise ValueError("the centroid-prior head needs both Goods and Bads")
-    centroid = np.asarray(goods_centroid(list(goods)), dtype=np.float64)
+    # A hard-view Good weighs less in the loss and in the centroid the head starts from (#5413).
+    good_weights = hard_view_good_weights(X, y)
+    if good_weights is not None:
+        sample_weight = _weigh_goods(pos, sample_weight, good_weights)
+    centroid = np.asarray(goods_centroid(list(goods), good_weights), dtype=np.float64)
     clf = LinearSVC(
         C=config.SVM_HEAD_C,
         class_weight=None if sample_weight is not None else "balanced",
@@ -169,6 +230,23 @@ def centroid_prior_direction(
     for k, (s, d) in enumerate(priors):
         w += s * coef[X.shape[1] + k] * d
     return w, float(np.asarray(clf.intercept_).ravel()[0])
+
+
+def _weigh_goods(pos: np.ndarray, sample_weight: np.ndarray | None, good_weights: np.ndarray) -> np.ndarray:
+    """Per-row loss weights with the Goods shared out by *good_weights*, each class keeping its mass.
+
+    Without *sample_weight* each class's mass is what ``class_weight="balanced"``
+    gives it (half the rows); with one, it is that class's own total.  Within the
+    Goods the mass goes by *good_weights*, so a hard Good counts less than the other
+    Goods while the Goods together count as before.
+    """
+    n = len(pos)
+    base = np.ones(n) if sample_weight is None else np.asarray(sample_weight, dtype=np.float64).ravel()
+    out = base.copy() if sample_weight is not None else np.where(pos, n / (2.0 * pos.sum()), n / (2.0 * (~pos).sum()))
+    share = base[pos] * good_weights
+    mass = n / 2.0 if sample_weight is None else base[pos].sum()
+    out[pos] = mass * share / share.sum()
+    return out
 
 
 def fit_linear_svm_prior_head(

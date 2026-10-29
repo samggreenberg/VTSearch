@@ -59,19 +59,25 @@ CENTROID_THRESHOLD = 0.5
 _MARK = "vtsearch_centroid_goods"
 
 
-def goods_centroid(vectors: Sequence[np.ndarray]) -> np.ndarray:
-    """The unit mean of the L2-normalised *vectors*: every Good weighs the same.
+def goods_centroid(vectors: Sequence[np.ndarray], weights: Sequence[float] | None = None) -> np.ndarray:
+    """The unit mean of the L2-normalised *vectors*: every Good weighs the same, or its *weights* entry.
 
     The same mean :func:`~vtscore.training.query_sort.example_sort_from_paths`
     takes of several uploaded examples, renormalised so a cosine to it is a
-    cosine.  Raises :class:`ValueError` on no vectors.
+    cosine.  *weights* (one per vector) is the trained head's weighting of a
+    hard-view face (:func:`vtscore.training.svm_prior.hard_view_good_weights`, #5413).
+    Raises :class:`ValueError` on no vectors.
     """
     if not len(vectors):
         raise ValueError("the Goods' centroid needs at least one Good")
     rows = np.stack([np.asarray(v, dtype=np.float64).ravel() for v in vectors])
     norms = np.linalg.norm(rows, axis=1, keepdims=True)
     rows = np.divide(rows, norms, out=np.zeros_like(rows), where=norms > 0)
-    mean = rows.mean(axis=0)
+    mean = (
+        rows.mean(axis=0)
+        if weights is None
+        else np.average(rows, axis=0, weights=np.asarray(weights, dtype=np.float64))
+    )
     norm = float(np.linalg.norm(mean))
     return (mean / norm if norm > 0 else mean).astype(np.float32)
 

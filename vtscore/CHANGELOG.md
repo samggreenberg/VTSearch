@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
+  Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
+  `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss
+  (each class keeps the mass `class_weight="balanced"` gives it) and in the Goods' centroid the head starts
+  from. `svm_prior.hard_view_rows(vectors)` names a training pass's hard-view rows by value, so every
+  calibration fold takes the weight; `labelset_training.hard_view_good_vectors` is what the app hands it,
+  and the eval harness names its pool's hard faces (`voting_iterations._fits_weigh_hard_views`).
+  `goods_centroid` takes optional `weights`. The calibration cache key carries the weights. A detector with
+  no hard-view Good, or on any media type without a Face Quality verdict, fits exactly as before. On FHIBE's
+  four-photo sessions with one hard starting face: F at 50 votes +0.02 / +0.04 at beta 4, +0.02 / +0.01 at
+  beta 1 (1024 / 640 px), nothing worse at any balance
+  (`docs/experiments/2026-10-29-hard-face-train-weight-5413`).
+
 - **The find-results contract says an exporter exports `hits` and treats `negative_hits` as informational**
   (issue #5283). `ResultsExporter.export_find_results` now says how the two sides of the threshold reach an
   exporter. Whoever builds the payload picks the side: the Find Results dialog moves the side it lists into

@@ -94,7 +94,10 @@ def _calibration_cache_key(
     groups_key = tuple(str(g) for g in groups) if groups is not None else None
     # The fold models of a typed-query detector start from its query (#4859): a pass
     # under another query, or none, must not be served this one's folds.
-    from vtscore.training.svm_prior import active_query_prior_key  # noqa: PLC0415
+    # Nor may a pass that weighs another set of hard-view Goods (#5413).
+    from vtscore.training.svm_prior import active_query_prior_key, hard_view_good_weights  # noqa: PLC0415
+
+    weights = hard_view_good_weights(np.stack(X_list), np.asarray(y_list))
 
     return (
         X_hash,
@@ -105,6 +108,7 @@ def _calibration_cache_key(
         groups_key,
         _score_rows_digest(score_rows_by_group),
         active_query_prior_key(),
+        None if weights is None else weights.tobytes(),
     )
 
 
