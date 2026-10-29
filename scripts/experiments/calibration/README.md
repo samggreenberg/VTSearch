@@ -35,6 +35,33 @@ every `.py` and `.sh` here appears in it exactly once, and every file it names
 exists. So a new study's files cannot land unclassified, and a deletion cannot
 leave a phantom row.
 
+**And it takes no new studies (#5406).** An index stops the heap from being
+unclassified, not from growing: the directory doubled, from 124 files to 231, in
+the two months after #3409. The move had only got dearer by then, since about 150
+files in other study directories import the shared layer from here as well. So
+the directory is closed to new study files instead. A new study lives in its own
+`scripts/experiments/<study>/`, as `fhibe/`, `gp_head/` and `state_of_app/`
+already do, and reaches the pipeline from there. A script puts this directory on
+`sys.path`:
+
+```python
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "calibration"))
+import common  # noqa: E402
+
+common.setup_env()
+```
+
+A launcher points at it (`CALIB="$HERE/../calibration"`) and calls the stages
+through it, as in `cd "$CALIB" && python run_cells.py …` or
+`bash "$CALIB/launch_bands.sh"`. That holds for a follow-up to a study filed
+below too, which goes in its own directory rather than beside the study it
+extends.
+The same gate enforces the rule: a file filed under **The studies** must be one
+already here when #5406 closed the directory. A genuinely shared script is still
+welcome, filed under **The shared layer**, where its row tells every study what
+it is.
+
 ### The shared layer
 
 Everything below the studies. Edit these with the care of a library, not a

@@ -805,7 +805,8 @@ _gate_vtscore_docs() { python scripts/gates/check-vtscore-docs.py ; }
 # class. See scripts/gates/check-extension-docs.py.
 _gate_extension_docs() { python scripts/gates/check-extension-docs.py ; }
 # Calibration script index: every .py/.sh in scripts/experiments/calibration/
-# is filed under exactly one study in that directory's README (#3409).
+# is filed under exactly one study in that directory's README (#3409), and no
+# new study files land there (#5406).
 _gate_calibration_index() { python scripts/gates/check-calibration-index.py ; }
 # Slide decks: every deck manifest names fragments that exist and figures that
 # resolve. Marp only *warns* on a missing figure and still exits 0.

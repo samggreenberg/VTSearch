@@ -75,7 +75,7 @@ from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.errors import error_response
 from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, run_plugin_or_error, validate_plugin_args
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
     ImporterSuggestedNameRequestSchema,
