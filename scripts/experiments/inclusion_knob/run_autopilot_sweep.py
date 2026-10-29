@@ -19,7 +19,7 @@ parity-interleaved Hard/New order instead of the app's phase machine, the
 retired ``"mlp"`` head instead of ``linear_svm``, no
 ``ACQUISITION_INCLUSION_OFFSET``, and a hardcoded ``calibration_fraction=0.5``
 where production resolves 0.3 in a single-vector space.  Nothing under
-``scripts/`` is covered by ``scripts/check-eval-app-sync.py``, so none of that
+``scripts/`` is covered by ``scripts/gates/check-eval-app-sync.py``, so none of that
 drift tripped a gate.  A driver cannot drift: it has no copy to go stale.
 
 Consequently **this script does not reproduce the committed

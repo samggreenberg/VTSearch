@@ -15,13 +15,12 @@ import pytest
 
 from vtscore.eval.live_threshold_rules import labels_chances
 from vtscore.training.thresholds import class_score_model, fit_labels_line
+from vtscore.training.thresholds import corpus_model
 from vtscore.training.thresholds import labels_line as LL
+from vtscore.training.thresholds.class_model import _finite_unit, _logit, _norm_pdf
 from vtscore.training.thresholds.labels_line import (
     PREVALENCE_MAX,
     PREVALENCE_MIN,
-    _finite_unit,
-    _logit,
-    _norm_pdf,
     corpus_posteriors,
 )
 
@@ -96,7 +95,7 @@ class TestTheClassModel:
 
 class TestTheAppsChances:
     def test_the_app_fits_the_bad_components_mean_and_holds_the_bound_at_4x(self):
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
+        assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
 
     def test_the_labels_arm_is_the_fit_before_5040_bit_for_bit(self):
         orderings, corpus, _ = _session()
@@ -168,17 +167,17 @@ class TestTheCorpusFittedBadComponent:
 class TestTheArmKnob:
     def test_it_swaps_both_pieces_and_puts_them_back(self):
         app = ("corpus_mean", 4.0)
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
+        assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == app
         with labels_chances("labels", 2.0):
-            assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
+            assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
+        assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == app
         with labels_chances():
-            assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
+            assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == app
 
     def test_it_puts_them_back_after_an_error(self):
         with pytest.raises(RuntimeError), labels_chances("corpus", math.inf):
             raise RuntimeError
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
+        assert (corpus_model.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
 
     def test_a_looser_bound_estimates_at_least_as_many_positives(self):
         orderings, corpus, _ = _session()

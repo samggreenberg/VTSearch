@@ -4,12 +4,12 @@ Vulture finds defined-but-never-referenced names. This file lists symbols
 that VTSearch DOES use, but only reflectively - so static analysis can't
 see the reference.
 
-**Do not run vulture by hand.** ``scripts/vulture-audit.py`` owns the
+**Do not run vulture by hand.** ``scripts/gates/vulture-audit.py`` owns the
 invocation (scan paths, excludes, ignore lists, confidence floor) and
 applies this file:
 
-    python scripts/vulture-audit.py                    # the pre-release audit
-    python scripts/vulture-audit.py --check-whitelist  # the run-tests.sh gate
+    python scripts/gates/vulture-audit.py                    # the pre-release audit
+    python scripts/gates/vulture-audit.py --check-whitelist  # the run-tests.sh gate
 
 The scan covers **every tier that defines or consumes first-party Python**:
 ``vtsearch/``, ``app.py``, ``tests/``, ``vtscore/``, ``tests_lib/``, and
@@ -34,7 +34,7 @@ never a deletion - removing one is a deliberate library break needing an
 See CLAUDE.md, "Dead code in ``vtscore/`` is a claim you cannot verify by
 grepping".
 
-Why the excludes / ignores (all configured in ``scripts/vulture-audit.py``):
+Why the excludes / ignores (all configured in ``scripts/gates/vulture-audit.py``):
 
 * ``vtsearch/schemas/*`` and ``vtsearch/settings_models.py`` are pure
   framework-managed declaration files. Every field assignment in a

@@ -31,6 +31,7 @@ from vtscore.training.thresholds import (
     stop_level_met,
     stop_level_reading,
 )
+from vtscore.training.thresholds.class_model import _norm_pdf
 from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
     WEAK_CHECK_COOLDOWN,
@@ -39,7 +40,6 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_SEPARATION_D,
     WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
-    _norm_pdf,
     done_check_due,
     weak_check_due,
     weak_check_prompts,
