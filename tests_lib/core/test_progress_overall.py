@@ -10,7 +10,8 @@ import time
 
 import pytest
 
-from vtscore.concurrency.progress import _ETA_LADDER, ProgressTracker, PROGRESS_COMMON_EXTRAS
+from vtscore.concurrency.progress import ProgressTracker, PROGRESS_COMMON_EXTRAS
+from vtscore.concurrency.progress_tracker import _ETA_LADDER
 
 
 def _tracker() -> ProgressTracker:

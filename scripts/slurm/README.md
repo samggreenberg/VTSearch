@@ -275,7 +275,7 @@ Clusters usually have a communal large-dataset area on a big shared volume.
 Rather than every user downloading the multi-GB demo datasets into their own
 data dir (often on a small per-user quota), keep one shared cache there and
 symlink it into each data dir with
-[`scripts/link-demo-cache.sh`](../link-demo-cache.sh) — see
+[`scripts/data/link-demo-cache.sh`](../data/link-demo-cache.sh) — see
 [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 Demo sources may also already exist elsewhere on the cluster (other groups'
 dataset folders); anything matching the extraction layout can be copied

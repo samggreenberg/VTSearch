@@ -1,4 +1,4 @@
-"""The settings ``scripts/seed_labbench_settings.py`` seeds are real settings (issue #4958).
+"""The settings ``scripts/install/seed_labbench_settings.py`` seeds are real settings (issue #4958).
 
 The LabBench image seeds its data volume with a server ``settings.json`` and
 the default user's ``user_settings.json``. A key either model does not declare
@@ -18,7 +18,7 @@ import pytest
 from vtsearch.settings import USER_SETTINGS_FILENAME
 from vtsearch.settings.models import ServerSettings, UserSettings
 
-_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "seed_labbench_settings.py"
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "install" / "seed_labbench_settings.py"
 
 
 def _load_seed():

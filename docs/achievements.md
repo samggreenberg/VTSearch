@@ -27,7 +27,7 @@ knows nothing else about it; with no app wired up, crediting is a no-op.
 | Entry | Credited by | Raised from |
 |---|---|---|
 | `votes_cast`, `days_active`, `hours_voted`, `media_types_touched`, `detectors_trained`, `vote_streak` | `record_vote` (event `vote`) | `vtscore/state/votes.py`, on every vote that lands an item in a labeled state |
-| `datasets_loaded` | `record_dataset_load` (event `dataset_load`) | `vtscore/datasets/load_pipeline.py`, when a load finishes, named by its importer |
+| `datasets_loaded` | `record_dataset_load` (event `dataset_load`) | `vtscore/datasets/load_origin.py`, when a load finishes, named by its importer |
 | `detectors_imported` | `record_detector_import` (event `detector_import`) | `vtscore/labels/sync.py` when a pull from a labelset source changes a detector, and `vtsearch/routes/labels/importers.py` |
 | `find_media` | `record_find` (event `find`) | `vtsearch/routes/detectors/scoring.py` (`POST /api/find-label`, the scoring pass behind Find and a sort by detector), `vtsearch/runtime/autofind.py` (AutoFind), and the CLI's autodetect in `vtscore/cli/scoring.py` |
 | `docs_read` | `record_doc_phrase` | `POST /api/achievements/check-phrase` |
@@ -133,7 +133,7 @@ Do not write a phrase anywhere else, this page included.
    its path to `WATCHED_PATTERNS`, or the toast waits for the next refresh.
 3. **Test it** in `tests/core/test_achievements.py`.
 4. **Regenerate what is drawn from the catalog:** the User Guide's table
-   (`python scripts/gen-docs-inventories.py`, which `./run-tests.sh` checks),
+   (`python scripts/gates/gen-docs-inventories.py`, which `./run-tests.sh` checks),
    and the slide figures (`python slides/figs/src/make-achievement-figs.py`,
    which refuses to run until its `COUNTS` has a line for the new id). Then
    re-read the slides' notes, which say how many entries there are.

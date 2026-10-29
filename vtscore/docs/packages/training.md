@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `check_schedule`, `ranges`, `spot_check`, `balance`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -395,7 +395,9 @@ single-class. (`INCLUSION_MIN` / `INCLUSION_MAX` live in `thresholds/knobs.py`.)
 
 `vtscore/training/thresholds/conformal.py::calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion_value=0, rng=None, calibrate_count=2, calibration_fraction=0.5, hidden_dim=None, groups=None, score_rows_by_group=None)`.
 Cross-calibration in one call (the interactive path uses the split form
-below). For each of `calibrate_count` rounds:
+below). The folds come from `compute_fold_orderings`
+(`vtscore/training/thresholds/fold_orderings.py`, also importable from
+`conformal`). For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
@@ -618,11 +620,30 @@ default arm:
   line expects at least `STOP_LEVEL` (0.5) F-beta at the balance
   (`stop_level_reading`; never while the head's count serves, #4878).
 
+**Where it lives** (#5426). `labels_line.py` draws the line from three modules
+below it, none of which calls one above it: `class_model.py` (`ClassScoreModel`,
+`class_score_model`, the logit helpers), `corpus_model.py` (`CorpusNegatives`,
+`fit_corpus`, `corpus_posteriors`, `corpus_cut`, `labels_line_threshold`,
+`target_precision_threshold` and the folds' scale transfer) and `head_count.py`
+(`head_count_serves` / `head_count_cut`, and the stop and spot-check rules
+above). Every public name of the four imports from `labels_line` as well as
+from `vtscore.training.thresholds`. A knob is swapped where it is read:
+`BAD_COMPONENT` in `corpus_model`, the `HEAD_COUNT_*` in `head_count`, and
+`_BOUND_MARGIN` and `corpus_sigma_floor` in `labels_line`, whose `_line_on`
+reads them; the eval harness's swaps (`vtscore.eval.live_threshold_rules`)
+follow that.
+
 ### The spot check: `balance_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `balance_line`, `balance_state`
 
 `vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
 stopped at the F-beta peak by #4413 and priced in
-[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)),
+split along its seams in #5425: `check_schedule.py` holds the balance's
+presets, the bands and the schedule, `ranges.py` the likely range,
+`spot_check.py` `LineRanking` and `SpotCheck`, and `balance.py` the mixture's
+counts, the count rule and the balance's state. Every name below still
+imports from `vtscore.training.thresholds.spot_check` as well as from the
+package.
 The line's preference is a **balance**: F-beta's *beta*, with the presets
 `BALANCE_PRESETS` (0.25, 1, 4; `DEFAULT_BETA` 1) and any value in
 `[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps
@@ -703,7 +724,7 @@ range comes only from those picks, never from a model.
   `kept_at_check`). `aim_words(state)` names the balance in a
   message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
+`scripts/gates/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
 ### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`

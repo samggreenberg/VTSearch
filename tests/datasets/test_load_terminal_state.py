@@ -60,12 +60,12 @@ def _fake_load(target_medias):
 def _run_load(tmp_path) -> str:
     """Run one full load synchronously and return its task id."""
     from vtsearch import settings as settings_mod
-    from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+    from vtscore.datasets.load_origin import _run_origin_load_in_background
     from vtscore.datasets.registry import list_datasets, unregister_dataset
 
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved"))
     with mock.patch(
-        "vtscore.datasets.load_pipeline.threading.Thread",
+        "vtscore.datasets.load_workers.threading.Thread",
         side_effect=_sync_thread_factory(),
     ):
         task_id = _run_origin_load_in_background(

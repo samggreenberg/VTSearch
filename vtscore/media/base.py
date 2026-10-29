@@ -34,8 +34,9 @@ import numpy as np
 from vtscore.security.path_validation import resolve_media_file_path
 
 # Progress callbacks.  Re-exported from ``vtscore.concurrency.progress`` (which
-# imports nothing from vtscore, so there is no cycle) rather than redeclared,
-# so the one signature every sink implements has exactly one definition.
+# imports nothing from vtscore but its own progress modules, so there is no
+# cycle) rather than redeclared, so the one signature every sink implements has
+# exactly one definition.
 from vtscore.concurrency.progress import (  # noqa: E402
     ProgressCallback,
     noop_progress as _noop_progress,
@@ -663,7 +664,7 @@ class MediaType(ABC):
         2. *lazy clip* - a derived sub-media that carries a clip recipe in
            ``origin.params`` instead of materialized bytes; its bytes are
            sliced/cropped from the source on demand (see
-           :mod:`vtscore.media.lazy_clip`).  A cleaned unit's recipe is
+           :mod:`vtscore.media.clipping.lazy_clip`).  A cleaned unit's recipe is
            exclusive: if its replay fails, nothing is served.
         3. *archive member* - a ``local_archive_member`` media's bytes,
            streamed out of its tar/zip shard on demand (see
@@ -675,7 +676,7 @@ class MediaType(ABC):
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
             return media_bytes
-        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+        from vtscore.media.clipping.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         clipped = lazy_clip_bytes(media)
         if clipped is not None:
@@ -711,7 +712,7 @@ class MediaType(ABC):
         media_string = media.get("media_string")
         if media_string is not None:
             return media_string
-        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+        from vtscore.media.clipping.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         derived = lazy_clip_bytes(media)
         if derived is not None:

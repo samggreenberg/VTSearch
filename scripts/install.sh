@@ -9,7 +9,7 @@ set -euo pipefail
 # hardware you have:
 #
 #   - GPU present -> CUDA torch, with the right cuXYZ wheel tag auto-selected
-#     from the GPU's compute capability (scripts/detect_cuda_tag.py).
+#     from the GPU's compute capability (scripts/install/detect_cuda_tag.py).
 #   - No GPU      -> the smaller CPU-only torch wheel (~200 MB vs ~2 GB).
 #
 # "GPU present" means nvidia-smi can actually see the card. If the GPU is
@@ -88,8 +88,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Shared progress-printing helpers.
-# shellcheck source=_progress.sh
-source "$SCRIPT_DIR/_progress.sh"
+# shellcheck source=install/_progress.sh
+source "$SCRIPT_DIR/install/_progress.sh"
 
 # --- GPU presence ------------------------------------------------------------
 # True (exit 0) when nvidia-smi exists and lists at least one GPU. This is the
@@ -828,7 +828,7 @@ vts_resolve_cuda_tag() {
     fi
     local pybin detected
     pybin="$(command -v python || command -v python3 || true)"
-    if [ -n "$pybin" ] && detected="$("$pybin" "$SCRIPT_DIR/detect_cuda_tag.py")"; then
+    if [ -n "$pybin" ] && detected="$("$pybin" "$SCRIPT_DIR/install/detect_cuda_tag.py")"; then
         echo "$detected"
     else
         echo "  (auto-detect failed; falling back to default tag cu126)" >&2
@@ -905,7 +905,7 @@ vts_install_toponymy() {
 # again after, so a torch that arrives with or without a cap is reconciled.
 vts_upgrade_setuptools() {
     local spec
-    spec="$(python "$SCRIPT_DIR/setuptools_spec.py")" || spec="setuptools>=83"
+    spec="$(python "$SCRIPT_DIR/install/setuptools_spec.py")" || spec="setuptools>=83"
     pip install --upgrade "$spec" --progress-bar on
 }
 
@@ -916,8 +916,8 @@ vts_install_cpu() {
     echo "normal -- it is working, not frozen."
 
     vts_progress_step "Checking Python version (>= 3.11)"
-    # shellcheck source=_check-python.sh
-    source "$SCRIPT_DIR/_check-python.sh"
+    # shellcheck source=install/_check-python.sh
+    source "$SCRIPT_DIR/install/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
     pip install --upgrade pip wheel --progress-bar on
@@ -1170,8 +1170,8 @@ vts_install_gpu() {
     vts_report_driver_persistence
 
     vts_progress_step "Checking Python version (>= 3.11)"
-    # shellcheck source=_check-python.sh
-    source "$SCRIPT_DIR/_check-python.sh"
+    # shellcheck source=install/_check-python.sh
+    source "$SCRIPT_DIR/install/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
     pip install --upgrade pip wheel --progress-bar on

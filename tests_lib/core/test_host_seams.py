@@ -63,6 +63,17 @@ class TestSnapshotCoverage:
 
         assert capture_host_seams().request_context_predicate is _sentinel
 
+    def test_capture_reads_the_persistence_hook_the_public_register_installs(self, restore_afterwards):
+        """The hook is a ``load_workers`` global; the snapshot reads it where the register writes it."""
+        from vtscore.datasets.load_pipeline import register_last_embedder_persistence_hook
+
+        def _sentinel(media_type: str, embedder: str) -> None:
+            return None
+
+        register_last_embedder_persistence_hook(_sentinel)
+
+        assert capture_host_seams().last_embedder_persistence_hook is _sentinel
+
     def test_plugin_families_are_deliberately_excluded(self, restore_afterwards):
         """``register_plugin_family`` looks like a seam but is not one.
 
@@ -88,6 +99,17 @@ class TestRestore:
         restore_host_seams(restore_afterwards)
 
         assert core._request_context_predicate is original
+
+    def test_the_persistence_hook_is_put_back_where_the_loads_read_it(self, restore_afterwards):
+        import vtscore.datasets.load_workers as load_workers
+        from vtscore.datasets.load_pipeline import register_last_embedder_persistence_hook
+
+        original = restore_afterwards.last_embedder_persistence_hook
+        register_last_embedder_persistence_hook(lambda media_type, embedder: None)
+
+        restore_host_seams(restore_afterwards)
+
+        assert load_workers._last_embedder_persistence_hook is original
 
     def test_a_leaked_keyed_seam_is_put_back(self, restore_afterwards):
         import vtscore.state as state

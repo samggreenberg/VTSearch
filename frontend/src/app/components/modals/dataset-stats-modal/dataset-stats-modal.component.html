@@ -29,6 +29,22 @@
             }
           </td>
         </tr>
+        @if (stats.num_dropped > 0) {
+          <tr>
+            <td
+              class="stat-label"
+              title="Items left out of the dataset because they had no vector: the embedder could not read them, or they were missing a vector the rest of the dataset has"
+            >Dropped items</td>
+            <td class="stat-value">
+              {{ stats.num_dropped | number }}
+              <button
+                class="btn btn--secondary btn--sm view-dropped-btn"
+                (click)="showDropped.set(true)"
+                title="See which items were dropped, and why"
+              >View</button>
+            </td>
+          </tr>
+        }
         @if (showAtlasRow) {
           <tr>
             <td
@@ -151,6 +167,14 @@
     <button class="btn btn--secondary" (click)="close()">Close</button>
   </div>
 </vt-modal>
+
+@if (showDropped()) {
+  <vt-dropped-items-modal
+    [datasetName]="datasetName()"
+    [groups]="stats()?.dropped_groups ?? []"
+    (closed)="showDropped.set(false)"
+  />
+}
 
 @if (showDuplicates()) {
   <vt-duplicates-modal

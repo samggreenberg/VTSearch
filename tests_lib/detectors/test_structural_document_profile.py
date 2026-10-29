@@ -12,7 +12,7 @@ from __future__ import annotations
 
 class TestPhotoPathUnchanged:
     def test_sift_vlad_still_keeps_1024(self):
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
         from vtscore.media.structural import DEFAULT_MAX_FEATURES
 
         assert DEFAULT_MAX_FEATURES == 1024
@@ -20,7 +20,7 @@ class TestPhotoPathUnchanged:
 
     def test_a_structural_embedder_that_opts_out_keeps_the_shipped_budget(self):
         """The no-profile case: not overriding ``max_features`` means today's value."""
-        from vtscore.media.image._structural_shared import _StructuralImageBase
+        from vtscore.media.image.embedders._structural_shared import _StructuralImageBase
         from vtscore.media.structural import DEFAULT_MAX_FEATURES
 
         class _NoProfile(_StructuralImageBase):
@@ -37,7 +37,7 @@ class TestPhotoPathUnchanged:
 
 class TestDocumentProfile:
     def test_budget_is_8192(self):
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
         from vtscore.media.structural import DOCUMENT_MAX_FEATURES
 
         assert DOCUMENT_MAX_FEATURES == 8192
@@ -46,8 +46,8 @@ class TestDocumentProfile:
     def test_identity_separates_it_from_the_photo_cell(self):
         """Cells are keyed on the embedder name, so a distinct name is what keeps
         a document build from overwriting or being read as a ``sift_vlad`` one."""
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
 
         photo, doc = ImageSiftVladEmbedder(), ImageSiftVladDocEmbedder()
         assert doc.name == "sift_vlad_doc" != photo.name
@@ -61,7 +61,7 @@ class TestDocumentProfile:
 
     def test_registered_and_listed_for_images(self):
         from vtscore.media import embedders_for_type, get_embedder
-        from vtscore.media.image._structural_shared import _StructuralImageBase
+        from vtscore.media.image.embedders._structural_shared import _StructuralImageBase
 
         registered = get_embedder("sift_vlad_doc")
         # `get_embedder` is typed to the MediaEmbedder base; `max_features` is a
@@ -76,7 +76,7 @@ class TestDocumentProfile:
         operator moving ``MAX_STRUCTURAL_DETECT_PIXELS`` would move it for photos
         only and silently leave documents on a stale pairing."""
         from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
         from vtscore.media.structural import SiftMatcher
 
         matcher = ImageSiftVladDocEmbedder()._make_matcher()

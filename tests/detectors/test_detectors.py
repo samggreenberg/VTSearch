@@ -166,7 +166,7 @@ class TestRegistryListingBackfill:
     @staticmethod
     def _count_reads(monkeypatch) -> list:
         """Spy on the listing's detector-JSON reads; returns the list of paths read."""
-        from vtsearch.routes.detectors import registry as route_module
+        from vtsearch.routes.detectors.registry import listing as route_module
 
         reads: list = []
         real = route_module._read_detector

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from vtscore.media.structural import SIFT_DESCRIPTOR_DIM, MatchStats, StructuralFeatures
-from vtscore.media.structural_tiles import fit_projection, raw_tiles, tile_vectors
+from vtscore.media.structural.structural_tiles import fit_projection, raw_tiles, tile_vectors
 from vtscore.training import structural_stage1 as s1
 from vtscore.training.thresholds import LineRanking, balance_state, gate_balance_state
 from vtscore.training.structural_similarity import (
@@ -45,7 +45,7 @@ def projection():
 @pytest.fixture
 def tiled(monkeypatch, projection):
     """Every page tiled with the small projection, which the queries also use."""
-    import vtscore.media.structural_tiles as st
+    import vtscore.media.structural.structural_tiles as st
 
     monkeypatch.setattr(st, "load_tile_projection", lambda *_a, **_k: projection)
     monkeypatch.setattr(s1, "_cuda", lambda: False)

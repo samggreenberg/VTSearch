@@ -14,7 +14,7 @@ CRUD endpoints (``vtsearch/routes/detectors/crud.py``):
 * ``POST   /api/detectors/combine``         -> :class:`DetectorCombineRequestSchema` ->
                                               :class:`DetectorCombineResponseSchema`
 
-Registry endpoints (``vtsearch/routes/detectors/registry.py``):
+Registry endpoints (``vtsearch/routes/detectors/registry/``):
 
 * ``GET    /api/detectors/registry``                   -> :class:`DetectorRegistryListResponseSchema`
 * ``POST   /api/detectors/registry``                   -> :class:`DetectorRegistryCreateRequestSchema` ->
@@ -71,7 +71,7 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
-from vtsearch.schemas.datasets import DatasetDomainShiftResponseSchema
+from vtsearch.schemas.datasets.registry import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
@@ -255,7 +255,7 @@ class DetectorCombineResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# Registry schemas (vtsearch/routes/detectors/registry.py)
+# Registry schemas (vtsearch/routes/detectors/registry/)
 # ---------------------------------------------------------------------------
 
 
@@ -758,7 +758,7 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
     the base is enumerated and the rest passed through, same as the clipper
-    descriptors in :mod:`vtsearch.schemas.datasets`.
+    descriptors in :mod:`vtsearch.schemas.datasets.listings`.
     """
 
     exporter = fields.String(required=True)

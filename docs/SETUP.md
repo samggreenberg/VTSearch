@@ -196,11 +196,11 @@ and install problems on GPU boxes are covered in
 
 ### Picking the CUDA tag
 
-When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
+When a GPU is visible, `scripts/install/detect_cuda_tag.py` picks the torch wheel's
 CUDA tag from the GPU's compute capability and the driver's CUDA version; pass
 an explicit `cuXYZ` tag only to override it. If the tag can't be determined it
 falls back to `cu126`, the widest wheel. You can preview the choice without
-installing anything: `python scripts/detect_cuda_tag.py`.
+installing anything: `python scripts/install/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
@@ -487,7 +487,7 @@ is streamlined the same way:
 
 The embedder lock and the hidden plugins (the all-types image's hidden media
 types among them) are seeded into the `/app/data` volume (by
-`scripts/seed_labbench_settings.py`), and Docker only seeds a fresh volume, so
+`scripts/install/seed_labbench_settings.py`), and Docker only seeds a fresh volume, so
 a volume an earlier LabBench image populated keeps that image's values. That is
 why each LabBench variant needs its own volume: `docker-compose.labbench-audio.yml`
 mounts `vtsearch-labbench-audio-data` rather than the `vtsearch-data` the other
@@ -554,7 +554,7 @@ DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
 README's License section.)
 
 ```bash
-HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh      # optional, one-time: populates ./model_cache/
+HF_TOKEN=hf_xxx ./scripts/install/cache_gated_models.sh      # optional, one-time: populates ./model_cache/
 
 docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders

@@ -1,6 +1,6 @@
 """How a dataset import ended, as handed to code outside the load pipeline.
 
-The load pipeline (:func:`vtscore.datasets.load_pipeline._run_origin_load_in_background`)
+The load pipeline (:func:`vtscore.datasets.load_origin._run_origin_load_in_background`)
 reports the end of an import through its ``on_finished`` callback with one
 :class:`DatasetImported`.  The app passes that event on to the functions a
 server admin names with ``--on-dataset-imported`` (see

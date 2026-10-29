@@ -1018,7 +1018,7 @@ class TestWarmupEmbedderAsync:
         from unittest.mock import patch
 
         from vtscore.media import embedders_for_type
-        from vtscore.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.datasets.load_workers import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         emb = embedders_for_type("audio")[0]
@@ -1030,7 +1030,7 @@ class TestWarmupEmbedderAsync:
     def test_text_encoder_produces_valid_embedding_after_load(self):
         """After _warmup_embedder_async finishes, embed_text returns a real vector."""
         from vtscore.media import embedders_for_type
-        from vtscore.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.datasets.load_workers import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         _warmup_embedder_async(snapshot_medias())
@@ -1047,7 +1047,7 @@ class TestWarmupEmbedderAsync:
         from unittest.mock import patch
 
         from vtscore.media import embedders_for_type
-        from vtscore.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.datasets.load_workers import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         emb = embedders_for_type("audio")[0]
@@ -1789,9 +1789,9 @@ class TestLoadProgressRaceCondition:
         assert current_loading_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
 
-        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_workers.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1808,11 +1808,11 @@ class TestLoadProgressRaceCondition:
         from unittest.mock import patch
 
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
 
         assert settings_mod.get_last_embedder_for_media_type("image") == ""
 
-        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_workers.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1827,9 +1827,9 @@ class TestLoadProgressRaceCondition:
         from unittest.mock import patch
 
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
 
-        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_workers.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1894,13 +1894,13 @@ class TestLoadFailureCleanup:
         """A failure after the registry entry is created must remove it."""
         from unittest import mock
 
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
         from vtscore.datasets.registry import list_datasets
 
         captured: dict = {}
         with (
             mock.patch(
-                "vtscore.datasets.load_pipeline.threading.Thread",
+                "vtscore.datasets.load_workers.threading.Thread",
                 side_effect=self._sync_thread_factory(captured),
             ),
             mock.patch(
@@ -1922,12 +1922,12 @@ class TestLoadFailureCleanup:
         """The cleanup must NOT fire on the happy path."""
         from unittest import mock
 
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
         from vtscore.datasets.registry import list_datasets, unregister_dataset
 
         captured: dict = {}
         with mock.patch(
-            "vtscore.datasets.load_pipeline.threading.Thread",
+            "vtscore.datasets.load_workers.threading.Thread",
             side_effect=self._sync_thread_factory(captured),
         ):
             _run_origin_load_in_background(
@@ -1994,7 +1994,7 @@ class TestEmptyLoadBackstop:
         from unittest import mock
 
         from tests.helpers import current_loading_progress
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
         from vtscore.datasets.registry import list_datasets
 
         def empty_load(target_medias):
@@ -2003,7 +2003,7 @@ class TestEmptyLoadBackstop:
 
         captured: dict = {}
         with mock.patch(
-            "vtscore.datasets.load_pipeline.threading.Thread",
+            "vtscore.datasets.load_workers.threading.Thread",
             side_effect=self._sync_thread_factory(captured),
         ):
             _run_origin_load_in_background(
@@ -2079,7 +2079,7 @@ class TestCancelIngest:
                     on_progress("loading", "working", 0, 0)
                     time.sleep(0.05)
 
-            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_origin import _run_origin_load_in_background
 
             _run_origin_load_in_background(
                 slow_load,
@@ -2127,9 +2127,9 @@ class TestCancelIngest:
 
         saved = dict(medias)
         try:
-            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_origin import _run_origin_load_in_background
 
-            with patch("vtscore.datasets.load_pipeline._warmup_embedder_async"):
+            with patch("vtscore.datasets.load_origin._warmup_embedder_async"):
                 task_id = _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},

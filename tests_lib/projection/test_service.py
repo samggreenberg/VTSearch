@@ -498,7 +498,7 @@ class TestBuildProgress:
         only sees the current counts has no way to reconstruct.
         """
         clock = {"t": 1000.0}
-        monkeypatch.setattr(progress_mod.time, "monotonic", lambda: clock["t"])
+        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
 
         job = AsyncJob(job_id="j", status="running")
         job.set_phase(1, 2, "arranging items")

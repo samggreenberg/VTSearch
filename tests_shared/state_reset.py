@@ -230,7 +230,7 @@ def reset_shared_state(medias_snapshot) -> None:
     # again.  Without this the gates' counts are whatever the previous test in
     # the worker process left behind, which made the assertions in
     # ``TestLoadingGates`` a lottery over xdist scheduling (issue #3613).
-    from vtscore.datasets.load_pipeline import reset_load_gates_for_tests
+    from vtscore.datasets.load_workers import reset_load_gates_for_tests
 
     reset_load_gates_for_tests()
 

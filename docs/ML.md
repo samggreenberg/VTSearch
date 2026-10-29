@@ -131,7 +131,7 @@ The calibration folds come from **cross-calibration**:
 3. Repeat for `calibrate_count` independent random splits.
 4. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the rule's resolution is bounded by how many calibration scores the quantiles are taken over.
 
-The `calibration_fraction` setting is the Calibrate share of each split, and its default is **per-embedder** (issue #3287): with no explicit user setting, a detector that learns in a single-vector space splits 70% Train / 30% Calibrate (`0.3`), while a patch-grid embedder keeps `0.5` — in *both* its voting styles, including the boxless whole-image fallback, because the measured optimum follows the embedder's capability rather than the voting mode. The table lives in `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds/knobs.py`), resolved with an unknown-space fallback of `0.5` by `resolve_calibration_fraction` (`vtscore/detectors/training.py`); an explicit `calibration_fraction` user setting always wins, and clearing it returns to the automatic per-embedder default. Evidence: [`docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md`](experiments/2026-08-27-calibration-fraction-3287/REPORT.md).
+The `calibration_fraction` setting is the Calibrate share of each split, and its default is **per-embedder** (issue #3287): with no explicit user setting, a detector that learns in a single-vector space splits 70% Train / 30% Calibrate (`0.3`), while a patch-grid embedder keeps `0.5` — in *both* its voting styles, including the boxless whole-image fallback, because the measured optimum follows the embedder's capability rather than the voting mode. The table lives in `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds/knobs.py`), resolved with an unknown-space fallback of `0.5` by `resolve_calibration_fraction` (`vtscore/detectors/training_calibration.py`); an explicit `calibration_fraction` user setting always wins, and clearing it returns to the automatic per-embedder default. Evidence: [`docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md`](experiments/2026-08-27-calibration-fraction-3287/REPORT.md).
 
 The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config/runtime.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and cut resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) The folds are trained at every label count: the fold *models* are an input to the fold-anchored estimator below — it anchors on their held-out scores — so there is nothing to skip. Every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
 
@@ -222,7 +222,7 @@ The **GMM-based threshold** fits a 2-component Gaussian Mixture Model to a score
 
 | Site | What the seed decides | Does it move the detector? |
 |---|---|---|
-| `CALIBRATION_SPLIT_SEED` (`vtscore/training/thresholds/conformal.py`) | **which labels land on the Calibrate side** of each fold | **Yes.** Different splits leave different held-out scores, so the conformal quantile cuts somewhere else. This is the pipeline's one genuine draw. |
+| `CALIBRATION_SPLIT_SEED` (`vtscore/training/thresholds/fold_orderings.py`) | **which labels land on the Calibrate side** of each fold | **Yes.** Different splits leave different held-out scores, so the conformal quantile cuts somewhere else. This is the pipeline's one genuine draw. |
 | `fit_linear_svm_prior_head(seed=…)` → `LinearSVC(random_state=…)` | nothing: the shipped head is solved in liblinear's primal, which reads no seed | No. A convex solve with a unique optimum. (The plain SVM arm, `fit_linear_svm_head`, lets scikit-learn pick, which is the dual while votes are fewer than dimensions; there the seed permutes the path to the optimum, not the answer.) |
 | the `gmm_fit_array` subsample | which scores are kept above `_GMM_MAX_SAMPLES` | Rarely. A large uniform draw from a distribution whose quantiles are the only thing read off it. (The mixture fit itself has no seed since #3585: a deterministic 2-means init and our own EM, not `GaussianMixture(random_state=42)`.) |
 
@@ -256,7 +256,7 @@ The same control answers the neighbouring question — "is the capacity right?" 
 |---------|-------|-------|
 | `OMP_NUM_THREADS` | `app.py` | the resolved thread count |
 | `MKL_NUM_THREADS` | `app.py` | the resolved thread count |
-| `torch.set_num_threads` | `vtscore/media/torch_setup.py` (`ensure_torch_configured`) | the resolved thread count |
+| `torch.set_num_threads` | `vtscore/media/torch_utils/torch_setup.py` (`ensure_torch_configured`) | the resolved thread count |
 | dtype | `vtscore/training/mlp.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
@@ -267,7 +267,7 @@ All three thread settings read one value, `VTSEARCH_TORCH_THREADS`. The **server
 Each embedder produces fixed-size embedding vectors from a pretrained model. The full roster is generated from the live registry (the `document` media type has no embedder of its own, so it is absent here — documents are converted to other media types before embedding):
 
 <!-- BEGIN GENERATED: embedders -->
-<!-- Generated by scripts/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gen-docs-inventories.py -->
+<!-- Generated by scripts/gates/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gates/gen-docs-inventories.py -->
 
 | Media type | Embedder | Display name | Model | Dim | Notes |
 |---|---|---|---|---|---|
@@ -486,11 +486,11 @@ report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(li
 - `vtscore/coverage/atlas.py`: `CoverageAtlas`
 - `vtscore/coverage/domain_shift.py`: `domain_shift_report`, `typicality_pvalues` (split-conformal kNN)
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
-- `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
-- `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
+- `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold` and `conformal_threshold` (`conformal.py`), `compute_fold_orderings` (`fold_orderings.py`), `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`)
+- `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training; its stages are `training_snap.py` (the embedding space), `training_scoring.py` (scoring a snapshot), `training_votes.py` (a vote's training rows) and `training_calibration.py` (the fold context, the split and the line)
 - `vtscore/detectors/label_quota.py`, `centroid_head.py`, `query_head.py`: the label quota, and the Goods' centroid and typed query's heads under it
-- `vtscore/training/thresholds/labels_line.py`, `spot_check.py`, `line_test.py`: the labels line, the spot check and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md))
+- `vtscore/training/thresholds/labels_line.py`, `check_schedule.py`, `ranges.py`, `spot_check.py`, `balance.py`, `line_test.py`: the labels line, the spot check (its schedule, its likely range, the walk, and the balance's state) and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md)); the labels line draws on `class_model.py` (the labels' class model), `corpus_model.py` (the corpus fits and the cut) and `head_count.py` (the head's count line and Autopilot's cues)
 - `vtscore/detectors/labeling_progress.py`: Per-step cache of the detectors the app trained, and their stability analysis
-- `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_setup.py`: torch thread configuration
+- `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_utils/torch_setup.py`: torch thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation
 - `vtscore/config/runtime.py`: `SVM_HEAD_C`, `DEFAULT_CALIBRATE_COUNT`, `TORCH_THREADS`, and the BCE-arm knobs (`TRAIN_EPOCHS`, …); `vtscore/config/models.py`: the model IDs

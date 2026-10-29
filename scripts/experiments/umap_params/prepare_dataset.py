@@ -91,7 +91,7 @@ def prepare_image_reembed(spec: C.DatasetSpec):
 # --- image folder: Places365 (val.txt labels) --------------------------------
 def prepare_places365(spec: C.DatasetSpec):
     from vtscore.datasets.metadata import load_places365_metadata
-    from vtscore.media.image._demo_sources import PLACES365_CATEGORIES
+    from vtscore.media.image.demo._demo_sources import PLACES365_CATEGORIES
 
     target_n = {"places365_s": 5110, "places365_m": 10220, "places365_l": 21170}[spec.name]
     meta = load_places365_metadata(Path(spec.folder), PLACES365_CATEGORIES)  # {fname: {path, category}}

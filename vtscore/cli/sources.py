@@ -151,7 +151,7 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     media dicts with no vector (``embeddings={}``) and the framework's
     :func:`~vtscore.datasets.stages.embedding.embed_missing` stage embeds
     everything still without a vector once the importer returns.  The GUI's
-    ``load_pipeline`` runs that stage; the CLI ran *none* of the post-import
+    ``load_origin`` runs that stage; the CLI ran *none* of the post-import
     stages and let the vectors appear incidentally at scoring time, inside
     ``route_and_embed``'s per-detector-group embed pass.
 

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-GATE = Path(__file__).resolve().parents[2] / "scripts" / "check-frontend-gate.py"
+GATE = Path(__file__).resolve().parents[2] / "scripts" / "gates" / "check-frontend-gate.py"
 
 
 def git(repo: Path, *args: str) -> None:

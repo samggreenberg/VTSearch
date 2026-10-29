@@ -1,6 +1,7 @@
 """Schemas for the media-handling routes (list / server / embed).
 
-Listing / per-media routes (``vtsearch/routes/media/list.py``):
+Listing / per-media routes (``vtsearch/routes/media/list.py``, ``content.py``,
+``vote.py``, ``pile.py``):
 
 * ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
 * ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
@@ -51,7 +52,7 @@ from marshmallow import Schema, fields, validate
 
 from vtscore.datasets import vote_provenance
 
-from vtsearch.schemas.datasets import ImporterPickerTabSchema
+from vtsearch.schemas.datasets.listings import ImporterPickerTabSchema
 from vtsearch.schemas.sorting import _WINDOW_META_FIELDS
 
 
@@ -80,7 +81,7 @@ class MediaVariantQuerySchema(Schema):
     """Query shared by every per-media payload route.
 
     ``variant=original`` streams the pre-clean payload of an item a
-    :class:`~vtscore.media.cleaner.MediaCleaner` rewrote at load time (see
+    :class:`~vtscore.media.clipping.cleaner.MediaCleaner` rewrote at load time (see
     ``docs/plans/media-cleaners.md``); the default streams the canonical
     (cleaned) payload.  An item with no snapshot ignores the parameter, so a
     stale link keeps working.
