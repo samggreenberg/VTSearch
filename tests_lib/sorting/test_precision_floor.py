@@ -21,7 +21,7 @@ from vtscore.training.thresholds import (
     precision_floor_cut,
     precision_lower_bound_curve,
 )
-from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+from vtscore.training.thresholds.knobs import NON_FINITE_SCORE_SENTINEL
 
 N = 3000
 

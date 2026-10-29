@@ -2,7 +2,7 @@
 
 Issue #3180. A head that emits a non-finite logit for a media - a corrupt
 vector, a destabilised fit - has that media recorded at
-:data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL` (``-1.0``). The
+:data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL` (``-1.0``). The
 sentinel is deliberately outside the ``[0, 1]`` sigmoid range so ``score >=
 threshold`` is always ``False`` for it, and that contract held right up until
 the sentinels were handed to the threshold estimators *as observations*.
@@ -33,7 +33,7 @@ from vtscore.training.thresholds import (
     scored_ordering,
     threshold_from_fold_orderings,
 )
-from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL, scored_mask, scored_only
+from vtscore.training.thresholds.knobs import NON_FINITE_SCORE_SENTINEL, scored_mask, scored_only
 
 DIM = 32
 

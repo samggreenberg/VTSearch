@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.utils.scores``; NaN/Inf cannot leak into JSON scores.
+"""Tests for ``vtscore.training.thresholds.knobs``; NaN/Inf cannot leak into JSON scores.
 
 Logical-bug audit M13: ``learned_scores`` in ``/api/votes`` (and the cousin
 endpoints ``/api/learned-sort``, ``/api/find-label``, ``/api/find``,
@@ -19,7 +19,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from vtscore.utils.scores import (
+from vtscore.training.thresholds.knobs import (
     NON_FINITE_SCORE_SENTINEL,
     finite_or,
     sigmoid_to_finite_array,

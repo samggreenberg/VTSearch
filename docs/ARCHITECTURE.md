@@ -171,7 +171,7 @@ VTSearch/
 │   ├── concurrency/        Async jobs, load gates, memory budget, progress, SSE channels
 │   │                       (events.py), stall diagnostics
 │   ├── state/              DatasetContext / DetectorContext and their registries (core.py),
-│   │                       votes, clicks, current user, coverage wiring
+│   │                       votes and click times, current user, coverage wiring
 │   ├── timing/             Per-step weights that pace each progress bar
 │   ├── plugins/            PluginBase, PluginField, PluginRegistry; inventory.py (--list-plugins)
 │   ├── security/           Path / URL / archive / pickle safety, the LoginProvider ABC
@@ -776,14 +776,14 @@ re-exports all of them for app-tier call-sites:
 |------------------------------|----------------|
 | `core.py` | `DatasetContext`, `DetectorContext`, context registries, `_state_lock`, the `override_*` / `thread_*` context scopers |
 | `current_user.py` | Framework-free current-user resolution (`register_request_user_resolver`) |
-| `votes.py` | Vote operations, label history, text-sort suggestions, learned scores |
-| `clicks.py` | Click-time tracking for vote sequence analysis |
+| `votes.py` | Vote operations, click-time tracking, label history, text-sort suggestions, learned scores |
 | `coverage.py` | Coverage atlas build/cache on the active dataset (the algorithm is `vtscore/coverage/`) |
 | `sort_results_cache.py` | Per-detector cache of the last sort's result rows |
 | `media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking, `next_media_id` |
 
-(`coverage_atlas.py` and `near_dupes.py` are deprecated import aliases, warning
-on import, for `vtscore.coverage.atlas` and `vtscore.media.near_dupes`.)
+(`coverage_atlas.py`, `near_dupes.py` and `clicks.py` are deprecated import
+aliases, warning on import, for `vtscore.coverage.atlas`,
+`vtscore.media.near_dupes` and `vtscore.state.votes`.)
 
 ### Multi-dataset support
 

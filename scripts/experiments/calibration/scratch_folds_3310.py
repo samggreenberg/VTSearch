@@ -56,7 +56,7 @@ from vtscore.training.thresholds import (  # noqa: E402
     fold_anchored_gmm_threshold,
     threshold_from_fold_orderings,
 )
-from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: E402
+from vtscore.training.thresholds.knobs import sigmoid_to_finite_scores  # noqa: E402
 
 DIM = 64
 K_GRID = [1, 2, 3, 4, 6, 8, 12, 16]

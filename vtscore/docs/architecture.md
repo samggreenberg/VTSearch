@@ -384,7 +384,7 @@ is the authority on where to import it from.
 | `vtscore.sync` | `SyncSource`. |
 | `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
 | `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
-| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
+| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hashing`, `vtscore.utils.optional_deps`, `vtscore.utils.synthetic`. (`build_media_hit` and the score sentinel moved out in #5399: they are in `vtscore.datasets.labelset` and `vtscore.training.thresholds.knobs`.) |
 | `vtscore.cli` | The entry points: `autodetect_main` and its three siblings, `import_labels_into_detector`, `DetectorNotFoundError`. The stages are submodules: `vtscore.cli.pipeline`, `vtscore.cli.progress`, `vtscore.cli.resume`, … (`vtscore.cli_pipeline`, `cli_progress` and `cli_resume` are deprecated aliases of the first three). |
 
 ## Dependency direction
