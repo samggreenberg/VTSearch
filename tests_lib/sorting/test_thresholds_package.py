@@ -86,15 +86,22 @@ class TestLayering:
                 assert target in LAYER, f"{mod_name} imports unknown sibling {node.module}"
                 assert LAYER[target] < layer, f"{mod_name} imports {target}, which is not below it"
 
-    def test_gmm_layer_is_self_contained(self):
-        """The mixture layer imports no sibling at all - not even the knobs."""
+    def test_gmm_layer_reads_only_the_knobs(self):
+        """The mixture layer imports no sibling but the knobs.
+
+        At the split (#3381) it imported no sibling at all, and this test pinned
+        that.  It always read ``scored_mask``, though, which lived outside the
+        package in ``vtscore.utils.scores``; #5399 folded that into the knobs,
+        beside the other sentinels.  The knobs import nothing, so the edge
+        cannot carry folds or an estimator into the mixture layer.
+        """
         tree = ast.parse((PKG_DIR / "gmm.py").read_text(encoding="utf-8"))
         siblings = [
             n.module
             for n in ast.walk(tree)
             if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("vtscore.training.thresholds")
         ]
-        assert siblings == []
+        assert set(siblings) <= {"vtscore.training.thresholds.knobs"}
 
 
 def _bimodal(n: int, seed: int) -> list[float]:

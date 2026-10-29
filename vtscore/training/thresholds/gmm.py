@@ -5,9 +5,10 @@ The self-contained estimation layer: fit two Gaussians to a list of scores
 (:func:`fit_anchored_score_gmm`), and read a cut off the fit
 (:func:`gmm_cut_from_fit`, :func:`_rate_cut`, :func:`_weighted_gaussian_crossing`).
 
-This module imports nothing else from :mod:`vtscore.training.thresholds` - it
-has no notion of folds, conformal quantiles or blends, and the conformal layer
-has no notion of it beyond the plain fit.
+This module imports nothing else from :mod:`vtscore.training.thresholds` but
+the knobs' unscorable-score filter (:func:`~.knobs.scored_mask`) - it has no
+notion of folds, conformal quantiles or blends, and the conformal layer has no
+notion of it beyond the plain fit.
 """
 
 from __future__ import annotations

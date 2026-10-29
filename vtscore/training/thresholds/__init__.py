@@ -11,12 +11,15 @@ The implementation is split across ten submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
-  Train/Calibrate split and the sentinels *mean*.  Depends on nothing.
+  Train/Calibrate split and the sentinels *mean*, including the score an
+  unscorable media is recorded at and the helpers that drop it.  Depends on
+  nothing.
 * :mod:`~vtscore.training.thresholds.costs` - what a cut *costs* on a labelled
   sample, under the weights the knob names.  Numpy only; the one definition the
   shipped Smart indicator and the eval harness both score through.
 * :mod:`~vtscore.training.thresholds.gmm` - the 1-D two-component mixture, its
-  anchored variant, and the rules that read a cut off a fit.  Self-contained.
+  anchored variant, and the rules that read a cut off a fit.  Reads only the
+  unscorable-score filter from the knobs.
 * :mod:`~vtscore.training.thresholds.anchored` - the fold-anchored cut, the
   line with no balance and the fallback under one where the labels support no
   class model: per-fold anchored mixtures combined in quantile space, plus the
@@ -357,12 +360,18 @@ from vtscore.training.thresholds.knobs import (
     INCLUSION_MIN,
     INCLUSION_SEARCH_SPAN,
     NO_GOOD_THRESHOLD,
+    NON_FINITE_SCORE_SENTINEL,
     PRODUCTION_SPLIT,
     PRODUCTION_SPLIT_BY_SPACE,
     acquisition_inclusion,
     classify_threshold_provenance,
+    finite_or,
     inclusion_cost_weights,
     production_split_for,
+    scored_mask,
+    scored_only,
+    sigmoid_to_finite_array,
+    sigmoid_to_finite_scores,
 )
 
 __all__ = [
@@ -441,12 +450,18 @@ __all__ = [
     "INCLUSION_MIN",
     "INCLUSION_SEARCH_SPAN",
     "NO_GOOD_THRESHOLD",
+    "NON_FINITE_SCORE_SENTINEL",
     "PRODUCTION_SPLIT",
     "PRODUCTION_SPLIT_BY_SPACE",
     "acquisition_inclusion",
     "classify_threshold_provenance",
+    "finite_or",
     "inclusion_cost_weights",
     "production_split_for",
+    "scored_mask",
+    "scored_only",
+    "sigmoid_to_finite_array",
+    "sigmoid_to_finite_scores",
     "weighted_error_cost",
     "BAND_BASE",
     "WALK_DEEPER",
