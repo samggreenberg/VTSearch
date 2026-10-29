@@ -39,7 +39,7 @@ import threading
 import time
 from importlib import util as importlib_util
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Sequence
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 if TYPE_CHECKING:
     from imagekit.face.pipeline import FacePipeline
@@ -72,13 +72,6 @@ QUALITY_METADATA_KEY = "Face Quality"
 #: sessions and 11 of the 12 that fail at every beta.  A session whose best
 #: starting face clears it did not fail, four-photo sessions included.
 HARD_VIEW_QUALITY: dict[str, float] = {"oss-arcface-mbf:1": 14.0}
-
-#: The weight a hard-view starting face takes in the example centroid when at
-#: least one other starting face is clear (#5389); a clear face weighs 1.  It
-#: still counts as a Good vote.  On FHIBE's four-photo sessions one hard face
-#: among clear ones cost F 0.10-0.11 at 50 votes at beta 4, and leaving it out
-#: of the session recovered all of it (#5376).
-HARD_VIEW_EXAMPLE_WEIGHT = 0.25
 
 #: How long a :func:`face_models` answer is reused.  The listing routes ask once
 #: per converter and per demo, so a page load asks dozens of times; a model
@@ -329,19 +322,6 @@ def hard_view_of_file(path: Path) -> Optional[bool]:
     if not records:
         return None
     return is_hard_view(records[0].quality, loaded_compat())
-
-
-def example_weights(hard: Sequence[Optional[bool]]) -> Optional[list[float]]:
-    """Each starting face's weight in the example centroid, one per :func:`is_hard_view` verdict in *hard*.
-
-    A hard view weighs :data:`HARD_VIEW_EXAMPLE_WEIGHT` and every other face 1,
-    but only while some face is clear (``False``): with none clear, there is no
-    better face to lean on and every face weighs the same.  ``None`` when every
-    weight would be 1, so a caller keeps its plain mean.
-    """
-    if HARD_VIEW_EXAMPLE_WEIGHT == 1.0 or not any(h is False for h in hard) or not any(h is True for h in hard):
-        return None
-    return [HARD_VIEW_EXAMPLE_WEIGHT if h is True else 1.0 for h in hard]
 
 
 def media_hard_view(media: dict) -> Optional[bool]:

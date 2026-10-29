@@ -984,19 +984,15 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.example_centroid",
-        app="py:vtscore.training.query_sort.example_sort_cuts_from_paths,_example_weights",
+        app="py:vtscore.training.query_sort.example_sort_cuts_from_paths",
         harness="vtscore/eval/example_opening.py::example_sort",
         kind="ported",
         note=(
             "The example opening's sort (#4699): cosine to the centroid of the starting photos' "
-            "L2-normalised vectors. A hard-view face among clear ones weighs "
-            "imagekit_bridge.HARD_VIEW_EXAMPLE_WEIGHT in that centroid (#5389); both sides take "
-            "the weights from imagekit_bridge.example_weights, so the rule is delegated and what "
-            "is ported is where each verdict comes from. The app reads it off the uploaded file "
-            "(hard_view_of_file) on a face dataset only; the harness off the pile media's stamped "
-            "Face Quality and Face Compat (media_hard_view), which carry no verdict off a face "
-            "dataset. If the app changes which examples average or how they are weighted, change "
-            "the harness to match."
+            "L2-normalised vectors, each weighing the same. Face studies patch the harness side "
+            "(#5376 swaps a hard-view face out, #5389 weighs it less), so a change to how the app "
+            "averages its examples changes what those studies measured against. If the app changes "
+            "which examples average or how they are weighted, change the harness to match."
         ),
         divergence=(
             "The app re-ranks a structural (SIFT/VLAD) dataset against every example (Stage 2); "
