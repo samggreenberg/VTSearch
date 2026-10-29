@@ -668,6 +668,33 @@ def labeled_media_labels(labelset: LabelSet, snap: dict[int, dict[str, Any]] | N
     return labels
 
 
+def hard_view_good_vectors(det_ctx, labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> list[np.ndarray]:
+    """The cached vectors of *labelset*'s Goods whose face in *snap* is a hard view (#5413).
+
+    These are the rows :func:`build_xy_from_labelset` fits on, so a training pass
+    hands them to :func:`vtscore.training.svm_prior.hard_view_rows` and the head
+    weighs those Goods less.  A Good that resolves to no media in *snap*, or whose
+    media carries no Face Quality verdict (any media type but a face), is not named.
+    """
+    if not snap:
+        return []
+    from vtscore.detectors.labelset_elements import resolve_current_dataset_cid, stable_element_id  # noqa: PLC0415
+    from vtscore.media.face.imagekit_bridge import media_hard_view  # noqa: PLC0415
+    from vtscore.state import build_media_lookup  # noqa: PLC0415
+
+    lookups = build_media_lookup({cid: {**m, "id": m.get("id", cid)} for cid, m in snap.items()})
+    cache: dict[str, np.ndarray] = det_ctx.label_embeddings
+    out: list[np.ndarray] = []
+    for elem in labelset.elements:
+        if elem.label != "good":
+            continue
+        emb = cache.get(stable_element_id(elem))
+        cid = resolve_current_dataset_cid(elem, lookups)
+        if emb is not None and cid is not None and cid in snap and media_hard_view(snap[cid]):
+            out.append(emb)
+    return out
+
+
 def labelset_resolution_report(
     det_ctx,
     labelset: LabelSet,
@@ -1218,12 +1245,16 @@ def train_from_labelset(
 
     from vtscore.detectors.query_head import typed_query_prior_vector
     from vtscore.detectors.training import train_and_threshold
-    from vtscore.training.svm_prior import typed_query_prior
+    from vtscore.training.svm_prior import hard_view_rows, typed_query_prior
 
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
     # (otherwise a balance change can't move the cutoff — see train_and_threshold).
-    # A typed-query detector's head starts from its query as well as the Goods (#4859).
-    with typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query):
+    # A typed-query detector's head starts from its query as well as the Goods (#4859),
+    # and a hard-view face's Good weighs less in it (#5413).
+    with (
+        typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query),
+        hard_view_rows(hard_view_good_vectors(det_ctx, labelset, snap)),
+    ):
         mlp, threshold = train_and_threshold(
             X_list,
             y_list,
@@ -1310,7 +1341,7 @@ def labelset_train_and_score(
     from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.query_head import typed_query_prior_vector
     from vtscore.detectors.training import _format_results, _train_and_score_xy, score_rows_with_model
-    from vtscore.training.svm_prior import typed_query_prior
+    from vtscore.training.svm_prior import hard_view_rows, typed_query_prior
 
     _retired_inclusion("labelset_train_and_score(inclusion_value=...)", inclusion_value)
 
@@ -1349,8 +1380,12 @@ def labelset_train_and_score(
             results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)
             results, threshold = maybe_labelset_structural_rerank(det_ctx, labelset, results, threshold, clips_dict)
             return results, threshold, head
-    # A typed-query detector's head starts from its query as well as the Goods (#4859).
-    with typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query):
+    # A typed-query detector's head starts from its query as well as the Goods (#4859),
+    # and a hard-view face's Good weighs less in it (#5413).
+    with (
+        typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query),
+        hard_view_rows(hard_view_good_vectors(det_ctx, labelset, clips_dict)),
+    ):
         results, threshold, model = _train_and_score_xy(
             X_list,
             y_list,

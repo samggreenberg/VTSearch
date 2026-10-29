@@ -983,6 +983,22 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="training.hard_view_goods",
+        app="py:vtscore.detectors.labelset_training.hard_view_good_vectors",
+        harness="vtscore/eval/voting_iterations.py::_fits_weigh_hard_views",
+        kind="ported",
+        note=(
+            "A hard-view face's Good weighs svm_prior.HARD_VIEW_GOOD_WEIGHT in the head's fit (#5413). "
+            "The rule is delegated: both sides name rows to svm_prior.hard_view_rows and "
+            "centroid_prior_direction weighs them (hard_view_good_weights). What is ported is which "
+            "rows are named. The app names its labelset's Goods whose resolved media is a hard view "
+            "(imagekit_bridge.media_hard_view), by their cached training vectors; the harness names "
+            "every hard-view face of its pool by media_embedding, the vector good_training_vec fits on "
+            "a single-vector dataset. The two agree because the rule weighs Goods only. If the app "
+            "changes which rows it names, or reads the verdict from elsewhere, change the harness."
+        ),
+    ),
+    Mirror(
         id="training.example_centroid",
         app="py:vtscore.training.query_sort.example_sort_cuts_from_paths",
         harness="vtscore/eval/example_opening.py::example_sort",
