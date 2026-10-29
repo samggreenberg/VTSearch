@@ -12104,7 +12104,7 @@
     },
     "/api/detectors/{name}/labels/{element_id}/thumbnail": {
       "get": {
-        "description": "Mirrors :func:`vtsearch.routes.media.list.media_image` for the right pane:\naudio elements get a waveform PNG, video elements a mid-frame PNG, image\nelements get the file bytes. When the element resolves into the active\ndataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);\notherwise we resolve the underlying file via the importer and generate\non the fly. Much smaller than ``/preview`` (which serves the full file).",
+        "description": "Mirrors :func:`vtsearch.routes.media.content.media_image` for the right pane:\naudio elements get a waveform PNG, video elements a mid-frame PNG, image\nelements get the file bytes. When the element resolves into the active\ndataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);\notherwise we resolve the underlying file via the importer and generate\non the fly. Much smaller than ``/preview`` (which serves the full file).",
         "operationId": "thumbnail_detector_label",
         "responses": {
           "404": {

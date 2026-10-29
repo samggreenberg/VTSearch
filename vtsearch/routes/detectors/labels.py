@@ -588,7 +588,7 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem, crop=None
 def thumbnail_detector_label(name: str, element_id: str):
     """Stream a small thumbnail image for a saved labelset element.
 
-    Mirrors :func:`vtsearch.routes.media.list.media_image` for the right pane:
+    Mirrors :func:`vtsearch.routes.media.content.media_image` for the right pane:
     audio elements get a waveform PNG, video elements a mid-frame PNG, image
     elements get the file bytes. When the element resolves into the active
     dataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);
