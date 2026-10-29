@@ -32,6 +32,7 @@ from vtscore.training.thresholds.fold_orderings import (
     compute_grouped_fold_node_scores as compute_grouped_fold_node_scores,
 )
 from vtscore.training.thresholds.fold_orderings import nearest_holdout as nearest_holdout
+from vtscore.training.thresholds.fold_orderings import FoldOrdering as FoldOrdering
 from vtscore.training.thresholds.gmm_core import scored_ordering, snap_cut_to_sample
 from vtscore.training.thresholds.knobs import NO_GOOD_THRESHOLD
 

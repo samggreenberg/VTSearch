@@ -491,3 +491,65 @@ class TestThePrecisionTopGate:
         with pytest.raises(ValueError):
             with head_count_precision(None, None, bad):
                 pass
+
+
+class TestAHardViewGoodIsOutOfTheReach:
+    """#5409: a hard-view face's held-out Good scores low, ranks below what stands out, and at beta 4 sent the
+    line down the excess curve.  The reach skips it; it stays a Good in the class model's every other field."""
+
+    @staticmethod
+    def _tagged(hard_views):
+        from vtscore.training.thresholds.fold_orderings import FoldOrdering
+
+        scores, labels = _orderings(4, 4)[0]
+        tagged = FoldOrdering((scores, labels))
+        tagged.hard_views = tuple(hard_views)
+        return tagged
+
+    def test_the_reach_reads_the_clear_goods_alone(self):
+        plain = fit_labels_line(_orderings(4, 4), _corpus())
+        line = fit_labels_line([self._tagged([True, False, False, False] + [False] * 4)], _corpus())
+        assert plain is not None and line is not None
+        assert line.model.pos_logits is not None and line.model.pos_logits.size == 3
+        clear_goods = np.sort(_logits(np.asarray(_orderings(4, 4)[0][0][1:4])))
+        np.testing.assert_allclose(line.model.pos_logits, clear_goods)
+        assert line.model.as_dict() == plain.model.as_dict()
+
+    def test_every_good_hard_leaves_nothing_to_reach_for(self):
+        line = fit_labels_line([self._tagged([True] * 4 + [False] * 4)], _corpus())
+        assert line is not None and line.model.pos_logits is not None and line.model.pos_logits.size == 0
+        assert line.model.n_pos == 4
+
+    def test_off_is_the_line_before_5409(self, monkeypatch):
+        from vtscore.training.thresholds import class_model
+
+        monkeypatch.setattr(class_model, "REACH_SKIPS_HARD_VIEWS", False)
+        plain = fit_labels_line(_orderings(4, 4), _corpus())
+        line = fit_labels_line([self._tagged([True] * 4 + [False] * 4)], _corpus())
+        assert plain is not None and line is not None
+        np.testing.assert_array_equal(line.model.pos_logits, plain.model.pos_logits)
+
+    def test_the_folds_tag_their_hard_held_out_rows(self):
+        from vtscore.training.svm_prior import hard_view_rows
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(0)
+        X = [rng.normal(size=8).astype(np.float32) for _ in range(12)]
+        y = [1.0] * 6 + [0.0] * 6
+        fit = lambda X_tr, y_tr: lambda X_q: np.full(len(X_q), 0.5)  # noqa: E731
+        rows: list = []
+        with hard_view_rows([X[0]]):
+            orderings, _ = compute_fold_orderings(
+                X, y, 8, rng=np.random.RandomState(0), calibrate_count=3, fold_fit=fit, holdout_sink=rows
+            )
+        for ordering, held in zip(orderings, rows):
+            hard = getattr(ordering, "hard_views", None)
+            if 0 in held:
+                assert hard is not None and [h for h, r in zip(hard, held) if r == 0] == [True]
+                assert sum(hard) == 1
+            else:
+                assert hard is None
+        assert any(0 in held for held in rows)
+        plain, _ = compute_fold_orderings(X, y, 8, rng=np.random.RandomState(0), calibrate_count=3, fold_fit=fit)
+        assert all(getattr(o, "hard_views", None) is None for o in plain)
+        assert [tuple(o) for o in plain] == [tuple(o) for o in orderings]
