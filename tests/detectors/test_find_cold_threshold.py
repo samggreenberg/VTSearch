@@ -158,10 +158,13 @@ class TestColdFindCutsOnTheCorpusItDecides:
         this corpus (the assertion above) is what sets the verdicts.  The
         labelset is small enough that the app draws the head's count there
         (#4786); the estimate is the class model's, so that count is held off.
+        Each is patched where it is read: the gate in ``head_count``, the
+        chances in ``labels_line``, whose ``_line_on`` calls them (#5426).
         """
+        import vtscore.training.thresholds.head_count as head_count_mod
         import vtscore.training.thresholds.labels_line as labels_line_mod
 
-        monkeypatch.setattr(labels_line_mod, "HEAD_COUNT_BADS", 0)
+        monkeypatch.setattr(head_count_mod, "HEAD_COUNT_BADS", 0)
         corpus = _cold_corpus()
         shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
         # Every image a sure positive: the counted cut keeps the whole corpus.

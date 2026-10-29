@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labels line is four modules** (issue #5426). The 1,300-line `vtscore.training.thresholds.labels_line`
+  is split along its layers: `class_model` (`ClassScoreModel`, `class_score_model`, the logit helpers and the
+  prevalence range), `corpus_model` (the corpus fits, `corpus_posteriors`, `corpus_cut`, the parametric cut and
+  the folds' scale transfer), `head_count` (the head's count line and the cues Autopilot reads beside the line:
+  `STOP_LEVEL`, `weak_check_due`, `done_check_due`) and `labels_line` itself (`LabelsLine`, `fit_labels_line`).
+  Every public name still imports from `labels_line` (its `__all__` now lists all of them) and from
+  `vtscore.training.thresholds`, and behaves as before. Two things change for code that reaches further in:
+  the private helpers (`_finite_unit`, `_norm_pdf`, `_excess_depth`, `_top_under`, ...) import from their new
+  module only, and a knob swapped at run time must be swapped where it is read. `BAD_COMPONENT` is read in
+  `corpus_model`, the `HEAD_COUNT_*` knobs in `head_count`, and `_BOUND_MARGIN` and `corpus_sigma_floor` in
+  `labels_line`; setting `labels_line.HEAD_COUNT_BADS` now changes nothing. The eval harness's swaps
+  (`vtscore.eval.live_threshold_rules`) do this already. See `packages/training.md`.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,

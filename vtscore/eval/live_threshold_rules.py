@@ -218,6 +218,8 @@ def sigma_floor(mode: str) -> Iterator[None]:
     if mode == "relative":
         yield
         return
+    # Swapped in ``labels_line``, where the line reads it: ``_line_on`` calls the name that module imported
+    # from ``corpus_model`` (#5426), which a swap in ``corpus_model`` would never reach.
     from vtscore.training.thresholds import labels_line  # noqa: PLC0415
 
     shipped = labels_line.corpus_sigma_floor
@@ -238,7 +240,7 @@ def labels_chances(bad: "str | None" = None, bound_margin: "float | None" = None
     """Hold the labels line's chances at an arm's pieces while the block runs (#5040).
 
     *bad* places the 3-part fit's Bad component
-    (:data:`~vtscore.training.thresholds.labels_line.BAD_COMPONENT`): ``"corpus"``
+    (:data:`~vtscore.training.thresholds.corpus_model.BAD_COMPONENT`): ``"corpus"``
     fits it on the corpus being decided, the held-out Bads counted as labelled
     points of it, ``"corpus_mean"`` its mean alone (the app's since #5040),
     ``"labels"`` pins it at the held-out Bads' mean (the line before).
@@ -247,26 +249,28 @@ def labels_chances(bad: "str | None" = None, bound_margin: "float | None" = None
     #5040); ``math.inf`` removes the bound.  ``None``
     leaves a piece as the app ships it.  Every line, Train's and Find's alike,
     reads both constants when it is drawn, so the swap reaches both, and through
-    the chances Autopilot's acquisition and its stop too.  Process-wide, as
-    :func:`sigma_floor`'s swap is, and undone on the way out.
+    the chances Autopilot's acquisition and its stop too.  Each is swapped in the
+    module that reads it (#5426): the Bad component in ``corpus_model``
+    (``corpus_posteriors``), the margin in ``labels_line`` (``_line_on``).
+    Process-wide, as :func:`sigma_floor`'s swap is, and undone on the way out.
     """
-    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+    from vtscore.training.thresholds import corpus_model, labels_line  # noqa: PLC0415
 
-    if bad is not None and bad not in labels_line.BAD_COMPONENTS:
-        raise ValueError(f"labels_chances bad must be one of {labels_line.BAD_COMPONENTS} or None; got {bad!r}")
+    if bad is not None and bad not in corpus_model.BAD_COMPONENTS:
+        raise ValueError(f"labels_chances bad must be one of {corpus_model.BAD_COMPONENTS} or None; got {bad!r}")
     if bound_margin is not None and (
         isinstance(bound_margin, bool) or not isinstance(bound_margin, (int, float)) or not bound_margin >= 1.0
     ):
         raise ValueError(f"labels_chances bound_margin must be a number >= 1 or None (the app's); got {bound_margin!r}")
-    shipped = labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN
+    shipped = corpus_model.BAD_COMPONENT, labels_line._BOUND_MARGIN
     if bad is not None:
-        labels_line.BAD_COMPONENT = bad
+        corpus_model.BAD_COMPONENT = bad
     if bound_margin is not None:
         labels_line._BOUND_MARGIN = float(bound_margin)
     try:
         yield
     finally:
-        labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN = shipped
+        corpus_model.BAD_COMPONENT, labels_line._BOUND_MARGIN = shipped
 
 
 @contextmanager
@@ -274,9 +278,9 @@ def head_count_bads(bads: "int | str | None") -> Iterator[None]:
     """Hold the Bads half of the labels line's head-count gate at *bads* while the block runs (#4786).
 
     Until the class model holds ``HEAD_COUNT_GOODS`` Goods, and while it holds fewer than
-    :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_BADS` Bads (unbounded in the
+    :data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_BADS` Bads (unbounded in the
     app since #4798), the line keeps the head's count
-    (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`).  *bads* bounds that
+    (:func:`~vtscore.training.thresholds.head_count.head_count_cut`).  *bads* bounds that
     half: ``0`` is the line before #4786, ``32`` is #4786's gate, another count prices
     another gate, and ``None`` changes nothing (the app's).  Every line reads the module's constant when it cuts,
     Train's and Find's alike, so the swap reaches both; it is process-wide, as
@@ -287,14 +291,14 @@ def head_count_bads(bads: "int | str | None") -> Iterator[None]:
         return
     if isinstance(bads, bool) or not isinstance(bads, int) or bads < 0:
         raise ValueError(f"head_count_bads must be an integer >= 0 or None (the app's); got {bads!r}")
-    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+    from vtscore.training.thresholds import head_count  # noqa: PLC0415
 
-    shipped = labels_line.HEAD_COUNT_BADS
-    labels_line.HEAD_COUNT_BADS = bads
+    shipped = head_count.HEAD_COUNT_BADS
+    head_count.HEAD_COUNT_BADS = bads
     try:
         yield
     finally:
-        labels_line.HEAD_COUNT_BADS = shipped
+        head_count.HEAD_COUNT_BADS = shipped
 
 
 @contextmanager
@@ -302,9 +306,9 @@ def head_count_recall(exponent: "float | str | None" = None, z: "float | str | N
     """Hold the head's count line above a balance of 1 at an arm's pieces while the block runs (#5039).
 
     *exponent* is how the count grows above beta 1
-    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_EXPONENT`), *z* where
+    (:data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_RECALL_EXPONENT`), *z* where
     the line reaches down the head's excess curve when a held-out Good ranks below the count
-    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_Z`).  ``"off"`` is that
+    (:data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_RECALL_Z`).  ``"off"`` is that
     piece before #5039 (#4603's ``beta ** 0.708``; no reach), and ``None`` leaves it as the app
     ships it.  Every line reads the module's constants when it cuts, Train's and Find's alike, so
     the swap reaches both; it is process-wide, as :func:`head_count_bads`'s is, and undone on the
@@ -315,17 +319,17 @@ def head_count_recall(exponent: "float | str | None" = None, z: "float | str | N
             continue
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             raise ValueError(f"head_count_recall {name} must be a finite number, 'off' or None (the app's); got {v!r}")
-    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+    from vtscore.training.thresholds import head_count  # noqa: PLC0415
 
-    shipped = labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z
+    shipped = head_count.HEAD_COUNT_RECALL_EXPONENT, head_count.HEAD_COUNT_RECALL_Z
     if exponent is not None:
-        labels_line.HEAD_COUNT_RECALL_EXPONENT = None if exponent == "off" else float(exponent)
+        head_count.HEAD_COUNT_RECALL_EXPONENT = None if exponent == "off" else float(exponent)
     if z is not None:
-        labels_line.HEAD_COUNT_RECALL_Z = None if z == "off" else float(z)
+        head_count.HEAD_COUNT_RECALL_Z = None if z == "off" else float(z)
     try:
         yield
     finally:
-        labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z = shipped
+        head_count.HEAD_COUNT_RECALL_EXPONENT, head_count.HEAD_COUNT_RECALL_Z = shipped
 
 
 @contextmanager
@@ -335,11 +339,11 @@ def head_count_precision(
     """Hold the head's count multiplier at a balance of 1 and below at an arm's while the block runs (#5084).
 
     The count keeps *scale* ``* beta **`` *exponent* times what stands out
-    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_PRECISION_SCALE`,
-    :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_PRECISION_EXPONENT`).  ``"off"`` is
+    (:data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_PRECISION_SCALE`,
+    :data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_PRECISION_EXPONENT`).  ``"off"`` is
     that piece before #5084 (#4603's scale 1, exponent 0.708), and ``None`` leaves it as the app
     ships it.  *top_z* gates it (#5215,
-    :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_PRECISION_TOP_Z`): a head whose top
+    :data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_PRECISION_TOP_Z`): a head whose top
     stands fewer bulk spreads up keeps #4603's count; ``"off"`` never gates.  Process-wide, as
     :func:`head_count_recall`'s swap is, and undone on the way out.
     """
@@ -350,24 +354,24 @@ def head_count_precision(
             raise ValueError(
                 f"head_count_precision {name} must be a positive number, 'off' or None (the app's); got {v!r}"
             )
-    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+    from vtscore.training.thresholds import head_count  # noqa: PLC0415
 
     shipped = (
-        labels_line.HEAD_COUNT_PRECISION_SCALE,
-        labels_line.HEAD_COUNT_PRECISION_EXPONENT,
-        labels_line.HEAD_COUNT_PRECISION_TOP_Z,
+        head_count.HEAD_COUNT_PRECISION_SCALE,
+        head_count.HEAD_COUNT_PRECISION_EXPONENT,
+        head_count.HEAD_COUNT_PRECISION_TOP_Z,
     )
     if scale is not None:
-        labels_line.HEAD_COUNT_PRECISION_SCALE = None if scale == "off" else float(scale)
+        head_count.HEAD_COUNT_PRECISION_SCALE = None if scale == "off" else float(scale)
     if exponent is not None:
-        labels_line.HEAD_COUNT_PRECISION_EXPONENT = None if exponent == "off" else float(exponent)
+        head_count.HEAD_COUNT_PRECISION_EXPONENT = None if exponent == "off" else float(exponent)
     if top_z is not None:
-        labels_line.HEAD_COUNT_PRECISION_TOP_Z = None if top_z == "off" else float(top_z)
+        head_count.HEAD_COUNT_PRECISION_TOP_Z = None if top_z == "off" else float(top_z)
     try:
         yield
     finally:
         (
-            labels_line.HEAD_COUNT_PRECISION_SCALE,
-            labels_line.HEAD_COUNT_PRECISION_EXPONENT,
-            labels_line.HEAD_COUNT_PRECISION_TOP_Z,
+            head_count.HEAD_COUNT_PRECISION_SCALE,
+            head_count.HEAD_COUNT_PRECISION_EXPONENT,
+            head_count.HEAD_COUNT_PRECISION_TOP_Z,
         ) = shipped
