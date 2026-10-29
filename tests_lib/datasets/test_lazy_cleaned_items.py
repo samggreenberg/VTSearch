@@ -2,7 +2,7 @@
 
 A cleaned unit's recipe is its whole chain trail, replayed from the source and
 served only while it still reproduces the content hash the trail recorded (see
-:mod:`vtscore.media.lazy_clip`).  These tests import the same folder thin and
+:mod:`vtscore.media.clipping.lazy_clip`).  These tests import the same folder thin and
 full and require the two to agree on every observable: the bytes, the stored
 MD5, the embedding, and the Original.  They also pin the failure mode: a source
 edited after import serves *nothing*, never the edited file.
@@ -31,9 +31,9 @@ from vtscore.datasets.loader_folder import load_dataset_from_folder
 from vtscore.datasets.stages import clipper as clipper_stage
 from vtscore.datasets.stages.embedding import embed_missing
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 from vtscore.media.embedder import MediaEmbedder
-from vtscore.media.lazy_clip import clip_recipe, embed_view, lazy_original_bytes, recipe_is_exclusive
+from vtscore.media.clipping.lazy_clip import clip_recipe, embed_view, lazy_original_bytes, recipe_is_exclusive
 from vtscore.state import DatasetContext
 
 # ---------------------------------------------------------------------------

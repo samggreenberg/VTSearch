@@ -149,7 +149,7 @@ class TestResolutionHooks:
     def test_chain_run_calls_resolve_for_media_and_not_resolve_for_durations(self, monkeypatch):
         import vtscore.media as media_mod
         from vtscore.datasets.clipper_chain import apply_chain_to_clips
-        from vtscore.media.clipper import MediaClipper
+        from vtscore.media.clipping.clipper import MediaClipper
 
         calls: list[str] = []
 
@@ -876,7 +876,7 @@ class TestVideoUnitEmbed:
         import vtscore.media as media_registry
         from vtscore.datasets.clipper_chain import replay_chain_on_file
         from vtscore.detectors import resolver as resolver_module
-        from vtscore.media.cleaner import MediaCleaner
+        from vtscore.media.clipping.cleaner import MediaCleaner
 
         class _Reencode(MediaCleaner):
             @property

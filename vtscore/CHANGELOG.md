@@ -12,6 +12,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore/media/`'s loose root modules moved into sub-packages** (issue #5401). The clipping
+  machinery is now `vtscore.media.clipping` (`clipper`, `cleaner`, `clip_recipe`, `lazy_clip`), the
+  torch helpers `vtscore.media.torch_utils` (`torch_ops`, `torch_setup`), and the structural pipeline
+  the `vtscore.media.structural` package: its core keeps the `vtscore.media.structural` path, while
+  `structural_geometry`, `structural_splg` and `structural_tiles` now sit inside it. The image
+  embedders moved to `vtscore.media.image.embedders` (`embedder_siglip`, …, with their shared bases),
+  and the image demo sources and categories to `vtscore.media.image.demo`. Embedder and clipper
+  registry names are unchanged, and `MediaClipper` / `MediaCleaner` still import from `vtscore.media`.
+  **The old public paths are deprecated, not removed:** `from vtscore.media.clipper import MediaClipper`,
+  `import vtscore.media.image.embedder_siglip` and the rest still work through the `_MOVED_MODULES`
+  table in `vtscore/media/__init__.py`, each emitting a `DeprecationWarning` that names the new path,
+  and resolve to the very same module object. Embedder discovery now also scans a media type's
+  `embedders/` sub-package, so the name `embedders` is reserved for that container. A flat
+  `embedder_<name>.py` (or `embedder_<name>/` package) dropped straight into the media-type package is
+  still discovered as before. See `packages/media.md`.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
@@ -267,7 +283,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   head is on the context, as it did when that head had no ranking.
 
 - **A converter output a clipper or cleaner changed replays converter first** (issue #5041). The new
-  `vtscore.media.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
+  `vtscore.media.clipping.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
   the `clipper_chain` that ran on its output: the converter's step, then that chain (`None` when either cannot
   be read). `lazy_clip.clip_recipe` returns it as a `("chain", …)` recipe for an audio / image / text
   converter output some clipper cut or cleaner rewrote; it used to return the converter recipe, which rebuilds
@@ -308,7 +324,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   `local_features` onto each media dict it embeds.
 
 - **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
-  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  `vtscore.media.clipping.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
   image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
   same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
   through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
@@ -2842,7 +2858,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   A detector saved before this keeps the stray `chain` in its stored `input_spec`, and still re-clips (as it
   always did) until its labels are next saved, which captures the spec again.
 
-- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.lazy_clip` read the recipe of a
+- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.clipping.lazy_clip` read the recipe of a
   reference-mode clip or converter output from `origin.params`, which a duplicate collapse replaces with the
   group's, so a merged item had no recipe and the resolvers served its whole source file instead (the photo a face
   was cut from). It now reads the representative's own origin, the group's first member.

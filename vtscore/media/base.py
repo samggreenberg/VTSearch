@@ -663,7 +663,7 @@ class MediaType(ABC):
         2. *lazy clip* - a derived sub-media that carries a clip recipe in
            ``origin.params`` instead of materialized bytes; its bytes are
            sliced/cropped from the source on demand (see
-           :mod:`vtscore.media.lazy_clip`).  A cleaned unit's recipe is
+           :mod:`vtscore.media.clipping.lazy_clip`).  A cleaned unit's recipe is
            exclusive: if its replay fails, nothing is served.
         3. *archive member* - a ``local_archive_member`` media's bytes,
            streamed out of its tar/zip shard on demand (see
@@ -675,7 +675,7 @@ class MediaType(ABC):
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
             return media_bytes
-        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+        from vtscore.media.clipping.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         clipped = lazy_clip_bytes(media)
         if clipped is not None:
@@ -711,7 +711,7 @@ class MediaType(ABC):
         media_string = media.get("media_string")
         if media_string is not None:
             return media_string
-        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+        from vtscore.media.clipping.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         derived = lazy_clip_bytes(media)
         if derived is not None:

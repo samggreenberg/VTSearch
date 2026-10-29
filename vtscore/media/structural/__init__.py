@@ -75,7 +75,7 @@ on FullMarks (23 classes, 721 instances): retrieval AP **0.88** at this budget
 against **0.16** at ``DEFAULT_MAX_FEATURES`` with the shipped 2 MP detection cap,
 and 0.12 for SigLIP.
 
-Used by :mod:`vtscore.media.image.embedder_sift_vlad_doc`, which is a separate
+Used by :mod:`vtscore.media.image.embedders.embedder_sift_vlad_doc`, which is a separate
 embedder so that binding it is recorded per dataset and no existing ``sift_vlad``
 cell changes meaning.
 
@@ -96,7 +96,7 @@ centroid until its labels meet the label quota,
 :mod:`vtscore.detectors.label_quota`).
 """
 
-_CODEBOOK_ASSET = Path(__file__).resolve().parent / "assets" / "vlad_codebook_v1.npy"
+_CODEBOOK_ASSET = Path(__file__).resolve().parents[1] / "assets" / "vlad_codebook_v1.npy"
 """Shipped, fixed VLAD vocabulary (a pre-computed k-means codebook).
 
 A code asset, not per-dataset state: it is loaded like model weights and never

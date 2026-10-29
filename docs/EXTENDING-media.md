@@ -44,7 +44,10 @@ module-level sentinel attributes:
 
 Embedders use **one module per embedder**: any `embedder_<name>.py` file
 (or `embedder_<name>/__init__.py` sub-package) inside a media-type package
-is auto-loaded and its module-level `EMBEDDER` sentinel is registered.
+is auto-loaded and its module-level `EMBEDDER` sentinel is registered. So is
+one inside the package's `embedders/` sub-package: that name is reserved for a
+container of embedders (`image/embedders/` holds the shipped image ones), and
+is scanned rather than loaded as an embedder itself.
 Names starting with `_` are skipped, which is how shared helpers such as
 `_dinov3_shared.py` stay out of the scan. Symlinked directories **and**
 symlinked embedder files are both supported, so a custom embedder can live
@@ -630,13 +633,13 @@ class and the user re-parameterises it through `with_params()`.
 
 ### What to implement
 
-Subclass `MediaClipper` from `vtscore.media.clipper` (also re-exported
+Subclass `MediaClipper` from `vtscore.media.clipping.clipper` (also re-exported
 from `vtscore.media`).
 
 ```python
 # vtscore/media/audio/clipper.py  (or a new file)
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.clipper import MediaClipper
 from typing import Any
 
 
@@ -696,7 +699,7 @@ class SoundOverlapClipper(MediaClipper):
 
 ### Shared helpers
 
-Don't hand-roll what `vtscore/media/clipper.py` already exports.
+Don't hand-roll what `vtscore/media/clipping/clipper.py` already exports.
 `clip_with_bounds(media, index, start, end)` returns a copy of *media*
 stamped with the standard `duration` / `clip_index` / `clip_start` /
 `clip_end` fields (add your own on top); `tile_starts(total, duration,
@@ -848,7 +851,7 @@ cleaner.
 
 ### What to implement
 
-Subclass `MediaCleaner` from `vtscore.media.cleaner` and implement `clean()`;
+Subclass `MediaCleaner` from `vtscore.media.clipping.cleaner` and implement `clean()`;
 the inherited `clip()` wraps it as a single-output chain step.
 
 ```python
@@ -856,7 +859,7 @@ the inherited `clip()` wraps it as a single-output chain step.
 
 from typing import Any
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 
 
 class TextWhitespaceCleaner(MediaCleaner):

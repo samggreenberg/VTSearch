@@ -80,7 +80,7 @@ class MediaVariantQuerySchema(Schema):
     """Query shared by every per-media payload route.
 
     ``variant=original`` streams the pre-clean payload of an item a
-    :class:`~vtscore.media.cleaner.MediaCleaner` rewrote at load time (see
+    :class:`~vtscore.media.clipping.cleaner.MediaCleaner` rewrote at load time (see
     ``docs/plans/media-cleaners.md``); the default streams the canonical
     (cleaned) payload.  An item with no snapshot ignores the parameter, so a
     stale link keeps working.

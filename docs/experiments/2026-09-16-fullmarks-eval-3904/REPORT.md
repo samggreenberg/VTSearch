@@ -107,7 +107,7 @@ the 2026-07-13 study** on the same SPODS pages, which found SIFT verifies only
 5.1% of true scanned-document pairs. Its structural win came from a different
 backend: SuperPoint+LightGlue verified 41% and, as a ranker, reached AP 0.395 /
 0.481 against SigLIP's 0.204 / 0.235. That backend
-(`vtscore/media/structural_splg.py`) has never been wired to an embedder, so
+(`vtscore/media/structural/structural_splg.py`) has never been wired to an embedder, so
 FullMarks has no cell for it.
 
 `diag_structural.py` asks the direct question: RANSAC inliers between each query

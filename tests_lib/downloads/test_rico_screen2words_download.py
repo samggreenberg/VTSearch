@@ -159,7 +159,7 @@ class TestLoadDemoSourceRico:
 
 class TestRicoCategoriesList:
     def test_has_16_unique(self):
-        from vtscore.media.image._demo_categories import RICO_SCREEN2WORDS_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import RICO_SCREEN2WORDS_CATEGORIES
 
         assert len(RICO_SCREEN2WORDS_CATEGORIES) == 16
         assert len(set(RICO_SCREEN2WORDS_CATEGORIES)) == 16

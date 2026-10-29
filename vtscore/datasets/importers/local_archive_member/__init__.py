@@ -22,7 +22,7 @@ clip windows** (e.g. ≈14 × 10 s CLAP windows per chunk), each its own
 searchable media with its own pre-computed vector.  Windowed media are
 *display-only*: the byte routes serve the **whole** member and the player seeks
 / loops within ``[clip_start, clip_end]`` -- we never byte-slice an AAC/MP4
-member server-side (see :func:`~vtscore.media.lazy_clip.clip_recipe`, which
+member server-side (see :func:`~vtscore.media.clipping.lazy_clip.clip_recipe`, which
 refuses to lazy-slice archive members).  Each window's synthesized content-id
 folds in the window so dedup / voting stay per-window unique.
 """

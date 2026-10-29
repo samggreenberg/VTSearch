@@ -267,7 +267,7 @@ class TestEupeAdapter:
 
 class TestEmbedderCapabilities:
     def test_dinov2_patch_supports_patch_regions(self):
-        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+        from vtscore.media.image.embedders.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
         e = ImageDinov2PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -275,13 +275,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov2_single_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+        from vtscore.media.image.embedders.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
         e = ImageDinov2SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_dinov3_patch_supports_patch_regions(self):
-        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+        from vtscore.media.image.embedders.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
         e = ImageDinov3PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -289,13 +289,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov3_single_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+        from vtscore.media.image.embedders.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         e = ImageDinov3SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_eupe_patch_supports_patch_regions_and_carries_license_notice(self):
-        from vtscore.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_patch import ImageEupePatchEmbedder
 
         e = ImageEupePatchEmbedder()
         assert e.supports_patch_regions is True
@@ -304,7 +304,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_eupe_single_carries_license_notice(self):
-        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_single import ImageEupeSingleEmbedder
 
         e = ImageEupeSingleEmbedder()
         assert e.supports_patch_regions is False
@@ -312,7 +312,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_siglip_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.supports_patch_regions is False
@@ -320,7 +320,7 @@ class TestEmbedderCapabilities:
 
     def test_default_patch_forward_returns_none(self):
         """Single-vector embedders inherit the ABC default and return None."""
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.patch_forward({"media_path": "/nonexistent.jpg"}) is None
@@ -371,29 +371,29 @@ class TestDinoAttentionBackend:
         return calls[0]
 
     def test_dinov3_patch_requests_eager_attention(self):
-        from vtscore.media.image import _dinov3_shared
-        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+        from vtscore.media.image.embedders import _dinov3_shared
+        from vtscore.media.image.embedders.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov3PatchEmbedder(), _dinov3_shared)
         assert kwargs.get("attn_implementation") == "eager"
 
     def test_dinov3_single_does_not_force_attention_backend(self):
-        from vtscore.media.image import _dinov3_shared
-        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+        from vtscore.media.image.embedders import _dinov3_shared
+        from vtscore.media.image.embedders.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov3SingleEmbedder(), _dinov3_shared)
         assert "attn_implementation" not in kwargs
 
     def test_dinov2_patch_requests_eager_attention(self):
-        from vtscore.media.image import _dinov2_shared
-        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+        from vtscore.media.image.embedders import _dinov2_shared
+        from vtscore.media.image.embedders.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov2PatchEmbedder(), _dinov2_shared)
         assert kwargs.get("attn_implementation") == "eager"
 
     def test_dinov2_single_does_not_force_attention_backend(self):
-        from vtscore.media.image import _dinov2_shared
-        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+        from vtscore.media.image.embedders import _dinov2_shared
+        from vtscore.media.image.embedders.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov2SingleEmbedder(), _dinov2_shared)
         assert "attn_implementation" not in kwargs
