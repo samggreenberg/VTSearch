@@ -463,7 +463,7 @@ def _stub_image_embedder(emb, dim: int = 8):
 
 class TestSiglipBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         _stub_image_embedder(emb)
@@ -480,7 +480,7 @@ class TestSiglipBulkOverride:
         assert [int(np.argmax(v)) for v in out if v is not None] == [0, 1, 2]
 
     def test_routes_through_bulk_helper(self, tmp_path):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         _stub_image_embedder(emb)
@@ -489,7 +489,7 @@ class TestSiglipBulkOverride:
         _write_image(p)
 
         with mock.patch(
-            "vtscore.media.image._cross_modal_shared.bulk_embed_image_files",
+            "vtscore.media.image.embedders._cross_modal_shared.bulk_embed_image_files",
             wraps=__import__(
                 "vtscore.media.image._image_bulk", fromlist=["bulk_embed_image_files"]
             ).bulk_embed_image_files,
@@ -503,7 +503,7 @@ class TestSiglipBulkOverride:
 
 class TestClipBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_clip import ImageClipEmbedder
+        from vtscore.media.image.embedders.embedder_clip import ImageClipEmbedder
 
         emb = ImageClipEmbedder()
         _stub_image_embedder(emb)
@@ -520,7 +520,7 @@ class TestClipBulkOverride:
 
 class TestSiglip2BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_siglip2 import ImageSiglip2Embedder
+        from vtscore.media.image.embedders.embedder_siglip2 import ImageSiglip2Embedder
 
         emb = ImageSiglip2Embedder()
         _stub_image_embedder(emb)
@@ -533,7 +533,7 @@ class TestSiglip2BulkOverride:
 
 class TestDinov2BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_dinov2_single import (
+        from vtscore.media.image.embedders.embedder_dinov2_single import (
             ImageDinov2SingleEmbedder,
         )
 
@@ -551,7 +551,7 @@ class TestDinov2BulkOverride:
 
 class TestDinov3BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_dinov3_single import (
+        from vtscore.media.image.embedders.embedder_dinov3_single import (
             ImageDinov3SingleEmbedder,
         )
 
@@ -568,7 +568,7 @@ class TestDinov3BulkOverride:
 
 class TestEupeBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_single import ImageEupeSingleEmbedder
 
         emb = ImageEupeSingleEmbedder()
         emb._model = mock.MagicMock()
@@ -669,7 +669,7 @@ class TestPatchForwardBulkOverrides:
     """The DINOv2/v3 + EUPE patch embedders override the bulk hook."""
 
     def test_dinov3_patch_routes_through_helper(self, tmp_path):
-        from vtscore.media.image.embedder_dinov3_patch import (
+        from vtscore.media.image.embedders.embedder_dinov3_patch import (
             ImageDinov3PatchEmbedder,
         )
 
@@ -695,7 +695,7 @@ class TestPatchForwardBulkOverrides:
         assert all(o is not None for o in out)
 
     def test_dinov2_patch_routes_through_helper(self, tmp_path):
-        from vtscore.media.image.embedder_dinov2_patch import (
+        from vtscore.media.image.embedders.embedder_dinov2_patch import (
             ImageDinov2PatchEmbedder,
         )
 

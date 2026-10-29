@@ -15,14 +15,14 @@ Licence - see :attr:`license_notice`.  No text encoder, so
 
 from __future__ import annotations
 
-from vtscore.media.image._eupe_shared import _EupeBase
+from vtscore.media.image.embedders._eupe_shared import _EupeBase
 
 
 class ImageEupeSingleEmbedder(_EupeBase):
     """Embeds images using facebookresearch/EUPE ViT-B/16 with CLS pooling.
 
     Output dimension: 768.  No patch-region pipeline - use
-    :class:`~vtscore.media.image.embedder_eupe_patch.ImageEupePatchEmbedder`
+    :class:`~vtscore.media.image.embedders.embedder_eupe_patch.ImageEupePatchEmbedder`
     if you need region search.
     """
 

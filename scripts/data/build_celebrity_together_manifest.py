@@ -4,7 +4,7 @@ The demo (``celebrity_together_s`` / ``_m``) downloads a few thousand loose
 photos from the Celebrity Together HuggingFace mirror rather than the 11 GB
 archive, so it has to know *which* photos in advance.  This script pins them:
 for every person in
-:data:`~vtscore.media.image._demo_categories.CELEBRITY_TOGETHER_CATEGORIES` it
+:data:`~vtscore.media.image.demo._demo_categories.CELEBRITY_TOGETHER_CATEGORIES` it
 picks ``--per-person`` photos where
 
 * that person's face is labelled exactly once (twice is a collage of them),
@@ -56,7 +56,7 @@ from vtscore.datasets.downloader.core import (  # noqa: E402
     CELEBRITY_TOGETHER_FILE_URL,
     CELEBRITY_TOGETHER_REPO_ID,
 )
-from vtscore.media.image._demo_categories import CELEBRITY_TOGETHER_CATEGORIES  # noqa: E402
+from vtscore.media.image.demo._demo_categories import CELEBRITY_TOGETHER_CATEGORIES  # noqa: E402
 
 _ASSET_PATH = _REPO / "vtscore" / "media" / "assets" / "celebrity_together.json"
 #: The dataset's own label file: every image's name, and every face's box and identity.

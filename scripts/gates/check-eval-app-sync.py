@@ -253,7 +253,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="check.schedule",
-        app="py:vtscore.training.thresholds.spot_check.balance_schedule",
+        app="py:vtscore.training.thresholds.check_schedule.balance_schedule",
         harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::floor_schedule,kept_count,band_edges,BASE_FINE,M_PICKS",
         kind="ported",
         note=(
@@ -279,7 +279,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="check.likely_range",
-        app="py:vtscore.training.thresholds.spot_check.likely_range",
+        app="py:vtscore.training.thresholds.ranges.likely_range",
         harness="scripts/experiments/state_of_app/check_range_4483.py::hg_bounds",
         kind="ported",
         note=(
@@ -353,7 +353,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="thresholds.balance_default",
         app="py:vtscore.state.__init__.line_knobs",
-        harness="vtscore/training/thresholds/spot_check.py::resolve_line_knobs",
+        harness="vtscore/training/thresholds/check_schedule.py::resolve_line_knobs",
         kind="default",
         note=(
             "What balance a detector's line is drawn at when nobody pinned one (#4413): the app's "

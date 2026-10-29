@@ -550,9 +550,9 @@ class TestCancelIsolation:
         try:
             from unittest.mock import patch
 
-            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_origin import _run_origin_load_in_background
 
-            with patch("vtscore.datasets.load_pipeline.threading.Thread"):
+            with patch("vtscore.datasets.load_workers.threading.Thread"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
@@ -566,13 +566,13 @@ class TestCancelIsolation:
     def test_new_load_starts_uncancelled(self):
         from unittest.mock import patch
 
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
 
         stale = loading_tasks.create_task("stale_task", "Cancelled earlier")
         stale.update("loading", "", 0, 0)
         stale.cancel()
 
-        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_workers.threading.Thread"):
             task_id = _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -659,10 +659,8 @@ class TestLoadingGates:
         """With the download limit at 1, a second load should show 'Waiting…'
         for the download gate and only proceed after the first releases it."""
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _run_origin_load_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_workers import _download_gate
 
         original = settings_mod.get_max_concurrent_dataset_downloads()
         settings_mod.set_max_concurrent_dataset_downloads(1)
@@ -730,10 +728,8 @@ class TestLoadingGates:
         """Cancelling a queued task must not release the gate it never
         acquired, which would let extra loads through."""
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _run_origin_load_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_workers import _download_gate
 
         original = settings_mod.get_max_concurrent_dataset_downloads()
         settings_mod.set_max_concurrent_dataset_downloads(1)
@@ -797,11 +793,8 @@ class TestLoadingGates:
         download gate would stay held forever and every subsequent
         dataset load would block.
         """
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _embed_gate,
-            _run_origin_load_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_workers import _download_gate, _embed_gate
 
         started = threading.Event()
 
@@ -842,11 +835,8 @@ class TestLoadingGates:
         """When the importer signals the embedding phase, the download gate
         is released so a second dataset can start downloading in parallel
         even though the first hasn't finished embedding."""
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _embed_gate,
-            _run_origin_load_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_workers import _download_gate, _embed_gate
 
         first_in_embed = threading.Event()
         first_proceed = threading.Event()
@@ -903,10 +893,8 @@ class TestLoadingGates:
         """Bumping ``max_concurrent_dataset_downloads`` should let the second
         load start its download phase in parallel with the first."""
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _run_origin_load_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_workers import _download_gate
 
         original = settings_mod.get_max_concurrent_dataset_downloads()
         settings_mod.set_max_concurrent_dataset_downloads(2)
@@ -961,11 +949,8 @@ class TestLoadingGates:
     def test_staging_import_swaps_download_gate_for_embed_gate(self):
         """A staging import holds the download gate through the importer and
         the embed gate through embedding, then releases both."""
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _embed_gate,
-            _stage_importer_in_background,
-        )
+        from vtscore.datasets.load_staging import _stage_importer_in_background
+        from vtscore.datasets.load_workers import _download_gate, _embed_gate
 
         in_run = threading.Event()
         run_proceed = threading.Event()
@@ -990,7 +975,7 @@ class TestLoadingGates:
         def _fake_embed(*args, **kwargs):
             during_embed.append((_download_gate.active, _embed_gate.active))
 
-        with mock.patch("vtscore.datasets.load_pipeline.embed_missing", _fake_embed):
+        with mock.patch("vtscore.datasets.load_staging.embed_missing", _fake_embed):
             task_id = _stage_importer_in_background(_BlockingImporter(), {})
             assert in_run.wait(timeout=10), "staging importer never started"
             run_proceed.set()
@@ -1010,11 +995,9 @@ class TestLoadingGates:
         """With the download limit at 1, a staging import parks on the gate
         while a regular load holds it, and reports the same waiting message."""
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _run_origin_load_in_background,
-            _stage_importer_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_staging import _stage_importer_in_background
+        from vtscore.datasets.load_workers import _download_gate
 
         original = settings_mod.get_max_concurrent_dataset_downloads()
         settings_mod.set_max_concurrent_dataset_downloads(1)
@@ -1041,7 +1024,7 @@ class TestLoadingGates:
             assert load_started.wait(timeout=10)
 
             _download_gate.waiter_parked.clear()
-            with mock.patch("vtscore.datasets.load_pipeline.embed_missing", lambda *a, **k: None):
+            with mock.patch("vtscore.datasets.load_staging.embed_missing", lambda *a, **k: None):
                 stage_id = _stage_importer_in_background(_StubImporter(), {})
                 assert _download_gate.waiter_parked.wait(timeout=10), (
                     "staging import never blocked on the download gate"
@@ -1076,11 +1059,9 @@ class TestLoadingGates:
         "failed" toast for a cancel the user asked for.
         """
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import (
-            _download_gate,
-            _run_origin_load_in_background,
-            _stage_importer_in_background,
-        )
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
+        from vtscore.datasets.load_staging import _stage_importer_in_background
+        from vtscore.datasets.load_workers import _download_gate
 
         original = settings_mod.get_max_concurrent_dataset_downloads()
         settings_mod.set_max_concurrent_dataset_downloads(1)
@@ -1135,7 +1116,7 @@ class TestImportFailureMessages:
 
     def test_cancel_import_and_oom_read_the_same_either_side(self):
         from vtscore.concurrency.progress import CancelledError as _Cancelled
-        from vtscore.datasets.load_pipeline import _failure_message
+        from vtscore.datasets.load_workers import _failure_message
 
         assert _failure_message(_Cancelled("Operation cancelled by user"), "fallback") == "Cancelled"
         assert _failure_message(ImportError("no torch"), "fallback").startswith("Missing dependency: no torch.")
@@ -1290,7 +1271,7 @@ class TestBackgroundLoadThreadContext:
     """
 
     def test_load_fn_sees_in_flight_dataset_context(self):
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
         from vtscore.state.core import (
             get_active_context,
             get_thread_dataset_context,
@@ -1356,7 +1337,7 @@ class TestBackgroundLoadThreadContext:
         import contextlib
 
         import vtscore.state.core as state_core
-        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_origin import _run_origin_load_in_background
 
         original_cm = state_core.thread_dataset_context
         observations: list[tuple[str, object]] = []

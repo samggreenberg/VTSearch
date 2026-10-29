@@ -16,7 +16,7 @@ call it, so the two cannot disagree.
 **The sample** (:class:`LineTest`) is a frozen ranking and a line: the top
 ``line_count`` items are what the line keeps.  Both sides of the line are cut
 into bands - the spot check's doubling bands from the top for the matches
-(:func:`~vtscore.training.thresholds.spot_check.band_edges`: 8, 8, 16, 32,
+(:func:`~vtscore.training.thresholds.check_schedule.band_edges`: 8, 8, 16, 32,
 ... to the line) and the same doubling from the line downward for the misses
 - and a round of picks is drawn uniformly without replacement from one band
 (a census when the band holds no more than a round).  Which band each pick
@@ -110,14 +110,13 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from vtscore.training.thresholds.spot_check import (
+from vtscore.training.thresholds.check_schedule import (
     BETA_MAX,
     BETA_MIN,
     CHECK_MIN_PICKS,
-    LikelyRange,
     band_edges,
-    likely_range,
 )
+from vtscore.training.thresholds.ranges import LikelyRange, likely_range
 
 #: The level the ranges are drawn at: a central ``1 - alpha`` posterior range.
 TEST_ALPHA = 0.05

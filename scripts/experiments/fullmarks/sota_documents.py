@@ -572,7 +572,7 @@ def save_opening_frame(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    from vtscore.media.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
     from vtscore.state.core import DetectorContext  # noqa: PLC0415
     from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
     from vtscore.training.structural_similarity import (  # noqa: PLC0415
@@ -650,7 +650,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
 
         s1_mod._gpu_page_max = sharded_gpu_page_max
-    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+    import vtscore.media.structural.structural_tiles as st  # noqa: PLC0415
 
     if args.tile_layers == "coarse":
         st.TILE_LAYERS = ((st.TILE_W, st.TILE_H),)

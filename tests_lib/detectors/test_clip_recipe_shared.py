@@ -1,6 +1,6 @@
 """The two clip-replay paths must read ``origin.params`` identically.
 
-``vtscore.media.lazy_clip`` (display bytes, cached, for the HTTP byte routes)
+``vtscore.media.clipping.lazy_clip`` (display bytes, cached, for the HTTP byte routes)
 and ``vtscore.detectors.resolver`` (rederive + embed, for cross-dataset
 training) rebuild content from the same ``origin.params`` dialects but keep
 their own replay and fallback policy.  These tests pin the half that must
@@ -8,7 +8,7 @@ their own replay and fallback policy.  These tests pin the half that must
 different region / sub-output than the other embeds - silently, on the
 load-bearing path of the origins-are-canonical invariant.
 
-See ``vtscore/media/clip_recipe.py``, and issue #3378.
+See ``vtscore/media/clipping/clip_recipe.py``, and issue #3378.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ import json
 import pytest
 
 from vtscore.detectors.resolver import _converter_origin_to_chain
-from vtscore.media.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
-from vtscore.media.lazy_clip import _converter_recipe, clip_recipe
+from vtscore.media.clipping.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
+from vtscore.media.clipping.lazy_clip import _converter_recipe, clip_recipe
 
 
 def _converter_params(**overrides) -> dict:

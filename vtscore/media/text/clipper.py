@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from vtscore.media.clipper import DefaultClipper, MediaClipper
+from vtscore.media.clipping.clipper import DefaultClipper, MediaClipper
 
 
 def _emit_text_pieces(media: dict[str, Any], pieces: list[str]) -> list[dict[str, Any]]:

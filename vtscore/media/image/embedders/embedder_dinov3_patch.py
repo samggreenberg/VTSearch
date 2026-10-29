@@ -1,4 +1,4 @@
-"""Image embedder - DINOv2 patch-region mode (``dinov2_patch``).
+"""Image embedder - DINOv3 patch-region mode (``dinov3_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
 image.  ~30× slower per image and ~100× more storage than the
@@ -6,26 +6,32 @@ single-vector variant, but enables region similarity, region-aware detector
 scoring, and (in v2) region voting.
 
 For the single-vector variant of the same backbone see
-``embedder_dinov2_single.py``.  Both share weights via
-``_dinov2_shared.py``.
+``embedder_dinov3_single.py``.  Both share weights via
+``_dinov3_shared.py``.
 
-DINOv2 weights are **ungated** on Hugging Face.  Image input is the HF
-default (224² for the standard processor) with patch size 14 → 16 × 16
-= 256 patch tokens.  There is no text encoder, so :attr:`supports_text`
-is ``False``.
+DINOv3 produces high-quality per-patch tokens and exposes a clean
+CLS→patch attention map (cleaner than DINOv2's thanks to Gram-anchored
+"storage" / register tokens that absorb high-norm artifacts).  We slice
+the 4 register tokens out of the token sequence before reshaping to the
+14 × 14 patch grid.
+
+DINOv3 weights are gated on Hugging Face - running this embedder requires
+the ``HF_TOKEN`` env var to be set to a user token that has accepted the
+DINOv3 licence at
+``https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m``.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from vtscore.media.image._dinov2_shared import _Dinov2Base
+from vtscore.media.image.embedders._dinov3_shared import _Dinov3Base
 from vtscore.media.image._image_bulk import bulk_patch_forward_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput
 
 
-class ImageDinov2PatchEmbedder(_Dinov2Base):
-    """Embeds images using DINOv2 ViT-B/14 with CLS pooling + patch regions.
+class ImageDinov3PatchEmbedder(_Dinov3Base):
+    """Embeds images using DINOv3 ViT-B/16 with CLS pooling + patch regions.
 
     Output dimension: 768.  Per-image side-channel: HAC region tree +
     14 × 14 patch grid (see :func:`vtscore.media.patch_embed`).
@@ -33,11 +39,11 @@ class ImageDinov2PatchEmbedder(_Dinov2Base):
 
     @property
     def name(self) -> str:
-        return "dinov2_patch"
+        return "dinov3_patch"
 
     @property
     def display_name(self) -> str:
-        return "DINOv2 patch (region-aware images)"
+        return "DINOv3 patch (region-aware images)"
 
     @property
     def supports_patch_regions(self) -> bool:
@@ -57,8 +63,8 @@ class ImageDinov2PatchEmbedder(_Dinov2Base):
                 forward_pil_batch=self._patch_forward_pil_batch,
                 batch_size=self.embed_batch_size,
                 on_progress=self._on_progress,
-                label="DINOv2 patch",
+                label="DINOv3 patch",
             )
 
 
-EMBEDDER = ImageDinov2PatchEmbedder()
+EMBEDDER = ImageDinov3PatchEmbedder()

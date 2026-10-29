@@ -52,7 +52,7 @@ def _extract(path: str) -> Any:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    from vtscore.media.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
     from vtscore.state.core import DetectorContext  # noqa: PLC0415
     from vtscore.training.structural_similarity import (  # noqa: PLC0415
         maybe_structural_rerank,

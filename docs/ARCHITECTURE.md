@@ -141,8 +141,9 @@ VTSearch/
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
 │   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs
-│   │                       (base.py, embedder.py, clipper.py, cleaner.py), plus one
-│   │                       subpackage per media type (audio/, image/, text/, video/,
+│   │                       (base.py, embedder.py, clipping/clipper.py, clipping/cleaner.py),
+│   │                       shared clipping/, structural/ and torch_utils/ subpackages, plus
+│   │                       one subpackage per media type (audio/, image/, text/, video/,
 │   │                       document/, face/) holding its embedders and clippers
 │   ├── converters/         MediaConverter ABC (base.py) + one module per converter;
 │   │                       runner.py stamps converter provenance
@@ -410,7 +411,7 @@ threshold = conformal_threshold(scores, labels, inclusion_value=0)
 
 ### Embedding models (CLAP, SigLIP, E5, X-CLIP, and more)
 
-**Files:** `vtscore/media/{audio,image,text,video,face}/embedder_*.py`
+**Files:** `vtscore/media/{audio,text,video,face}/embedder_*.py`, `vtscore/media/image/embedders/embedder_*.py`
 
 **Dependencies:** `torch`, `transformers`, `soundfile`/`soxr`/ffmpeg (audio,
 via `vtscore.media.audio.decode`), `PIL` (image/video),
@@ -631,7 +632,8 @@ Media types, embedders, clippers, and cleaners use four separate dict-based
 registries in `vtscore/media/__init__.py` rather than `PluginRegistry`.  The
 built-ins are still auto-discovered at import: each media-type sub-package
 (`audio/`, `image/`, …) exposes `MEDIA_TYPE`, `CLIPPERS` and `CLEANERS`
-sentinels, and every `embedder*.py` / `embedder*/` inside it exposes an
+sentinels, and every `embedder*.py` / `embedder*/` inside it (or inside its
+`embedders/` container, where `image/` keeps its own) exposes an
 `EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions; the
 full registration and lookup API is the table in
 [`vtscore.media` § Registry API](../vtscore/docs/packages/media.md#registry-api).
@@ -1310,7 +1312,7 @@ recoverable long after the import job ended:
   on its entry.  Cleaner steps stamp no legacy keys: with one output there is
   no sibling to disambiguate.
 
-Both are machine-readable recipes: `vtscore/media/lazy_clip.py` replays them
+Both are machine-readable recipes: `vtscore/media/clipping/lazy_clip.py` replays them
 to reproduce the bytes on demand, which is what makes reference-mode derived
 media possible (no duplicated clip/page bytes in the dataset).
 
@@ -1395,7 +1397,7 @@ text), clip and clean as normal, then re-lazify the resulting units back to
 references (`vtscore/datasets/stages/clipper.py`); an importer-level
 converter's outputs (`run_converters_on_folder`: rendered PDF pages, a PDF's
 text, extracted frames) re-lazify similarly, resolved through a byte-bounded LRU
-cache (`vtscore/media/lazy_clip.py`). A clipper chain that contains a converter
+cache (`vtscore/media/clipping/lazy_clip.py`). A clipper chain that contains a converter
 step, and the demo-dataset / standalone-PDF conversion paths, still fall back
 to full materialization rather than lazy resolution. Text clips cut from a text
 file stay materialized too: they have no slice recipe, and text is small.
@@ -1419,7 +1421,7 @@ replay of N cleaned tiles of one recording to one tiling of it.
 A converter output that a clipper cut or a cleaner rewrote (a rendered page's
 tiles, a PDF's text with its whitespace collapsed) is no output the converter
 alone rebuilds, so it gets the same chain recipe, led by the converter's own
-step (`vtscore.media.clip_recipe.converter_trail`): the replay hands the
+step (`vtscore.media.clipping.clip_recipe.converter_trail`): the replay hands the
 converter the source file the import converted, re-selects the recorded output,
 then re-runs the rest of the trail. The same dry run gates dropping its payload,
 cleaned or not. The label resolver replays the same composed trail when it

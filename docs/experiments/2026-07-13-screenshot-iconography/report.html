@@ -214,7 +214,7 @@ per-media-profile choice, mirroring how the design doc already scopes geometry p
 
 <p><strong>Setup.</strong> The design doc reserves a learned-feature slot behind the StructuralMatcher
 protocol ("SuperPoint + LightGlue v2" — no public LightGlue v2 exists; we use the official cvg/LightGlue,
-current head, SuperPoint weights). We built that backend (<code>vtscore/media/structural_splg.py</code>
+current head, SuperPoint weights). We built that backend (<code>vtscore/media/structural/structural_splg.py</code>
 on branch <code>claude/splg-structural-backend</code>, StructuralMatcher-conformant, smoke- and
 unit-tested) and ran it through the identical harness.</p>
 
@@ -363,7 +363,7 @@ cvg/LightGlue (SuperPoint weights, current head). (6) Cold start only, single se
 corpora (webdataset shards + corpus.jsonl), 463 query crops + features, pair manifests, 1.6M matched
 correspondences, per-query JSON, <code>results/report_data.json</code>, and the runnable pipeline
 (<code>pipeline.sh</code>, <code>extract_*.py</code>, <code>match_*.py</code>, <code>score_pairs.py</code>,
-<code>aggregate.py</code>). Integration code: <code>vtscore/media/structural_geometry.py</code> +
+<code>aggregate.py</code>). Integration code: <code>vtscore/media/structural/structural_geometry.py</code> +
 <code>structural_splg.py</code> + tests on branch <code>claude/splg-structural-backend</code>.</p>
 </div>
 </body>
