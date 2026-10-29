@@ -1,4 +1,4 @@
-"""Projection stage: compute + persist the 2-D Browse projection at ingest.
+"""Projection stages: compute + persist the 2-D Browse projection at ingest.
 
 Opt-in stage that fits UMAP on the cached embedding matrix, builds the
 tile pyramid, letters it with signposts, caches everything on the context,
@@ -14,6 +14,10 @@ serve path resolves is *worse* than no pre-build at all, because the first
 Browse open either throws it away and re-fits or serves an arrangement nobody
 configured. What is left in this module is the load-pipeline wiring: progress
 reporting through the loading tracker, and the best-effort contract.
+
+The 1-D similarity order a Face dataset's example picker lists its items in
+(#5465) is wired here too, by the same contract; its fit lives in
+:mod:`vtscore.projection.similarity_order`.
 """
 
 from __future__ import annotations
@@ -133,3 +137,33 @@ def _build_projection_stage(ctx: DatasetContext, tracker) -> None:
         on_progress=_progress,
     )
     _progress(1, 1, "Projection ready")
+
+
+def _build_similarity_order_stage(ctx: DatasetContext, tracker) -> None:
+    """Fit + persist the 1-D similarity order of a freshly built dataset (#5465).
+
+    The order New Detector's *Pick from Dataset* grid lists the items in, so
+    look-alikes sit together (:mod:`vtscore.projection.similarity_order`).  A
+    no-op for every type but the ones that module orders (Face).  Runs after
+    registration, so the container exists to persist into, and is best-effort
+    by the projection stage's contract: the caller wraps it, and the picker
+    fits the order itself if this did not.
+    """
+    from vtscore.projection import similarity_order  # noqa: PLC0415
+
+    if not similarity_order.wants_similarity_order(ctx):
+        return
+
+    def _progress(current: int, total: int, message: str) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            message,
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    if similarity_order.similarity_order_for(ctx, on_progress=_progress) is not None:
+        _progress(1, 1, "Similarity order ready")

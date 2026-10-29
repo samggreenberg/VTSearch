@@ -277,7 +277,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=ex3312-prep --mem=24G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     echo "cells enumerate from $PREP/prepare_info.json"
@@ -307,7 +307,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=ex3312-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (stage $STAGE, cell $IDX, arm $ARM)  ->  $BASE/sizing/logs/size-$S.out"
     ;;
@@ -324,7 +324,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=ex3312-baseline --mem=24G --cpus-per-task=2 \
       --time=2:00:00 --partition=cpu --export=ALL \
       --output="$BASE/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T  ->  $BASE/analysis/text_baseline.csv"
     ;;
@@ -342,8 +342,8 @@ case "$MODE" in
     # therefore survivable; the dangerous version is preflight reporting `ok`
     # without having looked (#2905).  Activate the venv first.
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
 
     WHICH="${2:-AB}"
@@ -365,7 +365,7 @@ case "$MODE" in
     A=$(sbatch --parsable --dependency="afterany:$DEPSTR" --job-name=ex3312-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_exclusion.py --base $BASE --out $BASE/analysis --stages $WHICH --baseline $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_exclusion.py --base $BASE --out $BASE/analysis --stages $WHICH --baseline $BASE/analysis/text_baseline.csv")
     require_jobid "$A" "the cross-arm analyze step"
 
     echo

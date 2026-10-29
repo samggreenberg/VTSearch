@@ -182,7 +182,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=cs3796-prep --mem=48G --cpus-per-task=2 \
       --time=2:00:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     echo "cells enumerate from $PREP/prepare_info.json"
@@ -204,7 +204,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=cs3796-size --mem="${CALSEED_SIZE_MEM:-64G}" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX)  ->  $BASE/sizing/logs/size-$S.out"
     echo "read it back with: sacct -j $S --format=Elapsed,MaxRSS,State"
@@ -222,7 +222,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=cs3796-baseline --mem=48G --cpus-per-task=2 \
       --time=2:00:00 --partition=cpu --export=ALL \
       --output="$BASE/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T  ->  $BASE/analysis/text_baseline.csv"
     ;;
@@ -237,8 +237,8 @@ case "$MODE" in
     # shell has no venv.  Activate it first, or those checks come back FAIL for
     # a reason unrelated to the run.
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
 
     export CALIB_EXP="$RUN"
@@ -298,7 +298,7 @@ PYSHAPE
     A=$(sbatch --parsable --dependency="afterany:$CELLS_ID" --job-name=cs3796-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_calseed_3796.py --results $CALIB_RESULTS --out $BASE/analysis --baseline $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_calseed_3796.py --results $CALIB_RESULTS --out $BASE/analysis --baseline $BASE/analysis/text_baseline.csv")
     require_jobid "$A" "the analyze step"
 
     echo
@@ -317,7 +317,7 @@ PYSHAPE
     A=$(sbatch --parsable --job-name=cs3796-analyze --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_calseed_3796.py --results $CALIB_RESULTS --out $BASE/analysis --baseline $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_calseed_3796.py --results $CALIB_RESULTS --out $BASE/analysis --baseline $BASE/analysis/text_baseline.csv")
     require_jobid "$A" "the analyze step"
     echo "analyze job: $A  ->  $ALOGS/analyze-$A.out"
     ;;

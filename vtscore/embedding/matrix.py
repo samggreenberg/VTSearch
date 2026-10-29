@@ -572,7 +572,7 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
         # Only the matrix family: the lookups and the browse layouts are
         # revision-keyed too and invalidate themselves off the bump below,
         # so dropping them here would throw away work for nothing.
-        ctx.reset_derived_caches(matrices=True, lookups=False, projection=False, subset=False)
+        ctx.reset_derived_caches(matrices=True, lookups=False, projection=False, subset=False, order=False)
         # An in-place rewrite can leave the id set (and dimension) unchanged,
         # which the sidecar's validity check alone cannot detect - permanently
         # stop trusting the on-disk mmap sidecar for this context so every

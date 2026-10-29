@@ -1,49 +1,79 @@
-@if (loading()) {
-  <p class="empty-state">Loading items…</p>
+@if (listing(); as data) {
+  @if (data.total === 0) {
+    <p class="empty-state">This dataset has no items.</p>
+  } @else {
+    <div class="pick-toolbar">
+      <input
+        type="search"
+        class="form-input pick-search"
+        placeholder="Search by name"
+        title="Keep only the items whose name holds every word typed. A face’s name starts with its photo’s, so a photo’s name finds its faces."
+        aria-label="Search this dataset’s items by name"
+        [value]="query()"
+        (input)="onQuery($any($event.target).value)" />
+      <vt-view-controls class="pick-size" side="picker" [currentMediaType]="mediaType()" [showFocus]="false" />
+    </div>
+    <p class="info-text">
+      @if (searchActive()) {
+        {{ ids().length | number }} of its {{ data.total | number }} items match. Click one to use it as the example.
+      } @else {
+        Click one of its {{ data.total | number }} items to use it as the example.
+        @if (data.order === 'similarity') { Look-alikes are listed together. }
+      }
+    </p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
+    }
+    @if (ids().length === 0) {
+      <p class="empty-state">No item’s name holds “{{ query().trim() }}”.</p>
+    } @else {
+      <cdk-virtual-scroll-viewport
+        class="pick-scroll"
+        [itemSize]="rowSize()"
+        [minBufferPx]="rowSize() * 2"
+        [maxBufferPx]="rowSize() * 4">
+        <div
+          *cdkVirtualFor="let row of rows(); trackBy: trackByRow"
+          class="pick-row"
+          [style.height.px]="rowSize()"
+          [style.--pick-cols]="columns()"
+          [style.--pick-cell]="cellWidth() + 'px'">
+          @for (id of row; track id) {
+            <button
+              type="button"
+              class="pick-tile"
+              [class.pick-tile--named]="!showsThumbnail(id)"
+              [disabled]="busy()"
+              [title]="name(id)"
+              [attr.aria-label]="'Use ' + name(id) + ' as the example'"
+              (click)="pick(id)">
+              @if (showsThumbnail(id)) {
+                @if (thumbReady(id)) {
+                  @if (isAudioWaveform()) {
+                    <span
+                      class="pick-thumb-wave waveform-mask"
+                      [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
+                      [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
+                  } @else {
+                    <img
+                      class="pick-thumb"
+                      [src]="thumbnailUrl(id)"
+                      alt=""
+                      decoding="async"
+                      (error)="onThumbnailError(id)" />
+                  }
+                }
+              } @else {
+                <span class="pick-name">{{ name(id) }}</span>
+              }
+            </button>
+          }
+        </div>
+      </cdk-virtual-scroll-viewport>
+    }
+  }
 } @else if (error()) {
   <p class="error-text">{{ error() }}</p>
-} @else if (ids().length === 0) {
-  <p class="empty-state">This dataset has no items.</p>
 } @else {
-  <p class="info-text">
-    Click one of its {{ ids().length | number }} items to use it as the example.
-  </p>
-  <div class="pick-scroll" (scroll)="onScroll($event)">
-    <div class="pick-grid">
-      @for (id of shown(); track id) {
-        <button
-          type="button"
-          class="pick-tile"
-          [class.pick-tile--named]="!showsThumbnail(id)"
-          [disabled]="busy()"
-          [title]="name(id)"
-          [attr.aria-label]="'Use ' + name(id) + ' as the example'"
-          (click)="pick(id)">
-          @if (showsThumbnail(id)) {
-            @if (isAudioWaveform()) {
-              <span
-                class="pick-thumb-wave waveform-mask"
-                [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
-                [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
-            } @else {
-              <img
-                class="pick-thumb"
-                [src]="thumbnailUrl(id)"
-                alt=""
-                loading="lazy"
-                (error)="onThumbnailError(id)" />
-            }
-          } @else {
-            <span class="pick-name">{{ name(id) }}</span>
-          }
-        </button>
-      }
-    </div>
-    @if (hasMore()) {
-      <div class="pick-more">
-        <span class="pick-count">Showing {{ shown().length | number }} of {{ ids().length | number }}</span>
-        <button type="button" class="btn btn--secondary btn--sm" (click)="showMore()" title="Show the next items (scrolling down does this too)">Show More</button>
-      </div>
-    }
-  </div>
+  <p class="empty-state">Loading items…</p>
 }

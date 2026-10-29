@@ -41,7 +41,7 @@ _WARM_MODEL_FLOOR_S = 0.5
 # Canonical finalize sub-slot execution order (matches FinalizeProgress._SLOTS).
 # The emitted shares list preserves this order; any slot seen in the data but
 # not listed here (e.g. a renamed/added sub-stage) is appended after it.
-_FIN_SLOT_ORDER = ("cleanup", "dedup", "coverage", "signpost_texts", "registry", "projection")
+_FIN_SLOT_ORDER = ("cleanup", "dedup", "coverage", "signpost_texts", "registry", "projection", "similarity_order")
 
 
 def _load_rows(paths: list[str]) -> list[dict]:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """#4216: how far down the typed query's sort a cell's positives sit, per embedder, offline.
 
-    source gridenv.sh && source scripts/experiments/pile/pile_env.sh
+    source scripts/grid/gridenv.sh && source scripts/experiments/pile/pile_env.sh
     python reach.py --results <a SotA run's results dir> --embedders siglip,siglip2_l,clip_l,clip,embeddinggemma2 \\
         --seeds 24 --seeds-other 5 --out <dir> [--examples bowl@small,chair@small,knife@small]
 

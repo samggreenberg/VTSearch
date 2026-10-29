@@ -1,8 +1,12 @@
 # Source to run experiment code from THIS worktree (shadows main venv editable finder).
-# Self-locating: the *worktree* path is derived from this file, not hardcoded to
-# whichever worktree happened to write it last.  A stale absolute path there
-# silently puts ANOTHER worktree's checkout on PYTHONPATH, which is how a run
-# measures code you did not commit.
+#
+#   source scripts/grid/gridenv.sh        # from the worktree root
+#   source "$WT/scripts/grid/gridenv.sh"  # from anywhere, as the launchers do
+#
+# Self-locating: the *worktree* path is derived from this file (two levels up),
+# not hardcoded to whichever worktree happened to write it last.  A stale
+# absolute path there silently puts ANOTHER worktree's checkout on PYTHONPATH,
+# which is how a run measures code you did not commit.
 #
 # The venv and the module are a different thing: they are shared machine state,
 # not per-worktree, so they are named rather than derived.  Both are overridable
@@ -16,7 +20,7 @@ fi
 if [ -n "${VTS_VENV-/exp/sgreenberg/projects/VTSearch/.venv}" ]; then
   source "${VTS_VENV:-/exp/sgreenberg/projects/VTSearch/.venv}/bin/activate"
 fi
-_VTS_WT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_VTS_WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # The no-op module that neutralises the venv's editable-install finder.  It is
 # untracked, so a *fresh* worktree does not have one -- and without it the finder

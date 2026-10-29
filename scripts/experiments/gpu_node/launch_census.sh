@@ -34,7 +34,7 @@ mkdir -p "$CENSUS" "$LOGS"
 # Weights come from the shared pile, and VTSEARCH_DATA_DIR is pointed at a
 # scratch dir of our own: the probe writes nothing but its own vectors, and must
 # not be able to touch the pile even by accident.
-ENVSET="source $WT/gridenv.sh"
+ENVSET="source $WT/scripts/grid/gridenv.sh"
 ENVSET="$ENVSET && export VTS_REPO=$WT HF_HOME=$PILE/models VTSEARCH_MODELS_DIR=$PILE/models"
 ENVSET="$ENVSET && export VTSEARCH_DATA_DIR=$STUDY/probe-datadir"
 ENVSET="$ENVSET && export VTSEARCH_TORCH_THREADS=4 OMP_NUM_THREADS=4"
@@ -120,7 +120,7 @@ status)
   ;;
 
 analyze)
-  source "$WT/gridenv.sh"
+  source "$WT/scripts/grid/gridenv.sh"
   cd "$HERE" && python analyze_census.py --census "$CENSUS" "${@:2}"
   ;;
 

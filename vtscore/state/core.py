@@ -518,6 +518,11 @@ class DatasetContext:
         "_subset_content_version",
         # Region signposts for the subset layout (mirror of ``_region_labels``).
         "_subset_region_labels",
+        # The ids in 1-D similarity order (#5465): a SimilarityOrder the
+        # example picker lists a Face dataset in, cached here once read from
+        # the container or fit.  Ids only, no vectors; checked against the live
+        # id set on every read (vtscore.projection.similarity_order).
+        "_similarity_order",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/ARCHITECTURE.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -603,6 +608,9 @@ class DatasetContext:
                 "_subset_region_labels",
             }
         ),
+        # The 1-D similarity order; persisted beside the dataset, so dropping
+        # it costs a container read, not a re-fit.
+        "order": frozenset({"_similarity_order"}),
     }
 
     #: Slots that are state, not cache - never touched by
@@ -674,6 +682,7 @@ class DatasetContext:
         # only the tile cache key/URL so stale tiles aren't served (the tile URL
         # is otherwise cached ``immutable``).  Reset to 0 on a fresh subset fit.
         self._subset_content_version: int = 0
+        self._similarity_order: Any = None  # SimilarityOrder | None (#5465)
         # Role-typed embedder binding (see __slots__ comment).  ``None``
         # until either explicitly bound or derived from the medias.
         self._text_embedder: str | None = None
@@ -737,6 +746,7 @@ class DatasetContext:
         lookups: bool = True,
         projection: bool = True,
         subset: bool = True,
+        order: bool = True,
     ) -> None:
         """Drop this context's derived caches, by family.
 
@@ -790,6 +800,8 @@ class DatasetContext:
                 self._subset_job_id = None
                 self._subset_content_version = 0
                 self._subset_region_labels = None
+            if order:
+                self._similarity_order = None
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding

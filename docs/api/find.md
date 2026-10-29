@@ -199,8 +199,8 @@ same line a Find there draws (#4452) - and the server logs that the set was
 never checked.
 
 When an exporter is configured for AutoFind, an `auto_export` object
-(`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
-extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
+(`{exporter, exporter_display_name, success, message?/error?, open_url?}` plus
+any exporter-specific extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
 AutoFind detectors for the media type), **404** (named detector not on the
 caller's AutoFind list), **409** (cancelled).
 

@@ -494,6 +494,20 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"grid_icon_size_popup": {"audio": "TINY"}})
         assert res.status_code == 400
 
+    def test_update_grid_icon_size_picker_per_type(self, client):
+        """New Detector's example picker sizes its grid apart from the panels and popup (#5465)."""
+        res = client.put("/api/settings", json={"grid_icon_size_picker": {"face": "xl", "image": "S"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_icon_size_picker"] == {"face": "XL", "image": "S"}
+        assert data["grid_icon_size_popup"].get("face") is None
+
+        assert client.get("/api/settings").get_json()["grid_icon_size_picker"]["face"] == "XL"
+
+    def test_update_grid_icon_size_picker_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_picker": {"face": "HUGE"}})
+        assert res.status_code == 400
+
     def test_update_popup_preview_size_per_type(self, client):
         res = client.put("/api/settings", json={"popup_preview_size": {"image": 320, "video": 480}})
         assert res.status_code == 200
