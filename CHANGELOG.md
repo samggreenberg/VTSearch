@@ -39,6 +39,9 @@ what is on `dev` but not yet on `main`; each release dates that section
   `scripts/data/` (dataset builders and the face CLIs). A deployment that calls one by its old path needs the new
   one: `scripts/install/download_models.sh`, `scripts/install/cache_gated_models.sh` and
   `scripts/data/link-demo-cache.sh`. The old paths were not kept.
+- **A multi-dataset import's names no longer carry a badge** (issue #5461). Each dataset one import produced showed
+  a badge with its kind of media after its name, so a face dataset read "Photos – Face", then **Face**, then
+  **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
 
 ### Fixed
 
