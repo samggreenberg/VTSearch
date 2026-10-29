@@ -1060,7 +1060,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="find.training_domain",
-        app="py:vtsearch.training_domain.domain_shift_against",
+        app="py:vtsearch.domain_overlap.domain_shift_against",
         harness="vtscore/eval/find_corpus.py::training_domain_flags,FindCorpus.matrix,FindCorpus.pool_matrix",
         kind="ported",
         note=(

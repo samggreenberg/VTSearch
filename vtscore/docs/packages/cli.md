@@ -615,6 +615,6 @@ events on stdout.
   flags call.
 - [`config.md`](config.md) explains `get_setting()` and
   `redirect_settings_path()`, which the pipeline reads its knobs through.
-- [`utils.md`](utils.md) documents `build_media_hit`, the helper
+- [`datasets.md`](datasets.md#hits) documents `build_media_hit`, the helper
   every detector-score row goes through before the exporter sees
   it.

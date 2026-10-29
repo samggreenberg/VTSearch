@@ -2756,6 +2756,26 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **`vtscore.utils.hits`, `vtscore.utils.scores`, `vtscore.utils.import_metadata` and
+  `vtscore.state.clicks`** (issue #5399). Each was a small module whose callers sat in one other module,
+  and each was folded into that module:
+
+  - `vtscore.utils.hits` (`build_media_hit`, `hit_custom_metadata`) → **`vtscore.datasets.labelset`**,
+    beside the labelset elements that are the other shape a scored media is exported as.
+  - `vtscore.utils.scores` (`NON_FINITE_SCORE_SENTINEL`, `sigmoid_to_finite_scores`,
+    `sigmoid_to_finite_array`, `finite_or`, `scored_mask`, `scored_only`) →
+    **`vtscore.training.thresholds.knobs`**, beside the other threshold sentinels.
+  - `vtscore.utils.import_metadata` (`seed_packages_distributions`, `fast_packages_distributions`,
+    `original_packages_distributions`) → **`vtscore.media.torch_utils.torch_setup`**, beside
+    `ensure_torch_configured`.
+  - `vtscore.state.clicks` (`assign_click_time`, `remove_click_time`, `get_vote_click_times`) →
+    **`vtscore.state.votes`**, its only caller.
+
+  Each old name still imports, and is the new module itself rather than a copy, so a stub patched through
+  either name is the one the library reads. Importing it emits a `DeprecationWarning`, and it will be
+  removed in a future release. The `vtscore.state` / `vtsearch.state` re-exports of the click-time
+  functions are unchanged. `vtscore.utils` keeps `hashing`, `optional_deps` and `synthetic`.
+
 - **`vtscore.cli_progress`, `vtscore.cli_resume` and `vtscore.cli_pipeline`** (issue #5397), now
   `vtscore.cli.progress`, `vtscore.cli.resume` and `vtscore.cli.pipeline`. Each old name still imports, and
   is the new module itself rather than a copy, so a format set or a stub patched through either name is

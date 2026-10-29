@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 
 from vtscore.detectors.training_snap import _score_embedder_for_snap, _scores_in_patch_space
-from vtscore.utils.scores import sigmoid_to_finite_array
+from vtscore.training.thresholds.knobs import sigmoid_to_finite_array
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -42,7 +42,7 @@ def _forward_sigmoid_chunked(
     dataset, where MaxPatch already stacks ~197 rows per image.  Chunking
     bounds that copy at ``ROW_CHUNK`` rows.
 
-    :func:`~vtscore.utils.scores.sigmoid_to_finite_array` replaces NaN/±Inf
+    :func:`~vtscore.training.thresholds.knobs.sigmoid_to_finite_array` replaces NaN/±Inf
     with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised head cannot
     leak non-finite floats into the JSON response.  The downstream segmented
     max-pool then incidentally drops sentinels in favour of any real score (in

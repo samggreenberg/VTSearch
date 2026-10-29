@@ -434,7 +434,7 @@ class TestGPFoldAnchored:
 
     def test_non_finite_fold_scores_become_the_sentinel(self):
         from vtscore.training.thresholds import compute_fold_orderings
-        from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+        from vtscore.training.thresholds.knobs import NON_FINITE_SCORE_SENTINEL
 
         X, y = _blobs()
         orderings, _ = compute_fold_orderings(

@@ -664,7 +664,7 @@ def _verified_votes_payload() -> dict:
     without copying the per-item dicts whole.
     """
     from vtscore.state.core import _state_lock, get_active_detector_context
-    from vtscore.utils.scores import finite_or  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import finite_or  # noqa: PLC0415
 
     with _state_lock:
         det_ctx = get_active_detector_context()
@@ -701,7 +701,7 @@ def get_votes(query: dict):
     verified this Find session; Find's Review tab polls that (#5115).
     """
     from vtscore.state.core import get_active_detector_context
-    from vtscore.utils.scores import finite_or  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import finite_or  # noqa: PLC0415
 
     if query["scope"] == "verified":
         return _verified_votes_payload()

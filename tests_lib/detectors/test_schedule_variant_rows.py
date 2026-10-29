@@ -20,7 +20,7 @@ from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.blend_schedules import BlendContext, production_schedule_for
 from vtscore.training.thresholds import NO_GOOD_THRESHOLD, calculate_safe_threshold
-from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+from vtscore.training.thresholds.knobs import NON_FINITE_SCORE_SENTINEL
 
 from .test_max_patch_style import _planted_dataset
 

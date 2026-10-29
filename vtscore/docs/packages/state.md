@@ -23,8 +23,8 @@ protected by a single re-entrant lock; there is no implicit global
 | `vtscore/state/dataset_registry.py` | The loaded-dataset registry, the dataset request-missing sentinel, `get_active_context`, `thread_dataset_context` |
 | `vtscore/state/detector_registry.py` | The detector mirror of the above, plus `override_detector_context`, `loaded_detector_contexts`, `invalidate_loaded_detector_models` |
 | `vtscore/state/detector_lines.py` | A detector's line re-derived from its cached estimators: `recut_detector_threshold`, `recompute_detector_thresholds`, `detector_balance_state`, `detector_acquisition_threshold`, `human_voted_ids`, `user_beta` |
-| `vtscore/state/votes.py` | Vote / label operations, label history, text-sort suggestions, learned scores, the Find queue |
-| `vtscore/state/clicks.py` | Click-time ordinals (`assign_click_time`, `remove_click_time`, `get_vote_click_times`) |
+| `vtscore/state/votes.py` | Vote / label operations, click-time ordinals (`assign_click_time`, `remove_click_time`, `get_vote_click_times`), label history, text-sort suggestions, learned scores, the Find queue |
+| `vtscore/state/clicks.py` | Deprecated alias for `vtscore.state.votes` (#5399) |
 | `vtscore/state/coverage.py` | Build / restore / mutate the active dataset's coverage atlas |
 | `vtscore/state/media_lookup.py` | Origin / MD5 / name lookup tables, cached per context; exact-duplicate collapsing |
 | `vtscore/state/sort_results_cache.py` | Process-global cache of full sorted result lists for windowed paging |
@@ -440,7 +440,7 @@ applying a fresh label list on dataset B must not leak those stale IDs.
 
 ## Click times
 
-A thin wrapper around `DetectorContext.click_counter` and
+In `vtscore/state/votes.py`: a thin wrapper around `DetectorContext.click_counter` and
 `DetectorContext.vote_click_times`. `assign_click_time(cid)` bumps the
 counter and stores the new value under `cid`; `remove_click_time` drops
 the entry; `get_vote_click_times` returns a copy.

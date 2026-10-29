@@ -488,7 +488,7 @@ class TestTransformersImportIsNotAStatWalk:
     def test_bridge_seeds_before_importing_transformers(self):
         import importlib.metadata
 
-        from vtscore.utils.import_metadata import fast_packages_distributions
+        from vtscore.media.torch_utils.torch_setup import fast_packages_distributions
 
         stdlib = importlib.metadata.packages_distributions
         called = []
