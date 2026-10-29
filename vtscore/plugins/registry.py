@@ -340,6 +340,21 @@ class PluginRegistry(Generic[T]):
         self._ensure_discovered()
         return list(self._items.values())
 
+    @property
+    def package(self) -> str:
+        """Dotted name of the package scanned for built-in plugins."""
+        return self._package
+
+    @property
+    def sentinel(self) -> str:
+        """Module-level attribute a built-in plugin exposes, e.g. ``"EXPORTER"``."""
+        return self._sentinel
+
+    @property
+    def entry_point_group(self) -> str | None:
+        """Entry-point group third-party plugins register into, or ``None``."""
+        return self._entry_point_group
+
 
 # ---------------------------------------------------------------------------
 # Factory helper: collapses the per-package boilerplate into one call

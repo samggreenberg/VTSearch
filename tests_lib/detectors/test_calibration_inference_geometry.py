@@ -20,13 +20,10 @@ import pytest
 import torch
 import torch.nn as nn
 
-from vtscore.detectors.training import (
-    _build_vote_xy,
-    _calibration_score_rows,
-    _flood_context,
-    _score_all_media,
-    inference_score_rows,
-)
+from vtscore.detectors.training import inference_score_rows
+from vtscore.detectors.training_calibration import _calibration_score_rows, _flood_context
+from vtscore.detectors.training_scoring import _score_all_media
+from vtscore.detectors.training_votes import _build_vote_xy
 
 DIM = 8
 GRID = (1, 3)  # 1x3 patch grid -> 1 CLS row + 3 patch rows = 4 score rows

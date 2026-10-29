@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.concurrency.progress` is split along its seams** (issue #5429). `ProgressTracker`,
+  `CancelledError`, `PROGRESS_COMMON_EXTRAS` and the `sort_progress` / `eval_progress` / `find_progress`
+  singletons now live in `vtscore.concurrency.progress_tracker`; `LoadingTasksTracker`, `CANCELLED_ERROR`,
+  `DEFAULT_MAX_KEPT_FAILURES`, `ingest_eta_hidden` and the `loading_tasks` / `detector_loading_tasks` singletons
+  in `vtscore.concurrency.loading_tracker`; `cancel_dataset_progress`, `cancel_dataset_task` and
+  `CANCEL_ACK_GRACE_SECONDS` in `vtscore.concurrency.progress_cancel`. `vtscore.concurrency.progress` keeps the
+  per-thread sink and the free-function API, and re-exports every one of those names as the same object, so
+  imports from it are unchanged and its singletons are still the only ones. The private helpers (`_ETA_LADDER`,
+  `_cancel_report`, `_CANCEL_POLL_SECONDS`, ...) moved with their code and are no longer reachable as
+  `vtscore.concurrency.progress._name`; a test that patches one patches the module that defines it. The module
+  no longer imports `time`, so a patch through `vtscore.concurrency.progress.time.monotonic` raises; patch
+  `time.monotonic`, which is what that string reached. See `packages/concurrency.md`.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
@@ -23,6 +36,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
+
+- **`vtscore.detectors.training` is split into its stages** (issue #5418). The 1,770-line module keeps the
+  pipeline entry points (`train_and_threshold`, `train_and_score`, `train_detector_from_origins`,
+  `collect_media_origins`, `serialize_weights`), and the stages they call move to four sibling modules:
+  `training_snap` (which embedding space a snapshot trains and scores in: `detector_score_embedder`,
+  `validate_good_bad_split`), `training_scoring` (`ScoringRows`, `scoring_rows_for_snap`,
+  `score_rows_with_model`, `scoring_progress`, `score_media_with_model`), `training_votes`
+  (`pool_box_from_media`, `bad_negative_vecs`, `inference_score_rows`) and `training_calibration`
+  (`resolve_calibration_fraction`, and the deprecated `calibration_rows_for` and `vote_calibrating_groups`).
+  Every public name still imports from `vtscore.detectors.training` and behaves as before. The private
+  helpers moved with their stage; a test that stubs one patches the module that looks it up, which for
+  `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
+  `packages/detectors.md`.
 
 - **`vtscore.plugins` is split into `field`, `base` and `registry` modules** (issue #5417). `PluginField`,
   its value types, `parse_checkbox` and `inactive_field_keys` now live in `vtscore.plugins.field`;
@@ -1457,6 +1483,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **`PluginRegistry.package`, `.sentinel` and `.entry_point_group`** (issue #5402): read-only properties echoing
+  the constructor arguments, so tooling can say where a family's plugins come from without reaching into private
+  attributes. The generated plugin-families table in the docs now reads each family's package, sentinel and
+  entry-point group off them. Additive: no package moved, and every documented import path is unchanged.
 
 - **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
   new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,

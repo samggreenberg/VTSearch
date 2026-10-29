@@ -54,7 +54,7 @@ from vtsearch.routes._plugins import (
     validate_exporter_field_values,
     validate_plugin_args,
 )
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
 )
