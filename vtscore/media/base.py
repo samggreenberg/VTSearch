@@ -34,8 +34,9 @@ import numpy as np
 from vtscore.security.path_validation import resolve_media_file_path
 
 # Progress callbacks.  Re-exported from ``vtscore.concurrency.progress`` (which
-# imports nothing from vtscore, so there is no cycle) rather than redeclared,
-# so the one signature every sink implements has exactly one definition.
+# imports nothing from vtscore but its own progress modules, so there is no
+# cycle) rather than redeclared, so the one signature every sink implements has
+# exactly one definition.
 from vtscore.concurrency.progress import (  # noqa: E402
     ProgressCallback,
     noop_progress as _noop_progress,

@@ -2,7 +2,7 @@
 
 VTSearch includes a built-in evaluation framework that measures how well its sorting methods work on demo datasets. This guide covers how to run evaluations, write custom eval scripts, and interpret the results.
 
-> **The default arm is the shipped algorithm.** Every experiment here is a measured *deviation* from what the app does, which only means something if the un-deviated arm matches the app. Where the harness can't call app code directly it copies it, and those copies are pinned by `scripts/check-eval-app-sync.py` — a `./run-tests.sh` gate that fails when an app-side surface moves. See [The Eval Default Arm IS the App](#the-eval-default-arm-is-the-app) below.
+> **The default arm is the shipped algorithm.** Every experiment here is a measured *deviation* from what the app does, which only means something if the un-deviated arm matches the app. Where the harness can't call app code directly it copies it, and those copies are pinned by `scripts/gates/check-eval-app-sync.py` — a `./run-tests.sh` gate that fails when an app-side surface moves. See [The Eval Default Arm IS the App](#the-eval-default-arm-is-the-app) below.
 
 ## Quick start
 
@@ -406,7 +406,7 @@ Neither the app nor the default arm builds the #4220 precision estimate any more
 - **What every row gains.** At every click the detector the click's Test gives (its `detector_tier`) scores the Find corpus and its line's corpus side is refitted there, as a Find there draws it, and the row carries `FIND_CORPUS_COLUMNS` (`find_fbeta` and its presets, `find_precision`, `find_recall`, `find_n_flagged`, `find_average_precision`, `find_n_pos`, `find_n_neg`) beside the in-corpus columns, which do not move (`tests_lib/detectors/test_find_corpus.py` pins them byte-identical, and the picks with them). A corpus with no positive scores NaN F-beta and still counts `find_n_flagged`.
 - **The domain-shift flags.** At the snapshot clicks (`find_flag_steps`, `CALIB_FIND_FLAGS_AT`, by default `CALIB_SAVE_TEST_SCORES_AT`'s list: the first click at or past each, named in `flags_at`) the row also reads the app's two flags against that corpus (`FIND_FLAG_COLUMNS`), each a delegated call into the report the app's route calls: the Training-domain overlap (`domain_shift_report` against the sim pool's vectors, as the app reads the reference dataset's; NaN only when the pool is under 40 media) and the Evidence coverage (`evidence_coverage_report` from the votes' vectors and the Find cut, its verdict ranked against the training baseline the app records on the detector, #5089: here the sim pool's unvoted media found as a Find there draws it, `pool_baseline`, drawn fresh at each snapshot click). The Evidence row also carries the counts behind its shares, by predicted class, over the corpus and over the pool (`evidence_n*`, `evidence_pool_n*`, `evidence_n_{pos,neg}_beyond_pool`). How the routes call them is ported, and the `find.training_domain` and `find.evidence_coverage` mirrors pin it. `analyze_autopilot_4671.py` reads the `find_*` columns the way it reads the in-corpus ones and adds a flag table per arm.
 
-**The spot check** (`spot_check`; default `None`, which resolves to the app's for the run's medias: `"weak"`, or `"end"` on face crops). The walk is the app's, delegated — the harness calls `balance_schedule` / `SpotCheck.start_balance` / `balance_state` — and pinned against the analysis that priced it by the schedule, likely-range and band-walk mirrors in `scripts/check-eval-app-sync.py` ([`ML.md`](ML.md#threshold-calibration) has the rule). Each band's 5 picks are answered from ground truth and **cast as votes** (provenance `check`), and the model retrains on them. Under the balance the walk is advisory at every preset, as the app's is (`check_shape`, #4452): it runs as an audit, `checked` on the F-beta peak, and the line stays the labels' line. Until a check ends every row reports `unchecked`, which is exactly what a headless run exports.
+**The spot check** (`spot_check`; default `None`, which resolves to the app's for the run's medias: `"weak"`, or `"end"` on face crops). The walk is the app's, delegated — the harness calls `balance_schedule` / `SpotCheck.start_balance` / `balance_state` — and pinned against the analysis that priced it by the schedule, likely-range and band-walk mirrors in `scripts/gates/check-eval-app-sync.py` ([`ML.md`](ML.md#threshold-calibration) has the rule). Each band's 5 picks are answered from ground truth and **cast as votes** (provenance `check`), and the model retrains on them. Under the balance the walk is advisory at every preset, as the app's is (`check_shape`, #4452): it runs as an audit, `checked` on the F-beta peak, and the line stays the labels' line. Until a check ends every row reports `unchecked`, which is exactly what a headless run exports.
 
 | `spot_check` | What runs |
 |---|---|
@@ -482,7 +482,7 @@ The parameterisation rests on one observation: both of today's opening phases ar
 | `@k-3` | that same fitted GMM, split at **inclusion −3** |
 | `@q0.05` | the sort's 5th rank percentile, named directly |
 
-`PRODUCTION_STARTUP` (`"g3@top,b4@mid"`; no More walk since #4740) is today's opening, and [`vtscore/eval/startup_schedule.py`](../vtscore/eval/startup_schedule.py) is the full reference. `startup_schedule=None` — the default — leaves every trajectory byte-for-byte what it was; the explicit production spec is *required* to reproduce a default run click for click, which `tests_lib/detectors/test_startup_schedule.py` asserts and `scripts/check-eval-app-sync.py`'s `autopilot.startup_default` mirror keeps true — except where the Good walk runs dry. Since #4731 the app's Good phase also ends after `moreDryRun` picks in a row without a Good, with a Good in hand, which the grammar cannot spell (a `+dry<m>/<w>` stop fires with no Good in hand). The mirror declares the divergence; `good_dry_run="off"` on the default arm is the pre-#4731 opening.
+`PRODUCTION_STARTUP` (`"g3@top,b4@mid"`; no More walk since #4740) is today's opening, and [`vtscore/eval/startup_schedule.py`](../vtscore/eval/startup_schedule.py) is the full reference. `startup_schedule=None` — the default — leaves every trajectory byte-for-byte what it was; the explicit production spec is *required* to reproduce a default run click for click, which `tests_lib/detectors/test_startup_schedule.py` asserts and `scripts/gates/check-eval-app-sync.py`'s `autopilot.startup_default` mirror keeps true — except where the Good walk runs dry. Since #4731 the app's Good phase also ends after `moreDryRun` picks in a row without a Good, with a Good in hand, which the grammar cannot spell (a `+dry<m>/<w>` stop fires with no Good in hand). The mirror declares the divergence; `good_dry_run="off"` on the default arm is the pre-#4731 opening.
 
 Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0` throughout one: a round is on the seed sort by construction, so the app would have no detector on screen however many votes have been cast. Every row also carries **`startup_schedule`**, so a pooled frame says which arm it came from without depending on the directory it was read out of.
 
@@ -720,7 +720,7 @@ Prefer delegation whenever it's possible; it's the only fix that can't rot.
 
 ### The drift gate
 
-`scripts/check-eval-app-sync.py` pins a digest of each mirrored surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
+`scripts/gates/check-eval-app-sync.py` pins a digest of each mirrored surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
 
 ```
   * autopilot.phase_machine  [ported, app-changed]
@@ -741,7 +741,7 @@ Prefer delegation whenever it's possible; it's the only fix that can't rot.
 Reconcile, then re-pin:
 
 ```bash
-python scripts/check-eval-app-sync.py --update
+python scripts/gates/check-eval-app-sync.py --update
 ```
 
 Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line, though not the comma that makes `(x,)` a tuple), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.

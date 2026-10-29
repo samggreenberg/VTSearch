@@ -818,7 +818,7 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
 
 #: The photos each Celebrities in Context person is shown in, pinned so the demo
 #: fetches a few thousand loose files instead of the dataset's 11 GB archive.
-#: Built by ``scripts/build_celebrity_together_manifest.py``.
+#: Built by ``scripts/data/build_celebrity_together_manifest.py``.
 _CELEBRITY_TOGETHER_MANIFEST = Path(__file__).resolve().parents[2] / "assets" / "celebrity_together.json"
 
 

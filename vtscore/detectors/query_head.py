@@ -121,7 +121,7 @@ def typed_query_prior_applies(embedder: str | None) -> bool:
     and an embedder with no text tower cannot embed it.  Reads the embedder's
     capabilities, not the query, so a cache can ask it cheaply.
     """
-    from vtscore.detectors.training import _patch_space_for  # noqa: PLC0415
+    from vtscore.detectors.training_calibration import _patch_space_for  # noqa: PLC0415
 
     if _patch_space_for(embedder) is not False:
         return False

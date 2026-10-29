@@ -24,9 +24,12 @@ end-to-end example per family.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/plugins/__init__.py` | `PluginField`, `PluginBase`, `PluginRegistry`, `make_plugin_registry`, sentinel + entry-point discovery |
+| `vtscore/plugins/__init__.py` | Re-exports the public names of `base.py`, `field.py` and `registry.py`; import them from `vtscore.plugins` |
+| `vtscore/plugins/base.py` | `PluginBase` and the default `name` / `display_name` / `description` / `icon` it derives for each subclass |
+| `vtscore/plugins/field.py` | `PluginField`, the `FieldType` / `FieldOption` / `ConditionValue` types, `parse_checkbox`, the `visible_when` evaluator `inactive_field_keys` |
 | `vtscore/plugins/inventory.py` | Enumerate every installed plugin across every family in one call |
 | `vtscore/plugins/normalize.py` | Framework-side normalisation of incoming `field_values` |
+| `vtscore/plugins/registry.py` | `PluginRegistry`, `make_plugin_registry`, `EntryPointTombstone`, sentinel + entry-point discovery |
 | `vtscore/plugins/schema.py` | Build marshmallow schemas from `PluginField` declarations |
 | `vtscore/plugins/uploads.py` | The normalised upload type shared by library-tier plugin bases |
 
@@ -66,7 +69,7 @@ standard `(get, list)` accessor pair every family re-exports.
 
 ## `PluginField`
 
-`vtscore/plugins/__init__.py` - a dataclass that describes one
+`vtscore/plugins/field.py` - a dataclass that describes one
 user-configurable input on a plugin. Each plugin declares its inputs as
 `fields: list[PluginField]` on the class; the frontend renders a form
 from those, the CLI derives flags from those, and the marshmallow
@@ -104,7 +107,7 @@ is used by every family; each family's base module re-exports
 
 ### `FieldType` values
 
-Defined as `Literal[...]` in `vtscore/plugins/__init__.py`:
+Defined as `Literal[...]` in `vtscore/plugins/field.py`:
 
 | Value | Frontend widget | Notes |
 |-------|-----------------|-------|
@@ -220,7 +223,7 @@ shape-validated against `fields` by `MediaConverter.convert_normalized()`
 
 ## `PluginBase`
 
-`vtscore/plugins/__init__.py` - the mixin every plugin class
+`vtscore/plugins/base.py` - the mixin every plugin class
 inherits from (directly or via a family-specific ABC like
 `ResultsExporter`). It supplies the CLI-flag, JSON-serialisation, and
 field-validation glue that's identical across families.
@@ -272,7 +275,7 @@ family-specific metadata (e.g. converters expose `source_type` /
 
 ## `PluginRegistry`
 
-`vtscore/plugins/__init__.py` - generic auto-discovering registry.
+`vtscore/plugins/registry.py` - generic auto-discovering registry.
 One instance per plugin family.
 
 ### Constructor
@@ -303,6 +306,9 @@ PluginRegistry(
 ```python
 registry.get(name: str) -> T | None     # None if not found; may return an EntryPointTombstone
 registry.list() -> list[T]              # discovery order (alphabetical built-ins, then entry points); no tombstones
+registry.package -> str                 # constructor arguments, read-only; reading them never triggers discovery
+registry.sentinel -> str
+registry.entry_point_group -> str | None
 ```
 
 Both methods trigger lazy discovery on first call if `eager=False`. A
@@ -330,7 +336,7 @@ pre-discovery state.
 
 ## `make_plugin_registry()` factory
 
-`vtscore/plugins/__init__.py` - collapses the per-family
+`vtscore/plugins/registry.py` - collapses the per-family
 boilerplate. Returns the `(get, list)` accessor pair every plugin
 family re-exports.
 
@@ -375,26 +381,39 @@ This means a single module can host multiple classes (a helper, a base
 class, the plugin) without confusing the registry, and you can swap
 plugin implementations without renaming the constant.
 
-The standard sentinel names per family are listed in the table below;
-the column also gives the entry-point group name for the third-party
-path.
+Every family's package, sentinel, base class and third-party hook are
+in the generated table below (`ResultsExporter` keeps its permanent
+alias `LabelsetExporter`). The media registries' `register*` functions
+are documented in [media.md](media.md#registry-api). The app-tier
+settings families live in `vtsearch/` and keep their own entry-point
+prefix; they are not part of the library tier.
 
-| Family | Library package | Sentinel | Base class | Entry-point group |
-|--------|-----------------|----------|------------|-------------------|
-| Dataset importers | `vtscore.datasets.importers` | `IMPORTER` | `DatasetImporter` | `vtscore.importers` |
-| Datasource importers | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | `vtscore.datasource_importers` |
-| Seed importers | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | `vtscore.seed_importers` |
-| Results exporters | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` (alias `LabelsetExporter`) | `vtscore.exporters` |
-| Label importers | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | `vtscore.label_importers` |
-| Labelset sources | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | `vtscore.labelset_sources` |
-| Media sources | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | `vtscore.media_sources` |
-| Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | `vtscore.converters` |
-| Media types / embedders / clippers / cleaners | `vtscore.media` | `MEDIA_TYPE` / `EMBEDDER` / `CLIPPERS` / `CLEANERS` (own scanner, not `PluginRegistry`) | `MediaType` / `MediaEmbedder` / `MediaClipper` / `MediaCleaner` | none - call `vtscore.media.register*` directly; see [media.md](media.md#registry-api) |
+<!-- BEGIN GENERATED: plugin-families -->
+<!-- Generated by scripts/gates/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gates/gen-docs-inventories.py -->
 
-App-tier families keep their own entry-point group prefix, e.g.
-`vtsearch.settings_importers`, `vtsearch.settings_exporters`,
-`vtsearch.settings_sources` - those plugins live in `vtsearch/` and are
-not part of the library tier.
+A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`python app.py --list-plugins`): 12 library families self-register when the library imports, and 3 app-tier families (settings importers/exporters/sources) are added by `vtsearch.shim.register_app_plugin_families()` at app startup — 15 in total. Counts below are the built-in plugins shipped in-tree; third-party entry-point plugins add to them.
+
+| Family | Tier | Package | Sentinel | Base class | Third-party hook | Built-in plugins |
+|---|---|---|---|---|---|---|
+| Dataset importers (`importers`) | library | `vtscore.datasets.importers` | `IMPORTER` | `ImporterBase` / `DatasetImporter` | entry-point group `vtscore.importers` | 10 |
+| Datasource importers (`datasource_importers`) | library | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | entry-point group `vtscore.datasource_importers` | 2 |
+| Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
+| Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
+| Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
+| Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
+| Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |
+| Media embedders (`embedders`) | library | `vtscore.media` | `EMBEDDER` | `MediaEmbedder` | call `vtscore.media.register_embedder()` | 29 |
+| Media clippers (`clippers`) | library | `vtscore.media` | `CLIPPERS` | `MediaClipper` | call `vtscore.media.register_clipper()` | 16 |
+| Media cleaners (`cleaners`) | library | `vtscore.media` | `CLEANERS` | `MediaCleaner` | call `vtscore.media.register_cleaner()` | 8 |
+| Settings importers (`settings_importers`) | app | `vtsearch.settings_io.importers` | `SETTINGS_IMPORTER` | `SettingsImporter` | entry-point group `vtsearch.settings_importers` | 2 |
+| Settings exporters (`settings_exporters`) | app | `vtsearch.settings_io.exporters` | `SETTINGS_EXPORTER` | `SettingsExporter` | entry-point group `vtsearch.settings_exporters` | 2 |
+| Settings sources (`settings_sources`) | app | `vtsearch.settings_io.sources` | `SETTINGS_SOURCE` | `SettingsSource` | entry-point group `vtsearch.settings_sources` | 1 |
+
+Package, sentinel and entry-point group are read off each family's live `PluginRegistry`. The four media registries are not `PluginRegistry` families: they scan `vtscore/media/` sub-packages, and out-of-tree code calls the `register*` function named in the table instead of declaring an entry point.
+
+<!-- END GENERATED: plugin-families -->
 
 ## Entry-point integration
 
@@ -416,7 +435,7 @@ my_exporter = "my_pkg.exporter:EXPORTER"
 After `pip install` of your package, the plugin appears in
 `list_importers()` / `list_exporters()` / etc. without any code change
 to `vtscore`. The discovery routine is
-`vtscore/plugins/__init__.py::PluginRegistry._discover_entry_points`.
+`vtscore/plugins/registry.py::PluginRegistry._discover_entry_points`.
 
 ### Invariants
 

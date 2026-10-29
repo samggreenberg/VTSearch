@@ -135,9 +135,9 @@ reorders what was previously planned here.
 - **VLAD codebook growth — demoted, not dismissed.** The shipped
   `vlad_codebook_v1.npy` is a real k-means vocabulary (64 centroids) fit on 1M
   Caltech-101 rootSIFT descriptors via
-  `scripts/build_vlad_codebook.py --images data/caltech-101/101_ObjectCategories`.
+  `scripts/data/build_vlad_codebook.py --images data/caltech-101/101_ObjectCategories`.
   The ROxford spike (4993 db + 70 queries, `max_features=1024`,
-  `scripts/spike_structural_roxford.py`, revisitop protocol) suggested a larger
+  `scripts/experiments/structural_roxford/spike_structural_roxford.py`, revisitop protocol) suggested a larger
   vocabulary (256–1024 centroids on a building/scene corpus such as Paris6k or a
   Places365 slice, kept disjoint from any eval set) as the fix for Stage-1 recall:
 
