@@ -7,7 +7,7 @@ return a single float threshold. Detector-specific glue (sourcing ``X_list`` / `
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across ten submodules, layered so that each one
+The implementation is split across thirteen submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -36,16 +36,31 @@ only reads from those above it:
   where the expected F-beta of the kept set peaks at the prevalence it
   estimates on the corpus being decided, and the head's count line while that
   model is thin.  Reads nothing above it; numpy and SciPy.
-* :mod:`~vtscore.training.thresholds.spot_check` - the balance (its presets
-  and the count rule a context with no trained head falls back to) and the spot
-  check, a walk of uniform picks in rank bands that audits the line and
-  reports a likely range without moving it.  Reads
-  :mod:`~vtscore.training.thresholds.knobs` and
-  :mod:`~vtscore.training.thresholds.gmm`.
+* :mod:`~vtscore.training.thresholds.check_schedule` - the balance's presets
+  and range, the bands a check walks, and the schedule and shape of a check
+  at one balance.  Plain Python; reads no sibling.
+* :mod:`~vtscore.training.thresholds.ranges` - the likely range: the exact
+  bound on how much of a set is right, from the uniform picks inside it.
+  Reads :mod:`~vtscore.training.thresholds.check_schedule`.
+* :mod:`~vtscore.training.thresholds.spot_check` - the spot check, a walk of
+  uniform picks in rank bands that audits the line and reports a likely range
+  without moving it, and the ranking it walks.  Reads the two modules above
+  it, and re-exports every public name of those two and of
+  :mod:`~vtscore.training.thresholds.balance`, as it did when the four were
+  one module (#5425).
+* :mod:`~vtscore.training.thresholds.balance` - the mixture's counts, the
+  count rule a context with no trained head falls back to, and the state a
+  balance reports beside a line.  Reads
+  :mod:`~vtscore.training.thresholds.knobs`,
+  :mod:`~vtscore.training.thresholds.check_schedule` and
+  :mod:`~vtscore.training.thresholds.ranges`, and
+  :mod:`~vtscore.training.thresholds.gmm` on first use; the spot check's
+  classes as types only.
 * :mod:`~vtscore.training.thresholds.line_test` - Test mode's sample of a
   line (#4527): band picks on both sides of it and the precision, recall and
   F-beta ranges they give.  Reads
-  :mod:`~vtscore.training.thresholds.spot_check`'s bands.
+  :mod:`~vtscore.training.thresholds.check_schedule`'s bands and
+  :mod:`~vtscore.training.thresholds.ranges`' bound.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
@@ -181,7 +196,7 @@ from vtscore.training.thresholds.gmm import (
 )
 from vtscore.training.thresholds.costs import weighted_error_cost
 
-from vtscore.training.thresholds.spot_check import (
+from vtscore.training.thresholds.check_schedule import (
     CHECK_ALPHA,
     CHECK_BASE_CANDIDATE,
     CHECK_CANCELLED,
@@ -190,17 +205,8 @@ from vtscore.training.thresholds.spot_check import (
     CHECK_RECALL_CANDIDATE,
     CHECK_RUNNING,
     CheckSchedule,
-    LikelyRange,
-    LineRanking,
     NO_BALANCE,
-    SpotCheck,
-    clopper_pearson_lower,
-    clopper_pearson_upper,
-    hypergeometric_lower,
-    hypergeometric_upper,
-    likely_range,
     line_under,
-    range_tail,
     rounds_for,
     BAND_BASE,
     WALK_DEEPER,
@@ -208,25 +214,11 @@ from vtscore.training.thresholds.spot_check import (
     WALK_START,
     band_edges,
     bands_for,
-    MIXTURE_MIN_STD_SHARE,
-    acquisition_count,
-    acquisition_threshold,
-    mixture_positives,
-    mixture_posterior,
-    walk_positives,
-    fbeta_count,
     fbeta_score,
     balance_schedule,
     check_shape,
-    balance_count,
-    balance_line,
-    aim_words,
     band_edges_fine,
-    balance_state,
-    gate_balance_state,
     resolve_line_knobs,
-    applicable_balance,
-    BalanceState,
     BALANCE_CHECKED,
     BALANCE_GATE,
     BALANCE_PRESETS,
@@ -238,6 +230,35 @@ from vtscore.training.thresholds.spot_check import (
     BETA_MAX,
     BETA_MIN,
     DEFAULT_BETA,
+)
+from vtscore.training.thresholds.ranges import (
+    LikelyRange,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    hypergeometric_lower,
+    hypergeometric_upper,
+    likely_range,
+    range_tail,
+)
+from vtscore.training.thresholds.spot_check import (
+    LineRanking,
+    SpotCheck,
+)
+from vtscore.training.thresholds.balance import (
+    MIXTURE_MIN_STD_SHARE,
+    acquisition_count,
+    acquisition_threshold,
+    mixture_positives,
+    mixture_posterior,
+    walk_positives,
+    fbeta_count,
+    balance_count,
+    balance_line,
+    aim_words,
+    balance_state,
+    gate_balance_state,
+    applicable_balance,
+    BalanceState,
 )
 from vtscore.training.thresholds.line_test import (
     ABOVE,

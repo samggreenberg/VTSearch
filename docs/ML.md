@@ -489,7 +489,7 @@ report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(li
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
 - `vtscore/detectors/label_quota.py`, `centroid_head.py`, `query_head.py`: the label quota, and the Goods' centroid and typed query's heads under it
-- `vtscore/training/thresholds/labels_line.py`, `spot_check.py`, `line_test.py`: the labels line, the spot check and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md))
+- `vtscore/training/thresholds/labels_line.py`, `check_schedule.py`, `ranges.py`, `spot_check.py`, `balance.py`, `line_test.py`: the labels line, the spot check (its schedule, its likely range, the walk, and the balance's state) and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md))
 - `vtscore/detectors/labeling_progress.py`: Per-step cache of the detectors the app trained, and their stability analysis
 - `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_setup.py`: torch thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation

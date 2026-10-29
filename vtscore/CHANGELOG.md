@@ -23,6 +23,20 @@ instead, since every commit on `dev` is effectively a new app release.)
   ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
+- **`vtscore.training.thresholds.spot_check` is four modules** (issue #5425). The 1,446-line module
+  keeps the ranking and the walk (`LineRanking`, `SpotCheck`). The balance's presets, the bands and the
+  check's schedule (`balance_schedule`, `band_edges`, `check_shape`, `resolve_line_knobs`, the `CHECK_*` /
+  `BALANCE_*` / `WALK_*` constants, ...) moved to `vtscore.training.thresholds.check_schedule`. The
+  likely range (`likely_range`, `LikelyRange`, the hypergeometric and Clopper-Pearson bounds,
+  `range_tail`) moved to `.ranges`, and the mixture's counts and the balance's state
+  (`mixture_posterior`, `walk_positives`, `fbeta_count`, `balance_count`, `balance_state`,
+  `BalanceState`, ...) to `.balance`. Every public name still imports from `thresholds.spot_check` and
+  from `vtscore.training.thresholds`, as the same object. `spot_check.__all__` now also lists the eight
+  public names it had left out (`LINE_DECIMALS`, `MIXTURE_MIN_STD_SHARE`, `acquisition_count`,
+  `acquisition_threshold`, `aim_words`, `band_edges_fine`, `resolve_line_knobs`, `walk_positives`).
+  The private `_mixture_is_sound` is reachable only from `.balance`. A test that stubs a moved name
+  patches the module that defines it: patching `spot_check.mixture_posterior` no longer reaches
+  `walk_positives`. See `packages/training.md`.
 
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
