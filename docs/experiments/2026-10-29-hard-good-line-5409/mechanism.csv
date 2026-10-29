@@ -1,9 +1,0 @@
-kind,size,line,cuts,hard_good_held_out,reach_fires,reach_only_from_hard_good,kept_without_reach,kept,kept_hard_good_skipped
-flagged,1024,measured,20,0.6,0.55,0.45,5.5,17.5,7.6
-flagged,1024,session,20,0.6,0.05,0.0,7.3,8.2,8.2
-flagged,640,measured,19,0.63,0.58,0.58,5.1,11.7,5.1
-flagged,640,session,19,0.63,0.0,0.0,7.6,7.6,7.6
-clear,1024,measured,22,0.0,0.05,0.0,5.8,7.0,7.0
-clear,1024,session,22,0.0,0.0,0.0,6.7,6.7,6.7
-clear,640,measured,26,0.0,0.04,0.0,6.6,8.3,8.3
-clear,640,session,26,0.0,0.0,0.0,6.0,6.0,6.0
