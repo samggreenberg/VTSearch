@@ -60,7 +60,7 @@ emit no row, and keep their static ballpark share via the `_finalize_slots` merg
 **What the weights do.** The unified load bar paces across four phases —
 **download (+ extract), load, embed, finalize** — using a weight vector
 (`load_step_weights` in `vtscore/datasets/stages/_common.py`, applied by
-`ProgressTracker._overall_raw_fraction` in `vtscore/concurrency/progress.py`). The weights only shape *pacing*:
+`ProgressTracker._overall_raw_fraction` in `vtscore/concurrency/progress_tracker.py`). The weights only shape *pacing*:
 bad weights make the bar race one phase and crawl another. An import publishes no
 ETA (#4667), so that bounds the value of this work: smooth honest pacing, not a
 time oracle.

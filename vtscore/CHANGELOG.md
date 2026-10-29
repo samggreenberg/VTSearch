@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.concurrency.progress` is split along its seams** (issue #5429). `ProgressTracker`,
+  `CancelledError`, `PROGRESS_COMMON_EXTRAS` and the `sort_progress` / `eval_progress` / `find_progress`
+  singletons now live in `vtscore.concurrency.progress_tracker`; `LoadingTasksTracker`, `CANCELLED_ERROR`,
+  `DEFAULT_MAX_KEPT_FAILURES`, `ingest_eta_hidden` and the `loading_tasks` / `detector_loading_tasks` singletons
+  in `vtscore.concurrency.loading_tracker`; `cancel_dataset_progress`, `cancel_dataset_task` and
+  `CANCEL_ACK_GRACE_SECONDS` in `vtscore.concurrency.progress_cancel`. `vtscore.concurrency.progress` keeps the
+  per-thread sink and the free-function API, and re-exports every one of those names as the same object, so
+  imports from it are unchanged and its singletons are still the only ones. The private helpers (`_ETA_LADDER`,
+  `_cancel_report`, `_CANCEL_POLL_SECONDS`, ...) moved with their code and are no longer reachable as
+  `vtscore.concurrency.progress._name`; a test that patches one patches the module that defines it. The module
+  no longer imports `time`, so a patch through `vtscore.concurrency.progress.time.monotonic` raises; patch
+  `time.monotonic`, which is what that string reached. See `packages/concurrency.md`.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
