@@ -1869,8 +1869,9 @@ time:
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, **Tune** or **Find** once the selected detector is trained, and
   **Find** alone when you have ticked several datasets or detectors. On the
-  dataset you trained the detector on, he asks you to select a different
-  dataset or detector instead: the detector has already seen those items.
+  dataset you trained the detector on, he looks surprised and asks you to
+  select a different dataset or detector instead: the detector has already
+  seen those items.
 
 While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add
@@ -1914,6 +1915,10 @@ banner's **Retry** button, over any dialog, and every other hint steps aside
 until the server answers again, since none of their steps could work without
 it. That hint has no hide boxes: nothing can be saved while the server is
 away.
+
+If a hint is in your way, drag Toasty or his bubble aside. The hint doesn't
+remember where you put it: the next one stands in its usual place. Point at
+Toasty and he pulls a face.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
