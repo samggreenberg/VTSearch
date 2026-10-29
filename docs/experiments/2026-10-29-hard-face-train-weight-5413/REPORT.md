@@ -6,7 +6,7 @@ The line returns 2 to 3 fewer faces, and precision rises 0.06 to 0.08. Nothing g
 sessions with no hard Good are untouched.** That is about a third of what leaving the face out of the
 session recovered (+0.10 / +0.11). Weighting hard Bads as well adds nothing, and weight 0 is no better than ¼.
 
-![F at 50 votes per β and arm, with #5376's hard-face-out level](f50.png)
+![F at 50 votes per β and arm, with #5376's hard-face-out level](f50.webp)
 
 | K = 4, flagged sessions, F at 50 votes, arm − control (95% CI) | 1024 px, 26 people | 640 px, 25 people |
 |---|---:|---:|
@@ -94,7 +94,7 @@ counts, which is #5409.
 
 ## Files and reproduce
 
-- `summary.csv`, `paired.csv`, `f50.png`: pack A (control, hard Goods ¼, hard Goods and Bads ¼ and 0)
+- `summary.csv`, `paired.csv`, `f50.webp`: pack A (control, hard Goods ¼, hard Goods and Bads ¼ and 0)
   on the 51 flagged and 60 clear person-sizes.
 - `summary_b.csv`, `paired_b.csv`: pack B on the flagged ones (hard Goods 0 and 0.1, the rerun control as
   `ctl`, and pack A's control and hard Goods ¼ as `ctlA` and `g0.25A`).
