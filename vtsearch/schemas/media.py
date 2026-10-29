@@ -4,6 +4,8 @@ Listing / per-media routes (``vtsearch/routes/media/list.py``, ``content.py``,
 ``vote.py``, ``pile.py``):
 
 * ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
+* ``GET  /api/medias/picker`` -> :class:`MediaPickerQuerySchema` ->
+                                 :class:`MediaPickerListingSchema`
 * ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
                                 :class:`MediaBatchResponseSchema`
 * ``POST /api/medias/<id>/vote`` -> :class:`MediaVoteRequestSchema` ->
@@ -136,6 +138,48 @@ class MediaIdsListResponseSchema(Schema):
         # The list shape is signalled by ``many=True`` at the decorator
         # call site (`response(200, MediaIdsListResponseSchema(many=True))`).
         pass
+
+
+class MediaPickerQuerySchema(Schema):
+    """Query for ``GET /api/medias/picker``."""
+
+    q = fields.String(
+        load_default="",
+        metadata={
+            "description": (
+                "Keep only items whose name holds every whitespace-separated word, ignoring case. "
+                "A face's name starts with the photo it was cropped from, so a photo's name finds its faces."
+            )
+        },
+    )
+
+    class Meta:
+        # The ``dataset_id`` query param a browser-native request may carry.
+        unknown = "exclude"
+
+
+class MediaPickerListingSchema(Schema):
+    """Response for ``GET /api/medias/picker``: the ids New Detector's example picker lists."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "The matching items' ids, in ``order``."},
+    )
+    total = fields.Integer(
+        required=True,
+        metadata={"description": "How many items the dataset holds, matching or not."},
+    )
+    order = fields.String(
+        required=True,
+        validate=validate.OneOf(["similarity", "dataset"]),
+        metadata={
+            "description": (
+                "``similarity``: look-alikes side by side, by a 1-D UMAP of the embeddings (Face datasets). "
+                "``dataset``: the order the items were imported in."
+            )
+        },
+    )
 
 
 class MediaBatchRequestSchema(Schema):
