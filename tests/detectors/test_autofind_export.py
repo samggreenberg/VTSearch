@@ -40,6 +40,8 @@ class TestAutofindExport:
         status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["exporter"] == "no_such_exporter"
+        # Nothing registered to take a display name from, so the name stands in.
+        assert status["exporter_display_name"] == "no_such_exporter"
         assert status["success"] is False
         assert "error" in status
 
@@ -50,10 +52,32 @@ class TestAutofindExport:
         status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["exporter"] == "server_json_file"
+        assert status["exporter_display_name"] == "Server JSON File"
         assert status["success"] is True
         assert out.exists()
         written = json.loads(out.read_text())
         assert "results" in written or "det-a" in json.dumps(written)
+
+
+class TestAutofindExportFailure:
+    """A failure reaches the user by the exporter's display name, never its registry name (#5463)."""
+
+    def test_a_failed_export_carries_the_display_name(self, isolated_settings):
+        from vtscore.exporters import get_exporter
+
+        settings.set_autofind_exporter("webhook")
+        settings.set_autofind_exporter_field_values({"webhook": {"url": "https://example.com/hook"}})
+        with patch.object(
+            type(get_exporter("webhook")),
+            "export_find_results",
+            side_effect=RuntimeError("Connection refused"),
+        ):
+            status = run_autofind_export(dict(_SAMPLE_RESULTS))
+        assert status is not None
+        assert status["success"] is False
+        assert status["exporter"] == "webhook"
+        assert status["exporter_display_name"] == "Webhook (HTTP POST)"
+        assert status["error"] == "Connection refused"
 
 
 class TestAutofindExportPaused:
@@ -100,6 +124,9 @@ class TestAutofindExportOpenUrl:
         assert status["success"] is False
         assert "cannot export find results" in status["error"]
         assert "detector_bundles" in status["error"]
+        # The message reaches the user, so it names the exporter as they picked it (#5463).
+        assert status["exporter_display_name"] == "Portable Detector Bundle"
+        assert status["error"].startswith("Portable Detector Bundle cannot")
 
     def test_unusable_url_is_dropped_not_forwarded(self, isolated_settings):
         """The same scheme allowlist the export route applies — a plugin must

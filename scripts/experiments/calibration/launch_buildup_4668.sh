@@ -190,7 +190,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=bu4668-prep --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P -> $CALIB_EXP/logs/prepare-$P.out"
     ;;
@@ -204,7 +204,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name="bu4668-size-$RUNG-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX, $RUNG) -> $CALIB_EXP/logs/size-$S.out"
     ;;
@@ -224,7 +224,7 @@ case "$MODE" in
       T=$(sbatch --parsable --job-name="bu4668-baseline-$which" --mem=32G --cpus-per-task=2 \
         --time=1:00:00 --partition=cpu --export=ALL \
         --output="$CALIB_EXP/logs/baseline-$which-%j.out" \
-        --wrap="source $WT/gridenv.sh && $ENVX && ${rule}cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $out")
+        --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && ${rule}cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $out")
       require_jobid "$T" "text baseline ($which)"
       echo "baseline job ($which): $T -> $out"
     done

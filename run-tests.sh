@@ -182,7 +182,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
         echo ""
         echo "Run the suite on a bigger machine instead — on the GRID:"
         echo "  sbatch --partition=cpu --cpus-per-task=8 --mem=32G \\"
-        echo "         --time=02:00:00 --wrap 'source gridenv.sh && ./run-tests.sh'"
+        echo "         --time=02:00:00 --wrap 'source scripts/grid/gridenv.sh && ./run-tests.sh'"
         echo "Or run one group at a time here (./run-tests.sh detectors),"
         echo "which skips the frontend gates unless the group is core/frontend."
         echo "============================================================"

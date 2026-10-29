@@ -20,6 +20,8 @@ throwaway origin + clone + worktree:
 * **data dir** -- the suite runs on a fresh ``VTSEARCH_DATA_DIR`` of its own,
   never the inherited one (the live app's, on the GRID: #4706), and the job
   removes it when it ends.
+* **old layout** -- a ref cut before #5407 keeps ``gridenv.sh`` at the repo
+  root rather than in ``scripts/grid/``, and the suite still sources it.
 
 ``run-tests.sh`` and ``gridenv.sh`` are stubs here: what is under test is the
 launcher's ref handling, not the suite it launches.
@@ -77,7 +79,8 @@ def grid(tmp_path: Path) -> dict:
     _git(tmp_path, "clone", "-q", str(origin), str(seed))
     _git(seed, "checkout", "-q", "-b", "dev")
     # The stubs are committed, so every checkout the script makes still has them.
-    (seed / "gridenv.sh").write_text(
+    (seed / "scripts" / "grid").mkdir(parents=True)
+    (seed / "scripts" / "grid" / "gridenv.sh").write_text(
         'mkdir -p "$PWD/.bin"; printf "#!/bin/sh\\n" > "$PWD/.bin/ruff"\n'
         'chmod +x "$PWD/.bin/ruff"; export PATH="$PWD/.bin:$PATH"\n'
     )
@@ -201,6 +204,20 @@ def test_suite_gets_a_data_dir_of_its_own(grid: dict, tmp_path: Path) -> None:
     assert f"=== data {used} (inherited VTSEARCH_DATA_DIR: {live}, not used)" in r.stdout
     assert not any(live.iterdir()), "the suite wrote into the inherited data dir"
     assert not used.exists(), "the job's data dir outlived the job"
+    assert _restored(grid)
+
+
+def test_a_ref_from_before_the_move_still_finds_gridenv(grid: dict) -> None:
+    """#5407 moved gridenv.sh into scripts/grid/; a branch cut before that has it at the root."""
+    seed = grid["seed"]
+    _git(seed, "checkout", "-q", "-b", "old-layout")
+    _git(seed, "mv", "scripts/grid/gridenv.sh", "gridenv.sh")
+    _git(seed, "commit", "-q", "-m", "old layout")
+    old = _git(seed, "rev-parse", "HEAD")
+    _git(seed, "push", "-q", "origin", "HEAD:refs/heads/old-layout")
+    r = _run(grid["wt"], "old-layout")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"SUITE RAN at {old}" in r.stdout
     assert _restored(grid)
 
 

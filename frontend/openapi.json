@@ -330,6 +330,12 @@
             },
             "type": "object"
           },
+          "grid_icon_size_picker": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "grid_icon_size_popup": {
             "additionalProperties": {
               "type": "string"
@@ -5977,6 +5983,36 @@
         ],
         "type": "object"
       },
+      "MediaPickerListing": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "The matching items' ids, in ``order``.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "order": {
+            "description": "``similarity``: look-alikes side by side, by a 1-D UMAP of the embeddings (Face datasets). ``dataset``: the order the items were imported in.",
+            "enum": [
+              "similarity",
+              "dataset"
+            ],
+            "type": "string"
+          },
+          "total": {
+            "description": "How many items the dataset holds, matching or not.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ids",
+          "order",
+          "total"
+        ],
+        "type": "object"
+      },
       "MediaSourceBatchEntry": {
         "additionalProperties": false,
         "properties": {
@@ -7166,6 +7202,7 @@
           "focus_mode_left": {},
           "focus_mode_right": {},
           "grid_icon_size_left": {},
+          "grid_icon_size_picker": {},
           "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
           "hidden_hints": {
@@ -7884,6 +7921,10 @@
           "exporter": {
             "type": "string"
           },
+          "exporter_display_name": {
+            "description": "The exporter's display name, for messages to the user (#5463); the ``exporter`` name itself when that names no registered exporter.",
+            "type": "string"
+          },
           "message": {
             "description": "Human-readable outcome; present on success.",
             "type": "string"
@@ -7898,6 +7939,7 @@
         },
         "required": [
           "exporter",
+          "exporter_display_name",
           "success"
         ],
         "type": "object"
@@ -14233,6 +14275,49 @@
           }
         },
         "summary": "Return a lightweight listing of all loaded medias.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
+    "/api/medias/picker": {
+      "get": {
+        "description": "A Face dataset's items come in **similarity order** - a 1-D UMAP of their\nembeddings, so the crops of one person sit together (#5465) - fit when the\ndataset was built, or here, once, for one built before that.  Every other\ndataset lists in import order.  ``q`` keeps only the items whose name holds\nevery word of it, so typing a photo's name finds the faces cropped from it.",
+        "operationId": "media_picker_listing",
+        "parameters": [
+          {
+            "description": "Keep only items whose name holds every whitespace-separated word, ignoring case. A face's name starts with the photo it was cropped from, so a photo's name finds its faces.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaPickerListing"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List the ids New Detector's *Pick from Dataset* grid shows, in the order it shows them.",
         "tags": [
           "medias"
         ]

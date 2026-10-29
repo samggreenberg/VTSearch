@@ -145,6 +145,9 @@ class AppSettingsSchema(Schema):
     # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
     # own size buttons and the Settings → Browse Map tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
+    # New Detector's Pick-from-Dataset grid thumbnail size, per media type.
+    # Driven by the picker's own size buttons.
+    grid_icon_size_picker = _PerMediaTypeStringDict()
     # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
     # px, per media type. Driven by the popup's own top-left size buttons.
     popup_preview_size = _PerMediaTypeIntDict()
@@ -310,6 +313,7 @@ class SettingsUpdateSchema(Schema):
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
     grid_icon_size_popup = fields.Raw()
+    grid_icon_size_picker = fields.Raw()
     popup_preview_size = fields.Raw()
     popup_metadata_shown = fields.Raw()
     bin_details_docked = fields.Raw()

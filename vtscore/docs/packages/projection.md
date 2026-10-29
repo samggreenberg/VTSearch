@@ -39,6 +39,7 @@ for the background-job runner the builds ride on.
 |--------|---------|
 | `vtscore/projection/store.py` | Where a layout lives on disk: `pkl_path_for`, `persist_projection`, `load_persisted_layout`, and the `projection_params_match` freshness guard |
 | `vtscore/projection/service.py` | The state machine: `build_layout`, `fit_and_install_layout`, the subset fit and cull, `prep_subset_layout` (that subset fit started ahead of a Browse the user is likely to ask for, only on an otherwise idle server), and the meta / labels / tile payloads |
+| `vtscore/projection/similarity_order.py` | The 1-D order a Face dataset's example picker lists it in (look-alikes together): `fit_similarity_order`, `ordered_ids`, and `similarity_order_for`, which serves it from the context, else the container, else a fit it persists (#5465) |
 
 **Signposts** - the "street sign" naming layer.
 
@@ -317,6 +318,11 @@ removes layouts (`persist_projection`, `remove_persisted_projections`),
 and judges whether what is already stored is still fresh
 (`load_persisted_layout`, `load_any_persisted_layout`,
 `projection_params_match`).
+
+The 1-D similarity order (`similarity_order.py`) is stored the same way, as
+the container's `similarity_order.json`: media ids only, served while it
+still names every current item (ids removed since are skipped) and re-fit
+once it misses one.
 
 Storing a projection and its pyramid **is** a carve-out from the
 [no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule),

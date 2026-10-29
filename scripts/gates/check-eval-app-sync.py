@@ -1043,7 +1043,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="line_test.budgets_default",
-        app="py:vtscore.training.thresholds.line_test.LineBudgets",
+        app="py:vtscore.training.thresholds.line_test_types.LineBudgets",
         harness="vtscore/eval/line_test_arm.py::line_test_row,simulate_line_test",
         kind="default",
         note=(

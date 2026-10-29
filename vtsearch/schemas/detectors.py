@@ -753,7 +753,8 @@ class _AutoDetectResultSchema(Schema):
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an AutoFind run's results.
 
-    Built by ``vtsearch.runtime.autofind.run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.runtime.autofind.run_autofind_export``: a fixed
+    ``{exporter, exporter_display_name, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
@@ -762,6 +763,15 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """
 
     exporter = fields.String(required=True)
+    exporter_display_name = fields.String(
+        required=True,
+        metadata={
+            "description": (
+                "The exporter's display name, for messages to the user (#5463); the "
+                "``exporter`` name itself when that names no registered exporter."
+            )
+        },
+    )
     success = fields.Boolean(required=True)
     message = fields.String(metadata={"description": "Human-readable outcome; present on success."})
     error = fields.String(metadata={"description": "Failure reason; present instead of ``message`` on failure."})

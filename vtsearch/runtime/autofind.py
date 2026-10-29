@@ -642,10 +642,12 @@ def run_autofind_export(response: dict) -> dict | None:
 
     Returns ``None`` when no exporter is configured (the common case) or the
     user has paused it (``autofind_export_enabled`` off, #5170), or a status
-    dict ``{exporter, success, message?, error?}`` otherwise. Export
-    failures are reported in the status block rather than raised: the scored
-    results are valuable on their own, so a misconfigured exporter must not
-    sink the whole run.
+    dict ``{exporter, exporter_display_name, success, message?, error?}``
+    otherwise. ``exporter_display_name`` is what the browser shows the user
+    (#5463); it falls back to the name when the exporter is not registered.
+    Export failures are reported in the status block rather than raised: the
+    scored results are valuable on their own, so a misconfigured exporter must
+    not sink the whole run.
     """
     from vtsearch.settings import (  # noqa: PLC0415
         get_autofind_export_enabled,
@@ -661,7 +663,13 @@ def run_autofind_export(response: dict) -> dict | None:
 
     exporter = get_exporter(exporter_name)
     if exporter is None:
-        return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
+        return {
+            "exporter": exporter_name,
+            "exporter_display_name": exporter_name,
+            "success": False,
+            "error": f"Unknown exporter '{exporter_name}'",
+        }
+    names = {"exporter": exporter_name, "exporter_display_name": exporter.display_name}
 
     if "find_results" not in exporter.supported_payloads:
         # A saved AutoFind choice can outlive the exporter's capabilities (a
@@ -670,9 +678,9 @@ def run_autofind_export(response: dict) -> dict | None:
         # read and mailing an empty summary.
         supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
         return {
-            "exporter": exporter_name,
+            **names,
             "success": False,
-            "error": f"Exporter '{exporter_name}' cannot export find results (it supports: {supported})",
+            "error": f"{exporter.display_name} cannot export find results (it supports: {supported})",
         }
 
     field_values = dict(get_autofind_exporter_field_values().get(exporter_name, {}))
@@ -683,9 +691,9 @@ def run_autofind_export(response: dict) -> dict | None:
         outcome = exporter.export_find_results(response, field_values) or {}
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
         logger.exception("AutoFind export via %s failed", exporter_name)
-        return {"exporter": exporter_name, "success": False, "error": str(exc)}
+        return {**names, "success": False, "error": str(exc)}
 
-    status = {"exporter": exporter_name, "success": True, "message": outcome.get("message", "Export complete.")}
+    status = {**names, "success": True, "message": outcome.get("message", "Export complete.")}
     for key, value in outcome.items():
         if key != "message":
             status[key] = value

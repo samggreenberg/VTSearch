@@ -21,7 +21,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ER
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -95,7 +95,7 @@ cells)
   submit cells --job-name="$JOB_NAME" --array="0-$((N-1))" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition=cpu --export=ALL \
     --output="$LOGS/cell-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && \
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && \
       DS=\$(awk -F, -v i=\$SLURM_ARRAY_TASK_ID 'NR>1 && \$1==i {print \$2}' $RESULTS/cell_map.csv) && \
       EMB=\$(awk -F, -v i=\$SLURM_ARRAY_TASK_ID 'NR>1 && \$1==i {print \$3}' $RESULTS/cell_map.csv) && \
       SD=\$(awk -F, -v i=\$SLURM_ARRAY_TASK_ID 'NR>1 && \$1==i {print \$4}' $RESULTS/cell_map.csv) && \
@@ -108,7 +108,7 @@ shift)
     submit "shift_$emb" --job-name="$JOB_NAME-shift" --mem=32G --cpus-per-task="$CPUS" \
       --time="$TIME" --partition=cpu --export=ALL \
       --output="$LOGS/shift-$emb-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && \
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && \
         python domain_shift_3329.py --embedder $emb --datasets $DATASETS --out $RESULTS"
   done
   ;;
