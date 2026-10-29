@@ -12,6 +12,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The load pipeline drops an item any of its embedders could not read** (issue #3798). In a multi-embedder load
+  an item one embedder declined kept another's vector (or the one its importer shipped), passed the finalize
+  stage's check for a primary vector, and was saved with a hole in one of the dataset's spaces, so
+  `get_embedding_matrix` raised for that embedder on every load. `_embed_missing_stage` now empties such an item
+  (keeping the reason its embedder recorded), and the finalize stage drops it with the rest. An embedder that
+  produced no vector for any item is not counted as one of the dataset's spaces, and a vector the load never ran
+  (one an importer shipped for a few items) marks nobody incomplete. `embed_missing` now returns the name of the
+  embedder it resolved and ran, or `None`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss
@@ -1437,6 +1446,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
+  dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
+  `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it
+  with its total as `num_dropped`. `merge_dropped_groups` adds to a recorded list under the same cap.
+- **`drop_incomplete_medias(medias)` repairs a dataset saved with an incomplete item** (issue #3798). It removes
+  every media missing a vector that more than half of them carry, returns them grouped by reason, and removes
+  nothing when that would be half the dataset or more. `resave_registered_dataset(entry, medias, coverage_atlas)`
+  rewrites a registered dataset's file atomically, with the writer the import uses.
 
 - **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
   new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,

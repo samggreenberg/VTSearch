@@ -199,6 +199,7 @@ def register_dataset(
     expires_at: float | None = None,
     import_group: str | None = None,
     output_category: str = "",
+    dropped_groups: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -220,6 +221,12 @@ def register_dataset(
             within its import group (``"face"``, ``"document"``…), which can
             differ from *media_type* (a Document output holds rendered page
             *images*).  Empty for a single-dataset import.
+        dropped_groups: The items the import left out because they ended up
+            with no vector, grouped by reason: ``{"reason", "count",
+            "items"}`` dicts, commonest first (see
+            :func:`vtscore.datasets.stages.finalize._drop_none_embeddings_stage`).
+            Stored with their total as ``num_dropped``, so the Stats window can
+            list them after the import's toast is gone (#3798).
 
     Returns the newly created entry (with a generated ``id``).
     """
@@ -263,6 +270,8 @@ def register_dataset(
         "expires_at": expires_at,
         "import_group": import_group,
         "output_category": output_category,
+        "num_dropped": sum(int(g["count"]) for g in dropped_groups or []),
+        "dropped_groups": list(dropped_groups or []),
     }
     _read_modify_write(lambda entries: entries.append(entry))
 

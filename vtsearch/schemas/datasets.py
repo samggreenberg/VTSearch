@@ -1105,6 +1105,17 @@ class DatasetRegistryEntrySchema(Schema):
     loaded = fields.Boolean(metadata={"description": "Whether this dataset is currently resident in memory."})
     num_items = fields.Integer(metadata={"description": "Item count after near-duplicate collapsing."})
     num_dupes = fields.Integer(metadata={"description": "How many items were collapsed as near-duplicates."})
+    # The entry's ``dropped_groups`` (the names behind this count) is left out
+    # on purpose: this list is fetched on every Dashboard refresh, and the
+    # names are served by ``GET /api/datasets/registry/<id>/stats`` instead.
+    num_dropped = fields.Integer(
+        metadata={
+            "description": (
+                "How many imported items were left out because they ended up with no vector (the embedder "
+                "could not read them). The stats endpoint names them."
+            )
+        }
+    )
     pkl_path = fields.String(metadata={"description": "Server-side path of the dataset pickle."})
     origin = fields.String(metadata={"description": "Name of the importer that produced this dataset."})
     source = fields.Dict(
@@ -1332,6 +1343,27 @@ class DatasetCoverageAtlasStatusSchema(Schema):
     )
 
 
+class DroppedItemsGroupSchema(Schema):
+    """The items an import left out for one reason, on a dataset's stats response."""
+
+    reason = fields.String(required=True, metadata={"description": "Why these items have no vector."})
+    count = fields.Integer(
+        required=True,
+        metadata={"description": "How many items were dropped for this reason; exact even when ``items`` is cut."},
+    )
+    items = fields.List(
+        fields.String(),
+        required=True,
+        metadata={
+            "description": (
+                "The dropped items' names (file name, plus where in the file for a clip). The names a dataset "
+                "keeps are capped across all its groups, commonest reason first, so this can be shorter than "
+                "``count``."
+            )
+        },
+    )
+
+
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``.
 
@@ -1345,6 +1377,20 @@ class DatasetRegistryStatsResponseSchema(Schema):
     media_type = fields.String(required=True)
     num_items = fields.Integer(required=True)
     num_dupes = fields.Integer(required=True)
+    num_dropped = fields.Integer(
+        required=True,
+        metadata={"description": "How many imported items were left out because they ended up with no vector."},
+    )
+    dropped_groups = fields.List(
+        fields.Nested(DroppedItemsGroupSchema),
+        required=True,
+        metadata={
+            "description": (
+                "The left-out items grouped by reason, commonest first; empty when nothing was dropped (or "
+                "the dataset predates the record)."
+            )
+        },
+    )
     file_type_counts = fields.Dict(
         keys=fields.String(),
         values=fields.Integer(),

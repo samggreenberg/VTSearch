@@ -33,6 +33,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A dataset with an item one embedder could not read can be browsed again** (issue #3798). An import that runs
+  two embedders, or one embedder over vectors the importer shipped, kept an item one of them could not read as
+  long as the other gave it a vector, so the dataset was saved with a hole in one of its spaces, and Browse, sort
+  and Train failed on it with `has no embedding for embedder`, on every load. Such an item is now dropped at import
+  like any unreadable one, and a dataset already saved with one is repaired the next time it loads: the item is
+  removed, the dataset is saved without it, and a warning names it.
+- **Dropped items stay listed after the toast is gone** (issue #3798). The items an import drops (and any a load
+  repairs away) are kept with the dataset: its Dashboard row shows **N dropped**, which opens the Stats window, and
+  its new **Dropped items** row lists each one with its reason, with **Copy** to take the list elsewhere.
+
 - **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
   emailed the Good and Bad rows as one list with nothing to tell them apart, and so did a `--stream-results
   --keep-negatives` run. Each row now carries its label: a `[good]` / `[bad]` tag in the plain text and a Label
