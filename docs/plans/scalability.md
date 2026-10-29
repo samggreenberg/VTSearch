@@ -193,7 +193,7 @@ votes and retrain once.
 
 ### S11: cross-dataset label population — serial I/O, O(N_labels)
 
-**File:** `vtscore/detectors/labelset_training.py` (`populate_label_embeddings`,
+**File:** `vtscore/detectors/labelset_embeddings.py` (`populate_label_embeddings`,
 serial `for idx, elem in …` loop)
 
 Resolves the file and embeds each LabelSet element serially — for uncached

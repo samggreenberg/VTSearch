@@ -52,6 +52,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   `reset_load_gates_for_tests` and `register_last_embedder_persistence_hook` rebind them. See
   `packages/datasets.md`.
 
+- **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
+  module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
+  helpers move verbatim to four sibling modules, none of which reads back: `labelset_embeddings`
+  (`populate_label_embeddings` and the label-embedding caches it fills, plus `ProgressCallback`),
+  `labelset_matrix` (`build_xy_from_labelset`, `labeled_media_ids`, `labeled_media_labels`,
+  `hard_view_good_vectors`, `labelset_resolution_report`, `labelset_calibrating_groups`),
+  `labelset_structural` (`populate_label_local_features`, `maybe_labelset_structural_rerank`) and
+  `labelset_heads` (`Haystack`, `install_centroid_head`, `install_query_head`). Every public name is
+  re-exported, so `labelset_training.X` imports and behaves as before. The private helpers (`_embed_one`,
+  `_resolve_uncached_embedding`, `_LabelVector`, `_labelset_feature_snapshot`, ...) live in their new
+  module only; a test that stubs one patches the module that calls it (the module docstring says which).
+  The cross-dataset embedding and local-feature warnings now log under
+  `vtscore.detectors.labelset_embeddings` and `vtscore.detectors.labelset_structural`, prefixed with the
+  same names. See `packages/detectors.md`.
+
 - **`vtscore.detectors.training` is split into its stages** (issue #5418). The 1,770-line module keeps the
   pipeline entry points (`train_and_threshold`, `train_and_score`, `train_detector_from_origins`,
   `collect_media_origins`, `serialize_weights`), and the stages they call move to four sibling modules:
@@ -1490,6 +1505,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **`PluginRegistry.package`, `.sentinel` and `.entry_point_group`** (issue #5402): read-only properties echoing
+  the constructor arguments, so tooling can say where a family's plugins come from without reaching into private
+  attributes. The generated plugin-families table in the docs now reads each family's package, sentinel and
+  entry-point group off them. Additive: no package moved, and every documented import path is unchanged.
 
 - **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
   new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,

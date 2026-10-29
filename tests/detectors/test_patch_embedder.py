@@ -1133,7 +1133,7 @@ class TestRegionAwareTraining:
         stored vector, on every pass, without resolving its origin file - so
         the per-vote retrain on the labels' own dataset is not what re-embeds
         boxed labels from file (#4192's follow-up)."""
-        import vtscore.detectors.labelset_training as lt
+        import vtscore.detectors.labelset_embeddings as lt
         from vtscore.datasets.labelset import LabeledElement, LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
         from vtscore.state.core import DetectorContext
@@ -1352,7 +1352,7 @@ class TestRegionAwareTrainingCrossDataset:
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
 
-        with caplog.at_level(logging.DEBUG, logger="vtscore.detectors.labelset_training"):
+        with caplog.at_level(logging.DEBUG, logger="vtscore.detectors.labelset_embeddings"):
             populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)
@@ -1396,7 +1396,7 @@ class TestRegionAwareTrainingCrossDataset:
         elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
-        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_embeddings"):
             populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)

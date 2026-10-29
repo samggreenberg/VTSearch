@@ -240,7 +240,7 @@ class TestColdFindIsTheAppsLabelsetTraining:
         detector against every selected dataset, so the throwaway context is kept
         for the whole run and later datasets read the cache.
         """
-        import vtscore.detectors.labelset_training as lt_mod
+        import vtscore.detectors.labelset_embeddings as lt_mod
 
         resolved: list[str] = []
         monkeypatch.setattr(
