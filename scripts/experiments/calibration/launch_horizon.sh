@@ -47,7 +47,7 @@ set -euo pipefail
 WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HERE="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 
@@ -126,7 +126,7 @@ size)
     J=$(sbatch --parsable --job-name="h$HORIZON-size$idx" --mem=48G --cpus-per-task=6 \
         --time=4:00:00 --partition=cpu --export=ALL \
         --output="$EXP/logs/size-$idx-%j.out" \
-        --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $idx")
+        --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $idx")
     [[ "$J" =~ ^[0-9]+$ ]] && echo "size idx $idx -> job $J" || echo "size idx $idx SUBMIT FAILED (empty job id)" >&2
   done
   ;;
@@ -149,7 +149,7 @@ cells)
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition=cpu --export=ALL \
       --output="$EXP/logs/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
   [[ "$J" =~ ^[0-9]+$ ]] || { echo "$JOB_NAME SUBMIT FAILED (empty job id) - NOT LAUNCHED" >&2; exit 1; }
   echo "$J" > "$EXP/logs/.jobid"
   echo "$JOB_NAME -> job $J"

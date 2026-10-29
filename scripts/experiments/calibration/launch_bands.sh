@@ -34,7 +34,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -237,7 +237,7 @@ PYC
   submit prepare --job-name=bands-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
   ;;
 
 size)
@@ -250,7 +250,7 @@ size)
     submit "size$idx" --job-name="bands-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time=2:00:00 --partition="$PARTITION" --export=ALL \
       --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
   done
   echo "read the ACTUAL seconds and MaxRSS off 'sacct -j <id> --format=Elapsed,MaxRSS,State'"
   echo "before quoting a wall clock or raising CONC — the defaults here are inherited, not measured"
@@ -309,13 +309,13 @@ PYSHAPE
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && for k in \$(seq 0 $((BUNDLE-1))); do i=\$(( SLURM_ARRAY_TASK_ID * $BUNDLE + k )); [ \$i -lt $N ] && python run_cells.py --index \$i || true; done"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && for k in \$(seq 0 $((BUNDLE-1))); do i=\$(( SLURM_ARRAY_TASK_ID * $BUNDLE + k )); [ \$i -lt $N ] && python run_cells.py --index \$i || true; done"
   else
     submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   fi
   ;;
 
@@ -331,7 +331,7 @@ redo)
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL \
     --output="$LOGS/redo-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
 pack)
@@ -368,7 +368,7 @@ pack)
       --mem="${CALIB_PACK_MEM:-$((PAR * MEM_GB))G}" --cpus-per-task="${CALIB_PACK_CPUS:-$((PAR * CPUS))}" --time="$TIME" \
       --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
       --output="$LOGS/pack$j-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \
 printf '%s\n' ${SHARD[*]} | xargs -P $PAR -I{} sh -c '${NUMA}python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
   done
   ;;

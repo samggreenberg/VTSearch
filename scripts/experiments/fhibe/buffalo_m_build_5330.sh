@@ -11,7 +11,7 @@ set -euo pipefail
 V=$1 SIZE=$2 W=/expscratch/sgreenberg/fhibe/ik-buffalo_m
 WT=/expscratch/sgreenberg/worktrees/vts-5330-run
 cd "$WT"
-source gridenv.sh >/dev/null 2>&1
+source scripts/grid/gridenv.sh >/dev/null 2>&1
 export VTS_PILE=$W/$V/pile VTS_FHIBE_ROOT=$W/$V/root
 source scripts/experiments/pile/pile_env.sh
 export VTS_REPO="$WT" VTS_LAUNCH_COMMIT=$(git -C "$WT" rev-parse HEAD)

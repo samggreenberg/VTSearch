@@ -158,7 +158,7 @@ arm_env() {
 activate_venv() {
   # preflight imports vtscore; the system python cannot.
   # shellcheck disable=SC1091
-  source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/gridenv.sh" >&2; exit 1; }
+  source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/scripts/grid/gridenv.sh" >&2; exit 1; }
 }
 
 run_preflight() {
@@ -179,7 +179,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=$TAG-prep --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P -> $CALIB_EXP/logs/prepare-$P.out"
     ;;
@@ -189,7 +189,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=$TAG-baseline --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T -> $BASE/text_baseline.csv"
     ;;
@@ -203,7 +203,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name="$TAG-size-$ARM-$IDX" --nice="$NICE" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX, $ARM) -> $CALIB_EXP/logs/size-$S.out"
     ;;

@@ -172,7 +172,7 @@ cell)  # K BETA INDEX: one cell, in its run dir's environment (called by pack)
   fi
   run_env "$k" "$b"
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
-  source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+  source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
   dir="$RUNS/$FHIBE_RUN-k$k-b$(btag "$b")"
   cd "$HERE/../calibration"
@@ -182,7 +182,7 @@ cell)  # K BETA INDEX: one cell, in its run dir's environment (called by pack)
 baseline)  # click 0: the example sort at K = 1 and 4, in the K=1 beta-1 run's environment
   run_env 1 1
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
-  source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+  source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
   out="$RUNS/$SET-baseline"
   mkdir -p "$out" && chmod 700 "$out"

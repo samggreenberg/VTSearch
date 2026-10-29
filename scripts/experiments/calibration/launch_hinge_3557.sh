@@ -133,8 +133,8 @@ link_prepare() {
 
 activate_venv() {
   # shellcheck disable=SC1091
-  source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-    echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+  source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+    echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
   }
 }
 
@@ -190,7 +190,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=hinge3557-prep --mem="${HINGE3557_PREP_MEM:-12G}" --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     ;;
@@ -229,7 +229,7 @@ PYLIST
     S=$(sbatch --parsable --job-name=hinge3557-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size (cell $IDX)"
     echo "size job: $S (cell $IDX)  ->  $BASE/sizing/logs/size-$S.out"
     ;;
@@ -257,7 +257,7 @@ PYLIST
     A=$(sbatch --parsable "${DEP[@]}" --job-name=hinge3557-analyze --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$BASE/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_hinge_3557.py --incumbent $BASE/incumbent/results --hinge $BASE/hinge/results --out $BASE/analysis")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_hinge_3557.py --incumbent $BASE/incumbent/results --hinge $BASE/hinge/results --out $BASE/analysis")
     require_jobid "$A" "analyze"
     echo "analyze job: $A -> $BASE/logs/analyze-$A.out"
     ;;

@@ -51,7 +51,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -140,7 +140,7 @@ prepare)
   submit prepare --job-name=lin2808-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_EXP/results && cd $HERE && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_EXP/results && cd $HERE && python prepare_data.py"
   ;;
 
 cells)
@@ -164,7 +164,7 @@ cells)
 
     # Cell count is per-arm identical, but compute it inside the arm's own env
     # so a mis-scoped grid shows up here rather than as a short array.
-    N=$(cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; \
+    N=$(cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1; \
         eval "$ENVX"; export CALIB_RESULTS="$RES" CALIB_HEAD="$head"; \
         python run_cells.py --print-cells 2>/dev/null | tail -1)
     if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
@@ -179,7 +179,7 @@ cells)
     submit "cells_$arm" --job-name="lin2808-$arm" --array=0-$((N-1))%"$CONC" \
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$atime" --partition="$PARTITION" \
       --export=ALL --output="$LOGS/cells-$arm-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$RES CALIB_HEAD=$head VTSEARCH_TRAIN_EPOCHS=$epochs VTSEARCH_TRAIN_PATIENCE=$patience && cd $HERE && python run_cells.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$RES CALIB_HEAD=$head VTSEARCH_TRAIN_EPOCHS=$epochs VTSEARCH_TRAIN_PATIENCE=$patience && cd $HERE && python run_cells.py"
     J=$(cat "$LOGS/.jobid_cells_$arm")
     DEPS="${DEPS:+$DEPS:}$J"
   done
@@ -194,7 +194,7 @@ cells)
   submit analyze --dependency=afterany:"$DEPS" --job-name=lin2808-analyze \
     --mem=16G --cpus-per-task=4 --time=1:00:00 --partition=cpu --export=ALL \
     --output="$LOGS/analyze-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && export SPIKE_ARMS='${ARM_ORDER[*]}' SPIKE_CONTROL_ARM=C_mlp SPIKE_PRODUCTION_ARM=A_shipped SPIKE_OUT=$CALIB_EXP/analysis && cd $HERE && python analyze_spikes.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export SPIKE_ARMS='${ARM_ORDER[*]}' SPIKE_CONTROL_ARM=C_mlp SPIKE_PRODUCTION_ARM=A_shipped SPIKE_OUT=$CALIB_EXP/analysis && cd $HERE && python analyze_spikes.py"
   ;;
 
 chain)

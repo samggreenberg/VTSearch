@@ -152,6 +152,27 @@ class FaceMediaType(MediaType):
             "thumbnail_bytes": thumb[0] if thumb is not None else None,
         }
 
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Build the grid thumbnail from the crop, for faces that arrived without one.
+
+        ``image2face`` thumbnails every crop it makes; this covers faces
+        converted before it did (#5465), and anything else that asks, with the
+        same helper the thumbnail route falls back to.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return thumb
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        data = self._resolve_media_bytes(media)
+        if not data:
+            return None
+        result = make_image_thumbnail(data)
+        if result is None:
+            return None
+        media["thumbnail_bytes"] = result[0]
+        return result[0]
+
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------

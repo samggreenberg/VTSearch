@@ -77,10 +77,15 @@ only reads from those above it:
   :mod:`~vtscore.training.thresholds.ranges`, and
   :mod:`~vtscore.training.thresholds.gmm` on first use; the spot check's
   classes as types only.
+* :mod:`~vtscore.training.thresholds.line_test_types` - the test sample's
+  vocabulary: its constants, budgets, bands, estimates and phase report.
+  Reads :mod:`~vtscore.training.thresholds.check_schedule`'s bands and
+  :mod:`~vtscore.training.thresholds.ranges`' bound.
 * :mod:`~vtscore.training.thresholds.line_test` - Test mode's sample of a
   line (#4527): band picks on both sides of it and the precision, recall and
   F-beta ranges they give.  Reads
-  :mod:`~vtscore.training.thresholds.check_schedule`'s bands and
+  :mod:`~vtscore.training.thresholds.line_test_types`, which it re-exports,
+  :mod:`~vtscore.training.thresholds.check_schedule`'s balance range and
   :mod:`~vtscore.training.thresholds.ranges`' bound.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
@@ -299,7 +304,8 @@ from vtscore.training.thresholds.balance import (
     applicable_balance,
     BalanceState,
 )
-from vtscore.training.thresholds.line_test import (
+from vtscore.training.thresholds.line_test import LineTest, line_phase
+from vtscore.training.thresholds.line_test_types import (
     ABOVE,
     BELOW,
     DEFAULT_BUDGETS,
@@ -325,14 +331,12 @@ from vtscore.training.thresholds.line_test import (
     Band,
     EdgeEstimate,
     Estimate,
-    LineTest,
     PhaseReport,
     LineBudgets,
     LineEstimates,
     RoundAhead,
     found_words,
     line_bands,
-    line_phase,
 )
 from vtscore.training.thresholds.precision_floor import (
     MIN_BOOTSTRAP_FITS,

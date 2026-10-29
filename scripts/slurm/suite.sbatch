@@ -36,8 +36,18 @@ set -uo pipefail
 WT="$1"
 REF="$2"
 
-if [[ ! -f "$WT/gridenv.sh" ]]; then
-    echo "FATAL: $WT is not a VTSearch worktree (no gridenv.sh)"
+# gridenv.sh lives in scripts/grid/. A ref cut before #5407 still has it at the
+# repo root, and this job tests whatever ref it is handed, so it takes either --
+# here for the worktree as it stands, and again below for the ref checked out.
+gridenv() {
+    local f
+    for f in "$WT/scripts/grid/gridenv.sh" "$WT/gridenv.sh"; do
+        [[ -f "$f" ]] && { echo "$f"; return 0; }
+    done
+    return 1
+}
+if ! gridenv >/dev/null; then
+    echo "FATAL: $WT is not a VTSearch worktree (no scripts/grid/gridenv.sh)"
     exit 2
 fi
 
@@ -124,7 +134,8 @@ fi
 # that one model download can fill, so the default is on /expscratch.
 export HF_HOME="${SUITE_HF_HOME:-/expscratch/$USER/cache/huggingface}"
 export PATH="$HOME/.local/bin:$PATH"
-source "$WT/gridenv.sh"
+_gridenv="$(gridenv)" || { echo "FATAL: $REF has no scripts/grid/gridenv.sh"; exit 2; }
+source "$_gridenv"
 
 command -v ruff >/dev/null || { echo "FATAL: venv did not activate (no ruff on PATH)"; exit 2; }
 

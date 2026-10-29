@@ -121,7 +121,12 @@ settings, auth, and the app-side state shim). A third, **`imagekit/`**, is
 the face localisation + embedding package with the pluggable provider seam
 ([`imagekit/README.md`](../imagekit/README.md)); it imports neither of the
 other two, and `vtscore` reaches it through
-`vtscore/media/face/imagekit_bridge.py` alone.
+`vtscore/media/face/imagekit_bridge.py` alone. It is a package of its own
+rather than a `vtscore` subpackage because it is used on its own (`import
+imagekit`, two CLIs) and its import path is a contract: a third-party face
+provider registers through `imagekit.face.register_provider` or the
+`imagekit.face_providers` entry-point group, so moving it would break code
+outside this repository.
 
 This map stops at the package level and names only the files you need to find
 your way in. Each module's docstring says what it is for, so read the directory
@@ -208,7 +213,8 @@ VTSearch/
 ├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*)
 ├── tests_shared/           Conftest machinery both suites import
 ├── typings/               Local stubs pyright reads in place of an installed package
-│                           (transformers; see docs/TESTING.md)
+│                           (transformers; see docs/TESTING.md). At the root because it
+│                           is pyright's stubPath, which resolves there (pyrightconfig.json)
 ├── scripts/                Repo tooling, grouped by purpose; install.sh (the dependency
 │   │                       installer) is the one file at the top level
 │   ├── gates/              run-tests.sh gates, and the generators whose output they check
@@ -216,10 +222,18 @@ VTSearch/
 │   ├── install/            install.sh's helpers, model downloads, Docker image provisioning
 │   ├── data/               Builders for shipped data assets, demo counts, the face CLIs
 │   ├── experiments/        GRID studies and spikes, one directory per study
-│   └── screenshots/, slurm/, grid/, profiling/, punchcard/
+│   ├── grid/               GRID glue: gridenv.sh (sourced in every worktree), the worktree guards
+│   └── screenshots/, slurm/, profiling/, punchcard/
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
-├── docker/, gunicorn.conf.py  Container images and the production WSGI config
+├── docker/, gunicorn.conf.py  Container images and the production WSGI config. The config
+│                           stays at the root, not in docker/: gunicorn looks for
+│                           ./gunicorn.conf.py by default, bare-metal deploys run it from
+│                           here too, and .dockerignore drops docker/ from every image
+├── model_cache/            Gated-model weights for the image-embedders images, filled by
+│                           scripts/install/cache_gated_models.sh; gitignored bar a
+│                           .gitkeep. At the root because the Dockerfile COPYs it and the
+│                           build context excludes data/
 ├── requirements/           pip install sets: base, gpu, an AGPL-free *-no-agpl mirror of each,
 │                           and the image-embedders / slim LabBench sets (docs/DEPLOYMENT.md)
 └── run-tests.sh            The test + gate runner (docs/TESTING.md)
@@ -781,7 +795,7 @@ summary; the field-by-field tables are in
 
 | Context | Key state |
 |---------|-----------|
-| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
+| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins, and the 1-D similarity order a Face dataset's example picker lists it in |
 | `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `label_history_base`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the

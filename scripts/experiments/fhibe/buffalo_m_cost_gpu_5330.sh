@@ -8,7 +8,7 @@
 set -uo pipefail
 W=/expscratch/sgreenberg/fhibe/ik-buffalo_m
 cd /expscratch/sgreenberg/worktrees/vts-5330-run
-source gridenv.sh >/dev/null 2>&1
+source scripts/grid/gridenv.sh >/dev/null 2>&1
 source scripts/experiments/pile/pile_env.sh
 export IMAGEKIT_FACE_PROVIDER=oss VTSEARCH_DEVICE=cuda VTSEARCH_TORCH_THREADS=8 OMP_NUM_THREADS=8
 hostname; nvidia-smi --query-gpu=name --format=csv,noheader; grep -m1 'model name' /proc/cpuinfo

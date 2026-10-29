@@ -23,7 +23,7 @@ mkdir -p "$ROOT/logs"
 
 env_lines() {  # the environment every task sources
   cat <<EOF
-source $REPO/gridenv.sh
+source $REPO/scripts/grid/gridenv.sh
 source $REPO/scripts/experiments/pile/pile_env.sh
 export VTSEARCH_DATA_DIR=/expscratch/$USER/vts-cache/datadir
 export VTS_REPO=$REPO CALIB_EXP=$GRID CALIB_RESULTS=$GRID/results CALIB_DATASETS=coco_better
