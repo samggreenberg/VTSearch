@@ -76,9 +76,7 @@ class TestMirrorsTheSource:
                 return _REPO_ROOT / "imagekit"
             return _REPO_ROOT / "vtscore" / folder
 
-        orphans = sorted(
-            f for f in LIB_GROUPS if f not in _NOT_PACKAGES and not any(source(f).glob("*.py"))
-        )
+        orphans = sorted(f for f in LIB_GROUPS if f not in _NOT_PACKAGES and not any(source(f).glob("*.py")))
         assert not orphans, f"tests_lib folders that mirror no source package: {orphans}"
 
 

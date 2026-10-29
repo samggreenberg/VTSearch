@@ -26,7 +26,7 @@ from vtscore.datasets.labelset import LabeledElement, LabelSet
 from vtscore.detectors.labelset_training import labeled_media_ids, labeled_media_labels
 from vtscore.detectors.training import train_and_score, train_and_threshold
 
-from .sweep_cache import memoize_sweep
+from tests_lib.eval.sweep_cache import memoize_sweep
 
 DIM = 32
 

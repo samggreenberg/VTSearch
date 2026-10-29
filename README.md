@@ -83,7 +83,7 @@ The remaining top level:
 ├── frontend/         # Angular SPA source (TypeScript, SCSS); builds into static/
 ├── static/           # Angular build output (HTML, JS, CSS, assets)
 ├── tests/            # App-tier test suite (pytest); grouped by folder (core, api, sorting, …)
-├── tests_lib/        # Library-tier test suite (mirrors tests/, import-clean of Flask)
+├── tests_lib/        # Library-tier test suite (one folder per vtscore package, import-clean of Flask)
 ├── tests_shared/     # Test machinery shared by both suites
 ├── docs/             # Extended documentation (see docs/ARCHITECTURE.md for the full map)
 ├── docker/           # Dockerfiles and docker/compose/ files

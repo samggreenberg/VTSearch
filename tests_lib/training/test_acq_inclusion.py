@@ -24,8 +24,8 @@ from vtscore.training.thresholds import (
     inclusion_cost_weights,
 )
 
-from .sweep_cache import memoize_sweep
-from .test_max_patch_style import _planted_dataset
+from tests_lib.eval.sweep_cache import memoize_sweep
+from tests_lib.eval.test_max_patch_style import _planted_dataset
 
 # The offsets this file sweeps repeat across tests (``-2`` alone is asserted on
 # by three of them), so each distinct argument set is simulated once per worker

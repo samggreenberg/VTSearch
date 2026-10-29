@@ -5,9 +5,8 @@ suite does: a single call trains a head and fits the safe-threshold mixtures
 once per simulated voting step, so one sweep costs seconds.  The threshold /
 variant-frame tests are written as one assertion per behaviour, and most of
 them assert on *different columns of the same frame* — so the same sweep, with
-byte-identical arguments, was being recomputed once per test.  Across
-``tests_lib/detectors`` that duplication was roughly a quarter of the whole
-pytest runtime.
+byte-identical arguments, was being recomputed once per test.  Across those
+tests that duplication was roughly a quarter of the whole pytest runtime.
 
 :func:`memoize_sweep` wraps such a helper so identical argument sets are
 computed once per worker process and replayed thereafter.  Two properties make

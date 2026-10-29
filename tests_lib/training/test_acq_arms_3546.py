@@ -24,8 +24,8 @@ from vtscore.eval.voting_iterations import (
 from vtscore.training.thresholds import ACQUISITION_TARGET_PRECISION, target_precision_threshold
 from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine
 
-from .sweep_cache import memoize_sweep
-from .test_max_patch_style import _planted_dataset
+from tests_lib.eval.sweep_cache import memoize_sweep
+from tests_lib.eval.test_max_patch_style import _planted_dataset
 
 # One worker, so an arm two tests read runs once (see sweep_cache.py).
 pytestmark = pytest.mark.xdist_group("acq-arms-3546")

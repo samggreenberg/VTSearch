@@ -311,8 +311,8 @@ the per-file embedder scan handles registration.
 
 ## Testing pattern
 
-Library tests for embedders live in `tests_lib/media/`, beside the embedders in `vtscore/media/`. The
-autouse `_stub_embedding_models` fixture in
+Library tests for embedders live in `tests_lib/media/`, beside the
+embedders in `vtscore/media/`. The autouse `_stub_embedding_models` fixture in
 [`tests_lib/conftest.py`](../../../tests_lib/conftest.py) stubs every
 built-in embedder so test runs don't download model weights;
 **your test must construct your real embedder explicitly** if you
