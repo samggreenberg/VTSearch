@@ -14,7 +14,7 @@ CRUD endpoints (``vtsearch/routes/detectors/crud.py``):
 * ``POST   /api/detectors/combine``         -> :class:`DetectorCombineRequestSchema` ->
                                               :class:`DetectorCombineResponseSchema`
 
-Registry endpoints (``vtsearch/routes/detectors/registry.py``):
+Registry endpoints (``vtsearch/routes/detectors/registry/``):
 
 * ``GET    /api/detectors/registry``                   -> :class:`DetectorRegistryListResponseSchema`
 * ``POST   /api/detectors/registry``                   -> :class:`DetectorRegistryCreateRequestSchema` ->
@@ -255,7 +255,7 @@ class DetectorCombineResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# Registry schemas (vtsearch/routes/detectors/registry.py)
+# Registry schemas (vtsearch/routes/detectors/registry/)
 # ---------------------------------------------------------------------------
 
 
