@@ -1,4 +1,4 @@
-"""Tests for ``scripts/check-dockerfiles.py``, the Dockerfile ordering gate.
+"""Tests for ``scripts/gates/check-dockerfiles.py``, the Dockerfile ordering gate.
 
 The gate used to look only for ``python`` on a RUN's first physical line, so a
 ``pip install`` of the local project slipped through: ``docker/Dockerfile`` and
@@ -20,7 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("check_dockerfiles", REPO_ROOT / "scripts" / "check-dockerfiles.py")
+    spec = importlib.util.spec_from_file_location(
+        "check_dockerfiles", REPO_ROOT / "scripts" / "gates" / "check-dockerfiles.py"
+    )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

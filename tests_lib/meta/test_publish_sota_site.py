@@ -1,7 +1,7 @@
 """Tests for the State of the App links on GitHub Pages.
 
 `.github/workflows/publish-sota.yml` builds a small site with
-`scripts/publish-sota-site.py` and deploys it on every push to ``dev`` that
+`scripts/release/publish-sota-site.py` and deploys it on every push to ``dev`` that
 touches a report. Like the slide publisher, nothing in ``./run-tests.sh`` ever
 runs the deploy, so its failures would show only as a link that quietly stops
 moving. The checks below cover the ways it can rot: the builder picking the
@@ -20,7 +20,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/publish-sota.yml"
-BUILDER = REPO_ROOT / "scripts/publish-sota-site.py"
+BUILDER = REPO_ROOT / "scripts/release/publish-sota-site.py"
 
 # Write-ups whose directory says State of the App but whose title names no
 # review kind, on purpose. A new entry is a decision: a review that lands here
@@ -200,7 +200,7 @@ def test_workflow_publishes_from_dev_when_a_report_changes() -> None:
     assert "Deployment branches and tags: add `dev`" in WORKFLOW.read_text(), "the setup note the deploy needs"
     for required in (
         "docs/experiments/*state-of-the-app*/**",
-        "scripts/publish-sota-site.py",
+        "scripts/release/publish-sota-site.py",
         ".github/workflows/publish-sota.yml",
     ):
         assert required in push["paths"], f"{required} would not trigger a republish"
@@ -218,7 +218,7 @@ def test_workflow_can_deploy_pages() -> None:
 def test_workflow_invokes_the_committed_builder() -> None:
     steps = _workflow()["jobs"]["publish"]["steps"]
     runs = " ".join(step.get("run", "") for step in steps)
-    assert "scripts/publish-sota-site.py" in runs
+    assert "scripts/release/publish-sota-site.py" in runs
     uses = [step.get("uses", "") for step in steps]
     assert any(u.startswith("actions/upload-pages-artifact@") for u in uses)
     assert any(u.startswith("actions/deploy-pages@") for u in uses)
