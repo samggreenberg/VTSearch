@@ -90,7 +90,7 @@ A test's group comes from the folder it lives in, so a new test inherits its gro
 | `api` | `api` | — | API contracts, error handling, security, dashboard, embed |
 | `sorting` | `sorting` | `training`, `coverage` | Training and safe thresholds, sort algorithms, diversity, enriched text sort |
 | `datasets` | `datasets` | `datasets` | Dataset importers and loading, splitting, dedup, parallel/chunked/thin loading, the clipper chain, multi-dataset context |
-| `io` | `io` | `exporters`, `labels`, `datasource_importers`, `seed_importers`, `sync` | Exporters, label I/O, datasource and seed importers, sync sources; on the app side also the dataset-import flow, settings I/O and NPZ import |
+| `io` | `io` | `exporters`, `labels`, `datasource_importers`, `seed_importers` | Exporters, label I/O, datasource and seed importers; on the app side also sync sources, the dataset-import flow, settings I/O and NPZ import |
 | `detectors` | `detectors` | `detectors`, `eval` | Detectors and the eval harness |
 | `downloads` | — | `datasets/downloader` | Demo dataset downloads, one file per source, plus the shared download-and-extract helper |
 | `integration` | `integration` | `integration` | End-to-end workflows, thread safety, async jobs |

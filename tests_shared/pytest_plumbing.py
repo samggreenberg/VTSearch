@@ -50,7 +50,6 @@ LIB_GROUPS: Mapping[str, str] = {
     "security": "core",
     "seed_importers": "io",
     "state": "core",
-    "sync": "io",
     "timing": "core",
     "training": "sorting",
     "utils": "core",
