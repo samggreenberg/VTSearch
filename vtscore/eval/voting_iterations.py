@@ -646,7 +646,7 @@ def _safe_threshold_for_step(
 
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then draws the line as
-    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    :func:`vtscore.detectors.training_calibration._fused_threshold` does: the labels' line
     under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
     production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
@@ -3130,7 +3130,7 @@ def _fits_weigh_hard_views(fn: Any) -> Any:
     """Run *fn* (the session) with every head fit weighing a hard-view face's Good less (#5413).
 
     The app names its voted hard-view Goods to the fit
-    (:func:`vtscore.detectors.labelset_training.hard_view_good_vectors`); a session
+    (:func:`vtscore.detectors.labelset_matrix.hard_view_good_vectors`); a session
     names every hard-view face of its pool, which is the same rule, since only a
     voted Good is ever fitted on and :func:`~vtscore.training.svm_prior.hard_view_good_weights`
     weighs Goods alone.  A pool with no Face Quality verdicts names none.

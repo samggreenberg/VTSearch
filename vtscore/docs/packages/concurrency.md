@@ -9,14 +9,20 @@ it, and capping how many run at once.
 nothing of its own and `from vtscore.concurrency import JobManager` raises
 `ImportError`. Every snippet below imports from the module that defines the
 name (`async_jobs`, `progress`, `memory_budget`, `gate`, `notifications`).
-The same is true of `vtscore.security`.
+The same is true of `vtscore.security`. The one facade is `progress`: its
+trackers and cancellation helpers are defined in three modules behind it,
+and it re-exports every public name of theirs as the same object, so
+import them from `progress`.
 
 ## Contents
 
 | Module | Concern |
 |--------|---------|
 | `vtscore/concurrency/async_jobs.py` | Single-slot async job manager: coalescing background tasks with a result slot |
-| `vtscore/concurrency/progress.py` | `ProgressTracker`, `LoadingTasksTracker`, the module-level singletons, cooperative cancellation |
+| `vtscore/concurrency/progress.py` | The facade: the per-thread progress callback, `update_progress()` and the sort / eval / find update/get pairs, re-exporting the three modules below |
+| `vtscore/concurrency/progress_tracker.py` | `ProgressTracker`, `CancelledError`, `PROGRESS_COMMON_EXTRAS`, the `sort_progress` / `eval_progress` / `find_progress` singletons |
+| `vtscore/concurrency/loading_tracker.py` | `LoadingTasksTracker`, `CANCELLED_ERROR`, the `loading_tasks` / `detector_loading_tasks` singletons |
+| `vtscore/concurrency/progress_cancel.py` | `cancel_dataset_progress()` / `cancel_dataset_task()`: cancel loads and report whether anything stopped |
 | `vtscore/concurrency/events.py` | Server-Sent Events stream over the progress channels |
 | `vtscore/concurrency/notifications.py` | `notify()` - one-off user-facing messages, rendered as toasts by the app |
 | `vtscore/concurrency/gate.py` | `ConcurrencyGate` - a semaphore whose limit is re-read on every acquisition |
@@ -238,7 +244,7 @@ in `JOB_MANAGERS` only; never keep a second hand-maintained list.
 ## `ProgressTracker`
 
 Thread-safe progress tracker for a single long-running operation
-(`progress.py`): `ProgressTracker(extra_fields=None, *,
+(`progress_tracker.py`): `ProgressTracker(extra_fields=None, *,
 initial_status="idle", publish_eta=True)`. Each instance holds its own
 lock, data dict, cancel event, and optional subscriber callbacks.
 
@@ -268,7 +274,7 @@ snapshot = tracker.get()
 `(status, message, current, total)` tuple. Unrecognised keys are
 silently dropped, so a single `update_progress()` call site can supply
 kwargs some trackers care about and others don't. Every shipped tracker
-uses `PROGRESS_COMMON_EXTRAS` (`progress.py`):
+uses `PROGRESS_COMMON_EXTRAS` (`progress_tracker.py`):
 
 ```python
 PROGRESS_COMMON_EXTRAS = {
@@ -314,7 +320,7 @@ swallowed. This is what `events.py` uses.
 ## `LoadingTasksTracker`
 
 A bag of named `ProgressTracker`s, each with a creation timestamp
-(`progress.py`). Used to multiplex concurrent dataset / detector
+(`loading_tracker.py`). Used to multiplex concurrent dataset / detector
 loads - the dashboard polls `list_tasks()` to show one row per loading
 operation.
 
@@ -369,14 +375,18 @@ applies it per connection (`stream_progress_events(viewer=...)`).
 ## Module-level singletons
 
 ```python
-# vtscore/concurrency/progress.py
+# vtscore/concurrency/progress_tracker.py
 sort_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 eval_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 find_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
+# vtscore/concurrency/loading_tracker.py
 loading_tasks          = LoadingTasksTracker()
 detector_loading_tasks = LoadingTasksTracker()
 ```
+
+Each is defined beside its class, so it exists exactly once, and
+`progress` re-exports that same object.
 
 Each single-channel tracker has a thin module-level update/get pair so
 callers don't have to import the tracker itself:
@@ -447,8 +457,8 @@ def load_something(path, on_progress=None):
 
 `ProgressCallback` and `noop_progress` are defined here and imported
 everywhere else (`vtscore.media.base` re-exports `ProgressCallback`);
-`progress.py` imports nothing from `vtscore`, so there is no cycle to
-work around. The binding is thread-local so multi-threaded consumers
+`progress.py` and the three modules behind it import nothing else from
+`vtscore` at import time, so there is no cycle to work around. The binding is thread-local so multi-threaded consumers
 (e.g. two concurrent loads) don't clobber each other's callback.
 
 ```python
@@ -501,7 +511,7 @@ need it: each load creates its own tracker, so its flag starts clear and
 a cancel aimed at an earlier load stays with that load.
 
 `cancel_dataset_progress(grace_seconds=CANCEL_ACK_GRACE_SECONDS)`
-cancels every active task in `loading_tasks` (staging imports included);
+(`progress_cancel.py`) cancels every active task in `loading_tasks` (staging imports included);
 `cancel_dataset_task(task_id, grace_seconds=...)` cancels one (returns
 `None` for an unknown id). Both wait up to the grace period (default
 2.0 s) and return a report dict `{ok, targets, acknowledged, pending,

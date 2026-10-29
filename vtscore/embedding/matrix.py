@@ -646,7 +646,7 @@ def media_score_rows(
 
     * **row 0** - the image-level (CLS) vector, box ``(0, 0, 1, 1)``.  It is
       load-bearing, not decoration: a *boxless* Good vote trains on the
-      image-level vector (:func:`~vtscore.detectors.training._training_vec_for_vote`),
+      image-level vector (:func:`~vtscore.detectors.training_votes._training_vec_for_vote`),
       so without this row that vote would train on a vector nothing ever
       scores.  Dropping it produced perfect ranking with catastrophic FNR when
       the Max-Patch style was first prototyped - see
@@ -747,7 +747,7 @@ def _build_region_arrays(
     bytes of the tree's.  The grid is already stored float16, so keeping the
     flattened stack in that dtype holds the blow-up to the row count alone;
     consumers upcast chunk-wise (:func:`chunked_row_scores`,
-    :func:`vtscore.detectors.training._forward_sigmoid_chunked`) so peak
+    :func:`vtscore.detectors.training_scoring._forward_sigmoid_chunked`) so peak
     float32 memory stays bounded regardless of dataset size.
 
     The build is two-pass - count rows from the grid *shapes*, allocate once,
@@ -900,7 +900,7 @@ def segmented_max_pool(
 ) -> tuple[list[float], list[int]]:
     """Max-pool per-row scores down to one score + winning region per media.
 
-    Shared by the head scoring path (:func:`vtscore.detectors.training._score_all_media`)
+    Shared by the head scoring path (:func:`vtscore.detectors.training_scoring._score_all_media`)
     and the region-aware cosine sort (:func:`vtscore.training.region_similarity.cosine_sort_with_boxes`),
     both of which flatten every ``(media, region)`` pair into one ``(R,)`` score
     vector (via :func:`get_region_matrix_for_snap`) and need to reduce it back to
