@@ -549,7 +549,8 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 <!-- END GENERATED: plugin-families -->
 
 The form-driven families share a common `PluginBase` / `PluginField` /
-`PluginRegistry` architecture in `vtscore/plugins/__init__.py`:
+`PluginRegistry` architecture in `vtscore/plugins/` (`base.py`, `field.py` and
+`registry.py` respectively, all three re-exported from `vtscore.plugins`):
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`,
    `description`, `icon`, `fields`, and the shared helpers (`notify()`,

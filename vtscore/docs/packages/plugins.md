@@ -24,9 +24,12 @@ end-to-end example per family.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/plugins/__init__.py` | `PluginField`, `PluginBase`, `PluginRegistry`, `make_plugin_registry`, sentinel + entry-point discovery |
+| `vtscore/plugins/__init__.py` | Re-exports the public names of `base.py`, `field.py` and `registry.py`; import them from `vtscore.plugins` |
+| `vtscore/plugins/base.py` | `PluginBase` and the default `name` / `display_name` / `description` / `icon` it derives for each subclass |
+| `vtscore/plugins/field.py` | `PluginField`, the `FieldType` / `FieldOption` / `ConditionValue` types, `parse_checkbox`, the `visible_when` evaluator `inactive_field_keys` |
 | `vtscore/plugins/inventory.py` | Enumerate every installed plugin across every family in one call |
 | `vtscore/plugins/normalize.py` | Framework-side normalisation of incoming `field_values` |
+| `vtscore/plugins/registry.py` | `PluginRegistry`, `make_plugin_registry`, `EntryPointTombstone`, sentinel + entry-point discovery |
 | `vtscore/plugins/schema.py` | Build marshmallow schemas from `PluginField` declarations |
 | `vtscore/plugins/uploads.py` | The normalised upload type shared by library-tier plugin bases |
 
@@ -66,7 +69,7 @@ standard `(get, list)` accessor pair every family re-exports.
 
 ## `PluginField`
 
-`vtscore/plugins/__init__.py` - a dataclass that describes one
+`vtscore/plugins/field.py` - a dataclass that describes one
 user-configurable input on a plugin. Each plugin declares its inputs as
 `fields: list[PluginField]` on the class; the frontend renders a form
 from those, the CLI derives flags from those, and the marshmallow
@@ -104,7 +107,7 @@ is used by every family; each family's base module re-exports
 
 ### `FieldType` values
 
-Defined as `Literal[...]` in `vtscore/plugins/__init__.py`:
+Defined as `Literal[...]` in `vtscore/plugins/field.py`:
 
 | Value | Frontend widget | Notes |
 |-------|-----------------|-------|
@@ -220,7 +223,7 @@ shape-validated against `fields` by `MediaConverter.convert_normalized()`
 
 ## `PluginBase`
 
-`vtscore/plugins/__init__.py` - the mixin every plugin class
+`vtscore/plugins/base.py` - the mixin every plugin class
 inherits from (directly or via a family-specific ABC like
 `ResultsExporter`). It supplies the CLI-flag, JSON-serialisation, and
 field-validation glue that's identical across families.
@@ -272,7 +275,7 @@ family-specific metadata (e.g. converters expose `source_type` /
 
 ## `PluginRegistry`
 
-`vtscore/plugins/__init__.py` - generic auto-discovering registry.
+`vtscore/plugins/registry.py` - generic auto-discovering registry.
 One instance per plugin family.
 
 ### Constructor
@@ -330,7 +333,7 @@ pre-discovery state.
 
 ## `make_plugin_registry()` factory
 
-`vtscore/plugins/__init__.py` - collapses the per-family
+`vtscore/plugins/registry.py` - collapses the per-family
 boilerplate. Returns the `(get, list)` accessor pair every plugin
 family re-exports.
 
@@ -416,7 +419,7 @@ my_exporter = "my_pkg.exporter:EXPORTER"
 After `pip install` of your package, the plugin appears in
 `list_importers()` / `list_exporters()` / etc. without any code change
 to `vtscore`. The discovery routine is
-`vtscore/plugins/__init__.py::PluginRegistry._discover_entry_points`.
+`vtscore/plugins/registry.py::PluginRegistry._discover_entry_points`.
 
 ### Invariants
 
