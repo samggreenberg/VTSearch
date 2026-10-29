@@ -101,6 +101,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   patches the module that defines it: patching `spot_check.mixture_posterior` no longer reaches
   `walk_positives`. See `packages/training.md`.
 
+- **`vtscore.datasets.load_pipeline` is split into four modules along its seams** (issue #5422). The
+  1,375-line module keeps the load entry points (`_run_importer_in_background`, `consume_chunks_into`,
+  `auto_chunk_size`). The rest moved to three siblings: `load_workers` holds what every load flow shares (the
+  download / embed concurrency gates and `_LoadGateController`, the task harness, the field parsers, the
+  failure and terminal-state handling, the last-embedder persistence hook). `load_origin` holds the
+  single-dataset load (`_run_origin_load_in_background`, `_finish_dataset_load`), and `load_staging` the
+  combine flow's staging import. The public names `register_last_embedder_persistence_hook`, `clear_dataset`,
+  `reset_load_gates_for_tests`, `consume_chunks_into`, `auto_chunk_size` and `STAGING_DIR` still import from
+  `vtscore.datasets.load_pipeline` and behave as before. The private helpers now live in the module that
+  owns them; import them from there, and a test that stubs one patches the module that calls it. The
+  rebound globals `_download_gate`, `_embed_gate` and `_last_embedder_persistence_hook` are no longer
+  attributes of `load_pipeline`: read them off `vtscore.datasets.load_workers`, which is where
+  `reset_load_gates_for_tests` and `register_last_embedder_persistence_hook` rebind them. See
+  `packages/datasets.md`.
+
 - **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
   module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
   helpers move verbatim to four sibling modules, none of which reads back: `labelset_embeddings`

@@ -107,7 +107,7 @@ HELDOUT_READINGS  # noqa: F821 - vtscore.eval.step_trainers, the held-out Smart 
 # Per CLAUDE.md these keep their names; deleting one is a library break.
 # ---------------------------------------------------------------------------
 recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
-clear_dataset  # noqa: F821 - vtscore.datasets.load_pipeline
+clear_dataset  # noqa: F821 - vtscore.datasets.load_workers, re-exported from load_pipeline
 is_request_missing_context  # noqa: F821 - vtscore.state.core; docs/packages/state.md
 build_md5_lookup  # noqa: F821 - vtscore.state.media_lookup; docs/packages/state.md
 get_find_scores  # noqa: F821 - vtscore.state.votes; docs/packages/state.md

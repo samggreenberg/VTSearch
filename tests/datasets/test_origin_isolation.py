@@ -1,7 +1,7 @@
 """Regression tests for H8; origin dict shared by reference across medias.
 
 The previous implementations of ``_tag_origins`` (in
-``vtscore/datasets/load_pipeline.py``), the legacy ingest path in
+``vtscore/datasets/load_workers.py``), the legacy ingest path in
 ``vtscore/datasets/ingest.py``, ``ServerFilesDatasetImporter._rewrite_origins``,
 and ``_build_folder_media_data`` (in ``vtscore/datasets/loader_folder.py``)
 all stamped the same ``origin`` dict reference onto every media they
@@ -21,7 +21,7 @@ from typing import Any
 
 from vtscore.datasets.importers.server_files import ServerFilesDatasetImporter
 from vtscore.datasets.ingest import _build_media_data
-from vtscore.datasets.load_pipeline import _tag_origins
+from vtscore.datasets.load_workers import _tag_origins
 from vtscore.datasets.loader_folder import _build_folder_media_data
 
 

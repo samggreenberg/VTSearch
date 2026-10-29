@@ -498,8 +498,8 @@ the same effect on OpenMP/MKL sets them itself.)
 
 ### How do I parallelise dataset loading?
 
-The pipeline already does - `vtscore.datasets.load_pipeline` runs
-embedding under a `ConcurrencyGate` capped by the
+The pipeline already does - `vtscore.datasets.load_origin` runs
+embedding under a `ConcurrencyGate` (`vtscore.datasets.load_workers`) capped by the
 `max_concurrent_dataset_embeddings` setting. Bumping that value lets
 multiple datasets embed in parallel.
 
