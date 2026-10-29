@@ -86,6 +86,9 @@ a flagged one (232) differs in exactly the 29 rows the runner pair moved.
   leave-it-out level as `swap`.
 - `mechanism.csv`: the table above, from the runner's logs.
 
+The three tables are on the `experiments-data` release (`archived-data.json`); put them back with
+`python scripts/experiments/study_data.py fetch 2026-10-29-hard-good-line-5409`.
+
 ```
 # run dirs (per β: the K4 preflight FAILs on 7 six-photo people, as in #5325; the branch must be on origin)
 for t in 5409dev 5409ship; do for b in 0.25 1 4; do
