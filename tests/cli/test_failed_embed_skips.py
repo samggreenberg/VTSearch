@@ -127,7 +127,7 @@ class TestTrainAndThresholdOverAPartlyEmbeddedHaystack:
         made impossible there.
         """
         import vtscore.embedding.matrix as matrix_mod
-        from vtscore.detectors.training import _score_all_media
+        from vtscore.detectors.training_scoring import _score_all_media
 
         calls: list[int] = []
         real = matrix_mod.scoreable_snapshot

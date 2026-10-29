@@ -20,7 +20,8 @@ import pytest
 import torch
 
 import vtscore.training.thresholds as thresholds_mod
-from vtscore.detectors.training import _score_all_media, train_and_threshold
+from vtscore.detectors.training import train_and_threshold
+from vtscore.detectors.training_scoring import _score_all_media
 from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 
 DIM = 8
