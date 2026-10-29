@@ -1,4 +1,11 @@
-<img class="toasty-hint__toasty" [src]="faceSrc()" alt="" />
+<img
+  class="toasty-hint__toasty"
+  [src]="faceSrc()"
+  alt=""
+  draggable="false"
+  (mouseenter)="hovered.set(true)"
+  (mouseleave)="hovered.set(false)"
+/>
 <div class="toasty-hint__bubble">
   <p class="toasty-hint__text"><ng-content /></p>
   @if (hideable()) {
