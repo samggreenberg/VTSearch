@@ -29,6 +29,8 @@ head -n 8 docs/experiments/*/REPORT.md
 
 is an always-current index. Check it before starting a study — the question may already be answered. A study that is planned but not yet run holds only a `PLAN.md` or `PREREG.md`.
 
+A study keeps in the tree only what its report shows or links; its bulk data (cell tables, measurement dumps, unembedded figures) is listed in its `archived-data.json` and lives on the `experiments-data` release. `python scripts/experiments/study_data.py fetch <study>` puts it back in place (#5404).
+
 ## Prerequisites
 
 Install dependencies (if you haven't already):

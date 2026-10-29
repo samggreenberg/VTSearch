@@ -99,8 +99,11 @@ same edit.
   - The comparison a reader wants is the two paths. So a Region Photo report
     carries `compare_paths.py`'s figures (`vs_binary_objective.png`,
     `vs_binary_path.png`) and its table, against the newest Binary Photo review
-    of the same app. It reads the two reports' committed `objective_by_click.csv`
-    and `precision_recall_path.csv`, so it needs nothing from the GRID.
+    of the same app. It reads the two reports' `objective_by_click.csv` and
+    `precision_recall_path.csv`, so it needs nothing from the GRID; an earlier
+    review's are archived, so run `python scripts/experiments/study_data.py
+    fetch <binary report>` first (see the grid-experiments skill, *Where a
+    study lives*).
   - The report names that binary review and its seeds, and says the two are not
     paired by seed. It is still two paths as they ship, not an A/B.
 - **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
