@@ -27,7 +27,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/publish-slides.yml"
-PUBLISH_SCRIPT = REPO_ROOT / "scripts/publish-slides.sh"
+PUBLISH_SCRIPT = REPO_ROOT / "scripts/release/publish-slides.sh"
 
 
 def _workflow() -> dict:
@@ -43,7 +43,7 @@ def test_workflow_and_script_both_exist() -> None:
     assert WORKFLOW.is_file(), "the publish workflow is gone"
     assert PUBLISH_SCRIPT.is_file(), "the workflow's script is gone"
     mode = PUBLISH_SCRIPT.stat().st_mode
-    assert mode & stat.S_IXUSR, "scripts/publish-slides.sh is not executable"
+    assert mode & stat.S_IXUSR, "scripts/release/publish-slides.sh is not executable"
 
 
 def test_workflow_invokes_the_committed_script() -> None:
@@ -54,7 +54,7 @@ def test_workflow_invokes_the_committed_script() -> None:
     """
     steps = _workflow()["jobs"]["publish"]["steps"]
     runs = " ".join(step.get("run", "") for step in steps)
-    assert "scripts/publish-slides.sh" in runs
+    assert "scripts/release/publish-slides.sh" in runs
 
 
 def test_workflow_triggers_on_dev_when_slides_change() -> None:
@@ -66,7 +66,7 @@ def test_workflow_triggers_on_dev_when_slides_change() -> None:
     )
     # The script is as much a source of the published PDF as the decks are, so a
     # change to it has to republish too.
-    for required in ("slides/**", "scripts/publish-slides.sh"):
+    for required in ("slides/**", "scripts/release/publish-slides.sh"):
         assert required in push["paths"], f"{required} would not trigger a republish"
     assert "workflow_dispatch" in triggers, "no way to republish by hand"
 

@@ -1,4 +1,4 @@
-"""Tests for ``scripts/detect_cuda_tag.py``.
+"""Tests for ``scripts/install/detect_cuda_tag.py``.
 
 The helper picks the right PyTorch CUDA wheel tag from the GPU's compute
 capability so ``install.sh`` doesn't make the user know their hardware (and
@@ -23,7 +23,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("detect_cuda_tag", REPO_ROOT / "scripts" / "detect_cuda_tag.py")
+    spec = importlib.util.spec_from_file_location(
+        "detect_cuda_tag", REPO_ROOT / "scripts" / "install" / "detect_cuda_tag.py"
+    )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

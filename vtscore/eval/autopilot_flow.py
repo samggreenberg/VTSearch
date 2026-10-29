@@ -28,7 +28,7 @@ every threshold and constant below — are copied verbatim, and
 
 Because this is a copy, it can go stale silently: change a phase trigger in the
 app and the simulated user keeps taking the old route, so every study run after
-that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
+that measures a flow nobody takes.  ``scripts/gates/check-eval-app-sync.py`` — a
 ``./run-tests.sh`` gate — digests both sources and fails when either moves; see
 "The Eval Default Arm IS the App" in ``docs/EVAL.md``.
 
@@ -473,7 +473,7 @@ def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
     #4220 estimate's evidence with the app's own
     :func:`~vtscore.datasets.vote_provenance.calibrates_precision` (#4245).
     Neither side builds that estimate any more, so no step records it, and
-    ``scripts/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
+    ``scripts/gates/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
     against the label view.  It still answers from that table, with a
     ``DeprecationWarning``, until the name is removed.  ``None`` outside the
     labelling phases.

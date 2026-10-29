@@ -218,7 +218,7 @@ entry point (see below).
 
 Converters declare user-configurable knobs the same way every other
 plugin family does - a list of `PluginField`s
-([`vtscore/plugins/__init__.py`](../../plugins/__init__.py)) on the
+([`vtscore/plugins/field.py`](../../plugins/field.py)) on the
 class. The audio→image spectrogram converter is a good reference for
 the spread of field types (select, number with min/max/step) it can
 accept; see [`vtscore/converters/audio2image.py`](../../converters/audio2image.py).

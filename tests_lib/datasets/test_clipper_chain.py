@@ -700,7 +700,7 @@ class TestBareConverterOriginCallers:
 
     def test_labelset_training_embeds_the_output(self, tmp_path, converter, embedded):
         from vtscore.datasets.labelset import LabeledElement
-        from vtscore.detectors.labelset_training import _embed_one
+        from vtscore.detectors.labelset_embeddings import _embed_one
 
         origin, page = self._origin(converter, tmp_path)
         elem = LabeledElement(md5="ff" * 16, label="good", origin=origin, origin_name="doc.pdf→page_2")
@@ -715,7 +715,7 @@ class TestBareConverterOriginCallers:
         label trains on the page's image-level vector instead, and the box stays
         final so a retrain doesn't redo the replay."""
         from vtscore.datasets.labelset import LabeledElement
-        from vtscore.detectors import labelset_training as lt
+        from vtscore.detectors import labelset_embeddings as lt
 
         fake = _FakeDoc2Image()
         monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == fake.name else None)
@@ -740,7 +740,7 @@ class TestBareConverterOriginCallers:
         key either; the trail alone has to send it to the replay."""
         from vtscore.datasets.clipper_chain import _content_hash
         from vtscore.datasets.labelset import LabeledElement
-        from vtscore.detectors.labelset_training import _embed_one
+        from vtscore.detectors.labelset_embeddings import _embed_one
 
         fake = _FakeDoc2Image()
         monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == fake.name else None)

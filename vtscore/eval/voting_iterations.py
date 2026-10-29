@@ -646,7 +646,7 @@ def _safe_threshold_for_step(
 
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then draws the line as
-    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    :func:`vtscore.detectors.training_calibration._fused_threshold` does: the labels' line
     under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
     production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
@@ -1912,7 +1912,7 @@ def _skyline_fit_and_score(
     same bag-aware flooding.  A skyline that trained through a private
     ``LinearSVC`` would report "fewer labels" and "different trainer" as one
     number, and would need its own ``Mirror(...)`` entry in
-    ``scripts/check-eval-app-sync.py`` to stay honest; delegation needs neither.
+    ``scripts/gates/check-eval-app-sync.py`` to stay honest; delegation needs neither.
 
     The threshold the trainer calibrates is computed and **discarded** - the
     caller takes the test oracle's cut instead (see :data:`SKYLINE_PROVENANCE`).
@@ -2766,7 +2766,7 @@ def _resolve_production_defaults(
     """Resolve the unnamed blend schedule and split fraction to the app's own.
 
     **The eval default arm must be the app's default.**  Both ``default``
-    mirrors in ``scripts/check-eval-app-sync.py`` -
+    mirrors in ``scripts/gates/check-eval-app-sync.py`` -
     ``training.blend_schedule_default`` and ``training.split_fraction_default`` -
     name *this* function as their harness side, so a tripped gate points the
     reconciler at twenty lines instead of at the thousand that make up
@@ -2806,7 +2806,7 @@ def _resolve_production_defaults(
     # reads off ``supports_patch_regions`` in
     # ``vtscore.detectors.training.resolve_calibration_fraction``, which the
     # ``training.split_fraction_default`` mirror in
-    # ``scripts/check-eval-app-sync.py`` pins against this block.  Note it is
+    # ``scripts/gates/check-eval-app-sync.py`` pins against this block.  Note it is
     # deliberately NOT the voting mode: ``dinov3_patch`` datasets take 0.5 in
     # both their styles, including boxless ``whole_image``.
     if calibration_fraction is None:
@@ -3130,7 +3130,7 @@ def _fits_weigh_hard_views(fn: Any) -> Any:
     """Run *fn* (the session) with every head fit weighing a hard-view face's Good less (#5413).
 
     The app names its voted hard-view Goods to the fit
-    (:func:`vtscore.detectors.labelset_training.hard_view_good_vectors`); a session
+    (:func:`vtscore.detectors.labelset_matrix.hard_view_good_vectors`); a session
     names every hard-view face of its pool, which is the same rule, since only a
     voted Good is ever fitted on and :func:`~vtscore.training.svm_prior.hard_view_good_weights`
     weighs Goods alone.  A pool with no Face Quality verdicts names none.

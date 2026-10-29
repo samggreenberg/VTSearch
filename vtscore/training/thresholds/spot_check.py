@@ -50,7 +50,7 @@ The bands, the picks and the likely range are the ``grow-fine`` reference in
 ``scripts/experiments/calibration/analyze_line_estimate_4383.py``
 (``band_edges``, ``draw_audits``, ``Audits.union_estimate``), and the walk's
 stop is ``rule_fb_walk`` in ``analyze_fbeta_line_4411.py``;
-``scripts/check-eval-app-sync.py`` pins this module against them.
+``scripts/gates/check-eval-app-sync.py`` pins this module against them.
 
 Everything here is scores, ids and labels - never a vector - so a
 :class:`SpotCheck` and a :class:`LineRanking` may live on a detector context

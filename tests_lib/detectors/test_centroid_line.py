@@ -452,7 +452,7 @@ class TestTheLineCountsTheUnvoted:
             fit_centroid([vecs[-1]], lambda h: score_rows_with_model(h, rows)[0], beta=1.0, line_mask=[True])
 
     def test_the_unvoted_mask_flags_all_but_the_labelled(self):
-        from vtscore.detectors.labelset_training import _unvoted_mask
+        from vtscore.detectors.labelset_heads import _unvoted_mask
 
         _vecs, rows = self._rows()
         mask = _unvoted_mask(rows, {0, 3003})

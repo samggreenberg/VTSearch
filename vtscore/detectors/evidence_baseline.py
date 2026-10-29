@@ -167,7 +167,7 @@ def labelset_evidence(det_ctx: "DetectorContext", labelset: "LabelSet") -> tuple
     """The detector's labelled evidence as ``(Good rows, Bad rows)``, or ``None`` when no label has a vector.
 
     The rows its head trains on
-    (:func:`~vtscore.detectors.labelset_training.build_xy_from_labelset`): a
+    (:func:`~vtscore.detectors.labelset_matrix.build_xy_from_labelset`): a
     Good's one vector, a Bad's flooded image-level and patch negatives on a
     patch dataset, read from the label embeddings *det_ctx* holds in memory.
     """

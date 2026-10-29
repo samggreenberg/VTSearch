@@ -452,7 +452,7 @@ def _cold_labelset(dc: dict):
 def _cold_detector_context(dc: dict):
     """A throwaway :class:`DetectorContext` for *dc*'s cold path, memoised on *dc*.
 
-    :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`
+    :func:`~vtscore.detectors.labelset_embeddings.populate_label_embeddings`
     writes its resolved vectors into ``label_embeddings`` /
     ``label_negative_regions`` / ``label_score_regions`` and stamps ``embedder``
     on the context it is handed.  Find must not hand it the **live** context:

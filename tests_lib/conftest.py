@@ -22,7 +22,7 @@ from __future__ import annotations
 # controller's ``sys.meta_path``, and this conftest is the first thing a
 # worker imports.  Installing the Flask blocker here is what makes
 # ``./run-tests.sh vtscore-clean`` actually cover the library code (the
-# controller-side install in ``scripts/check-vtscore-clean.py`` would
+# controller-side install in ``scripts/gates/check-vtscore-clean.py`` would
 # otherwise only see this file's own imports).  No-op unless the gate set
 # ``VTSEARCH_BLOCK_FLASK``.
 from tests_lib.flask_blocker import install_if_requested as _install_flask_blocker
