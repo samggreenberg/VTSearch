@@ -18,7 +18,8 @@ import numpy as np
 import pytest
 
 from vtscore.state import clear_medias
-from vtscore.state.core import DatasetContext, _iter_slots, thread_dataset_context
+from vtscore.state.core import DatasetContext, thread_dataset_context
+from vtscore.state.primitives import _iter_slots
 
 _FAMILIES = DatasetContext._DERIVED_CACHE_SLOTS
 

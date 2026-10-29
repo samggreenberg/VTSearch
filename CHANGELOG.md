@@ -49,7 +49,10 @@ what is on `dev` but not yet on `main`; each release dates that section
   `vtsearch.diagnose` and `vtsearch.settings_store` are `vtsearch.runtime.autofind`, `vtsearch.runtime.import_hooks`,
   `vtsearch.runtime.diagnose` and `vtsearch.settings.store`. The cuML fallback warning moved from
   `vtscore.gpu_backends` to `vtscore.config.gpu_backends`. Nothing else an operator sees changes.
-
+- **Toasty's hints are bigger, and you can drag them out of the way** (issue #5462). Toasty stands a little larger
+  beside every hint. Drag him or his speech bubble to move the hint; the next hint appears in its usual spot. Point at
+  Toasty and he changes his face. On the dataset a detector was trained on he now looks surprised rather than happy,
+  and the Browse map's first hint reads "Drag to pan or wheel to zoom."
 - **The helper scripts moved into folders by purpose** (issue #5408). `scripts/install.sh` stays where it was; the
   other scripts that were loose in `scripts/` now live in `scripts/gates/` (the `run-tests.sh` checks),
   `scripts/release/` (release and publishing), `scripts/install/` (model downloads and Docker image setup) and

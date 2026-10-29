@@ -366,7 +366,7 @@ Notes on the multi-thread story:
 - `train_model` is thread-safe: the production linear-SVM head is fitted
   by liblinear, which touches no global RNG, and the BCE heads use a
   local `torch.Generator` plus `torch.random.fork_rng()`.
-- The state lock (`_state_lock` in `vtscore/state/core.py`) is an
+- The state lock (`_state_lock` in `vtscore/state/primitives.py`) is an
   `RLock`, so one public function can call another while holding the
   lock without deadlock.
 - Per-thread progress callbacks are available via

@@ -27,6 +27,16 @@ MIN_LOGIT_SIGMA = 0.25
 RANDOM_BADS_MIN = 100
 #: The prevalence range an estimate is held to: never a certainty either way.
 PREVALENCE_MIN, PREVALENCE_MAX = 1e-6, 0.5
+#: Whether the head's count line's reach (:data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_RECALL_Z`)
+#: skips a hard-view face's held-out Good (#5409): a hard view (Face Quality under the cut, #5372) that the
+#: calibration folds hold out scores low, ranks below what stands out, and sends the line at a balance above 1
+#: down the excess curve.  Four-photo sessions with one hard starting face returned about twice the faces at
+#: beta 4 and halved their precision; skipping it raised F at 50 votes +0.11 / +0.06 (1024 / 640 px), back to
+#: the level of leaving the face out of the session, with recall unchanged and every session with no hard Good
+#: identical (``docs/experiments/2026-10-29-hard-good-line-5409``).  The face stays a Good everywhere else: the
+#: fit, the class model's mean, spread and counts.  The folds tag the rows
+#: (:class:`~vtscore.training.thresholds.fold_orderings.FoldOrdering`).  ``False`` is the line before #5409.
+REACH_SKIPS_HARD_VIEWS: bool = True
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -90,8 +100,9 @@ class ClassScoreModel:
     neg_sd: float | None = field(default=None, compare=False, repr=False)
     #: The Goods' held-out logit scores, sorted: where the head's count line looks for a Good ranked
     #: below what stands out (:data:`~vtscore.training.thresholds.head_count.HEAD_COUNT_RECALL_Z`, #5039).
-    #: ``None`` on a model built by hand, and on the in-sample stand-in, whose Goods the head trained on.
-    #: Not in :meth:`as_dict`.
+    #: A hard-view face's Good is left out (:data:`REACH_SKIPS_HARD_VIEWS`, #5409), though it counts in
+    #: every other field.  ``None`` on a model built by hand, and on the in-sample stand-in, whose Goods
+    #: the head trained on.  Not in :meth:`as_dict`.
     pos_logits: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def floored(self, floor: float) -> "ClassScoreModel":
@@ -151,7 +162,9 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
         return None
     pos_parts: list[np.ndarray] = []
     neg_parts: list[np.ndarray] = []
-    for scores, labels in orderings:
+    reach_parts: list[np.ndarray] = []
+    for ordering in orderings:
+        scores, labels = ordering
         # Any numeric dtype: the app's folds hold Python floats, the eval
         # harness's float32 arrays (an isinstance check on ``float`` silently
         # dropped every float32 score).
@@ -162,6 +175,9 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
         ok = np.isfinite(s) & (s >= 0.0) & (s <= 1.0)
         pos_parts.append(s[ok & (y >= 0.5)])
         neg_parts.append(s[ok & (y < 0.5)])
+        hard = getattr(ordering, "hard_views", None) if REACH_SKIPS_HARD_VIEWS else None
+        clear = np.ones(n, dtype=bool) if hard is None else ~np.asarray(hard, dtype=bool)[:n]
+        reach_parts.append(s[ok & (y >= 0.5) & clear])
     pos = np.concatenate(pos_parts) if pos_parts else np.empty(0)
     neg = np.concatenate(neg_parts) if neg_parts else np.empty(0)
     if pos.size == 0 or neg.size == 0:
@@ -173,6 +189,7 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
     raw = math.sqrt(var)
     neg = np.sort(xn) if xn.size >= RANDOM_BADS_MIN else None
     neg_sd = float(np.std(xn, ddof=1)) if xn.size > 1 else None
+    reach = _logit(np.concatenate(reach_parts))
     return ClassScoreModel(
-        mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg, neg_sd, np.sort(xp)
+        mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg, neg_sd, np.sort(reach)
     )

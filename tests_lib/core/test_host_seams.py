@@ -92,13 +92,14 @@ class TestSnapshotCoverage:
 class TestRestore:
     def test_a_leaked_single_slot_seam_is_put_back(self, restore_afterwards):
         import vtscore.state.core as core
+        import vtscore.state.resolution as resolution
 
         original = restore_afterwards.request_context_predicate
         core.register_request_context_predicate(lambda: True)
 
         restore_host_seams(restore_afterwards)
 
-        assert core._request_context_predicate is original
+        assert resolution._request_context_predicate is original
 
     def test_the_persistence_hook_is_put_back_where_the_loads_read_it(self, restore_afterwards):
         import vtscore.datasets.load_workers as load_workers

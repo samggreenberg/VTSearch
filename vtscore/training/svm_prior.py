@@ -136,6 +136,18 @@ def hard_view_rows(vectors: "Iterable[np.ndarray] | None") -> Iterator[None]:
         _HARD_VIEW_ROWS.reset(token)
 
 
+def hard_view_mask(X: np.ndarray) -> np.ndarray | None:
+    """Which rows of *X* are hard-view faces (:func:`hard_view_rows`), or ``None`` outside such a block.
+
+    The calibration folds tag their held-out rows with it, so the labels line can keep
+    a hard-view Good out of the head's count line's reach (#5409).
+    """
+    keys = _HARD_VIEW_ROWS.get()
+    if keys is None:
+        return None
+    return np.array([_row_key(row) in keys for row in np.asarray(X)], dtype=bool)
+
+
 def hard_view_good_weights(X: np.ndarray, y: np.ndarray) -> np.ndarray | None:
     """Each Good row's weight in the fit (:data:`HARD_VIEW_GOOD_WEIGHT` for a hard view, else 1), or ``None``.
 
