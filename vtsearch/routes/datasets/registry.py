@@ -33,7 +33,7 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtscore.datasets.load_pipeline import _warmup_embedder_async
+from vtscore.datasets.load_workers import _warmup_embedder_async
 from vtscore.datasets.loader import load_dataset_from_pickle
 from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,

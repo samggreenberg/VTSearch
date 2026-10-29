@@ -24,6 +24,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
 
+- **`vtscore.datasets.load_pipeline` is split into four modules along its seams** (issue #5422). The
+  1,375-line module keeps the load entry points (`_run_importer_in_background`, `consume_chunks_into`,
+  `auto_chunk_size`). The rest moved to three siblings: `load_workers` holds what every load flow shares (the
+  download / embed concurrency gates and `_LoadGateController`, the task harness, the field parsers, the
+  failure and terminal-state handling, the last-embedder persistence hook). `load_origin` holds the
+  single-dataset load (`_run_origin_load_in_background`, `_finish_dataset_load`), and `load_staging` the
+  combine flow's staging import. The public names `register_last_embedder_persistence_hook`, `clear_dataset`,
+  `reset_load_gates_for_tests`, `consume_chunks_into`, `auto_chunk_size` and `STAGING_DIR` still import from
+  `vtscore.datasets.load_pipeline` and behave as before. The private helpers now live in the module that
+  owns them; import them from there, and a test that stubs one patches the module that calls it. The
+  rebound globals `_download_gate`, `_embed_gate` and `_last_embedder_persistence_hook` are no longer
+  attributes of `load_pipeline`: read them off `vtscore.datasets.load_workers`, which is where
+  `reset_load_gates_for_tests` and `register_last_embedder_persistence_hook` rebind them. See
+  `packages/datasets.md`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss

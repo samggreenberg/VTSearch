@@ -963,16 +963,16 @@ class TestStagingPerTaskIsolation:
         from unittest import mock
 
         from vtscore.concurrency.progress import loading_tasks
-        from vtscore.datasets.load_pipeline import _stage_importer_in_background
+        from vtscore.datasets.load_staging import _stage_importer_in_background
 
         importer = _FakeStagingImporter()
 
         # Patch the embedder (medias are pre-embedded) and run the daemon
         # threads inline so both stagings complete deterministically.
         with (
-            mock.patch("vtscore.datasets.load_pipeline.embed_missing", lambda *a, **k: None),
+            mock.patch("vtscore.datasets.load_staging.embed_missing", lambda *a, **k: None),
             mock.patch(
-                "vtscore.datasets.load_pipeline.threading.Thread",
+                "vtscore.datasets.load_workers.threading.Thread",
                 side_effect=_sync_thread_factory([]),
             ),
         ):

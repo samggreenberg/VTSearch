@@ -105,7 +105,7 @@ class TestIngestPaths:
     """Every ingest path builds an ETA-less tracker, whatever the old switch says."""
 
     def test_import_task_tracker(self, old_switch_off, clock):
-        from vtscore.datasets.load_pipeline import _start_import_task
+        from vtscore.datasets.load_workers import _start_import_task
 
         task = _start_import_task(prefix="_test_", display_name="test", total_steps=2)
         assert loading_tasks.get_tracker(task.task_id) is task.tracker

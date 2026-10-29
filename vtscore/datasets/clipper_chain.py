@@ -229,7 +229,7 @@ def _resolved_clipper_params(clipper) -> dict[str, Any]:
     """Return the clipper's *effective* parameter dict (post ``with_params``).
 
     Reads from ``to_dict()`` and strips the base/metadata keys, matching the
-    convention already used by ``_apply_clipper`` in ``load_pipeline.py``.
+    convention already used by ``_apply_clipper`` in ``stages/clipper.py``.
     """
     d = clipper.to_dict()
     return {k: v for k, v in d.items() if k not in CLIPPER_BASE_KEYS}
@@ -568,7 +568,7 @@ def apply_chain_to_clips(  # noqa: C901
 
     Like the legacy single-clipper path, this **does not** recompute MD5s,
     thumbnails, or embeddings; the caller (``_apply_clipper`` in
-    ``load_pipeline.py``) handles those in a single batched pass over the
+    ``stages/clipper.py``) handles those in a single batched pass over the
     final clip list.
     """
     if not steps:
