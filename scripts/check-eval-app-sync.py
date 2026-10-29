@@ -407,7 +407,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.text_sort_acquisition",
-        app="py:vtscore.training.thresholds.gmm.text_sort_cuts",
+        app="py:vtscore.training.thresholds.text_sort.text_sort_cuts",
         harness="vtscore/eval/al_strategies.py::_sort_threshold",
         kind="default",
         note=(
@@ -851,7 +851,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.rate_cut_no_root",
-        app="py:vtscore.training.thresholds.gmm._rate_cut",
+        app="py:vtscore.training.thresholds.gmm_core._rate_cut",
         harness="vtscore/eval/cut_rules.py::gaussian_cuts",
         kind="default",
         note=(

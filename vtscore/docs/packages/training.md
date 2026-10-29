@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm_core`, `gmm_em`, `gmm_threshold`, `text_sort` (`gmm` re-exports those four), `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line`, `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -289,7 +289,7 @@ are summarised in
 
 ### `text_sort_cuts(scores, rule=None, beta=None)`
 
-`vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
+`vtscore/training/thresholds/text_sort.py` (import from `vtscore.training.thresholds`).
 The two lines a **typed-query** sort carries (issue #4136), as a frozen
 `TextSortCuts(threshold, acq_threshold, branch)`, drawn from one mixture fit.
 Called by `vtscore/training/query_sort.py::text_sort_active`, which the
@@ -332,14 +332,14 @@ bit-identical to `calculate_gmm_threshold`.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds/gmm.py`. Fits a 2-component 1-D Gaussian
+`vtscore/training/thresholds/gmm_threshold.py`. Fits a 2-component 1-D Gaussian
 mixture to the score list and returns the **midpoint between the two
 component means**. Used to produce a reasonable operating point even when
 only a few labels exist - the score distribution still tends to be bimodal
 because the embedder space already separates "kind of like X" from "kind of
 not like X".
 
-The fit is `fit_score_gmm`: a deterministic 2-means init and EM, stopping
+The fit is `fit_score_gmm` (`gmm_em.py`): a deterministic 2-means init and EM, stopping
 when an iteration improves the mean log-likelihood by less than 1e-3 (the
 same criterion as sklearn's `GaussianMixture`, which `fit_score_gmm_sklearn`
 keeps available for comparison but which production no longer calls).

@@ -10,7 +10,9 @@ Three things had to survive that split and are pinned here:
 2. **The layering stays a DAG.**  ``knobs -> gmm -> {anchored, conformal} ->
    blend`` is the whole point of the split: the mixture layer knows nothing of
    folds, and the two rival estimators know nothing of each other.  A back edge
-   would quietly restore the tangle.
+   would quietly restore the tangle.  The mixture layer is itself four layers
+   since #5424 (``gmm_core -> gmm_em -> gmm_threshold -> text_sort``), with
+   ``gmm`` a re-export facade over them that must keep resolving every name.
 3. **``calculate_gmm_threshold`` is ``fit_gmm_threshold`` with the fit
    discarded.**  The two carried byte-identical bodies before the split; the
    delegation is what stops them drifting apart again.
@@ -32,17 +34,51 @@ from vtscore.training.thresholds import (
     conformal,
     fit_gmm_threshold,
     gmm,
+    gmm_core,
+    gmm_em,
+    gmm_threshold,
     knobs,
+    text_sort,
 )
 
 #: The layer each submodule sits in.  A submodule may import from a *lower*
 #: number only; ``anchored`` and ``conformal`` share a rank because they are
 #: rival estimators rather than layers, and neither may import the other.
-LAYER = {"knobs": 0, "gmm": 1, "anchored": 2, "conformal": 2, "blend": 3}
+LAYER = {
+    "knobs": 0,
+    "gmm_core": 1,
+    "gmm_em": 2,
+    "gmm_threshold": 3,
+    "text_sort": 4,
+    "gmm": 5,
+    "anchored": 6,
+    "conformal": 6,
+    "blend": 7,
+}
 
-SUBMODULES = {"knobs": knobs, "gmm": gmm, "anchored": anchored, "conformal": conformal, "blend": blend}
+#: The four modules the mixture was split into (#5424), in layer order; ``gmm``
+#: re-exports them all.
+MIXTURE_LAYERS = {"gmm_core": gmm_core, "gmm_em": gmm_em, "gmm_threshold": gmm_threshold, "text_sort": text_sort}
+
+#: The submodules that define names.  The ``gmm`` facade defines none of its
+#: own, so its contract is pinned separately (:class:`TestGmmFacade`).
+SUBMODULES = {"knobs": knobs, **MIXTURE_LAYERS, "anchored": anchored, "conformal": conformal, "blend": blend}
 
 PKG_DIR = Path(thresholds.__file__).parent
+
+
+def _top_level_names(mod_name: str) -> list[str]:
+    """Every name *mod_name*'s source binds at module level (defs, classes, assignments)."""
+    tree = ast.parse((PKG_DIR / f"{mod_name}.py").read_text(encoding="utf-8"))
+    names: list[str] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+        elif isinstance(node, ast.Assign):
+            names.extend(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.append(node.target.id)
+    return names
 
 
 class TestPackageReExport:
@@ -59,18 +95,25 @@ class TestPackageReExport:
         """
         exported = set(thresholds.__all__)
         for mod_name, mod in SUBMODULES.items():
-            tree = ast.parse((PKG_DIR / f"{mod_name}.py").read_text(encoding="utf-8"))
-            for node in tree.body:
-                names: list[str] = []
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    names = [node.name]
-                elif isinstance(node, ast.Assign):
-                    names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                    names = [node.target.id]
-                for name in names:
-                    assert name in exported, f"{mod_name}.{name} is not re-exported from the package __init__"
-                    assert getattr(thresholds, name) is getattr(mod, name)
+            for name in _top_level_names(mod_name):
+                assert name in exported, f"{mod_name}.{name} is not re-exported from the package __init__"
+                assert getattr(thresholds, name) is getattr(mod, name)
+
+
+class TestGmmFacade:
+    """``thresholds.gmm.X`` outlived the #5424 split, for every name the four mixture layers define."""
+
+    def test_every_mixture_name_resolves_off_the_facade(self):
+        defined: set[str] = set()
+        for mod_name, mod in MIXTURE_LAYERS.items():
+            for name in _top_level_names(mod_name):
+                defined.add(name)
+                assert getattr(gmm, name) is getattr(mod, name), f"gmm.{name} is not {mod_name}.{name}"
+        assert set(gmm.__all__) == defined
+
+    def test_the_facade_defines_nothing_of_its_own(self):
+        """A body here would be a second home for a name, and patching it would reach no caller."""
+        assert _top_level_names("gmm") == ["__all__"]
 
 
 class TestLayering:
@@ -87,14 +130,16 @@ class TestLayering:
                 assert LAYER[target] < layer, f"{mod_name} imports {target}, which is not below it"
 
     def test_gmm_layer_is_self_contained(self):
-        """The mixture layer imports no sibling at all - not even the knobs."""
-        tree = ast.parse((PKG_DIR / "gmm.py").read_text(encoding="utf-8"))
-        siblings = [
-            n.module
-            for n in ast.walk(tree)
-            if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("vtscore.training.thresholds")
-        ]
-        assert siblings == []
+        """The mixture layers import no sibling outside themselves - not even the knobs."""
+        allowed = {f"vtscore.training.thresholds.{name}" for name in MIXTURE_LAYERS}
+        for mod_name in (*MIXTURE_LAYERS, "gmm"):
+            tree = ast.parse((PKG_DIR / f"{mod_name}.py").read_text(encoding="utf-8"))
+            siblings = {
+                n.module
+                for n in ast.walk(tree)
+                if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("vtscore.training.thresholds")
+            }
+            assert siblings <= allowed, f"{mod_name} imports {sorted(siblings - allowed)}"
 
 
 def _bimodal(n: int, seed: int) -> list[float]:

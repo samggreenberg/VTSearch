@@ -24,6 +24,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
 
+- **`vtscore.training.thresholds.gmm` is split into four modules** (issue #5424): `gmm_core` (`GmmFit1D`,
+  the crossing solvers and `CUT_KIND_*`, `gmm_fit_array`, `scored_ordering`, `snap_cut_to_sample`), `gmm_em`
+  (the plain and anchored EM fits and their stopping rules), `gmm_threshold` (`gmm_cut_from_fit`,
+  `fit_gmm_threshold`, `calculate_gmm_threshold`) and `text_sort` (the typed-query sort's lines). Every name
+  still imports from `vtscore.training.thresholds` and from `vtscore.training.thresholds.gmm`, now a
+  re-export facade, and behaves bit for bit as before. A stub that rebinds a module global has to patch the
+  module whose function reads it: `gmm_em._EM_LOGLIK_TOL` / `_ANCHORED_EM_LOGLIK_TOL`,
+  `text_sort.TEXT_SORT_CUT_RULE`, `gmm_core._GMM_MAX_SAMPLES`; a rebind on `gmm` is now ignored.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss

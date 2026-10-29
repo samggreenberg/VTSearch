@@ -3,7 +3,7 @@
 The line with no balance, and the fallback under one where the labels support
 no class model (under a balance the line is the labels',
 :mod:`vtscore.training.thresholds.labels_line`, #4452).  Where
-:mod:`vtscore.training.thresholds.gmm` fits one mixture to one score list,
+:mod:`vtscore.training.thresholds.gmm_em` fits one mixture to one score list,
 this layer runs that fit *per calibration
 fold* with the fold's votes anchored into it, transfers each fold's cut into a
 common quantile space (:func:`rank_transfer`), and combines them into a single
@@ -20,15 +20,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vtscore.training.thresholds.gmm import (
-    GmmFit1D,
-    fit_anchored_score_gmm,
-    fit_score_gmm,
-    gmm_cut_from_fit,
-    gmm_fit_array,
-    scored_ordering,
-    snap_cut_to_sample,
-)
+from vtscore.training.thresholds.gmm_core import GmmFit1D, gmm_fit_array, scored_ordering, snap_cut_to_sample
+from vtscore.training.thresholds.gmm_em import fit_anchored_score_gmm, fit_score_gmm
+from vtscore.training.thresholds.gmm_threshold import gmm_cut_from_fit
 from vtscore.training.thresholds.knobs import INCLUSION_SEARCH_SPAN, inclusion_cost_weights
 from vtscore.utils.scores import scored_only
 

@@ -19,7 +19,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-from vtscore.training.thresholds.gmm import scored_ordering, snap_cut_to_sample
+from vtscore.training.thresholds.gmm_core import scored_ordering, snap_cut_to_sample
 from vtscore.training.thresholds.knobs import NO_GOOD_THRESHOLD
 
 # Seed of the Train/Calibrate fold splits when a caller passes no ``rng``.

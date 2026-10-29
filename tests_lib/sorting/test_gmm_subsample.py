@@ -41,7 +41,7 @@ class TestGmmSubsample:
         forced full-population fit on the same data: temporarily lift the cap so
         nothing is dropped.
         """
-        from vtscore.training.thresholds import gmm as thr
+        from vtscore.training.thresholds import gmm_core as thr
 
         scores = _bimodal_scores(150_000, seed=2)
         subsampled = calculate_gmm_threshold(scores)
@@ -75,7 +75,7 @@ class TestGmmSubsample:
         on a busy machine).  The spy sits on ``_plain_em`` because that is the
         fit since #3585; it used to sit on ``GaussianMixture.fit``.
         """
-        from vtscore.training.thresholds import gmm as gmm_mod  # noqa: PLC0415
+        from vtscore.training.thresholds import gmm_em as gmm_mod  # noqa: PLC0415
 
         scores = _bimodal_scores(1_000_000, seed=5)
         seen_rows: list[int] = []

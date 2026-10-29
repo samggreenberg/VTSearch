@@ -5,7 +5,7 @@ A face session's class model never holds :data:`~vtscore.training.thresholds.lab
 held-out Goods (a person has about four photos in the voting half), so Find's line is the head's count line all
 session (:func:`~vtscore.training.thresholds.labels_line.head_count_cut`, #4786 / #5039 / #5084): a multiple of
 #4603's count of what stands out (the logits above ``median + z spreads`` less what a Gaussian bulk puts there,
-``z`` = :data:`~vtscore.training.thresholds.gmm.TEXT_SORT_COUNT_Z`), never fewer than the top's widest drop.
+``z`` = :data:`~vtscore.training.thresholds.text_sort.TEXT_SORT_COUNT_Z`), never fewer than the top's widest drop.
 
 This script reads a face review's score snapshots (``CALIB_SAVE_TEST_SCORES=1`` + ``CALIB_SAVE_TEST_SCORES_AT``:
 the withheld half's scores at each listed click, at the last vote and after the check, with the calibration
@@ -61,17 +61,17 @@ ZS = (3.0, 4.0, 5.0, 6.0)
 
 @contextmanager
 def candidate(z: float | None, scale: float | None):
-    from vtscore.training.thresholds import gmm, labels_line
+    from vtscore.training.thresholds import labels_line, text_sort
 
-    z0, s0 = gmm.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE
+    z0, s0 = text_sort.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE
     try:
         if z is not None:
-            gmm.TEXT_SORT_COUNT_Z = float(z)
+            text_sort.TEXT_SORT_COUNT_Z = float(z)
         if scale is not None:
             labels_line.HEAD_COUNT_PRECISION_SCALE = float(scale)
         yield
     finally:
-        gmm.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE = z0, s0
+        text_sort.TEXT_SORT_COUNT_Z, labels_line.HEAD_COUNT_PRECISION_SCALE = z0, s0
 
 
 def _snapshots(npz: str) -> dict[str, dict]:
