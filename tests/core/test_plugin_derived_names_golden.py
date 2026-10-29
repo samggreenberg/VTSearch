@@ -3,7 +3,7 @@
 A plugin's ``name`` is a **registry key**: it is what ``get_exporter("…")``
 looks up, what a third party writes into an entry-point config, what
 ``origin.params`` records, and what persisted settings store.  Most of it is
-produced by :func:`vtscore.plugins._default_plugin_name`, which strips a
+produced by :func:`vtscore.plugins.base._default_plugin_name`, which strips a
 family suffix off the class name and snake-cases the remainder.  A change to
 that derivation renames plugins silently — no error, no warning, just a
 lookup that stops resolving on somebody's install.
@@ -35,7 +35,8 @@ import functools
 
 import pytest
 
-from vtscore.plugins import PluginBase, _default_plugin_name
+from vtscore.plugins import PluginBase
+from vtscore.plugins.base import _default_plugin_name
 
 # (derived_name, name, display_name, icon); ``None`` = attribute absent or
 # not a plain string.

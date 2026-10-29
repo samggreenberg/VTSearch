@@ -75,8 +75,10 @@ Package, sentinel and entry-point group are read off each family's live `PluginR
 
 The form-driven families (dataset / datasource / seed / label importers,
 results exporters, settings I/O, labelset sources, converters) share the
-same architecture built on `PluginField` and `PluginBase` in
-`vtscore/plugins/__init__.py`, and are discovered by `PluginRegistry`.
+same architecture built on `PluginField` (`vtscore/plugins/field.py`) and
+`PluginBase` (`vtscore/plugins/base.py`), and are discovered by
+`PluginRegistry` (`vtscore/plugins/registry.py`); all three import from
+`vtscore.plugins`.
 Media sources use the registry but not `PluginBase` (their sentinel is a
 plain factory object). The media registries — media types, embedders,
 clippers, cleaners — have their own registration story; see

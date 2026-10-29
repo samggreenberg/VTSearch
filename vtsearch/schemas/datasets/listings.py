@@ -194,7 +194,7 @@ class EmbedderInfoSchema(Schema):
 
 
 class ImporterFieldSchema(Schema):
-    """One ``PluginField.to_dict()`` payload (see ``vtscore/plugins/__init__.py``).
+    """One ``PluginField.to_dict()`` payload (see ``vtscore/plugins/field.py``).
 
     Shared by every plugin family that renders a form: dataset importers,
     converters, label importers/exporters.  Fixed shape - ``PluginField`` is

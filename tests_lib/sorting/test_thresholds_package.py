@@ -7,10 +7,11 @@ Three things had to survive that split and are pinned here:
    harness all say ``vtscore.training.thresholds.X``; the ``__init__``
    re-export is what keeps that true, and it is easy to forget a name when a
    submodule grows one.
-2. **The layering stays a DAG.**  ``knobs -> gmm -> {anchored, conformal} ->
-   blend`` is the whole point of the split: the mixture layer knows nothing of
-   folds, and the two rival estimators know nothing of each other.  A back edge
-   would quietly restore the tangle.
+2. **The layering stays a DAG.**  ``knobs -> {gmm, fold_orderings} ->
+   {anchored, conformal} -> blend`` is the whole point of the split: the
+   mixture layer knows nothing of folds, the fold fitting knows nothing of the
+   conformal rule that reads it (#5428), and the two rival estimators know
+   nothing of each other.  A back edge would quietly restore the tangle.
 3. **``calculate_gmm_threshold`` is ``fit_gmm_threshold`` with the fit
    discarded.**  The two carried byte-identical bodies before the split; the
    delegation is what stops them drifting apart again.
@@ -31,6 +32,7 @@ from vtscore.training.thresholds import (
     calculate_gmm_threshold,
     conformal,
     fit_gmm_threshold,
+    fold_orderings,
     gmm,
     knobs,
 )
@@ -38,9 +40,17 @@ from vtscore.training.thresholds import (
 #: The layer each submodule sits in.  A submodule may import from a *lower*
 #: number only; ``anchored`` and ``conformal`` share a rank because they are
 #: rival estimators rather than layers, and neither may import the other.
-LAYER = {"knobs": 0, "gmm": 1, "anchored": 2, "conformal": 2, "blend": 3}
+#: ``fold_orderings`` shares ``gmm``'s: it reads only the knobs.
+LAYER = {"knobs": 0, "gmm": 1, "fold_orderings": 1, "anchored": 2, "conformal": 2, "blend": 3}
 
-SUBMODULES = {"knobs": knobs, "gmm": gmm, "anchored": anchored, "conformal": conformal, "blend": blend}
+SUBMODULES = {
+    "knobs": knobs,
+    "gmm": gmm,
+    "fold_orderings": fold_orderings,
+    "anchored": anchored,
+    "conformal": conformal,
+    "blend": blend,
+}
 
 PKG_DIR = Path(thresholds.__file__).parent
 
@@ -71,6 +81,27 @@ class TestPackageReExport:
                 for name in names:
                     assert name in exported, f"{mod_name}.{name} is not re-exported from the package __init__"
                     assert getattr(thresholds, name) is getattr(mod, name)
+
+
+class TestConformalReExportsTheFolds:
+    def test_every_public_fold_name_imports_from_conformal(self):
+        """The fold code left ``conformal`` (#5428); its public names still import from there."""
+        tree = ast.parse((PKG_DIR / "fold_orderings.py").read_text(encoding="utf-8"))
+        public = [
+            name
+            for node in tree.body
+            for name in (
+                [node.name]
+                if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+                else [t.id for t in node.targets if isinstance(t, ast.Name)]
+                if isinstance(node, ast.Assign)
+                else []
+            )
+            if not name.startswith("_")
+        ]
+        assert "compute_fold_orderings" in public
+        for name in public:
+            assert getattr(conformal, name, None) is getattr(fold_orderings, name), name
 
 
 class TestLayering:
