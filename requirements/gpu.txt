@@ -34,8 +34,7 @@
 #   pip install --extra-index-url https://pypi.nvidia.com "cuml-cu12>=26.8"
 #
 # (the >=26.8 floor matches scripts/install.sh: it is the first RAPIDS whose
-# cudf takes the pandas 3 pinned in pyproject.toml, and it needs the CUDA 12.9
-# libraries that only the cu129 torch wheel pins, so it belongs on a cu129
-# venv -- see docs/DEPLOYMENT.md "cuML crashes compiling a kernel"). Output
+# cudf takes the pandas 3 pinned in pyproject.toml; it belongs beside a cu129
+# or cu126 torch -- see docs/TROUBLESHOOTING.md "GPU install's cuML step"). Output
 # differs from the CPU path; this is safe because both consumers
 # freeze/persist their result once.

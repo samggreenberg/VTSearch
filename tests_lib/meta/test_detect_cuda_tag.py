@@ -4,8 +4,8 @@ The helper picks the right PyTorch CUDA wheel tag from the GPU's compute
 capability so ``install.sh`` doesn't make the user know their hardware (and
 doesn't fall into the "newest tag is wrong for an old GPU" trap: cu128 dropped
 Volta, so a V100 needs cu126). The anchor is cu129, the one tag whose torch
-shares its CUDA 12.9 libraries with RAPIDS >= 26.8, so it is where cuML gets
-installed (#4390). The selection logic is pure; the nvidia-smi parsing is
+shares its whole CUDA 12.9 library set with RAPIDS >= 26.8; install.sh also
+installs cuML beside cu126 (#4390). The selection logic is pure; the nvidia-smi parsing is
 text-only. Both are covered here without a GPU.
 """
 
@@ -77,7 +77,7 @@ class TestSelectCudaTag:
 
     def test_driver_below_default_steps_down_to_newest_it_runs(self):
         """An A100 on a CUDA 12.6 driver can't run cu129 (or cu128) -> cu126; on
-        a 12.8 driver -> cu128; on 12.4 -> cu118. Each installs without cuML."""
+        a 12.8 driver -> cu128; on 12.4 -> cu118. Only cu126 of these gets cuML."""
         assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 6)) == "cu126"
         assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 8)) == "cu128"
         assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 4)) == "cu118"

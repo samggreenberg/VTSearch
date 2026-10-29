@@ -214,11 +214,11 @@ floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
 import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
-later, and it is the **only tag that gets cuML** (GPU UMAP / k-means). A
-Volta card, or an older driver, steps down to `cu126` (or older), where the
-installer skips cuML and the app runs UMAP / k-means on the CPU; why, and the
-by-hand escape hatch, are in
-[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
+later. It and `cu126`, where a Volta card or a driver below CUDA 12.9 steps
+down to, are the **tags that get cuML** (GPU UMAP / k-means). On `cu118` and
+`cu128` the installer skips cuML and the app runs UMAP / k-means on the CPU;
+why, and the by-hand escape hatch, are in
+[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-cu118-and-cu128).
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
