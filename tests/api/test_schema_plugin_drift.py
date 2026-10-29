@@ -1,6 +1,6 @@
 """Drift guards between plugin ``to_dict()`` payloads and their schemas.
 
-Several schemas in :mod:`vtsearch.schemas.datasets` hand-transcribe a plugin
+Several schemas in :mod:`vtsearch.schemas.datasets.listings` hand-transcribe a plugin
 ``to_dict()`` payload so the generated OpenAPI client carries a real typed
 model instead of ``any``.  Nothing tied the two together, and the failure
 mode is silent in the worst way: marshmallow **drops undeclared keys on
@@ -8,7 +8,7 @@ dump**, so adding a key to a ``to_dict()`` removes it from the API response
 and from the generated TypeScript client without a single test going red.
 
 These tests close that loop.  They are deliberately one-directional except
-for :class:`~vtsearch.schemas.datasets.ImporterFieldSchema`: a key the wire
+for :class:`~vtsearch.schemas.datasets.listings.ImporterFieldSchema`: a key the wire
 emits but the schema does not declare is a bug (it vanishes), while a key
 the schema declares but no plugin currently emits is fine (routes annotate
 some payloads themselves — ``ImporterInfoSchema.enabled`` is added by the
@@ -31,7 +31,7 @@ from vtscore.datasets import list_importers
 from vtscore.media import all_cleaners_dict, all_clippers_dict, all_embedders_dict, all_types_dict
 from vtscore.plugins import PluginField
 from vtsearch.schemas.common import PluginExtrasSchema
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.listings import (
     CleanerInfoSchema,
     ClipperInfoSchema,
     ConverterInfoSchema,

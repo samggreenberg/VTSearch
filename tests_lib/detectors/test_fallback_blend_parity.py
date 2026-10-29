@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vtscore.detectors.training import _fused_threshold
+from vtscore.detectors.training_calibration import _fused_threshold
 from vtscore.eval.step_model import resolve_hidden_dim
 from vtscore.eval.step_trainers import _train_and_calibrate
 from vtscore.eval.voting_iterations import _blend_xcal_input, _safe_threshold_for_step

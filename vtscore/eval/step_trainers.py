@@ -753,7 +753,7 @@ def _style_train_and_calibrate(
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
 
-    from vtscore.detectors.training import _flood_context  # noqa: PLC0415
+    from vtscore.detectors.training_calibration import _flood_context  # noqa: PLC0415
 
     X_list: list[np.ndarray] = []
     y_list: list[float] = []

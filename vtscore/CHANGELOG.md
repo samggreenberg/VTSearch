@@ -35,6 +35,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
 
+- **`vtscore.detectors.training` is split into its stages** (issue #5418). The 1,770-line module keeps the
+  pipeline entry points (`train_and_threshold`, `train_and_score`, `train_detector_from_origins`,
+  `collect_media_origins`, `serialize_weights`), and the stages they call move to four sibling modules:
+  `training_snap` (which embedding space a snapshot trains and scores in: `detector_score_embedder`,
+  `validate_good_bad_split`), `training_scoring` (`ScoringRows`, `scoring_rows_for_snap`,
+  `score_rows_with_model`, `scoring_progress`, `score_media_with_model`), `training_votes`
+  (`pool_box_from_media`, `bad_negative_vecs`, `inference_score_rows`) and `training_calibration`
+  (`resolve_calibration_fraction`, and the deprecated `calibration_rows_for` and `vote_calibrating_groups`).
+  Every public name still imports from `vtscore.detectors.training` and behaves as before. The private
+  helpers moved with their stage; a test that stubs one patches the module that looks it up, which for
+  `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
+  `packages/detectors.md`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss

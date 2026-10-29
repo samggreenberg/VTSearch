@@ -46,7 +46,7 @@ with torch.no_grad():
     r["sigmoid"] = h(torch.sigmoid(torch.from_numpy(v32)).numpy())
 sys.path.insert(0, os.environ["VTS_REPO"])
 from vtscore.training.svm import fit_linear_svm_head
-from vtscore.detectors.training import _forward_sigmoid_chunked
+from vtscore.detectors.training_scoring import _forward_sigmoid_chunked
 
 y = (X32[:300, 0] + 0.5 * rng.standard_normal(300) > 0.8).astype(np.float32)
 m = fit_linear_svm_head(X32[:300], y, 768)
