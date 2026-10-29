@@ -381,7 +381,7 @@ justifies the choice only against picking one box **arbitrarily** — "would
 discard real signal and depend on annotation order" — which does not rule out
 picking the **largest**, a choice that is neither arbitrary nor order-dependent.
 
-This is **not** eval/app drift in the sense `scripts/check-eval-app-sync.py`
+This is **not** eval/app drift in the sense `scripts/gates/check-eval-app-sync.py`
 guards: there is no app function to mirror, because the app has a human. It is an
 unvalidated assumption about the simulated user, and it was being quoted as a
 fact about the app. Corrected at every live site; the archived reports keep their

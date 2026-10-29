@@ -89,7 +89,7 @@ from vtscore.eval import (
 > rather than re-deriving them). Two things can't delegate and so can
 > drift: `autopilot_flow.py`, which is ported because the original is
 > TypeScript, and the places where "no arm" resolves to the app's
-> current default. `scripts/check-eval-app-sync.py` (a `./run-tests.sh`
+> current default. `scripts/gates/check-eval-app-sync.py` (a `./run-tests.sh`
 > gate) pins a digest of each mirrored surface **on both sides** - the app
 > code and the harness copy of it - and fails when either moves.
 

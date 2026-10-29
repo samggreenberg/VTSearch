@@ -1,6 +1,6 @@
 """The two command lines: detection only, and the full detect + align + embed pipeline.
 
-``scripts/detect_faces.py`` and ``scripts/process_faces.py`` are thin shims
+``scripts/data/detect_faces.py`` and ``scripts/data/process_faces.py`` are thin shims
 over :func:`detect_faces_main` and :func:`process_faces_main`, so the logic is
 importable and testable in-process.  Both share the input selection
 (``--dir`` / ``--list`` / ``--img``), the runtime flags, and the failure
@@ -92,7 +92,7 @@ def _detect_parser() -> argparse.ArgumentParser:
 
 
 def detect_faces_main(argv: Sequence[str] | None = None) -> int:
-    """Entry point of ``scripts/detect_faces.py``; returns the exit status."""
+    """Entry point of ``scripts/data/detect_faces.py``; returns the exit status."""
     from imagekit.face.detection.face_detector import FaceDetector  # noqa: PLC0415
 
     args = _detect_parser().parse_args(argv)
@@ -136,7 +136,7 @@ def _process_parser() -> argparse.ArgumentParser:
 
 
 def process_faces_main(argv: Sequence[str] | None = None) -> int:
-    """Entry point of ``scripts/process_faces.py``; returns the exit status."""
+    """Entry point of ``scripts/data/process_faces.py``; returns the exit status."""
     from imagekit.face.pipeline import load_pipeline, read_pipeline_config, runtime_options_from_config  # noqa: PLC0415
 
     args = _process_parser().parse_args(argv)

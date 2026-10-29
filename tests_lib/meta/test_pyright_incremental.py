@@ -1,6 +1,6 @@
 """The incremental pyright gate: it re-checks exactly the files whose inputs changed.
 
-``scripts/pyright-incremental.py`` lets a session's second and later full
+``scripts/gates/pyright-incremental.py`` lets a session's second and later full
 runs pay for the files they changed (plus everything importing them) instead
 of a whole-tree check. That is sound only if its import resolution
 never misses a repository module and its baseline is only ever written by a
@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "pyright-incremental.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "pyright-incremental.py"
 
 
 def _load():
@@ -261,7 +261,7 @@ class TestConfig:
         assert "vtscore" in cfg.include and "tests_lib" in cfg.include
         assert "scripts/experiments/pile" in cfg.roots
         assert MOD.is_checkable("vtscore/config/paths.py", cfg)
-        assert not MOD.is_checkable("scripts/check-docs.py", cfg)
+        assert not MOD.is_checkable("scripts/gates/check-docs.py", cfg)
         assert not MOD.is_checkable("app.py", cfg)
 
 

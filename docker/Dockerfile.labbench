@@ -18,7 +18,7 @@
 #
 # That table is informational. The baked and locked embedder is whatever the
 # server warms for the type at startup, because the build runs that very
-# preload (scripts/preload_default_embedder.py); this file names no model.
+# preload (scripts/install/preload_default_embedder.py); this file names no model.
 # What it does pin is the requirements file, curated for that embedder, so a
 # change of default that needs new dependencies fails the bake step loudly
 # rather than shipping an image that cannot load its own embedder.
@@ -41,7 +41,7 @@
 #   * VTSEARCH_DATASET_MAX_AGE_DAYS=14 (below) caps dataset retention at 14
 #     days for every user; it overrides the persisted file for the process
 #     lifetime and is not editable via the settings API.
-#   * scripts/seed_labbench_settings.py seeds the data volume: the default
+#   * scripts/install/seed_labbench_settings.py seeds the data volume: the default
 #     user's ``solo_embedder_per_media_type`` locks each type to its baked
 #     embedder (the importer hides its embedder dropdown; users can override
 #     it in Settings > Import Defaults), and ``hidden_plugins`` drops the
@@ -151,9 +151,9 @@ ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
     TORCH_HOME=/opt/vtsearch/models \
     HF_HUB_DOWNLOAD_TIMEOUT=120 \
     PYTHONUNBUFFERED=1
-COPY scripts/preload_default_embedder.py scripts/preload_default_embedder.py
+COPY scripts/install/preload_default_embedder.py scripts/install/preload_default_embedder.py
 RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
-    python -u scripts/preload_default_embedder.py $(cat /opt/vtsearch/labbench-media-types)
+    python -u scripts/install/preload_default_embedder.py $(cat /opt/vtsearch/labbench-media-types)
 
 # ---------- application layer ----------
 COPY . .
@@ -172,7 +172,7 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 # a fresh named volume on first creation, so a new deployment comes
 # ready-to-serve without any first-run setup. What is seeded, and why, is in
 # the script's docstring.
-RUN python scripts/seed_labbench_settings.py $(cat /opt/vtsearch/labbench-media-types) /app/data
+RUN python scripts/install/seed_labbench_settings.py $(cat /opt/vtsearch/labbench-media-types) /app/data
 
 # Runtime data directory (settings, embeddings, datasets, media files).
 # Mount a volume here to persist user data across container restarts.

@@ -51,7 +51,7 @@ inclusions = 7,392 rows; run 2026-07-30.
 > `linear_svm`, taking the pre-#2877 parity-interleaved Hard/New order rather
 > than the app's phase machine, selecting against an un-offset threshold, and
 > pinning `calibration_fraction=0.5` where production resolves 0.3 — none of
-> which tripped a gate, because `scripts/check-eval-app-sync.py` covers nothing
+> which tripped a gate, because `scripts/gates/check-eval-app-sync.py` covers nothing
 > under `scripts/`. Issue #3408 replaced the mirror with a thin driver over
 > `simulate_voting_iterations`, which cannot drift because it keeps no copy; it
 > writes `autopilot_prod_*.csv` and leaves the files above untouched. The
