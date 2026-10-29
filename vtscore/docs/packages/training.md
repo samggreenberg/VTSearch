@@ -395,7 +395,9 @@ single-class. (`INCLUSION_MIN` / `INCLUSION_MAX` live in `thresholds/knobs.py`.)
 
 `vtscore/training/thresholds/conformal.py::calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion_value=0, rng=None, calibrate_count=2, calibration_fraction=0.5, hidden_dim=None, groups=None, score_rows_by_group=None)`.
 Cross-calibration in one call (the interactive path uses the split form
-below). For each of `calibrate_count` rounds:
+below). The folds come from `compute_fold_orderings`
+(`vtscore/training/thresholds/fold_orderings.py`, also importable from
+`conformal`). For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).

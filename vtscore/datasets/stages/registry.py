@@ -7,6 +7,8 @@ entry id (rolling the entry back if the migration fails).
 
 from __future__ import annotations
 
+import os
+import tempfile
 import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -24,6 +26,7 @@ from vtscore.datasets.registry import (
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS, _origin_to_str
 
 if TYPE_CHECKING:
+    from vtscore.datasets.stages.finalize import DroppedGroup
     from vtscore.state import DatasetContext
 
 
@@ -41,13 +44,14 @@ def _auto_register_dataset(
     extra_pickle_keys: dict | None = None,
     import_group: str | None = None,
     output_category: str = "",
+    dropped_groups: list[DroppedGroup] | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
     Unlike the old version, this accepts an explicit *media_dict* instead
     of reading from the global ``medias`` proxy, enabling parallel loads.
-    *import_group* / *output_category* go to the registry entry as given (see
-    :func:`~vtscore.datasets.registry.register_dataset`).
+    *import_group* / *output_category* / *dropped_groups* go to the registry
+    entry as given (see :func:`~vtscore.datasets.registry.register_dataset`).
 
     Returns the registry entry dict on success, or ``None`` on failure/skip.
     """
@@ -143,6 +147,7 @@ def _auto_register_dataset(
             expires_at=expires_at,
             import_group=import_group,
             output_category=output_category,
+            dropped_groups=dropped_groups,
         )
     except Exception:
         # Registry write failed; clean up the orphaned pkl so we don't
@@ -167,8 +172,13 @@ def _register_and_migrate(
     *,
     import_group: str | None = None,
     output_category: str = "",
+    dropped_groups: list[DroppedGroup] | None = None,
 ) -> tuple[str, str | None]:
     """Save to registry, migrate the context from task_id to its real id.
+
+    *dropped_groups* is what the finalize stage dropped for want of a vector
+    (:func:`~vtscore.datasets.stages.finalize._drop_none_embeddings_stage`),
+    kept on the entry so the user can read it after the toast is gone.
 
     Returns ``(context_id, registry_entry_id)``; *context_id* is the
     (possibly migrated) context id, and *registry_entry_id* is the id of
@@ -227,6 +237,7 @@ def _register_and_migrate(
         extra_pickle_keys=extra_pickle_keys,
         import_group=import_group,
         output_category=output_category,
+        dropped_groups=dropped_groups,
     )
     if entry is None:
         return task_id, None
@@ -246,6 +257,43 @@ def _register_and_migrate(
             traceback.print_exc()
         raise
     return entry_id, entry_id
+
+
+def resave_registered_dataset(entry: dict, medias: dict, coverage_atlas=None) -> None:
+    """Rewrite registry *entry*'s dataset file from *medias*, replacing it atomically.
+
+    For a repair made at load (:func:`~vtscore.datasets.stages.finalize.drop_incomplete_medias`):
+    the file is rewritten once, so the next load starts from the repaired
+    dataset rather than repairing it again.  The writer is the one the import
+    used, fed the entry's own metadata; *coverage_atlas* (the context's, when it
+    has one) is cached in the file as at import.  Entries the old file held
+    beside the medias (a Browse layout, its signposts) are not carried over:
+    they were laid out over media the rewrite no longer has.
+    """
+    extra_pickle_keys = None
+    if coverage_atlas is not None:
+        extra_pickle_keys = {"coverage_atlas": coverage_atlas.to_serializable()}
+    data_bytes = export_dataset_to_file(
+        medias,
+        embedder=entry.get("embedder", ""),
+        clipper=entry.get("clipper", ""),
+        media_type=entry.get("media_type", ""),
+        name=entry.get("name", ""),
+        created_at=entry.get("created_at"),
+        expires_at=entry.get("expires_at"),
+        extra_pickle_keys=extra_pickle_keys,
+    )
+    path = Path(entry["pkl_path"])
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as raw:
+            raw.write(data_bytes)
+            raw.flush()
+            os.fsync(raw.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
