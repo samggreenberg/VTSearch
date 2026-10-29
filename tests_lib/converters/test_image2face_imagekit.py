@@ -88,6 +88,28 @@ class TestConvert:
         assert first["width"] == 50 and first["height"] == 70
         assert first[SOURCE_BOX_FIELD] == pytest.approx([0.25, 0.2, 0.5, 0.55])
 
+    def test_each_crop_carries_a_grid_thumbnail(self, fake):
+        """A gallery of faces streams small tiles, not a decode per request (#5465)."""
+        from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM, make_image_thumbnail
+
+        conv = Image2FaceMediaConverter()
+        big = _png(1200, 1200)
+        fake.records = [
+            FaceRecord.from_detection(
+                FaceDetection((100, 100, 900, 1000), None, 0.9),
+                np.random.default_rng(42).standard_normal(512),
+                "fake:1",
+                "big.png",
+                0,
+            )
+        ]
+        (out,) = conv.convert_normalized({"filename": "big.png", "media_bytes": big}, _params())
+        # The tile the thumbnail route would have generated, built once here.
+        assert out["thumbnail_bytes"] == make_image_thumbnail(out["media_bytes"])[0]
+        with Image.open(io.BytesIO(out["thumbnail_bytes"])) as thumb:
+            assert max(thumb.size) == DEFAULT_MAX_DIM
+        assert (out["width"], out["height"]) == (800, 900)
+
     def test_thresholds_and_min_size_still_apply(self, fake):
         conv = Image2FaceMediaConverter()
         kept = conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params(threshold=0.8))
@@ -142,6 +164,8 @@ class TestRunnerCarryThrough:
             assert set(media["embeddings"]) == {"face"}
             assert media["embeddings"]["face"].shape == (512,)
             assert media["custom_metadata"]["Face Compat"] == "fake:1"
+            # The crop's thumbnail rides along too, so no tile decodes on request.
+            assert media["thumbnail_bytes"]
 
     def test_embed_stage_finds_nothing_missing(self, fake, tmp_path):
         from vtscore.datasets.stages.embedding import embed_missing
