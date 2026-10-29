@@ -264,10 +264,11 @@ class TestLoadingTaskProgressIsAuthoritative:
         A re-introduced process-wide sink would look harmless — it renders
         nowhere — right up until it parked on a message no worker could clear.
         """
-        import vtscore.concurrency.progress as progress_mod
+        from vtscore.concurrency import loading_tracker, progress, progress_cancel, progress_tracker
 
-        for gone in ("dataset_progress", "get_progress", "check_dataset_cancelled", "LEGACY_PROGRESS_TARGET"):
-            assert not hasattr(progress_mod, gone), f"{gone} is back; the legacy global progress system is not"
+        for progress_mod in (progress, progress_tracker, loading_tracker, progress_cancel):
+            for gone in ("dataset_progress", "get_progress", "check_dataset_cancelled", "LEGACY_PROGRESS_TARGET"):
+                assert not hasattr(progress_mod, gone), f"{gone} is back; the legacy global progress system is not"
 
     def test_unbound_thread_reports_into_a_noop(self):
         """With nothing bound, the resolved sink discards rather than parks."""

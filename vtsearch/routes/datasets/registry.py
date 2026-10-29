@@ -52,11 +52,12 @@ from vtscore.datasets.registry import (
     update_readers as _reg_update_readers,
 )
 from vtscore.security.readers import ReadersUpdate
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.registry import (
     DatasetAutofindRequestSchema,
     DatasetDomainShiftResponseSchema,
     DatasetRegistryDuplicatesResponseSchema,
     DatasetRegistryLoadResponseSchema,
+    DatasetRegistryOkResponseSchema,
     DatasetRegistryPreloadEmbedderResponseSchema,
     DatasetRegistryReadersRequestSchema,
     DatasetRegistryReadersResponseSchema,
@@ -64,7 +65,6 @@ from vtsearch.schemas.datasets import (
     DatasetRegistryRenameResponseSchema,
     DatasetRegistryStatsResponseSchema,
     DatasetsRegistryListResponseSchema,
-    DatasetRegistryOkResponseSchema,
 )
 from vtsearch.state import (
     DatasetContext,

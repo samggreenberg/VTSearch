@@ -48,19 +48,21 @@ from vtsearch.import_hooks import fire_dataset_imported
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
-from vtsearch.schemas.datasets import (
-    ClearStagingResponseSchema,
-    DatasetAvailableFilesResponseSchema,
-    DatasetCombineRequestSchema,
-    DatasetLoadStartedResponseSchema,
-    DatasetPromoteRequestSchema,
-    DatasetStageDemoRequestSchema,
-    DatasetStageFileResponseSchema,
-    DatasetStagingStartedResponseSchema,
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
     ImporterSuggestedNameRequestSchema,
     ImporterSuggestedNameResponseSchema,
+)
+from vtsearch.schemas.datasets.load import DatasetLoadStartedResponseSchema
+from vtsearch.schemas.datasets.staging import (
+    ClearStagingResponseSchema,
+    DatasetAvailableFilesResponseSchema,
+    DatasetCombineRequestSchema,
+    DatasetPromoteRequestSchema,
+    DatasetStageDemoRequestSchema,
+    DatasetStageFileResponseSchema,
+    DatasetStagingStartedResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
 from vtsearch.threading import spawn
