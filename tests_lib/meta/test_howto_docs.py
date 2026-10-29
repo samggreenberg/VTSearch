@@ -16,7 +16,7 @@ works for what these tests pin:
   browser, which has no route for it.
 
 Links, anchors and embedded screenshot ids are checked repo-wide by
-``scripts/check-docs.py`` and ``scripts/screenshots/wiring-check.py``; this
+``scripts/gates/check-docs.py`` and ``scripts/screenshots/wiring-check.py``; this
 file covers only what is particular to the docs the Help panel serves.
 """
 

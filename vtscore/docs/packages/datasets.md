@@ -18,7 +18,7 @@ The largest package in the library. Every module, grouped by role.
 | Module | Concern |
 |--------|---------|
 | `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
-| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export`, `label_entry_for_export`, `elements_for_media` |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export`, `label_entry_for_export`, `elements_for_media`; the scored-media hit dict (`build_media_hit`, `hit_custom_metadata`) |
 | `vtscore/datasets/metadata.py` | Per-media metadata extraction |
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
@@ -37,7 +37,10 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/chunks.py` | `DeferredChunk`, a chunk walked but not built (a resumed CLI run's skip) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
-| `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
+| `vtscore/datasets/load_pipeline.py` | Load entry points: an importer's form values in, a background load out; chunking (`consume_chunks_into`, `auto_chunk_size`) |
+| `vtscore/datasets/load_workers.py` | What every load flow shares: the download / embed gates and their controller, the task harness, field parsers, failure handling |
+| `vtscore/datasets/load_origin.py` | The single-dataset load: the importer under the gates, then every post-import stage |
+| `vtscore/datasets/load_staging.py` | The combine flow's staging import, saved to a temporary pkl under `STAGING_DIR` |
 | `vtscore/datasets/load_multi.py` | Multi-dataset imports: one importer run fanned out into one dataset per `OutputSpec` |
 | `vtscore/datasets/import_event.py` | `DatasetImported`, the frozen event a finished import hands its `on_finished` callback |
 | `vtscore/datasets/stages/` | The post-import stages the pipeline runs - see below |
@@ -223,6 +226,135 @@ merged = ls_a.merge(ls_b, ls_c, conflict_policy="drop")
 `"drop"` is the only supported `conflict_policy` today; entries with
 disagreeing labels across inputs are silently removed. See
 `element_key` in `vtscore/datasets/labelset.py` for the dedup key.
+
+---
+
+## Hits
+
+The other shape a scored media leaves the library in, beside a labelset's
+elements: the dict CLI autodetect results and the routes serve, and that
+`elements_for_media` accepts as a media. Both live in
+`vtscore/datasets/labelset.py` (`vtscore.utils.hits` until #5399, now a
+deprecated alias for that module).
+
+### `build_media_hit`
+
+The single source of truth for the scored-media hit-dict shape, used
+wherever scored rows are assembled (e.g. `vtscore.cli` autodetect
+results). If you score a media against a detector and want to
+return the result, build the row through this function rather than
+constructing the dict by hand - that's how new optional fields
+(clip boundaries, MD5, origin) get picked up automatically.
+
+```python
+def build_media_hit(
+    cid: int,
+    media: dict[str, Any],
+    score: float,
+    **extra: Any,
+) -> dict[str, Any]:
+```
+
+Defined in `vtscore/datasets/labelset.py`.
+
+#### Shape
+
+The returned dict always has these keys:
+
+| Key        | Type    | Source                                                       |
+|------------|---------|--------------------------------------------------------------|
+| `id`       | `int`   | the *cid* argument                                           |
+| `filename` | `str`   | `media["filename"]`, falling back to `f"media_{cid}"`        |
+| `category` | `str`   | `media["category"]`, falling back to `"unknown"`             |
+| `score`    | `float` | `round(score, 4)`                                            |
+
+Optional keys are added only when the corresponding field is present
+on *media*:
+
+| Key               | Added when…                                        |
+|-------------------|----------------------------------------------------|
+| `custom_metadata` | `media["custom_metadata"]` is a non-empty dict      |
+| `origin`          | `media["origin"] is not None`                      |
+| `origin_name`     | `media["origin_name"]` is truthy                   |
+| `md5`             | `media["md5"]` is truthy                           |
+| `clip_start`      | `media["clip_start"] is not None`                  |
+| `clip_end`        | `media["clip_end"] is not None`                    |
+| `clip_box`        | `media["clip_box"] is not None`                    |
+| `clip_index`      | `media["clip_index"] is not None`                  |
+
+`custom_metadata` is the importer-supplied metadata the media carries
+(asset ids, catalogue rows, whatever the source system attached), and
+it is what lets an exporter correlate a hit back to that system. It is
+a fresh dict, so mutating it cannot reach back into the loaded media,
+and the `embedding` key is stripped: that key is the pre-computed
+vector channel of `custom_metadata_map`, consumed at load time, and a
+numpy array has no business in an export.
+
+The `clip_*` keys are how sub-medias produced by a clipper round-trip
+through scoring. They are passed through unchanged so the consumer
+can reconstruct the time-range / spatial-region the score applies
+to.
+
+#### Example
+
+```python
+from vtscore.datasets.labelset import build_media_hit
+
+media = {
+    "filename": "talk_01.wav",
+    "category": "podcast",
+    "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
+    "origin_name": "/srv/sounds/talk_01.wav",
+    "md5": "abc123",
+    "custom_metadata": {"asset_id": "XY-7"},
+    "clip_start": 12.5,
+    "clip_end": 17.5,
+    "clip_index": 2,
+}
+
+hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
+
+# hit == {
+#     "id": 42,
+#     "filename": "talk_01.wav",
+#     "category": "podcast",
+#     "score": 0.873,
+#     "custom_metadata": {"asset_id": "XY-7"},
+#     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
+#     "origin_name": "/srv/sounds/talk_01.wav",
+#     "md5": "abc123",
+#     "clip_start": 12.5,
+#     "clip_end": 17.5,
+#     "clip_index": 2,
+#     "label": "good",
+# }
+```
+
+Extra keyword arguments are merged in last, so callers can attach
+detector-specific or call-site-specific fields (`label="good"`,
+`detector="my-detector"`) without needing to extend this function.
+
+### `hit_custom_metadata`
+
+```python
+def hit_custom_metadata(media: dict[str, Any]) -> dict[str, Any]:
+```
+
+The filter `build_media_hit` applies to `media["custom_metadata"]`, exposed
+on its own for every other surface that serves that dict to an outside
+caller. Returns a **fresh** dict - mutating it cannot reach back into the
+loaded media - carrying the importer's metadata minus the `embedding` key,
+and `{}` when the media has no `custom_metadata` (or a non-dict one).
+
+Reach for it anywhere a media's `custom_metadata` leaves the process: an
+export row, an API response, a payload handed to a plugin. Filtering the
+media's *top-level* keys is not enough, because `custom_metadata_map` lets
+an importer ship a pre-computed vector **nested inside** `custom_metadata`
+(see `vtscore.datasets.loader_folder.load_dataset_from_folder`). That vector
+is consumed at load time and is a numpy array, so left in it breaks
+`json.dumps` - and persisting it would be exactly the vector persistence the
+[no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule)
+forbids.
 
 ---
 
@@ -568,7 +700,7 @@ simulate, test = split_dataset(medias, test_fraction=0.2, seed=42)
 
 ## Concurrency gates
 
-`vtscore/datasets/load_pipeline.py` holds two module-level
+`vtscore/datasets/load_workers.py` holds two module-level
 [`ConcurrencyGate`](concurrency.md#concurrencygate)s (semaphores whose
 limit is re-read on every `acquire()`) that drive dataset loading:
 
@@ -584,6 +716,15 @@ under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
 gates directly; they're driven by the load orchestrator and read
 their limits with `vtscore.config.get_setting`.
+
+`reset_load_gates_for_tests()` rebinds both gates to fresh instances
+between tests, so code outside `load_workers` reads them through the
+module (`load_workers._embed_gate`), never through a `from ... import`
+copy; the same holds for the hook
+`register_last_embedder_persistence_hook` installs. The public names
+(`reset_load_gates_for_tests`, `register_last_embedder_persistence_hook`,
+`clear_dataset`, `STAGING_DIR`) still import from
+`vtscore.datasets.load_pipeline`.
 
 **Several datasets from one import** (`load_multi.py`). A multi-dataset
 load runs the importer's acquire phase once, under the download gate,

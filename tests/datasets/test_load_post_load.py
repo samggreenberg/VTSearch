@@ -83,12 +83,12 @@ _ORIGIN = {"importer": "test_post_load", "params": {}}
 
 def _run_load(tmp_path, load_fn, post_load=None, on_finished=None) -> str:
     """Run one full load synchronously and return its task id."""
-    from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+    from vtscore.datasets.load_origin import _run_origin_load_in_background
     from vtsearch import settings as settings_mod
 
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved"))
     with mock.patch(
-        "vtscore.datasets.load_pipeline.threading.Thread",
+        "vtscore.datasets.load_workers.threading.Thread",
         side_effect=_sync_thread_factory(),
     ):
         return _run_origin_load_in_background(
@@ -236,3 +236,16 @@ class TestOnFinishedHook:
         snapshot = _snapshot(task_id)
         assert snapshot["status"] == "idle"
         assert snapshot["error"] is None
+
+
+class TestEmbedderMemory:
+    def test_a_single_load_remembers_the_pick_through_the_public_register(self, isolated_settings, tmp_path):
+        """The load reads the hook at call time, so one installed after import is the one it calls."""
+        from vtscore.datasets.load_pipeline import register_last_embedder_persistence_hook
+
+        remembered: list[tuple[str, str]] = []
+        register_last_embedder_persistence_hook(lambda media_type, embedder: remembered.append((media_type, embedder)))
+
+        _run_load(tmp_path, _fake_load)
+
+        assert remembered == [("audio", "clap")]

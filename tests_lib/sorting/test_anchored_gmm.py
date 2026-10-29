@@ -834,7 +834,7 @@ class TestAnchoredEmStopping:
 
     def test_the_shipped_anchored_path_stops_on_the_log_likelihood(self, monkeypatch):
         """``fit_anchored_score_gmm`` reads the constant, and reads it per call."""
-        from vtscore.training.thresholds import gmm as gmm_mod
+        from vtscore.training.thresholds import gmm_em as gmm_mod
 
         x, _lo, _hi, a, lbl = self._problem()
         shipped: dict[str, float] = {}
@@ -926,7 +926,7 @@ class TestFoldAnchoredConvergenceProvenance:
         assert all(cut.fold_converged)
 
     def test_a_fold_that_ran_out_of_iterations_is_named(self, monkeypatch):
-        from vtscore.training.thresholds import gmm as gmm_mod
+        from vtscore.training.thresholds import gmm_em as gmm_mod
 
         # A tolerance of zero is never met, so every refit exhausts the cap.
         monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
@@ -939,7 +939,7 @@ class TestFoldAnchoredConvergenceProvenance:
 
     def test_the_marked_provenance_still_parses_as_a_of_k(self, monkeypatch):
         from vtscore.eval.row_metrics import folds_used
-        from vtscore.training.thresholds import gmm as gmm_mod
+        from vtscore.training.thresholds import gmm_em as gmm_mod
 
         monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
         folds, orderings, final = self._inputs()
@@ -1004,7 +1004,7 @@ class TestAnchoredRefitBudget:
         return x, a, lbl
 
     def test_a_slow_fold_converges_inside_the_shipped_budget(self):
-        from vtscore.training.thresholds import gmm as gmm_mod
+        from vtscore.training.thresholds import gmm_em as gmm_mod
 
         x, a, lbl = self._slow_fold()
         stats: dict[str, float] = {}

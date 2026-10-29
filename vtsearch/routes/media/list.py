@@ -4,9 +4,10 @@ Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 ``/api/openapi.json`` spec.
 
 :data:`medias_bp` carries every ``/api/medias/...`` route.  This module
-registers the listing ones (the id listing, batch metadata, and a converter
-output's source item); the rest register on the same blueprint from sibling
-modules, which :mod:`vtsearch.routes.media` imports after this one:
+registers the listing ones (the id listing, the example picker's listing,
+batch metadata, and a converter output's source item); the rest register on
+the same blueprint from sibling modules, which :mod:`vtsearch.routes.media`
+imports after this one:
 
 * :mod:`vtsearch.routes.media.content` - stream a media's bytes, thumbnail
   or text;
@@ -20,6 +21,7 @@ The helpers the content routes share live in
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from flask_smorest import Blueprint, abort
@@ -27,18 +29,22 @@ from flask_smorest import Blueprint, abort
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import media_embedder_names
 from vtscore.media.provenance import CLIP_WINDOW_FIELDS
-from vtscore.utils.hits import hit_custom_metadata
+from vtscore.datasets.labelset import hit_custom_metadata
 from vtsearch.routes._source import abort_source_not_loaded, source_locator
 from vtsearch.schemas.media import (
     MediaBatchRequestSchema,
     MediaBatchResponseSchema,
     MediaIdsListResponseSchema,
+    MediaPickerListingSchema,
+    MediaPickerQuerySchema,
     MediaSourceBatchEntrySchema,
     MediaSourceBatchRequestSchema,
     MediaSourceResponseSchema,
 )
 from vtsearch.routes._context import MISSING_DATASET_HEADER, require_dataset_header
 from vtsearch.state import get_media, snapshot_medias
+
+logger = logging.getLogger(__name__)
 
 medias_bp = Blueprint(
     "medias",
@@ -51,7 +57,7 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     """Copy the sometimes-present per-media fields onto a batch payload *out*.
 
     ``has_original`` marks an item some
-    :class:`~vtscore.media.cleaner.MediaCleaner` actually rewrote at load time
+    :class:`~vtscore.media.clipping.cleaner.MediaCleaner` actually rewrote at load time
     (it kept a pre-clean snapshot), which is what gates the detail viewer's
     Clean/Original toggle and the byte routes' ``?variant=original``.
     """
@@ -104,6 +110,43 @@ def list_media_ids():
         _attach_embedder_fields(item, c)
         result.append(item)
     return result
+
+
+def _name_matches(media: dict[str, Any], terms: list[str]) -> bool:
+    """Whether *media*'s filename or origin name holds every one of *terms* (lowercased)."""
+    name = f"{media.get('filename') or ''}\n{media.get('origin_name') or ''}".lower()
+    return all(term in name for term in terms)
+
+
+@medias_bp.route("/api/medias/picker")
+@medias_bp.arguments(MediaPickerQuerySchema, location="query")
+@medias_bp.response(200, MediaPickerListingSchema)
+@medias_bp.alt_response(400, description=MISSING_DATASET_HEADER)
+@require_dataset_header
+def media_picker_listing(query: dict):
+    """List the ids New Detector's *Pick from Dataset* grid shows, in the order it shows them.
+
+    A Face dataset's items come in **similarity order** - a 1-D UMAP of their
+    embeddings, so the crops of one person sit together (#5465) - fit when the
+    dataset was built, or here, once, for one built before that.  Every other
+    dataset lists in import order.  ``q`` keeps only the items whose name holds
+    every word of it, so typing a photo's name finds the faces cropped from it.
+    """
+    from vtscore.projection.similarity_order import ordered_ids, similarity_order_for  # noqa: PLC0415
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+
+    snap = snapshot_medias()
+    try:
+        order = similarity_order_for(get_active_context())
+    except Exception:
+        # The order is a nicety: a failed fit lists the items as imported.
+        logger.warning("Similarity order failed; listing in dataset order.", exc_info=True)
+        order = None
+    ids = ordered_ids(order, snap.keys())
+    terms = query["q"].lower().split()
+    if terms:
+        ids = [i for i in ids if _name_matches(snap[i], terms)]
+    return {"ids": ids, "total": len(snap), "order": "similarity" if order is not None else "dataset"}
 
 
 @medias_bp.route("/api/medias/batch", methods=["POST"])

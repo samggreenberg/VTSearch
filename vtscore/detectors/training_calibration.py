@@ -10,7 +10,7 @@ detector's embedding space.  Part of the detector training pipeline
 :mod:`vtscore.detectors.training_snap` and
 :mod:`vtscore.detectors.training_scoring`.
 
-``scripts/check-eval-app-sync.py`` pins four of these against the eval
+``scripts/gates/check-eval-app-sync.py`` pins four of these against the eval
 harness's default arm: ``_fused_threshold``, ``_calibration_score_rows``,
 ``_blend_schedule_for_snap`` and ``resolve_calibration_fraction``.
 """
@@ -212,7 +212,7 @@ def _fused_threshold(
 
     **Unscorable media never reach the fit.**  A media the head cannot score
     (a broken vector, a destabilised model) is recorded at
-    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`, a full unit below
+    :data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL`, a full unit below
     the sigmoid range; both estimators drop those before fitting, and both do
     it *inside* the shared :mod:`vtscore.training.thresholds` functions, so the
     eval harness's default arm inherits the same population without copying
@@ -229,7 +229,7 @@ def _fused_threshold(
         fit_fold_anchored_cut,
         reporting_line,
     )
-    from vtscore.utils.scores import scored_only  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import scored_only  # noqa: PLC0415
 
     n_unscorable = len(final_scores) - int(scored_only(final_scores).size)
     if n_unscorable:
@@ -415,7 +415,7 @@ def resolve_calibration_fraction(calibration_fraction: float | None, embedder_na
     whether the dataset carries a ``patch_grid`` (its spelling of "built by a
     patch embedder").  If the predicate here changes, the harness's has to
     move with it - the ``training.split_fraction_default`` mirror in
-    ``scripts/check-eval-app-sync.py`` pins this function for that reason.
+    ``scripts/gates/check-eval-app-sync.py`` pins this function for that reason.
     """
     if calibration_fraction is not None:
         return float(calibration_fraction)

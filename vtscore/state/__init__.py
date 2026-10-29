@@ -57,20 +57,14 @@ from vtscore.state.core import (  # noqa: F401
 )
 import vtscore.state.core as _core  # noqa: F401 - for conftest direct access
 
-# Re-export click tracking ------------------------------------------------
-from vtscore.state.clicks import (  # noqa: F401
-    assign_click_time,
-    get_vote_click_times,
-    remove_click_time,
-)
-
-# Re-export vote/label operations -----------------------------------------
+# Re-export vote/label operations and click tracking ----------------------
 from vtscore.state.votes import (  # noqa: F401
     add_label_to_history,
     add_textsort_suggestion,
     apply_label,
     apply_label_with_click_time,
     apply_labels_bulk_with_click_time,
+    assign_click_time,
     clear_votes,
     find_boundary_next,
     find_queue_ids,
@@ -78,6 +72,8 @@ from vtscore.state.votes import (  # noqa: F401
     get_find_scores,
     get_learned_scores,
     get_textsort_suggestions,
+    get_vote_click_times,
+    remove_click_time,
     rethreshold_unverified_find_items,
     set_find_initial_labels,
     set_find_scores,
@@ -192,7 +188,7 @@ def clear_all() -> None:
 # ---------------------------------------------------------------------------
 # Each ``set_X`` wrapper below does its in-memory work (e.g. cache
 # invalidation) and then delegates persistence to whatever the app
-# installed.  ``vtsearch/shim/register_app_persistence_hooks()`` wires
+# installed.  :func:`vtsearch.seam_wiring.register_app_persistence_hooks` wires
 # each key here to the matching ``vtsearch.settings.set_*`` function at
 # app startup.  Library-only callers (no app) see in-memory mutation
 # only.  See Hook 3 (``register_setting_persister``) of
@@ -219,7 +215,7 @@ _setting_persisters: dict[str, Callable[[Any], None]] = {}
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persistence callback for setting *key*.
 
-    Called by ``vtsearch/shim`` at app startup.  *key* must be one of
+    Called by ``vtsearch/seam_wiring.py`` at app startup.  *key* must be one of
     :data:`KNOWN_SETTING_KEYS`; a retired key (``inclusion``) is
     accepted with a ``DeprecationWarning`` and never fires.
     """

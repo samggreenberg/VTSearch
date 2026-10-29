@@ -12,6 +12,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore/media/`'s loose root modules moved into sub-packages** (issue #5401). The clipping
+  machinery is now `vtscore.media.clipping` (`clipper`, `cleaner`, `clip_recipe`, `lazy_clip`), the
+  torch helpers `vtscore.media.torch_utils` (`torch_ops`, `torch_setup`), and the structural pipeline
+  the `vtscore.media.structural` package: its core keeps the `vtscore.media.structural` path, while
+  `structural_geometry`, `structural_splg` and `structural_tiles` now sit inside it. The image
+  embedders moved to `vtscore.media.image.embedders` (`embedder_siglip`, …, with their shared bases),
+  and the image demo sources and categories to `vtscore.media.image.demo`. Embedder and clipper
+  registry names are unchanged, and `MediaClipper` / `MediaCleaner` still import from `vtscore.media`.
+  **The old public paths are deprecated, not removed:** `from vtscore.media.clipper import MediaClipper`,
+  `import vtscore.media.image.embedder_siglip` and the rest still work through the `_MOVED_MODULES`
+  table in `vtscore/media/__init__.py`, each emitting a `DeprecationWarning` that names the new path,
+  and resolve to the very same module object. The alias is runtime-only, so a static type checker
+  (pyright, mypy) reports an old path as unresolved: move the import. Embedder discovery now also
+  scans a media type's `embedders/` sub-package, so the name `embedders` is reserved for that container. A flat
+  `embedder_<name>.py` (or `embedder_<name>/` package) dropped straight into the media-type package is
+  still discovered as before. See `packages/media.md`.
+
 - **The load pipeline drops an item any of its embedders could not read** (issue #3798). In a multi-embedder load
   an item one embedder declined kept another's vector (or the one its importer shipped), passed the finalize
   stage's check for a primary vector, and was saved with a hole in one of the dataset's spaces, so
@@ -47,6 +64,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   `labels_line`; setting `labels_line.HEAD_COUNT_BADS` now changes nothing. The eval harness's swaps
   (`vtscore.eval.live_threshold_rules`) do this already. See `packages/training.md`.
 
+- **The calibration folds left `thresholds.conformal` for `thresholds.fold_orderings`** (issue #5428).
+  The Train/Calibrate splits and the per-fold fits (`compute_fold_orderings`,
+  `compute_grouped_fold_node_scores`, `nearest_holdout`, `CALIBRATION_SPLIT_SEED` and their private helpers)
+  now live in `vtscore.training.thresholds.fold_orderings`; `conformal` keeps the quantile rule, the fold
+  combiners and the fold cache. Every name still imports from `vtscore.training.thresholds`, and the public
+  fold names still import from `vtscore.training.thresholds.conformal`. The private helpers (`_grouped_folds`,
+  `_split_train_counts`, ...) and the module's `time` are no longer reachable as `conformal._name`: a stub for
+  anything the fold code reads (its per-fold clock, the split sizing) patches `fold_orderings`, while a stub for
+  `compute_fold_orderings` that should reach `calibration_folds` still patches `conformal`. Behaviour is
+  unchanged.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
@@ -58,6 +86,46 @@ instead, since every commit on `dev` is effectively a new app release.)
   ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
+- **`vtscore.training.thresholds.spot_check` is four modules** (issue #5425). The 1,446-line module
+  keeps the ranking and the walk (`LineRanking`, `SpotCheck`). The balance's presets, the bands and the
+  check's schedule (`balance_schedule`, `band_edges`, `check_shape`, `resolve_line_knobs`, the `CHECK_*` /
+  `BALANCE_*` / `WALK_*` constants, ...) moved to `vtscore.training.thresholds.check_schedule`. The
+  likely range (`likely_range`, `LikelyRange`, the hypergeometric and Clopper-Pearson bounds,
+  `range_tail`) moved to `.ranges`, and the mixture's counts and the balance's state
+  (`mixture_posterior`, `walk_positives`, `fbeta_count`, `balance_count`, `balance_state`,
+  `BalanceState`, ...) to `.balance`. Every public name still imports from `thresholds.spot_check` and
+  from `vtscore.training.thresholds`, as the same object. `spot_check.__all__` now also lists the eight
+  public names it had left out (`LINE_DECIMALS`, `MIXTURE_MIN_STD_SHARE`, `acquisition_count`,
+  `acquisition_threshold`, `aim_words`, `band_edges_fine`, `resolve_line_knobs`, `walk_positives`).
+  The private `_mixture_is_sound` is reachable only from `.balance`. A test that stubs a moved name
+  patches the module that defines it: patching `spot_check.mixture_posterior` no longer reaches
+  `walk_positives`. See `packages/training.md`.
+
+- **`vtscore.datasets.load_pipeline` is split into four modules along its seams** (issue #5422). The
+  1,375-line module keeps the load entry points (`_run_importer_in_background`, `consume_chunks_into`,
+  `auto_chunk_size`). The rest moved to three siblings: `load_workers` holds what every load flow shares (the
+  download / embed concurrency gates and `_LoadGateController`, the task harness, the field parsers, the
+  failure and terminal-state handling, the last-embedder persistence hook). `load_origin` holds the
+  single-dataset load (`_run_origin_load_in_background`, `_finish_dataset_load`), and `load_staging` the
+  combine flow's staging import. The public names `register_last_embedder_persistence_hook`, `clear_dataset`,
+  `reset_load_gates_for_tests`, `consume_chunks_into`, `auto_chunk_size` and `STAGING_DIR` still import from
+  `vtscore.datasets.load_pipeline` and behave as before. The private helpers now live in the module that
+  owns them; import them from there, and a test that stubs one patches the module that calls it. The
+  rebound globals `_download_gate`, `_embed_gate` and `_last_embedder_persistence_hook` are no longer
+  attributes of `load_pipeline`: read them off `vtscore.datasets.load_workers`, which is where
+  `reset_load_gates_for_tests` and `register_last_embedder_persistence_hook` rebind them. See
+  `packages/datasets.md`.
+
+- **The test sample's vocabulary is its own module, `vtscore.training.thresholds.line_test_types`** (issue
+  #5427). The constants (`TEST_ALPHA`, `TEST_DRAWS`, `TEST_DRAW_SEED`, `JEFFREYS`, `MODEL_FLOOR`,
+  `TEST_PROVENANCE`, the sides, phases and stop reasons, `FOUND_WORDS`), `LineBudgets` and `DEFAULT_BUDGETS`,
+  `Band` and `line_bands`, `Estimate`, `EdgeEstimate`, `LineEstimates` and `found_words`, `PhaseReport` and
+  `RoundAhead` moved there unchanged. `LineTest`, `line_phase` and the pool's knobs (`POOLED_WEIGHT`,
+  `POOL_RADIUS`, `FIRST_PASS_BEFORE_BUDGET`, `pooled_weight`) stay in `line_test`, which re-exports every
+  moved name, so `vtscore.training.thresholds.line_test.X` and `vtscore.training.thresholds.X` resolve as
+  before, and a study that rebinds a pool knob still patches `line_test`. The one name lost is `band_edges`,
+  which `line_test` only imported: take it from `vtscore.training.thresholds.check_schedule`. See
+  `packages/training.md`.
 
 - **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
   module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
@@ -86,6 +154,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   helpers moved with their stage; a test that stubs one patches the module that looks it up, which for
   `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
   `packages/detectors.md`.
+
+- **`vtscore.plugins` is split into `field`, `base` and `registry` modules** (issue #5417). `PluginField`,
+  its value types, `parse_checkbox` and `inactive_field_keys` now live in `vtscore.plugins.field`;
+  `PluginBase` in `vtscore.plugins.base`; `PluginRegistry`, `make_plugin_registry` and `EntryPointTombstone`
+  in `vtscore.plugins.registry`. Every name in `vtscore.plugins.__all__` still imports from
+  `vtscore.plugins` and behaves as before; only the moved classes' `__module__` changes. The private
+  name-derivation helpers (`_LEGACY_PLUGIN_NAME_SUFFIXES`, `_default_plugin_name`, `_snake_case`, ...) moved
+  to `vtscore.plugins.base` and are no longer reachable as `vtscore.plugins._name`. See `packages/plugins.md`.
+
+- **`vtscore.training.thresholds.gmm` is split into four modules** (issue #5424): `gmm_core` (`GmmFit1D`,
+  the crossing solvers and `CUT_KIND_*`, `gmm_fit_array`, `scored_ordering`, `snap_cut_to_sample`), `gmm_em`
+  (the plain and anchored EM fits and their stopping rules), `gmm_threshold` (`gmm_cut_from_fit`,
+  `fit_gmm_threshold`, `calculate_gmm_threshold`) and `text_sort` (the typed-query sort's lines). Every name
+  still imports from `vtscore.training.thresholds` and from `vtscore.training.thresholds.gmm`, now a
+  re-export facade, and behaves bit for bit as before. A stub that rebinds a module global has to patch the
+  module whose function reads it: `gmm_em._EM_LOGLIK_TOL` / `_ANCHORED_EM_LOGLIK_TOL`,
+  `text_sort.TEXT_SORT_CUT_RULE`, `gmm_core._GMM_MAX_SAMPLES`; a rebind on `gmm` is now ignored.
 
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
@@ -330,7 +415,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   head is on the context, as it did when that head had no ranking.
 
 - **A converter output a clipper or cleaner changed replays converter first** (issue #5041). The new
-  `vtscore.media.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
+  `vtscore.media.clipping.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
   the `clipper_chain` that ran on its output: the converter's step, then that chain (`None` when either cannot
   be read). `lazy_clip.clip_recipe` returns it as a `("chain", …)` recipe for an audio / image / text
   converter output some clipper cut or cleaner rewrote; it used to return the converter recipe, which rebuilds
@@ -371,7 +456,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   `local_features` onto each media dict it embeds.
 
 - **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
-  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  `vtscore.media.clipping.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
   image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
   same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
   through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
@@ -975,7 +1060,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   beta=None)` now draws the line at the balance (the new
   `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
   of `line_knobs` and the `thresholds.line_preference_default` mirror of
-  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `scripts/gates/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
   `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
   under a balance as it was under a floor. `aim_words(state)` says which
   preference an unchecked set was exported at ("aiming at 25% right" / "at
@@ -1519,6 +1604,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   an embedder could not read them) and `dropped` (those items as the `DroppedGroup`s the registry entry keeps, a
   copy). All three are empty on a failed import. A hook that emails the user can now list what to look into.
 
+- **`vtscore.projection.similarity_order`: a 1-D similarity order over a dataset** (issue #5465).
+  `fit_similarity_order(matrix, ids, *, n_neighbors, min_dist, random_state=None)` sorts the ids by a 1-D UMAP of
+  their embeddings (PCA-1 below ten points, as given below three) and returns a `SimilarityOrder(ids, method)`;
+  `ordered_ids(order, ids)` merges an order with the live ids, skipping removed ones and appending new ones.
+  `similarity_order_for(ctx, *, fit=True)` serves a dataset's order from `DatasetContext._similarity_order`, else from
+  the container's new `similarity_order.json` entry (`container.append_similarity_order` /
+  `read_similarity_order`), else fits, caches and persists one, for the media types in `ORDERED_MEDIA_TYPES`
+  (Face); it answers `None` for every other type. The load pipeline fits it for a freshly built Face dataset, in a new
+  `similarity_order` finalize slot. `DatasetContext.reset_derived_caches` takes a matching `order=` family flag
+  (default `True`, like the others).
+- **Face crops carry a grid thumbnail** (issue #5465). `image2face` emits `thumbnail_bytes` for each crop (the
+  converter runner now carries that key onto the media), `FaceMediaType.ensure_thumbnail_bytes` builds one for a face
+  without it, and `export_dataset_to_file` backfills a missing face thumbnail as it already did for images.
 - **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
   dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
   `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it
@@ -2644,6 +2742,26 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **`vtscore.utils.hits`, `vtscore.utils.scores`, `vtscore.utils.import_metadata` and
+  `vtscore.state.clicks`** (issue #5399). Each was a small module whose callers sat in one other module,
+  and each was folded into that module:
+
+  - `vtscore.utils.hits` (`build_media_hit`, `hit_custom_metadata`) → **`vtscore.datasets.labelset`**,
+    beside the labelset elements that are the other shape a scored media is exported as.
+  - `vtscore.utils.scores` (`NON_FINITE_SCORE_SENTINEL`, `sigmoid_to_finite_scores`,
+    `sigmoid_to_finite_array`, `finite_or`, `scored_mask`, `scored_only`) →
+    **`vtscore.training.thresholds.knobs`**, beside the other threshold sentinels.
+  - `vtscore.utils.import_metadata` (`seed_packages_distributions`, `fast_packages_distributions`,
+    `original_packages_distributions`) → **`vtscore.media.torch_utils.torch_setup`**, beside
+    `ensure_torch_configured`.
+  - `vtscore.state.clicks` (`assign_click_time`, `remove_click_time`, `get_vote_click_times`) →
+    **`vtscore.state.votes`**, its only caller.
+
+  Each old name still imports, and is the new module itself rather than a copy, so a stub patched through
+  either name is the one the library reads. Importing it emits a `DeprecationWarning`, and it will be
+  removed in a future release. The `vtscore.state` / `vtsearch.state` re-exports of the click-time
+  functions are unchanged. `vtscore.utils` keeps `hashing`, `optional_deps` and `synthetic`.
+
 - **`vtscore.cli_progress`, `vtscore.cli_resume` and `vtscore.cli_pipeline`** (issue #5397), now
   `vtscore.cli.progress`, `vtscore.cli.resume` and `vtscore.cli.pipeline`. Each old name still imports, and
   is the new module itself rather than a copy, so a format set or a stub patched through either name is
@@ -2925,7 +3043,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   A detector saved before this keeps the stray `chain` in its stored `input_spec`, and still re-clips (as it
   always did) until its labels are next saved, which captures the spec again.
 
-- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.lazy_clip` read the recipe of a
+- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.clipping.lazy_clip` read the recipe of a
   reference-mode clip or converter output from `origin.params`, which a duplicate collapse replaces with the
   group's, so a merged item had no recipe and the resolvers served its whole source file instead (the photo a face
   was cut from). It now reads the representative's own origin, the group's first member.

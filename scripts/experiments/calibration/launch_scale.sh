@@ -20,7 +20,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -226,7 +226,7 @@ PYCHK
   submit prepare --job-name=scale-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
   ;;
 
 size)
@@ -239,7 +239,7 @@ size)
     submit "size$idx" --job-name="scale-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time=2:00:00 --partition="$PARTITION" --export=ALL \
       --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
   done
   ;;
 
@@ -292,7 +292,7 @@ PYSHAPE
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL \
     --output="$LOGS/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
 redo)
@@ -309,7 +309,7 @@ redo)
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL \
     --output="$LOGS/redo-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
 status)

@@ -22,7 +22,7 @@ STRATA="$BASE/person_strata.csv"
 for f in "$BASE/example_baseline_k1.csv" "$BASE/example_baseline_k4.csv" "$STRATA"; do
   [[ -s "$f" ]] || { echo "sota_face_viewer: no $f" >&2; exit 3; }
 done
-source "$WT/gridenv.sh" >/dev/null 2>&1
+source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1
 export VTS_REPO="$WT"
 
 label() { [[ "$1" == 1 ]] && echo "1 photo" || echo "$1 photos"; }

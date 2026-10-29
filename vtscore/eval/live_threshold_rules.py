@@ -120,7 +120,7 @@ def xcal_mincost_threshold(
 def gmm_midpoint_threshold(haystack_scores: Sequence[float]) -> float:
     """The label-free cut: a two-component GMM over the haystack, cut at the midpoint of its means."""
     from vtscore.training.thresholds import fit_gmm_threshold  # noqa: PLC0415
-    from vtscore.utils.scores import scored_only  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import scored_only  # noqa: PLC0415
 
     population = scored_only(list(haystack_scores))
     cut, _fit = fit_gmm_threshold(population.tolist())

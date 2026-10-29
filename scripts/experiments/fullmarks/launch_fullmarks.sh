@@ -32,7 +32,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ER
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 export PATH="$HOME/.local/bin:$PATH"
@@ -99,7 +99,7 @@ build)
   cat > "$RUNNER" <<RUNNER_EOF
 #!/usr/bin/env bash
 set -uo pipefail
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 export PATH="\$HOME/.local/bin:\$PATH"
@@ -147,7 +147,7 @@ slate)
   cat > "$RUNNER" <<RUNNER_EOF
 #!/usr/bin/env bash
 set -uo pipefail
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 export VTS_FULLMARKS_OUT="$VTS_FULLMARKS_OUT"
@@ -200,7 +200,7 @@ siglip)
   cat > "$RUNNER" <<RUNNER_EOF
 #!/usr/bin/env bash
 set -uo pipefail
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 export VTS_FULLMARKS_OUT="$VTS_FULLMARKS_OUT"
@@ -261,7 +261,7 @@ embed)
   cat > "$RUNNER" <<RUNNER_EOF
 #!/usr/bin/env bash
 set -uo pipefail
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 export VTS_FULLMARKS_OUT="$VTS_FULLMARKS_OUT"

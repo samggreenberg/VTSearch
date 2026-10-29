@@ -27,7 +27,7 @@ reasons in pixel coordinates:
   bitmap first is pure waste.  Call sites that report pixel coordinates
   multiply them back by ``1 / scale`` to stay in original-image space.
 * **Full resolution** — cropping/clipping (:mod:`vtscore.media.cropping`,
-  :mod:`vtscore.media.lazy_clip`, the image clippers).  A crop's box comes
+  :mod:`vtscore.media.clipping.lazy_clip`, the image clippers).  A crop's box comes
   from the media's stored ``width``/``height`` and the user expects the
   region back at full fidelity, so those paths keep decoding at native
   size.  They still benefit from the lifted ceiling: before it, they

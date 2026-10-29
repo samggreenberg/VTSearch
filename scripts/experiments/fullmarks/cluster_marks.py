@@ -224,7 +224,7 @@ def describe_marks(
         return np.array(rows, dtype=bool)
 
     if backend == "siglip":
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder  # noqa: PLC0415
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder  # noqa: PLC0415
 
         embedder = ImageSiglipEmbedder()
         crops = []

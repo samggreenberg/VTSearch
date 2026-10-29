@@ -34,7 +34,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 
 export VTS_REPO="$WT"
 export VTS_GRID_STUDY="${VTS_GRID_STUDY:-/expscratch/$USER/patchgrid-3159}"
@@ -135,19 +135,19 @@ build)
   submit build --job-name=grid3159-build --partition=gpu --gres="gpu:${GPU_TYPE}:1" \
     --nodelist="$GPU_NODE" --cpus-per-task=8 --mem=48G --time=4:00:00 \
     --output="$LOGS/build-%j.out" \
-    --wrap="source $WT/gridenv.sh && export HF_HOME=$VTS_PILE/models ATEN_CPU_CAPABILITY=avx2 VTSEARCH_EMBED_BATCH_SIZE=$BATCH VTSEARCH_TORCH_THREADS=8 OMP_NUM_THREADS=8 && cd $HERE && python build_grid_3159.py build --force --datasets $DATASETS && python build_grid_3159.py adopt-cls --datasets $DATASETS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && export HF_HOME=$VTS_PILE/models ATEN_CPU_CAPABILITY=avx2 VTSEARCH_EMBED_BATCH_SIZE=$BATCH VTSEARCH_TORCH_THREADS=8 OMP_NUM_THREADS=8 && cd $HERE && python build_grid_3159.py build --force --datasets $DATASETS && python build_grid_3159.py adopt-cls --datasets $DATASETS"
   ;;
 
 verify)
   submit verify --job-name=grid3159-verify --partition=cpu --ntasks=1 --cpus-per-task=2 --mem=24G \
     --time=1:00:00 --output="$LOGS/verify-%j.out" \
-    --wrap="source $WT/gridenv.sh && cd $HERE && python build_grid_3159.py verify --datasets $DATASETS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && cd $HERE && python build_grid_3159.py verify --datasets $DATASETS"
   ;;
 
 drift)
   submit drift --job-name=grid3159-drift --partition=cpu --ntasks=1 --cpus-per-task=8 --mem=48G \
     --time=6:00:00 --output="$LOGS/drift-%j.out" \
-    --wrap="source $WT/gridenv.sh && export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 && cd $HERE && python grid_drift_3159.py --datasets $DATASETS --out $VTS_GRID_STUDY/drift"
+    --wrap="source $WT/scripts/grid/gridenv.sh && export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 && cd $HERE && python grid_drift_3159.py --datasets $DATASETS --out $VTS_GRID_STUDY/drift"
   ;;
 
 prepare)
@@ -158,7 +158,7 @@ prepare)
     [[ -f "$VTS_GRID_STUDY/piles/$arm/provenance.json" ]] || { echo "FAIL: arm $arm has no provenance.json" >&2; exit 2; }
     submit "prep-$arm" --job-name="grid3159-prep-$arm" --mem=32G --cpus-per-task=4 --ntasks=1 \
       --time=2:00:00 --partition=cpu --output="$exp/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $(arm_env "$arm") && cd $HERE && python run_cells_3159.py --prepare"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$arm") && cd $HERE && python run_cells_3159.py --prepare"
   done
   ;;
 
@@ -174,7 +174,7 @@ size)
   ln -sfn "$exp/results/crops" "$S/crops"
   submit "size-$ARM-$IDX" --job-name=grid3159-size --mem="$MEM" --cpus-per-task="$CPUS" --ntasks=1 \
     --time=2:00:00 --partition=cpu --output="$exp/logs/size-$IDX-%j.out" \
-    --wrap="source $WT/gridenv.sh && $(arm_env "$ARM") && export CALIB_RESULTS=$S && cd $HERE && time python run_cells_3159.py --index $IDX"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$ARM") && export CALIB_RESULTS=$S && cd $HERE && time python run_cells_3159.py --index $IDX"
   ;;
 
 cells)
@@ -189,7 +189,7 @@ cells)
     submit "cells-$arm" --job-name="grid3159-$arm" --array="0-$((N-1))%$CONC" \
       --mem="$MEM" --cpus-per-task="$CPUS" --ntasks=1 --time="$TIME" --partition=cpu \
       --output="$exp/logs/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $(arm_env "$arm") && cd $HERE && python run_cells_3159.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$arm") && cd $HERE && python run_cells_3159.py"
   done
   ;;
 

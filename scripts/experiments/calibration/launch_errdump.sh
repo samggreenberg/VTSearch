@@ -42,7 +42,7 @@ HERE="$WT/scripts/experiments/calibration"
 ROOT="${ERRDUMP_ROOT:-/expscratch/$USER/bench-errors}"
 DUMP="$ROOT/dumps"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 
@@ -109,7 +109,7 @@ if [[ "$PROFILE" == "text" ]]; then
   J=$(sbatch --parsable --job-name="errdump-text" --mem=48G --cpus-per-task=6 \
       --time=3:00:00 --partition=cpu --export=ALL \
       --output="$EXP/logs/text-%j.out" \
-      --wrap="source $WT/gridenv.sh && export VTS_REPO=$WT \
+      --wrap="source $WT/scripts/grid/gridenv.sh && export VTS_REPO=$WT \
         VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME \
         && cd $HERE && python text_baseline.py --results $SRC/results \
              --out $EXP/text_baseline_$1.csv --dump-dir $DUMP/text")
@@ -147,7 +147,7 @@ for spec in "$@"; do
   J=$(sbatch --parsable --job-name="errdump-$PROFILE$idx" --mem=48G --cpus-per-task=6 \
       --time=3:00:00 --partition=cpu --export=ALL \
       --output="$EXP/logs/err-$PROFILE-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export VTS_DUMP_TAG=$tag && cd $HERE && python run_cells.py --index $idx")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export VTS_DUMP_TAG=$tag && cd $HERE && python run_cells.py --index $idx")
   if [[ "$J" =~ ^[0-9]+$ ]]; then
     echo "idx $idx ($tag) -> job $J"
   else

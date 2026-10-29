@@ -11,6 +11,7 @@ runs *after* an importer has populated a context's ``medias`` dict:
 
 The orchestration that strings these together (gate handoff, progress
 routing, background threading) stays in
-:mod:`vtscore.datasets.load_pipeline`; these modules hold the per-stage work
+:mod:`vtscore.datasets.load_origin`, on the gates and task harness of
+:mod:`vtscore.datasets.load_workers`; these modules hold the per-stage work
 so the orchestrator reads as a sequence of named steps.
 """

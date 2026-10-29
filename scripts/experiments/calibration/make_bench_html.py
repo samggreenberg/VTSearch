@@ -119,7 +119,7 @@ def slugify(text: str) -> str:
 
     Runs of hyphens are *preserved* — `## a / b — c` slugs to `a--b--c`, not
     `a-b-c` — which is the difference between an in-page link resolving and
-    landing nowhere. Same rule as `scripts/check-docs.py`, which is what
+    landing nowhere. Same rule as `scripts/gates/check-docs.py`, which is what
     validates those links in the markdown.
     """
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)  # link text only

@@ -15,8 +15,9 @@ from __future__ import annotations
 import math
 
 from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_schedule
-from vtscore.training.thresholds.gmm import GmmFit1D, fit_gmm_threshold
-from vtscore.utils.scores import scored_only
+from vtscore.training.thresholds.gmm_core import GmmFit1D
+from vtscore.training.thresholds.gmm_threshold import fit_gmm_threshold
+from vtscore.training.thresholds.knobs import scored_only
 
 
 def calculate_safe_threshold(
@@ -62,7 +63,7 @@ def calculate_safe_threshold(
         without breaking ``score >= threshold`` comparisons.
 
     Media the head could not score are dropped from *all_scores* before the
-    GMM sees them (:func:`~vtscore.utils.scores.scored_only`); they are
+    GMM sees them (:func:`~vtscore.training.thresholds.knobs.scored_only`); they are
     recorded a unit below the sigmoid range and would otherwise pull a fitted
     component - and the blend with it - under zero (issue #3180).  When that
     leaves *no* population at all, there is nothing for the GMM to stand in

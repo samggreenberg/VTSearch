@@ -20,7 +20,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm`, `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `spot_check`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
+| `vtscore/training/thresholds/`                                        | Threshold helpers: `knobs`, `costs`, `gmm_core`, `gmm_em`, `gmm_threshold`, `text_sort` (`gmm` re-exports those four), `anchored`, `conformal`, `blend`, `precision_floor`, `labels_line` (drawn from `class_model`, `corpus_model`, `head_count`), `check_schedule`, `ranges`, `spot_check`, `balance`, `line_test_types`, `line_test` (all re-exported from `vtscore.training.thresholds`) |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the plain SVM head's fit, an eval arm) |
 | `vtscore/training/svm_prior.py`                                       | `centroid_prior_direction`, `fit_linear_svm_prior_head`: the linear SVM started from the Goods' centroid (`LINEAR_SVM_PRIOR_HEAD`), the production head (#4776, #4785) |
@@ -287,9 +287,59 @@ are summarised in
 | `balance_schedule` / `SpotCheck` / `likely_range` | The balance's spot check (#4272, #4413): the cap, bands and picks a walk costs, the walk itself, and the likely ranges a checked set carries |
 | `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps, the count rule over it (now only for a context with no head, and the harness's `walk_shape` arms), and the state every response carries |
 
+### Unscorable media: `NON_FINITE_SCORE_SENTINEL`, `scored_only`
+
+In `vtscore/training/thresholds/knobs.py`, beside the threshold sentinels
+(`vtscore.utils.scores` until #5399, now a deprecated alias for that module):
+
+```python
+NON_FINITE_SCORE_SENTINEL: float = -1.0
+
+def sigmoid_to_finite_scores(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> list[float]: ...
+def sigmoid_to_finite_array(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> np.ndarray: ...
+def finite_or(value, default=NON_FINITE_SCORE_SENTINEL) -> float: ...
+def scored_mask(scores) -> np.ndarray: ...
+def scored_only(scores) -> np.ndarray: ...
+```
+
+A trained head can emit `NaN` logits when training destabilises - bad
+optimisation, corrupted input embeddings, AMP overflow on CUDA, an
+extreme class-weight shift. `torch.sigmoid(NaN)` is `NaN`, and
+`json.dumps` will happily emit the bare token `NaN` (and
+`Infinity` / `-Infinity`), which is invalid JSON per RFC 7159 and is
+rejected by every browser's `JSON.parse`.
+
+So every score-emitting path routes through one sentinel. `-1.0` sits
+*outside* the `[0, 1]` sigmoid range, which buys two things: `score >=
+threshold` is always `False` for a sanitised score, so broken items fall
+deterministically to the bottom of any sort; and a UI that renders a
+missing score as `-1` shows it exactly like "no score yet".
+
+Use `sigmoid_to_finite_scores` in place of
+`torch.sigmoid(model(X)).squeeze(1).cpu().tolist()` at any site whose
+output reaches a JSON response. Use `sigmoid_to_finite_array` where the
+output feeds straight into numpy math (e.g. segmented max-pool): it ends
+in `.numpy()` instead of `.tolist()`, avoiding a pure-Python,
+GIL-holding O(N) pass that matters on the background training thread.
+`finite_or` is the defensive guard for already-stored floats such as
+`DetectorContext.last_learned_scores`.
+
+`scored_mask` / `scored_only` are the other side of the sentinel: they
+say which entries of a score list are *observations* at all. The
+sentinel means "this media could not be scored", which is a different
+statement from "this media scored low", so anything that fits a
+distribution - every threshold estimator in
+`vtscore.training.thresholds` - drops it first. Skipping that step is
+not a rounding error but a sign flip: a spike a full unit below the
+sigmoid range pulls the fitted cut under zero, where every real score
+clears it and the detector reports the whole dataset as a hit.
+`scored_mask` returns the mask rather than the filtered array so
+a caller holding a score list *and* its labels (a calibration ordering)
+drops the same positions from both.
+
 ### `text_sort_cuts(scores, rule=None, beta=None)`
 
-`vtscore/training/thresholds/gmm.py` (import from `vtscore.training.thresholds`).
+`vtscore/training/thresholds/text_sort.py` (import from `vtscore.training.thresholds`).
 The two lines a **typed-query** sort carries (issue #4136), as a frozen
 `TextSortCuts(threshold, acq_threshold, branch)`, drawn from one mixture fit.
 Called by `vtscore/training/query_sort.py::text_sort_active`, which the
@@ -332,14 +382,14 @@ bit-identical to `calculate_gmm_threshold`.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds/gmm.py`. Fits a 2-component 1-D Gaussian
+`vtscore/training/thresholds/gmm_threshold.py`. Fits a 2-component 1-D Gaussian
 mixture to the score list and returns the **midpoint between the two
 component means**. Used to produce a reasonable operating point even when
 only a few labels exist - the score distribution still tends to be bimodal
 because the embedder space already separates "kind of like X" from "kind of
 not like X".
 
-The fit is `fit_score_gmm`: a deterministic 2-means init and EM, stopping
+The fit is `fit_score_gmm` (`gmm_em.py`): a deterministic 2-means init and EM, stopping
 when an iteration improves the mean log-likelihood by less than 1e-3 (the
 same criterion as sklearn's `GaussianMixture`, which `fit_score_gmm_sklearn`
 keeps available for comparison but which production no longer calls).
@@ -395,7 +445,9 @@ single-class. (`INCLUSION_MIN` / `INCLUSION_MAX` live in `thresholds/knobs.py`.)
 
 `vtscore/training/thresholds/conformal.py::calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion_value=0, rng=None, calibrate_count=2, calibration_fraction=0.5, hidden_dim=None, groups=None, score_rows_by_group=None)`.
 Cross-calibration in one call (the interactive path uses the split form
-below). For each of `calibrate_count` rounds:
+below). The folds come from `compute_fold_orderings`
+(`vtscore/training/thresholds/fold_orderings.py`, also importable from
+`conformal`). For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
@@ -635,7 +687,13 @@ follow that.
 
 `vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
 stopped at the F-beta peak by #4413 and priced in
-[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)),
+split along its seams in #5425: `check_schedule.py` holds the balance's
+presets, the bands and the schedule, `ranges.py` the likely range,
+`spot_check.py` `LineRanking` and `SpotCheck`, and `balance.py` the mixture's
+counts, the count rule and the balance's state. Every name below still
+imports from `vtscore.training.thresholds.spot_check` as well as from the
+package.
 The line's preference is a **balance**: F-beta's *beta*, with the presets
 `BALANCE_PRESETS` (0.25, 1, 4; `DEFAULT_BETA` 1) and any value in
 `[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps
@@ -716,7 +774,7 @@ range comes only from those picks, never from a model.
   `kept_at_check`). `aim_words(state)` names the balance in a
   message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
+`scripts/gates/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
 ### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`
@@ -727,7 +785,13 @@ never trained on what share of what its line ships would be right and what
 share of the real matches it would ship, as likely ranges from uniform picks
 within rank bands; this module is the sample, its estimators, the allocation
 rule and the phase machine, pure statistics over ids, ranks and labels that
-the app's routes and the eval harness both call.
+the app's routes and the eval harness both call. Its vocabulary (the
+constants, `LineBudgets`, `Band` and `line_bands`, the estimates and
+`found_words`, `PhaseReport`, `RoundAhead`) lives in `line_test_types.py`,
+which never reads the sample, and `line_test` re-exports all of it. The
+pool's knobs (`POOLED_WEIGHT`, `POOL_RADIUS`, `FIRST_PASS_BEFORE_BUDGET`,
+`pooled_weight`) stay in `line_test`, where the sample looks them up, so a
+study that rebinds one patches `line_test`.
 
 **Why it is shaped this way.** AutoFind ships the set above the line unchecked,
 and nobody downstream can tell a wrong match from a missed one, so a test

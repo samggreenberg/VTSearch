@@ -570,7 +570,7 @@ https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its inte
 ```
 
 and likewise `region-photo/`, `document-logo/` and `face/`. `.github/workflows/publish-sota.yml`
-rebuilds them with `scripts/publish-sota-site.py` on each **push to `dev`**
+rebuilds them with `scripts/release/publish-sota-site.py` on each **push to `dev`**
 that touches a report, so a report has its link as soon as it merges. Three
 things keep a report on its link:
 

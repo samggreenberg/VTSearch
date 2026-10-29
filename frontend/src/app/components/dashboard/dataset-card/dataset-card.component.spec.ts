@@ -265,26 +265,27 @@ describe('DatasetCardComponent', () => {
     expect(btn.textContent?.trim()).toBe('Cancelling…');
   });
 
-  it('shows no category badge for a dataset with no import siblings', () => {
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.badge-category')).toBeFalsy();
+  it('gives the name no import tooltip for a dataset with no import siblings', () => {
+    const name = (fixture.nativeElement as HTMLElement).querySelector('.dataset-name') as HTMLElement;
+    expect(name.hasAttribute('title')).toBe(false);
   });
 
-  it('shows the import category, naming the siblings, for a multi-dataset import (#4747)', async () => {
+  it('names the siblings on hover, with no category badge, for a multi-dataset import (#4747, #5461)', async () => {
     fixture.componentRef.setInput('dataset', {
       ...mockDataset,
-      name: 'Photos – Document',
-      media_type: 'image',
+      name: 'Photos – Face',
+      media_type: 'face',
       import_group: 'g1',
-      output_category: 'document',
+      output_category: 'face',
     });
-    fixture.componentRef.setInput('importSiblings', ['Photos – Image', 'Photos – Face']);
+    fixture.componentRef.setInput('importSiblings', ['Photos – Image']);
     await settleZoneless(fixture);
 
-    const badge = (fixture.nativeElement as HTMLElement).querySelector('.badge-category') as HTMLElement;
-    expect(badge).toBeTruthy();
-    // The category, not the media type: the rendered pages are image media.
-    expect(badge.textContent?.trim()).toBe('Document');
-    expect(badge.title).toBe('Imported together with Photos – Image, Photos – Face');
+    const el = fixture.nativeElement as HTMLElement;
+    const name = el.querySelector('.dataset-name') as HTMLElement;
+    // The name already says "Face" and so does the Type column: no third copy.
+    expect(name.textContent?.trim()).toBe('Photos – Face');
+    expect(el.querySelector('.name-cell')?.textContent).not.toMatch(/Face\s*Face/);
+    expect(name.title).toBe('Imported together with Photos – Image');
   });
 });

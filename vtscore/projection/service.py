@@ -329,7 +329,7 @@ def reset_full_projection(ctx: DatasetContext) -> None:
     (which are shared across shapes).  The subset layout is deliberately left
     standing: it is an independent fit the user may still be browsing.
     """
-    ctx.reset_derived_caches(matrices=False, lookups=False, projection=True, subset=False)
+    ctx.reset_derived_caches(matrices=False, lookups=False, projection=True, subset=False, order=False)
     store.remove_persisted_projections(ctx.dataset_id)
 
 
@@ -498,7 +498,7 @@ def build_subset_layout(
         # the survivors of a cull re-spread instead of keeping their old slots.
         # Drops the layout, its pyramids, the in-flight job id, the tile-cache
         # token, and the signposts anchored in the dropped layout.
-        ctx.reset_derived_caches(matrices=False, lookups=False, projection=False, subset=True)
+        ctx.reset_derived_caches(matrices=False, lookups=False, projection=False, subset=True, order=False)
         ctx._subset_ids = sorted_ids
 
     return start_subset_build(ctx, sorted_ids, matrix, bin_shape, force=force)

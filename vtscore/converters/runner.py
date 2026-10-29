@@ -65,6 +65,9 @@ def _normalise_converter_specs(
 #: (:data:`vtscore.media.provenance.SOURCE_BOX_FIELD`).  The importer-hook
 #: and clipper-chain paths keep the whole output dict, so without these two
 #: names a folder or demo conversion lost what the other paths keep (#4748).
+#: ``thumbnail_bytes`` is the grid tile a converter built while it still held
+#: the output decoded (``image2face`` does, #5465); without it every tile of a
+#: converted dataset is decoded and resized on the request thread.
 _OPTIONAL_OUTPUT_FIELDS = (
     "media_bytes",
     "media_string",
@@ -73,6 +76,7 @@ _OPTIONAL_OUTPUT_FIELDS = (
     "word_count",
     "character_count",
     "custom_metadata",
+    "thumbnail_bytes",
     SOURCE_BOX_FIELD,
 )
 
@@ -272,7 +276,7 @@ def _emit_converted_outputs(
     ``_relazify_reference_clips_stage`` strips those bytes after embedding so
     the saved dataset stores only the source path plus the converter recipe
     (in ``origin.params``); the bytes are reproduced on demand by
-    :mod:`vtscore.media.lazy_clip`.
+    :mod:`vtscore.media.clipping.lazy_clip`.
     """
     media_id = start_id
     n_out = len(outputs)
@@ -334,7 +338,7 @@ def run_converters_on_folder(
             (``converter`` / ``converter_param_*`` / ``converter_out_index``
             / ``converter_n_out`` / ``converter_content_hash`` in
             ``origin.params``) instead of N copies of the rendered output.
-            :mod:`vtscore.media.lazy_clip` reproduces the bytes on demand.
+            :mod:`vtscore.media.clipping.lazy_clip` reproduces the bytes on demand.
         on_progress: Optional progress callback.
         base_origin: The origin dict of the parent import (e.g.
             ``{"importer": "server_folder", "params": {"path": "..."}}``)

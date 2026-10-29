@@ -39,7 +39,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -139,7 +139,7 @@ gate)
   submit gate --job-name="$JOB_NAME-gate" "${DEP_ARG[@]}" --mem="${GATE_MEM:-32G}" --cpus-per-task=2 \
     --time="${GATE_TIME:-8:00:00}" --partition="$PARTITION" --export=ALL \
     --output="$LOGS/gate-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python gate_3825.py --corpus $CORPUS --out $ANALYSIS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python gate_3825.py --corpus $CORPUS --out $ANALYSIS"
   ;;
 
 bench)
@@ -150,7 +150,7 @@ bench)
   submit bench --job-name="$JOB_NAME-bench" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
     --time="${BENCH_TIME:-6:00:00}" --partition="$PARTITION" --export=ALL \
     --output="$LOGS/bench-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python bench_3825.py --corpus $CORPUS --out $ANALYSIS/bench3825.csv --per-cell ${BENCH_PER_CELL:-1} --reps ${BENCH_REPS:-5}"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python bench_3825.py --corpus $CORPUS --out $ANALYSIS/bench3825.csv --per-cell ${BENCH_PER_CELL:-1} --reps ${BENCH_REPS:-5}"
   ;;
 
 ab)
@@ -170,7 +170,7 @@ ab)
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/ab-$arm-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS ANCHORED_STOP_ARM=$arm ANCHORED_RULE_ARM=$arm && cd $HERE && python $AB_RUNNER"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS ANCHORED_STOP_ARM=$arm ANCHORED_RULE_ARM=$arm && cd $HERE && python $AB_RUNNER"
   done
   ;;
 
@@ -182,7 +182,7 @@ abanalyze)
     submit "abanalyze_$arm" --job-name="$JOB_NAME-abanalyze-$arm" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
       --time=2:00:00 --partition="$PARTITION" --export=ALL \
       --output="$LOGS/abanalyze-$arm-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_$arm/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab_$arm && mkdir -p $ANALYSIS/ab_$arm && cd $CALIB && python analyze_ab.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_$arm/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab_$arm && mkdir -p $ANALYSIS/ab_$arm && cd $CALIB && python analyze_ab.py"
   done
   ;;
 
@@ -190,7 +190,7 @@ analyse)
   submit analyse --job-name="$JOB_NAME-analyse" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=1:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/analyse-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python analyze_3825.py --analysis $ANALYSIS && python figures_3825.py --analysis $ANALYSIS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python analyze_3825.py --analysis $ANALYSIS && python figures_3825.py --analysis $ANALYSIS"
   ;;
 
 status)
