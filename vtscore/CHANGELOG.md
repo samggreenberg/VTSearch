@@ -116,6 +116,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   `reset_load_gates_for_tests` and `register_last_embedder_persistence_hook` rebind them. See
   `packages/datasets.md`.
 
+- **The test sample's vocabulary is its own module, `vtscore.training.thresholds.line_test_types`** (issue
+  #5427). The constants (`TEST_ALPHA`, `TEST_DRAWS`, `TEST_DRAW_SEED`, `JEFFREYS`, `MODEL_FLOOR`,
+  `TEST_PROVENANCE`, the sides, phases and stop reasons, `FOUND_WORDS`), `LineBudgets` and `DEFAULT_BUDGETS`,
+  `Band` and `line_bands`, `Estimate`, `EdgeEstimate`, `LineEstimates` and `found_words`, `PhaseReport` and
+  `RoundAhead` moved there unchanged. `LineTest`, `line_phase` and the pool's knobs (`POOLED_WEIGHT`,
+  `POOL_RADIUS`, `FIRST_PASS_BEFORE_BUDGET`, `pooled_weight`) stay in `line_test`, which re-exports every
+  moved name, so `vtscore.training.thresholds.line_test.X` and `vtscore.training.thresholds.X` resolve as
+  before, and a study that rebinds a pool knob still patches `line_test`. The one name lost is `band_edges`,
+  which `line_test` only imported: take it from `vtscore.training.thresholds.check_schedule`. See
+  `packages/training.md`.
+
 - **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
   module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
   helpers move verbatim to four sibling modules, none of which reads back: `labelset_embeddings`
