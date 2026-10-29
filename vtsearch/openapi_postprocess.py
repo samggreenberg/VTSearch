@@ -10,7 +10,7 @@ on every URL rename.
 rule to its view function, and writes ``operationId = view_func.__name__``
 into the spec. It is wired up in ``app.py`` by wrapping
 ``api.spec.to_dict`` so both the live ``/api/openapi.json`` endpoint and
-the ``scripts/dump_openapi.py`` snapshot dumper see the post-processed
+the ``scripts/gates/dump_openapi.py`` snapshot dumper see the post-processed
 result.
 """
 

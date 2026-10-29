@@ -7,7 +7,7 @@ embedder's ``supports_patch_regions`` capability; the eval harness resolves
 ``patch_grid`` presence - both through the same
 :func:`vtscore.training.thresholds.production_split_for` table, so the values
 cannot drift (the ``training.split_fraction_default`` mirror in
-``scripts/check-eval-app-sync.py`` pins the predicates).
+``scripts/gates/check-eval-app-sync.py`` pins the predicates).
 """
 
 import numpy as np

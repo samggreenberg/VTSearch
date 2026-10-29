@@ -29,7 +29,7 @@ last link of the #2836 chain. Splitting them would force duplication or a shared
 layer that re-flattens what the split just separated.
 
 What the subdirectories were actually wanted for is **knowing which file belongs
-to which study**, and that is a table. `scripts/check-calibration-index.py`
+to which study**, and that is a table. `scripts/gates/check-calibration-index.py`
 (a `run-tests.sh` gate) requires this index to be *total* in both directions:
 every `.py` and `.sh` here appears in it exactly once, and every file it names
 exists. So a new study's files cannot land unclassified, and a deletion cannot

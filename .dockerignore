@@ -50,7 +50,7 @@ README.md
 CLAUDE.md
 
 # Scripts (not needed at runtime)
-scripts/download_models.sh
+scripts/install/download_models.sh
 scripts/install-cpu.sh
 scripts/install-gpu.sh
 scripts/install-plugin-deps.sh
