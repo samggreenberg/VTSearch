@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from vtscore.utils.scores import scored_mask
+from vtscore.training.thresholds.knobs import scored_mask
 
 if TYPE_CHECKING:
     from vtscore.training.query_sort import SortLine
@@ -342,7 +342,7 @@ def scored_ordering(
     """A fold's ``(scores, labels)`` ordering with the unscored items dropped.
 
     A held-out item whose fold model produced a non-finite logit is recorded at
-    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL` (``-1.0``) - the
+    :data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL` (``-1.0``) - the
     orderings are cached and swept, so they cannot hold ``NaN``.  As a
     *calibration anchor* that sentinel is worse than useless: the rules here
     read the anchors as positions on the sigmoid scale, and a labelled item

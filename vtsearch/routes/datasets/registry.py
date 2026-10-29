@@ -506,7 +506,7 @@ def dataset_domain_shift(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import get_active_context
-    from vtsearch.training_domain import DomainShiftUnavailable, domain_shift_against
+    from vtsearch.domain_overlap import DomainShiftUnavailable, domain_shift_against
 
     entry = _reg_get(dataset_id)
     if entry is None:

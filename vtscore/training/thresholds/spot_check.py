@@ -66,7 +66,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR
+from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR, scored_mask
 
 #: The level the likely range is drawn at: each band's tail (#4257's alpha).
 #: #4272 split it over the bands in the set; #4483 dropped the split.
@@ -416,7 +416,7 @@ class LineRanking:
     """The ranking a detector's line is drawn over: the haystack the last retrain scored, sorted.
 
     *ids* and *scores* are aligned and sorted by score descending (ties by id),
-    with unscorable media (:func:`~vtscore.utils.scores.scored_mask`) left out.
+    with unscorable media (:func:`~vtscore.training.thresholds.knobs.scored_mask`) left out.
     *voted* names the items the trainer held as voted - the labelset's items
     resolved into the haystack - which never enter a candidate; the caller adds
     the live votes cast since (:meth:`unvoted_ids`).
@@ -436,8 +436,6 @@ class LineRanking:
     def from_scores(
         cls, ids: Sequence[int], scores: Sequence[float] | np.ndarray, voted: Iterable[int] | None = None
     ) -> "LineRanking":
-        from vtscore.utils.scores import scored_mask  # noqa: PLC0415
-
         id_arr = np.asarray(list(ids), dtype=np.int64)
         score_arr = np.asarray(scores, dtype=np.float64)
         if id_arr.shape != score_arr.shape:

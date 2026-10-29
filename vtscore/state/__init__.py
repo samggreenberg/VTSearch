@@ -57,20 +57,14 @@ from vtscore.state.core import (  # noqa: F401
 )
 import vtscore.state.core as _core  # noqa: F401 - for conftest direct access
 
-# Re-export click tracking ------------------------------------------------
-from vtscore.state.clicks import (  # noqa: F401
-    assign_click_time,
-    get_vote_click_times,
-    remove_click_time,
-)
-
-# Re-export vote/label operations -----------------------------------------
+# Re-export vote/label operations and click tracking ----------------------
 from vtscore.state.votes import (  # noqa: F401
     add_label_to_history,
     add_textsort_suggestion,
     apply_label,
     apply_label_with_click_time,
     apply_labels_bulk_with_click_time,
+    assign_click_time,
     clear_votes,
     find_boundary_next,
     find_queue_ids,
@@ -78,6 +72,8 @@ from vtscore.state.votes import (  # noqa: F401
     get_find_scores,
     get_learned_scores,
     get_textsort_suggestions,
+    get_vote_click_times,
+    remove_click_time,
     rethreshold_unverified_find_items,
     set_find_initial_labels,
     set_find_scores,

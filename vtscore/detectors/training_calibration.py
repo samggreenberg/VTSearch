@@ -212,7 +212,7 @@ def _fused_threshold(
 
     **Unscorable media never reach the fit.**  A media the head cannot score
     (a broken vector, a destabilised model) is recorded at
-    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`, a full unit below
+    :data:`~vtscore.training.thresholds.knobs.NON_FINITE_SCORE_SENTINEL`, a full unit below
     the sigmoid range; both estimators drop those before fitting, and both do
     it *inside* the shared :mod:`vtscore.training.thresholds` functions, so the
     eval harness's default arm inherits the same population without copying
@@ -229,7 +229,7 @@ def _fused_threshold(
         fit_fold_anchored_cut,
         reporting_line,
     )
-    from vtscore.utils.scores import scored_only  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import scored_only  # noqa: PLC0415
 
     n_unscorable = len(final_scores) - int(scored_only(final_scores).size)
     if n_unscorable:

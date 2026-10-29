@@ -78,8 +78,7 @@ def _fit_label(base: str) -> str:
 
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
 from vtscore.media.base import ProgressCallback
-from vtscore.media.torch_setup import ensure_torch_configured
-from vtscore.utils.import_metadata import seed_packages_distributions
+from vtscore.media.torch_setup import ensure_torch_configured, seed_packages_distributions
 
 logger = logging.getLogger(__name__)
 

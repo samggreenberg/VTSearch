@@ -988,7 +988,7 @@ class TestClipFieldsInBuildMediaHit:
     """build_media_hit should include clip fields when present."""
 
     def test_hit_includes_clip_start_end(self):
-        from vtscore.utils.hits import build_media_hit
+        from vtscore.datasets.labelset import build_media_hit
 
         media = {
             "filename": "clip.wav",
@@ -1004,7 +1004,7 @@ class TestClipFieldsInBuildMediaHit:
         assert hit["clip_index"] == 0
 
     def test_hit_includes_clip_box(self):
-        from vtscore.utils.hits import build_media_hit
+        from vtscore.datasets.labelset import build_media_hit
 
         media = {
             "filename": "tile.png",
@@ -1018,7 +1018,7 @@ class TestClipFieldsInBuildMediaHit:
         assert hit["clip_index"] == 1
 
     def test_hit_omits_clip_fields_when_absent(self):
-        from vtscore.utils.hits import build_media_hit
+        from vtscore.datasets.labelset import build_media_hit
 
         media = {"filename": "full.wav", "category": "audio", "md5": "xyz"}
         hit = build_media_hit(1, media, 0.5)

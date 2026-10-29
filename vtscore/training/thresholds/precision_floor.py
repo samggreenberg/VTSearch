@@ -88,7 +88,7 @@ from typing import Any
 import numpy as np
 
 from vtscore.training.thresholds.gmm import gmm_fit_array, scored_ordering
-from vtscore.utils.scores import scored_only
+from vtscore.training.thresholds.knobs import scored_only
 
 #: Positives among the calibration folds' held-out votes below which no promise
 #: is made.  #4220: gated here, the fold-rank lower bound with EM breaks 6% of
@@ -536,7 +536,7 @@ class PrecisionFloorEstimate:
     *n_boot* refits are paid by :meth:`curve` - once, under a lock, and then
     kept.  Moving the floor after that is :meth:`PrecisionFloorCurve.cut`.
 
-    Every score array goes through :func:`~vtscore.utils.scores.scored_only`
+    Every score array goes through :func:`~vtscore.training.thresholds.knobs.scored_only`
     (and each held-out vote through
     :func:`~vtscore.training.thresholds.scored_ordering`), so an item the head
     could not score is absent rather than an observation a unit below the

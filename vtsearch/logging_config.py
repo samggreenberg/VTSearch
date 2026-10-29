@@ -348,7 +348,7 @@ def install_transformers_logging_bridge() -> None:
     # Imported lazily: ``logging_config`` is app.py's very first import, and a
     # module-level ``vtscore`` import here would pull the library package in
     # before logging is configured.
-    from vtscore.utils.import_metadata import seed_packages_distributions  # noqa: PLC0415
+    from vtscore.media.torch_setup import seed_packages_distributions  # noqa: PLC0415
 
     seed_packages_distributions()
     try:

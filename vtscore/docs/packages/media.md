@@ -33,7 +33,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
 | `vtscore/media/structural_tiles.py` | Tiled VLAD: the structural Stage 1 for document pages |
 | `vtscore/media/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
-| `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
+| `vtscore/media/torch_setup.py` | Runtime setup for embedder code: torch's thread count, and the stat-free `packages_distributions` seed |
 
 **Media types** - one self-registering sub-package each. Every one holds a
 `media_type.py` (the `MediaType`), plus whichever of `clipper.py`,
@@ -362,6 +362,31 @@ import.
   applies `vtscore.config.TORCH_THREADS` (env `$VTSEARCH_TORCH_THREADS`,
   default `1`) once, if torch is already imported. `embedder_load_setup`
   calls it for you.
+
+---
+
+## Stat-free package metadata
+
+In `vtscore/media/torch_setup.py` (`vtscore.utils.import_metadata` until #5399,
+now a deprecated alias for that module), beside `ensure_torch_configured`: both
+are runtime setup the embedding loader does before it touches a model.
+
+
+```python
+def fast_packages_distributions() -> Mapping[str, list[str]]: ...
+def seed_packages_distributions() -> bool: ...
+```
+
+`transformers` calls `importlib.metadata.packages_distributions()` at
+module import time, and the stdlib implementation `stat()`s every file
+recorded by every installed distribution - tens of thousands of calls,
+which on an NFS-mounted venv can stall startup for minutes.
+`fast_packages_distributions` builds the same mapping from each
+distribution's `top_level.txt` (falling back to parsing `RECORD` as text)
+without touching the recorded files. `seed_packages_distributions()`
+installs it over the stdlib function; call it once, early, **before
+anything imports `transformers`**. It is idempotent and best-effort
+(returns `False` when the swap could not be made).
 
 ---
 
