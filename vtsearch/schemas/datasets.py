@@ -1111,8 +1111,8 @@ class DatasetRegistryEntrySchema(Schema):
     num_dropped = fields.Integer(
         metadata={
             "description": (
-                "How many imported items were left out because they ended up with no vector (the embedder "
-                "could not read them). The stats endpoint names them."
+                "How many items the dataset lost because they had no vector: an embedder could not read them, "
+                "or they were missing a vector the rest of the dataset has. The stats endpoint names them."
             )
         }
     )
@@ -1379,7 +1379,7 @@ class DatasetRegistryStatsResponseSchema(Schema):
     num_dupes = fields.Integer(required=True)
     num_dropped = fields.Integer(
         required=True,
-        metadata={"description": "How many imported items were left out because they ended up with no vector."},
+        metadata={"description": "How many items the dataset lost because they had no vector; see ``dropped_groups``."},
     )
     dropped_groups = fields.List(
         fields.Nested(DroppedItemsGroupSchema),
