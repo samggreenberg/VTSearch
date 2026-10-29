@@ -621,7 +621,7 @@ settings families could not join a library-tier umbrella anyway.)
   `discover_modules=True`.
 - **Register it twice.** A new family registers a `FamilyProvider` with
   `vtscore.plugins.inventory` (app-tier ones in
-  `vtsearch.shim.register_app_plugin_families()`), and gets an entry in
+  `vtsearch.seam_wiring.register_app_plugin_families()`), and gets an entry in
   `REGISTRY_FAMILIES` in `scripts/gates/gen-docs-inventories.py`, which refuses
   to generate the table above for a family it cannot place.
 
