@@ -5,7 +5,7 @@ used to leave undeclared.
 reached only through ``getattr(mt, "image_response", None)`` in two route
 helpers.  Duck-typing an ABC's own hook makes it invisible three ways: a
 third-party author reading ``MediaType`` cannot find it, the extension guides
-cannot document it (``scripts/check-extension-docs.py`` rejects a table naming
+cannot document it (``scripts/gates/check-extension-docs.py`` rejects a table naming
 a member the class does not define), and a typo in an override degrades to
 "this type has no picture" instead of failing.  These tests pin the declared
 shape: a ``None`` default that keeps a minimal type working, an override that

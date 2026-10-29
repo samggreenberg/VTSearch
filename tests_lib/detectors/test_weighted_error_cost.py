@@ -3,7 +3,7 @@
 Issue #3414: the shipped Smart indicator
 (:func:`vtscore.detectors.labeling_progress._score_step`) and the eval
 harness's window scorer used to carry independent hand copies of the same
-FP/FN counting loop, with nothing in ``scripts/check-eval-app-sync.py`` pinning
+FP/FN counting loop, with nothing in ``scripts/gates/check-eval-app-sync.py`` pinning
 them together.  Both then delegated to
 :func:`vtscore.training.thresholds.weighted_error_cost`.  Since #5134 Smart reads
 each model's best F-beta instead, and both tiers delegate to

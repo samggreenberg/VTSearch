@@ -71,7 +71,7 @@
 #          leaves two of four cores idle for its whole run; the free lanes
 #          fill them, instead of starting beside pytest's four workers, where
 #          they cost it 77s (startup went from 25s to 73s).
-#      pyright itself is incremental: scripts/pyright-incremental.py checks
+#      pyright itself is incremental: scripts/gates/pyright-incremental.py checks
 #      only the files changed since the last green check plus everything that
 #      transitively imports them, which is exact rather than heuristic (a
 #      file's diagnostics depend on its text, its transitive imports, the
@@ -132,7 +132,7 @@
 #
 # The frontend gates also prune themselves on any full run: when the branch
 # changes no frontend/ path they have nothing to judge (that is a claim about
-# the diff, decided by scripts/check-frontend-gate.py), so the build, npm audit
+# the diff, decided by scripts/gates/check-frontend-gate.py), so the build, npm audit
 # and Vitest are skipped and the verdict says so. The build still runs when
 # `static/` holds no bundle, so the tests that serve one do not build it inside
 # a pytest worker.
@@ -253,7 +253,7 @@ bash .claude/hooks/ensure-test-deps.sh
 # Flask; we do not re-run the linting we already do in the main path.
 if [[ "${1:-}" == "vtscore-clean" ]]; then
     shift
-    exec python scripts/check-vtscore-clean.py "$@"
+    exec python scripts/gates/check-vtscore-clean.py "$@"
 fi
 
 # ---------------------------------------------------------------------------
@@ -578,7 +578,7 @@ _skipped_gates=()
 _note_skipped() { _skipped_gates+=("$1"); }
 
 # Which frontend gates run, decided up front against the branch diff by
-# scripts/check-frontend-gate.py, so a frontend change in a worktree with no
+# scripts/gates/check-frontend-gate.py, so a frontend change in a worktree with no
 # node_modules fails in the first seconds instead of after pytest, and a
 # backend-only change does not spend the build and the Vitest suite re-checking
 # origin/dev's frontend. An unreadable answer is a block: a gate that cannot
@@ -601,7 +601,7 @@ if $_run_frontend_check || $_run_frontend_unit; then
         fi
     else
         _fe_why=$(mktemp)
-        _fe_gate_decision=$(python scripts/check-frontend-gate.py 2> "$_fe_why" || true)
+        _fe_gate_decision=$(python scripts/gates/check-frontend-gate.py 2> "$_fe_why" || true)
         case "$_fe_gate_decision" in
             run)
                 _run_frontend_build=true
@@ -645,7 +645,7 @@ fi
 #
 # A lane's name is what the run prints for it, and docs/TESTING.md's stage
 # tables list every lane by that name, in its stage and kind. Adding, removing,
-# renaming or re-kinding a lane fails scripts/check-docs.py until the table
+# renaming or re-kinding a lane fails scripts/gates/check-docs.py until the table
 # says the same.
 # ---------------------------------------------------------------------------
 _lane_log_dir=$(mktemp -d)
@@ -729,11 +729,11 @@ _last_line() { sed -r 's/\x1b\[[0-9;]*m//g' "$1" | grep -v '^[[:space:]]*$' | ta
 # Two signals, because deletions are only the visible half: whole paths that
 # vanished, and runs of consecutive commits the branch keeps nothing of (a
 # clobber whose reverted hunks sit inside files that survive deletes nothing
-# at all). See scripts/check-phantom-base.py for both and their measured
+# at all). See scripts/gates/check-phantom-base.py for both and their measured
 # false-positive rates.
 # ---------------------------------------------------------------------------
 echo "Checking for a stale tree..."
-if ! python scripts/check-phantom-base.py ; then
+if ! python scripts/gates/check-phantom-base.py ; then
     _blocked "branch reverts work it never touched (stale tree)"
     exit 1
 fi
@@ -759,7 +759,7 @@ _gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # broken code fences, undated study directories, docs/TESTING.md's stage
 # tables against the gates this script runs, and line-number anchors. Pure
 # invariants against the current tree — nothing to re-pin.
-_gate_check_docs() { python scripts/check-docs.py ; }
+_gate_check_docs() { python scripts/gates/check-docs.py ; }
 _gate_deptry() { python -m deptry . ; }
 # OpenAPI snapshot drift: regenerate the flask-smorest spec from the live app
 # and diff against the checked-in snapshot at frontend/openapi.json. The
@@ -768,7 +768,7 @@ _gate_deptry() { python -m deptry . ; }
 _gate_openapi_drift() {
     local regen log
     regen=$(mktemp); log=$(mktemp)
-    if ! python scripts/dump_openapi.py > "$regen" 2> "$log"; then
+    if ! python scripts/gates/dump_openapi.py > "$regen" 2> "$log"; then
         echo "OpenAPI spec dump failed:"
         cat "$log"
         rm -f "$regen" "$log"
@@ -776,7 +776,7 @@ _gate_openapi_drift() {
     fi
     if ! diff -u frontend/openapi.json "$regen" > /dev/null; then
         echo "OpenAPI snapshot is stale. Run 'npm run regenerate-openapi-snapshot' (or"
-        echo "'python scripts/dump_openapi.py > frontend/openapi.json') and commit the result."
+        echo "'python scripts/gates/dump_openapi.py > frontend/openapi.json') and commit the result."
         diff -u frontend/openapi.json "$regen" | head -80
         rm -f "$regen" "$log"
         return 1
@@ -786,12 +786,12 @@ _gate_openapi_drift() {
 }
 # Generated doc-inventory drift: regenerate the registry-backed tables embedded
 # in the docs (embedders, plugin families, demo datasets, ...) and fail if any
-# committed region is stale. See scripts/gen-docs-inventories.py.
+# committed region is stale. See scripts/gates/gen-docs-inventories.py.
 _gate_doc_inventories() {
-    python scripts/gen-docs-inventories.py --check \
-        || { echo "Run 'python scripts/gen-docs-inventories.py' and commit the result."; return 1; }
+    python scripts/gates/gen-docs-inventories.py --check \
+        || { echo "Run 'python scripts/gates/gen-docs-inventories.py' and commit the result."; return 1; }
 }
-_gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
+_gate_dockerfiles() { python scripts/gates/check-dockerfiles.py ; }
 # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
 # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
 # browser-free (see scripts/screenshots/README.md); the pixel-diff
@@ -799,22 +799,22 @@ _gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
 _gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
 # vtscore package docs: every top-level module / sub-package of vtscore/ is
 # covered by a packages/ doc. (Line-number anchors are check-docs.py's, repo-wide.)
-_gate_vtscore_docs() { python scripts/check-vtscore-docs.py ; }
+_gate_vtscore_docs() { python scripts/gates/check-vtscore-docs.py ; }
 # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
 # contract for the same plugin ABCs in their own words; this holds both to the
-# class. See scripts/check-extension-docs.py.
-_gate_extension_docs() { python scripts/check-extension-docs.py ; }
+# class. See scripts/gates/check-extension-docs.py.
+_gate_extension_docs() { python scripts/gates/check-extension-docs.py ; }
 # Calibration script index: every .py/.sh in scripts/experiments/calibration/
 # is filed under exactly one study in that directory's README (#3409), and no
 # new study files land there (#5406).
-_gate_calibration_index() { python scripts/check-calibration-index.py ; }
+_gate_calibration_index() { python scripts/gates/check-calibration-index.py ; }
 # Slide decks: every deck manifest names fragments that exist and figures that
 # resolve. Marp only *warns* on a missing figure and still exits 0.
 _gate_slide_decks() { python slides/build.py --check ; }
 # Eval/app sync: the eval framework reproduces a handful of app surfaces it
 # cannot call; this notices when one of them changes, so the eval default arm
 # can't quietly stop being the shipped algorithm.
-_gate_eval_app_sync() { python scripts/check-eval-app-sync.py ; }
+_gate_eval_app_sync() { python scripts/gates/check-eval-app-sync.py ; }
 
 echo "Running the cheap gates concurrently..."
 _stage2_start=$SECONDS
@@ -913,7 +913,7 @@ _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # an entry that suppresses no finding is unfalsifiable and will outlive the
 # symbol it was written for. That is how the file rotted before -- 49 of 102
 # entries were asserting nothing. Whole-repo scan (~14s), hence a lane.
-_lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
+_lane_vulture_whitelist() { python scripts/gates/vulture-audit.py --check-whitelist; }
 # Audits the whole tree, dev deps included. This used to be `--omit=dev`
 # because `@angular-devkit/build-angular` dragged in the webpack toolchain
 # (webpack-dev-server → sockjs/express/launch-editor), which regularly carried
@@ -923,10 +923,10 @@ _lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
 # unfixable advisory with it. Keep the gate wide: if a dev-only advisory ever
 # has genuinely no fix, pin it in `overrides`, or -- only when no published
 # version is patched -- waive that one advisory in `WAIVERS` in
-# scripts/npm-audit-gate.py, rather than re-blinding the audit to the entire dev
+# scripts/gates/npm-audit-gate.py, rather than re-blinding the audit to the entire dev
 # tree. Each waiver is pinned to the advisory's vulnerable range, so it lapses
 # (and fails the gate) the moment upstream ships a fix (#4447).
-_lane_npm_audit() { python scripts/npm-audit-gate.py; }
+_lane_npm_audit() { python scripts/gates/npm-audit-gate.py; }
 # `npm run test:ci` regenerates the API client (pretest:ci) then runs
 # `ng test --no-watch`, which exits non-zero on any spec failure. Started only
 # once the build lane is green: both regenerate the API client under
@@ -958,7 +958,7 @@ _lane_frontend_build() {
     rm -f "$log" "$plain"
     echo "Frontend build OK"
 }
-# pyright, incrementally: scripts/pyright-incremental.py checks the files
+# pyright, incrementally: scripts/gates/pyright-incremental.py checks the files
 # changed since the last green check plus everything that transitively imports
 # them, and the whole tree when there is no record to work from (a fresh
 # clone), when pyrightconfig.json, pyproject.toml or the installed packages
@@ -1023,7 +1023,7 @@ _lane_pyright() {
     if [[ -n "$_pyright_heap_mb" ]]; then
         export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=$_pyright_heap_mb"
     fi
-    PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 python scripts/pyright-incremental.py --threads "$_pyright_threads"
+    PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 python scripts/gates/pyright-incremental.py --threads "$_pyright_threads"
 }
 
 _vitest_pending=false

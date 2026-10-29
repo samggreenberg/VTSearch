@@ -45,6 +45,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   no longer imports `time`, so a patch through `vtscore.concurrency.progress.time.monotonic` raises; patch
   `time.monotonic`, which is what that string reached. See `packages/concurrency.md`.
 
+- **The labels line is four modules** (issue #5426). The 1,300-line `vtscore.training.thresholds.labels_line`
+  is split along its layers: `class_model` (`ClassScoreModel`, `class_score_model`, the logit helpers and the
+  prevalence range), `corpus_model` (the corpus fits, `corpus_posteriors`, `corpus_cut`, the parametric cut and
+  the folds' scale transfer), `head_count` (the head's count line and the cues Autopilot reads beside the line:
+  `STOP_LEVEL`, `weak_check_due`, `done_check_due`) and `labels_line` itself (`LabelsLine`, `fit_labels_line`).
+  Every public name still imports from `labels_line` (its `__all__` now lists all of them) and from
+  `vtscore.training.thresholds`, and behaves as before. Two things change for code that reaches further in:
+  the private helpers (`_finite_unit`, `_norm_pdf`, `_excess_depth`, `_top_under`, ...) import from their new
+  module only, and a knob swapped at run time must be swapped where it is read. `BAD_COMPONENT` is read in
+  `corpus_model`, the `HEAD_COUNT_*` knobs in `head_count`, and `_BOUND_MARGIN` and `corpus_sigma_floor` in
+  `labels_line`; setting `labels_line.HEAD_COUNT_BADS` now changes nothing. The eval harness's swaps
+  (`vtscore.eval.live_threshold_rules`) do this already. See `packages/training.md`.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
@@ -56,6 +69,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
   stubs one patches the module that calls it (the package docstring says which that is). See
   `packages/cli.md`.
+
+- **`vtscore.detectors.labelset_training` is split along its seams** (issue #5423). The 1,400-line
+  module keeps the two training entry points, `train_from_labelset` and `labelset_train_and_score`; its
+  helpers move verbatim to four sibling modules, none of which reads back: `labelset_embeddings`
+  (`populate_label_embeddings` and the label-embedding caches it fills, plus `ProgressCallback`),
+  `labelset_matrix` (`build_xy_from_labelset`, `labeled_media_ids`, `labeled_media_labels`,
+  `hard_view_good_vectors`, `labelset_resolution_report`, `labelset_calibrating_groups`),
+  `labelset_structural` (`populate_label_local_features`, `maybe_labelset_structural_rerank`) and
+  `labelset_heads` (`Haystack`, `install_centroid_head`, `install_query_head`). Every public name is
+  re-exported, so `labelset_training.X` imports and behaves as before. The private helpers (`_embed_one`,
+  `_resolve_uncached_embedding`, `_LabelVector`, `_labelset_feature_snapshot`, ...) live in their new
+  module only; a test that stubs one patches the module that calls it (the module docstring says which).
+  The cross-dataset embedding and local-feature warnings now log under
+  `vtscore.detectors.labelset_embeddings` and `vtscore.detectors.labelset_structural`, prefixed with the
+  same names. See `packages/detectors.md`.
 
 - **`vtscore.detectors.training` is split into its stages** (issue #5418). The 1,770-line module keeps the
   pipeline entry points (`train_and_threshold`, `train_and_score`, `train_detector_from_origins`,
@@ -958,7 +986,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   beta=None)` now draws the line at the balance (the new
   `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
   of `line_knobs` and the `thresholds.line_preference_default` mirror of
-  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `scripts/gates/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
   `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
   under a balance as it was under a floor. `aim_words(state)` says which
   preference an unchecked set was exported at ("aiming at 25% right" / "at

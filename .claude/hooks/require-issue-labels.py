@@ -37,7 +37,7 @@ label set, minus `solved`", and `gh issue close` has no `--label` flag at all,
 so it has no text-only translation. The three candidates each fail somewhere --
 demanding a chained `--remove-label solved` fires on the majority of closes
 whose issue never carried the label; leaving it to
-`scripts/reconcile-solved-labels.py` repairs the state only when someone
+`scripts/release/reconcile-solved-labels.py` repairs the state only when someone
 remembers to run it, which is the "no session is around to observe it" problem
 `solved` was invented to dodge. So this path asks GitHub instead: a
 command-position `gh issue close` triggers one `gh issue view --json labels`
@@ -59,7 +59,7 @@ where it is awake: on the laptop, where `gh auth login` has run and where the
 `gh issue close` commands in the transcripts were actually typed. A Claude Code
 on the web container has no `gh` at all, and the ambient `GH_TOKEN` there 403s
 on REST and GraphQL alike, so a close issued from one is allowed unexamined.
-`scripts/reconcile-solved-labels.py` remains the thing that guarantees the
+`scripts/release/reconcile-solved-labels.py` remains the thing that guarantees the
 strip; this hook is what makes the repair unnecessary most of the time.
 
 A third job, added after #3694: an `issue_write` update whose `labels` array
@@ -807,7 +807,7 @@ def _issue_labels(target: str, repo: str | None) -> set[str] | None:
     covers a laptop without `gh`, an unauthenticated one, a dropped link, and a
     slow answer. Blocking on any of those would wedge a close over a network
     blip, which is a far worse failure than the stale label
-    `scripts/reconcile-solved-labels.py` would go on to catch anyway.
+    `scripts/release/reconcile-solved-labels.py` would go on to catch anyway.
 
     `gh issue view` (rather than `gh api`) is deliberate: with no `--repo` it
     resolves the repository from the working directory's git remote, exactly as
