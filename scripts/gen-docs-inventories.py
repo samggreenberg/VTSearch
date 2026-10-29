@@ -182,6 +182,99 @@ def build_media_types() -> str:
     return _table(["Media type", "Default embedder", "Model", "Alternative embedders"], rows)
 
 
+#: Where each ``PluginRegistry`` family lives: its ``list_*`` accessor and the
+#: base class a plugin subclasses, both as ``"module:attribute"``.  The package,
+#: sentinel and entry-point group are read off the accessor's live registry, so
+#: they cannot disagree with the code; the base classes are imported, so a
+#: rename fails ``--check`` instead of leaving a dead name in the docs.
+REGISTRY_FAMILIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "importers": (
+        "vtscore.datasets.importers:list_importers",
+        ("vtscore.datasets.importers.base:ImporterBase", "vtscore.datasets.importers.base:DatasetImporter"),
+    ),
+    "datasource_importers": (
+        "vtscore.datasource_importers:list_datasource_importers",
+        ("vtscore.datasource_importers.base:DataSourceImporter",),
+    ),
+    "exporters": ("vtscore.exporters:list_exporters", ("vtscore.exporters.base:ResultsExporter",)),
+    "label_importers": (
+        "vtscore.labels.importers:list_label_importers",
+        ("vtscore.labels.importers.base:LabelImporter",),
+    ),
+    "seed_importers": ("vtscore.seed_importers:list_seed_importers", ("vtscore.seed_importers.base:SeedImporter",)),
+    "labelset_sources": (
+        "vtscore.labels.sources:list_labelset_sources",
+        ("vtscore.labels.sources.base:LabelsetSource",),
+    ),
+    "converters": ("vtscore.converters:list_converters", ("vtscore.converters.base:MediaConverter",)),
+    "media_sources": ("vtscore.datasets.sources:list_media_sources", ("vtscore.datasets.sources.base:MediaSource",)),
+    "settings_importers": (
+        "vtsearch.settings_io.importers:list_settings_importers",
+        ("vtsearch.settings_io.importers.base:SettingsImporter",),
+    ),
+    "settings_exporters": (
+        "vtsearch.settings_io.exporters:list_settings_exporters",
+        ("vtsearch.settings_io.exporters.base:SettingsExporter",),
+    ),
+    "settings_sources": (
+        "vtsearch.settings_io.sources:list_settings_sources",
+        ("vtsearch.settings_io.sources.base:SettingsSource",),
+    ),
+}
+
+#: The ``vtscore.media`` registries are not ``PluginRegistry`` families: they
+#: scan ``vtscore/media/`` sub-packages for a sentinel and have no entry-point
+#: group, so a third party calls a ``register`` function instead.  Stated as
+#: ``(sentinel, base class, register function)``; the last two are imported.
+MEDIA_FAMILIES: dict[str, tuple[str, str, str]] = {
+    "media_types": ("MEDIA_TYPE", "vtscore.media:MediaType", "vtscore.media:register"),
+    "embedders": ("EMBEDDER", "vtscore.media:MediaEmbedder", "vtscore.media:register_embedder"),
+    "clippers": ("CLIPPERS", "vtscore.media:MediaClipper", "vtscore.media:register_clipper"),
+    "cleaners": ("CLEANERS", "vtscore.media:MediaCleaner", "vtscore.media:register_cleaner"),
+}
+
+
+def _resolve(path: str):
+    """Import ``"module:attribute"`` and return the attribute."""
+    import importlib
+
+    module, _, attr = path.partition(":")
+    return getattr(importlib.import_module(module), attr)
+
+
+def _family_location(fam: str, built_in: list[str]) -> tuple[str, str, str, str]:
+    """``(package, sentinel, base class, third-party hook)`` cells for one family."""
+    import inspect
+
+    from vtscore.plugins import PluginRegistry
+
+    if fam in REGISTRY_FAMILIES:
+        accessor_path, base_paths = REGISTRY_FAMILIES[fam]
+        accessor = _resolve(accessor_path)
+        # make_plugin_registry hands out the registry's bound ``list``.
+        registry = getattr(accessor, "__self__", None)
+        if not isinstance(registry, PluginRegistry):
+            raise SystemExit(f"{accessor_path} is not a PluginRegistry accessor; fix REGISTRY_FAMILIES[{fam!r}].")
+        if [getattr(p, "name", repr(p)) for p in accessor()] != built_in:
+            raise SystemExit(f"{accessor_path} does not list family {fam!r}'s plugins; fix REGISTRY_FAMILIES.")
+        group = registry.entry_point_group
+        package, sentinel = registry.package, registry.sentinel
+        hook = f"entry-point group `{group}`" if group else "—"
+    elif fam in MEDIA_FAMILIES:
+        sentinel, base_path, register_path = MEDIA_FAMILIES[fam]
+        base_paths = (base_path,)
+        register = _resolve(register_path)
+        package = "vtscore.media"
+        hook = f"call `{register.__module__}.{register.__name__}()`"
+    else:
+        raise SystemExit(f"plugin family {fam!r} has no entry in REGISTRY_FAMILIES or MEDIA_FAMILIES; add one.")
+    bases = [_resolve(p) for p in base_paths]
+    for path, base in zip(base_paths, bases):
+        if not inspect.isclass(base):
+            raise SystemExit(f"{path} is not a class; fix the base class for family {fam!r}.")
+    return f"`{package}`", f"`{sentinel}`", " / ".join(f"`{b.__name__}`" for b in bases), hook
+
+
 def build_plugin_families() -> str:
     """Family table plus the counting rule, so prose never states a bare number."""
     inv = _inventory()
@@ -191,6 +284,12 @@ def build_plugin_families() -> str:
     library = [f for f in FAMILIES if f not in app_families]
     app = [f for f in FAMILIES if f in app_families]
 
+    stale = (set(REGISTRY_FAMILIES) | set(MEDIA_FAMILIES)) - set(FAMILIES)
+    if stale:
+        raise SystemExit(
+            f"no registered plugin family {sorted(stale)}; drop it from REGISTRY_FAMILIES / MEDIA_FAMILIES."
+        )
+
     # The label lives on the FamilyProvider; reach it through the registry.
     from vtscore.plugins import inventory as _inv_mod
 
@@ -198,10 +297,17 @@ def build_plugin_families() -> str:
         provider = _inv_mod._FAMILIES_REGISTRY.get(fam)
         return provider.label if provider is not None else fam
 
-    rows = [
-        [f"`{fam}`", "app" if fam in app_families else "library", label(fam), str(len(inv.get(fam, [])))]
-        for fam in FAMILIES
-    ]
+    rows = []
+    for fam in FAMILIES:
+        entries = inv.get(fam, [])
+        rows.append(
+            [
+                f"{label(fam)} (`{fam}`)",
+                "app" if fam in app_families else "library",
+                *_family_location(fam, [e.name for e in entries]),
+                str(len(entries)),
+            ]
+        )
     counting_rule = (
         f"A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` "
         f"(`python app.py --list-plugins`): {len(library)} library families self-register "
@@ -211,7 +317,14 @@ def build_plugin_families() -> str:
         f"{len(FAMILIES)} in total. Counts below are the built-in plugins shipped "
         f"in-tree; third-party entry-point plugins add to them."
     )
-    return counting_rule + "\n\n" + _table(["Family", "Tier", "Registry", "Built-in plugins"], rows)
+    columns = (
+        "Package, sentinel and entry-point group are read off each family's live "
+        "`PluginRegistry`. The four media registries are not `PluginRegistry` families: "
+        "they scan `vtscore/media/` sub-packages, and out-of-tree code calls the "
+        "`register*` function named in the table instead of declaring an entry point."
+    )
+    headers = ["Family", "Tier", "Package", "Sentinel", "Base class", "Third-party hook", "Built-in plugins"]
+    return counting_rule + "\n\n" + _table(headers, rows) + "\n\n" + columns
 
 
 def build_plugin_family_roster(family: str) -> str:
