@@ -1,0 +1,127 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-23-cross-corpus-o365-4739.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "examples_b1.csv": {
+     "bytes": 54254,
+     "oid": "0e17328f198a8d879ea0b6a2a91a45fa2789f49d"
+    },
+    "figures/fbeta_vs_clicks.csv": {
+     "bytes": 67508,
+     "oid": "ab55ccb027baf369d30814c74e8dcca98935c1e8"
+    },
+    "figures/fbeta_vs_clicks.png": {
+     "bytes": 92570,
+     "oid": "c7a5ab13ae5efc7d20252500af47288624d2952d"
+    },
+    "figures/fbeta_vs_clicks_runs__coco_better.png": {
+     "bytes": 1104656,
+     "oid": "ca1a88563c727382b3891782585cf9d7e06f570d"
+    },
+    "flags.csv": {
+     "bytes": 4280,
+     "oid": "e60971d017dfa06abf3621373518694f07bc125b"
+    },
+    "identity.csv": {
+     "bytes": 283,
+     "oid": "0b66ef55a2c1022401ad84cd51c915c36e170696"
+    },
+    "legs.csv": {
+     "bytes": 14966,
+     "oid": "67e808c2bd83effaa36361c2951b3f2cb33b3d53"
+    },
+    "o365/curves.csv": {
+     "bytes": 101299,
+     "oid": "d170f2bce033dc7f1e0fd259e99471c0335cef00"
+    },
+    "o365/figures/autopilot_curves.png": {
+     "bytes": 254529,
+     "oid": "6ef942003ddeb82893987fb3078d93c23c6ee373"
+    },
+    "o365/figures/autopilot_returned.png": {
+     "bytes": 205274,
+     "oid": "d08eb9592b0b385ec5a8edbf2fe6627fe05b7ddc"
+    },
+    "o365/find_curves.csv": {
+     "bytes": 81051,
+     "oid": "304ba6ba801d8ef83d72da3e754d37c80902ab48"
+    },
+    "o365/find_paired_curve.csv": {
+     "bytes": 16218,
+     "oid": "e3eb91b51df4363670c94fc65f2e7d420e4f067a"
+    },
+    "o365/flags.csv": {
+     "bytes": 2001,
+     "oid": "d1d9082c01202914970aea8897e3ec0031212663"
+    },
+    "o365/paired.csv": {
+     "bytes": 14236,
+     "oid": "24fc7b94b6f15c6a6cf9e0397615a97fbedf97e7"
+    },
+    "o365/paired_curve.csv": {
+     "bytes": 16307,
+     "oid": "34b137aa25cce91dbd0d2a12ecf4c4dd21d63a9e"
+    },
+    "o365/provenance.json": {
+     "bytes": 1595,
+     "oid": "90268c4f4a4a1e1db43873d3a1f1bd453711b1d4"
+    },
+    "paired-107.txt": {
+     "bytes": 1639,
+     "oid": "b9300338c51af03ad7d2337251887ae09ed01830"
+    },
+    "price_gap.csv": {
+     "bytes": 568,
+     "oid": "f603ce9b3e1e81ae067ffc6b9033e34581cac7b2"
+    },
+    "provenance.json": {
+     "bytes": 149,
+     "oid": "f773647f13f3d10819f47436e50a51f0128420b2"
+    },
+    "screens0/curves.csv": {
+     "bytes": 101299,
+     "oid": "d170f2bce033dc7f1e0fd259e99471c0335cef00"
+    },
+    "screens0/figures/autopilot_curves.png": {
+     "bytes": 254529,
+     "oid": "6ef942003ddeb82893987fb3078d93c23c6ee373"
+    },
+    "screens0/figures/autopilot_returned.png": {
+     "bytes": 205274,
+     "oid": "d08eb9592b0b385ec5a8edbf2fe6627fe05b7ddc"
+    },
+    "screens0/find_curves.csv": {
+     "bytes": 81009,
+     "oid": "ef9f8ef3fc154bcc9f769375a3edb16ce9ed9b48"
+    },
+    "screens0/find_paired_curve.csv": {
+     "bytes": 16322,
+     "oid": "2c0f350277d0a540a835f83b6efea4951d8b9705"
+    },
+    "screens0/flags.csv": {
+     "bytes": 2002,
+     "oid": "ebda1bf277a01e94e7e33d9f3fabd2eae0bc798a"
+    },
+    "screens0/paired.csv": {
+     "bytes": 14249,
+     "oid": "8e8eba2bc3b6ba43d20155c515ab0659f09eba1f"
+    },
+    "screens0/paired_curve.csv": {
+     "bytes": 16307,
+     "oid": "34b137aa25cce91dbd0d2a12ecf4c4dd21d63a9e"
+    },
+    "screens0/provenance.json": {
+     "bytes": 1595,
+     "oid": "90268c4f4a4a1e1db43873d3a1f1bd453711b1d4"
+    },
+    "span.csv": {
+     "bytes": 652,
+     "oid": "8669735c733360d873e0c2204f066a66cf71eeea"
+    }
+   }
+  }
+ ]
+}

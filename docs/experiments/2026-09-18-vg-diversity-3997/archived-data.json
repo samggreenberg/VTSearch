@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-18-vg-diversity-3997.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/provenance_hardness.json": {
+     "bytes": 323535,
+     "oid": "546a95dee9f50f7c32192946fac7c41bf7a96709"
+    },
+    "measurements/provenance_probe.json": {
+     "bytes": 1289,
+     "oid": "a0755d1dfbdd886d444e8ac97e86a1afa64004d3"
+    }
+   }
+  }
+ ]
+}

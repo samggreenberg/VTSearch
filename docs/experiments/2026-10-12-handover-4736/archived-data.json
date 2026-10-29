@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-12-handover-4736.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "arm.csv": {
+     "bytes": 1776,
+     "oid": "c7a0cff7cd4e50a7a9a396060ecc11716c108b33"
+    },
+    "crossfit.csv": {
+     "bytes": 11285,
+     "oid": "4bfe76043c86b69a09538f13dfe3ac32faaa6cc5"
+    },
+    "holds.csv": {
+     "bytes": 15245,
+     "oid": "e14bf7f2b292d9ab7a2f3d16bef51e464d63967b"
+    },
+    "rules.csv": {
+     "bytes": 174141,
+     "oid": "37d767a7422c254e019895dbc06cfab25c509f28"
+    }
+   }
+  }
+ ]
+}

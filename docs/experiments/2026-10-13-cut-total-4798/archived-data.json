@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-13-cut-total-4798.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ab.csv": {
+     "bytes": 3533,
+     "oid": "eed4859d428231b68b18392f84646738d2bc2ed6"
+    },
+    "ab_curves.csv": {
+     "bytes": 119067,
+     "oid": "90b2852f58bc11aacbd53f8dc07408ac1b584fd7"
+    },
+    "curves_b025.csv": {
+     "bytes": 193561,
+     "oid": "035958f4321d2e936fe289cd835e5accb7ef3c01"
+    },
+    "curves_b1.csv": {
+     "bytes": 181944,
+     "oid": "f79b84992511e9502a5fc80c370ce95fb85978ca"
+    },
+    "curves_b4.csv": {
+     "bytes": 181994,
+     "oid": "909205153fa8f26d58e40fcbc81f8fc927cd128d"
+    },
+    "rules_b025.csv": {
+     "bytes": 5292,
+     "oid": "51c791ad4088435a126fefd31a009d2e0a0ae44b"
+    },
+    "rules_b1.csv": {
+     "bytes": 5214,
+     "oid": "bd3a7efc084faa6c6c67c77d42571d23ca31e30e"
+    },
+    "rules_b4.csv": {
+     "bytes": 5336,
+     "oid": "b3ca0c48f801e7b44077c496246e818cbdba32cf"
+    }
+   }
+  }
+ ]
+}

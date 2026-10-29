@@ -204,7 +204,7 @@ move. Table: [`agg/trap_check.csv`](agg/trap_check.csv).
 
 ## Figures
 
-![cost over clicks](figures/cost_vs_clicks.png)
+![cost over clicks](figures/cost_vs_clicks.webp)
 
 One panel per **geometry** (there is one dataset, and `max_patch` must never be
 averaged with `whole_image`); colour is the fraction; the band is the inter-quartile
@@ -215,7 +215,7 @@ that arm's cells; only a solid segment is a level worth quoting. It does *not*
 license comparing across panels: the three geometries have different absolute costs
 for reasons that have nothing to do with this knob.
 
-![average precision over clicks](figures/average_precision_vs_clicks.png)
+![average precision over clicks](figures/average_precision_vs_clicks.webp)
 
 Per-run versions — every seed as its own line, one file per geometry — are in
 [`figures/`](figures/); the spread there is routinely the finding, and two arms with
@@ -361,8 +361,8 @@ Absolute deep-band cost, for scale — monotone increasing in the fraction, both
 
 ### Figures
 
-![cost over clicks, clip](clip/figures/cost_vs_clicks.png)
-![cost over clicks, clip_l](clip_l/figures/cost_vs_clicks.png)
+![cost over clicks, clip](clip/figures/cost_vs_clicks.webp)
+![cost over clicks, clip_l](clip_l/figures/cost_vs_clicks.webp)
 
 One panel per arm; colour is the fraction; the band is the inter-quartile range over
 cells. **Click 0 is the free text sort** — 0.45 for `clip`, 0.47 for `clip_l` — so the

@@ -18,7 +18,7 @@ looks found no roster mark on a non-Tobacco UCSF page:
   of the companies** (Kraft, General Foods, Nabisco, Reynolds, Brown &
   Williamson), looked at whole. **0 of 49** carry a roster mark.
 
-![what the top-ranked pages are](fig_top_hits.png)
+![what the top-ranked pages are](fig_top_hits.webp)
 
 ## What SigLIP ranks highest instead
 
@@ -53,9 +53,9 @@ SigLIP's AP is low:
 The first non-Tobacco UCSF page lands at rank 1 or 2 for nine classes, and at
 rank 19 for *Lorillard*, whose own positives fill most of the top of its ranking.
 
-![Lorillard: its top non-Tobacco pages are logo images](sheet_lorillard_band.png)
+![Lorillard: its top non-Tobacco pages are logo images](sheet_lorillard_band.webp)
 
-![B&W leaf: its top non-Tobacco pages are sugar-industry clippings](sheet_bw_band.png)
+![B&W leaf: its top non-Tobacco pages are sugar-industry clippings](sheet_bw_band.webp)
 
 ## The pages that name the companies
 
@@ -74,7 +74,7 @@ whole:
 - **The Brown & Williamson match** is a letter that mentions a B&W case study.
   There is no mark on it.
 
-![Kraft and General Foods pages](sheet_kraft_meta.png)
+![Kraft and General Foods pages](sheet_kraft_meta.webp)
 
 ## Limits
 

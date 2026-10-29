@@ -99,7 +99,7 @@ the shipped line. The one gain that held is the opening: at click 0, a higher
 inlier floor lifts beta 0.5 by +0.18 [+0.04, +0.31]. But it was not tested on
 its own, and tier `m` has now been seen.
 
-![Share by click](figures/share_by_click.png)
+![Share by click](figures/share_by_click.webp)
 
 ### Method
 

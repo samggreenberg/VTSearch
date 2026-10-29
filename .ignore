@@ -1,0 +1,20 @@
+# Files ripgrep skips (and every tool built on it: Claude Code's Grep, `rg`,
+# VS Code's search). Git does not read this file, so everything listed here
+# stays tracked, and `rg -uu` or `git grep` still searches it.
+#
+# Experiment records were 86% of the text in this repo (#5404), almost none of
+# it prose: viewer pages are a JSON payload on one line, report pages are
+# mostly inline base64 images, SVG figures are path data, and a table cell
+# matches nearly any short query. A hit in one returns a line megabytes long.
+# Each study's REPORT.md stays searchable, and names everything below.
+# (No `!` re-includes here: ripgrep drops them when a search starts below the
+# pattern's directory, e.g. `rg x docs/experiments`.)
+
+docs/experiments/**/*.html
+docs/experiments/**/*.csv
+docs/experiments/**/*.tsv
+docs/experiments/**/*.svg
+
+# The pile's hand-made verdict store: one JSON record per reviewed image, read
+# by scripts/experiments/pile/, never by a person searching the tree.
+scripts/experiments/pile/human_record/

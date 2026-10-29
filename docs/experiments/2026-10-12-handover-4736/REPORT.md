@@ -26,7 +26,7 @@ clustered on the 48 classes. It covers COCO Better's Binary opening, 702 session
 | the five seeds, votes 1-150 | +0.002 to +0.006 | +0.005 to +0.008 | +0.009 to +0.010 |
 | Region, beta 1, votes 1-25 / 1-150 (offline; not shipped) | | -0.035 / -0.009 | |
 
-![The set on screen at every vote](fig_by_vote.png)
+![The set on screen at every vote](fig_by_vote.webp)
 
 *Figure 1. Mean F-beta of the set on screen at every vote, over every run. Blue: today, the head from the
 quota (vote 7 in a median run). Green: the typed query's set throughout. Orange: the shipped hold. It is
@@ -34,7 +34,7 @@ the green line until vote 30 (the grey rule) and the blue line from there. Yello
 better at that vote, with hindsight. Binary at beta ¼, 1 and 4, and Region at beta 1, where the head passes
 the query by about vote 10. Offline prices on the text baseline (below).*
 
-![The gain over votes 1-150 against the hold](fig_hold.png)
+![The gain over votes 1-150 against the hold](fig_hold.webp)
 
 *Figure 2. The gain in the session mean against how long the typed query's set is held, with two SEs
 shaded. Binary peaks at 25-30 votes at beta ¼ and 1 and at 40-45 at beta 4. Every hold loses on Region.*

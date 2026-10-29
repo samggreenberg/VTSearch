@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-face-sideways-4788.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "compare.csv": {
+     "bytes": 2501,
+     "oid": "90b613be5716edac456d46a3ed4016b055860d48"
+    },
+    "compare_4784_roll.csv": {
+     "bytes": 2283,
+     "oid": "40caa1eea208290948752ac0aa92291b2d121978"
+    },
+    "screen.csv": {
+     "bytes": 719,
+     "oid": "ce864fa642e13dd9c738e5ba860e22efa85ebda4"
+    },
+    "screen_vs_roll.csv": {
+     "bytes": 531,
+     "oid": "ef1ecb355fbffe9cabe313fc0e66cf54d1e1d5f8"
+    },
+    "screen_vs_roll_by_band.csv": {
+     "bytes": 858,
+     "oid": "6e7e619241877c1addcd60529782ac64594f0aab"
+    }
+   }
+  }
+ ]
+}

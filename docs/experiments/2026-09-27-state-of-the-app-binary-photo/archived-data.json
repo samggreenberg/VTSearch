@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-27-state-of-the-app-binary-photo.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/confusers_bottle.jpg": {
+     "bytes": 47590,
+     "oid": "2ab19f5531adc9d8dba0e02b86eed7e3b907277e"
+    },
+    "figures/confusers_tv.jpg": {
+     "bytes": 45238,
+     "oid": "d4fd78816eeac44e469611c902f480a2894d6a44"
+    },
+    "why.csv": {
+     "bytes": 2166,
+     "oid": "7988b5040f88d5161364bc08d27bf914cfd69e13"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-textgood-4222.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "cells_calpos.csv": {
+     "bytes": 847227,
+     "oid": "f679dd6acfffaff063c52fbb0d0151b61d2359b1"
+    },
+    "cells_harvest.csv": {
+     "bytes": 987784,
+     "oid": "73d60955e755e28acbe11164c956900bff76d8fa"
+    },
+    "cells_quality.csv": {
+     "bytes": 1276235,
+     "oid": "3ffb5b1bd5694388883e3b597a5909ad9f265429"
+    },
+    "harvest.csv": {
+     "bytes": 1126,
+     "oid": "6646d10040e544f7e337fbf310b4e10aceebdcf9"
+    },
+    "promises_gated.csv": {
+     "bytes": 2998,
+     "oid": "fce662a305e2c543d04615ef96249aec7c2f7b99"
+    },
+    "promises_kept.csv": {
+     "bytes": 2273,
+     "oid": "ac753cf9c9e22e1bf2030b22a511577dffbb4b69"
+    },
+    "quality_paired.csv": {
+     "bytes": 3445,
+     "oid": "af8d9736306e367add0586cf4b13216b032ba2f1"
+    },
+    "trust_gate.csv": {
+     "bytes": 842,
+     "oid": "9230658b2267e5655c9a4e3c81fa1ad0644b7d72"
+    },
+    "verdict.json": {
+     "bytes": 489,
+     "oid": "4af7656874487c4dc0152999546ba79e0ac75c5b"
+    }
+   }
+  }
+ ]
+}

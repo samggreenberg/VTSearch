@@ -69,7 +69,7 @@ challenger. Bold means more than 2 SE from zero.
 ladder turned into a detour. That re-run changed the metric, the prevalence and the last rung at once. Re-scoring
 the original 0.44% cells changes only the metric, and the reversal is all there:
 
-![The seven rungs per click, in cost and at three betas](figures/ladder_044.png)
+![The seven rungs per click, in cost and at three betas](figures/ladder_044.webp)
 
 *Mean over 720 runs per rung, filled from the typed query until a detector shows. In cost (left), r4 is lowest
 throughout and r1 (blue) is among the worst. At every beta, r1 is far above every other rung, and r4 is a
@@ -107,7 +107,7 @@ Each step against the one before, at vote 150 (paired over 720 runs):
   too much raises FPR by only a few points, while it takes recall to 1. The examples below show runs where r4
   "wins" on cost with a precision of 0.03 to 0.11.
 
-![Each run's cost and F1 at vote 150, r4 against r1](figures/ladder_runs.png)
+![Each run's cost and F1 at vote 150, r4 against r1](figures/ladder_runs.webp)
 
 *Each dot is one run. Left: r4 has the lower cost in 61% of runs. Right: r4 has the higher F1 in 3%.*
 
@@ -146,7 +146,7 @@ Paired 0.3 − 0.5, pooled over the four vote bands (12 classes × 4 seeds per s
   the precision end rewards and the recall end does not.
 - **AP does not move** for 0.3 (at most 0.007 in any space), so this is the cut and not the ranking, as a split should be.
 
-![Per-run 0.3 − 0.5 at vote 150, beta 1/4 and 4](figures/fraction_runs.png)
+![Per-run 0.3 − 0.5 at vote 150, beta 1/4 and 4](figures/fraction_runs.webp)
 
 *Each dot is one run (category × seed), paired. At beta 1/4 (left) every space's mean is right of zero. At beta 4
 (right), `dinov3_patch` whole-image is left of zero, with a tail of runs where 0.3 loses 0.1 to 0.19.*

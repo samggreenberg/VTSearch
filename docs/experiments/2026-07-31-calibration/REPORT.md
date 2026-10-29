@@ -149,7 +149,7 @@ Trained vs oracle cost at t = 150, per arm, before → after #2784:
 - **The tree keeps the lowest oracle cost of any VG arm (0.253) and the highest
   regret (0.140)** — best ranking, worst threshold.
 
-![Regret vs votes per arm](regret_vs_t.png)
+![Regret vs votes per arm](regret_vs_t.webp)
 
 ## Finding 3 — The tree verdict: calibration is (now provably) the bottleneck, but no remedy recovers it
 
@@ -182,7 +182,7 @@ remedy recovers the tree**, so `max_patch` stays the production region-vote
 strategy; the tree's ranking advantage motivates future max-pool-aware
 calibration rather than a ship today.
 
-![Test FPR at the trained threshold vs pool size (final step)](fpr_tail_vs_npool.png)
+![Test FPR at the trained threshold vs pool size (final step)](fpr_tail_vs_npool.webp)
 
 _A sign correction was needed to measure `pnorm` at all: the pre-registered
 formula `1 − F_neg(max)^N` is a p-value (small = positive), which inverts the
@@ -235,7 +235,7 @@ grouped path.
 Runner: `scripts/experiments/calibration/` (`launch_all.sh` → `prepare_data.py`
 → `run_cells.py` → `analyze.py`). Reuses the Max-Patch pickles where the
 (dataset, embedder) pair coincides; only `siglip_l` is embedded fresh. Figures:
-`regret_vs_t.png`, `fpr_tail_vs_npool.png`. Pass `autopilot_fidelity=False` to
+`regret_vs_t.webp`, `fpr_tail_vs_npool.webp`. Pass `autopilot_fidelity=False` to
 `simulate_voting_iterations` to reproduce these numbers exactly (see
 [`docs/EVAL.md`](../../EVAL.md)); the runner's default is now the app-faithful
 vote order.

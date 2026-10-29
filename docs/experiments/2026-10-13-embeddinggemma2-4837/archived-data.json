@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-13-embeddinggemma2-4837.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "audio.csv": {
+     "bytes": 602,
+     "oid": "642eef7757d5bf46251b76939422ef4e8c0d3dc6"
+    },
+    "by_band.csv": {
+     "bytes": 7130,
+     "oid": "35b06e7fb2d48a177b61662fb22f493ec387a215"
+    },
+    "by_class.csv": {
+     "bytes": 29739,
+     "oid": "fc536db7c8b5d757f3f1412d9d2d6119cfc80ec3"
+    },
+    "click0_by_class.csv": {
+     "bytes": 2208,
+     "oid": "6421267ecec2d41076cb3010a89ceb58d4eaf3b8"
+    },
+    "compare.csv": {
+     "bytes": 2759,
+     "oid": "7c514f9374f2de36c8102246a51d903c1459dc37"
+    },
+    "image_evals.csv": {
+     "bytes": 343,
+     "oid": "df9ffb3b5a73a6a0c4a566dbd4bd1348a25898e0"
+    },
+    "objective_by_click.csv": {
+     "bytes": 20789,
+     "oid": "a7dfc1cdce11ddcaa6945425fe9c4c828ba77117"
+    },
+    "timing.csv": {
+     "bytes": 396,
+     "oid": "c48de9b2065ff0ac16bc84286d1aa19432ba3db4"
+    }
+   }
+  }
+ ]
+}

@@ -51,7 +51,7 @@ NEVER stop the user; are we really going to make them label 10k images? ... Wors
 
 ## Where the rules stop
 
-![Share of sessions not yet stopped, over clicks to 400, per preset](figures/survival.png)
+![Share of sessions not yet stopped, over clicks to 400, per preset](figures/survival.webp)
 
 | preset | rule | by 150 | by 200 | by 300 | by 400 | KM median |
 |---|---|---|---|---|---|---|
@@ -75,7 +75,7 @@ NEVER stop the user; are we really going to make them label 10k images? ... Wors
 
 ## Who is still going
 
-![Mean withheld F-beta over clicks, by when the app's Done fired](figures/by_group.png)
+![Mean withheld F-beta over clicks, by when the app's Done fired](figures/by_group.webp)
 
 | preset | Done by 150 | Done at 151–400 | trained, never Done | never left the opening |
 |---|---|---|---|---|
@@ -114,7 +114,7 @@ same mean leave, and over the same leave clicks dealt at random). Three ways to 
   the budget an early one does. A session that never leaves it is never capped, and one capped past 400 reads
   as leaving there.
 
-![F-beta at the stop and clicks to the stop against no cap, per cap kind and N](figures/caps.png)
+![F-beta at the stop and clicks to the stop against no cap, per cap kind and N](figures/caps.webp)
 
 The app's Done or N votes (every vote), against no cap:
 

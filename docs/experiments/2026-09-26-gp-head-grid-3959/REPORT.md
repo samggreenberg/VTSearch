@@ -93,12 +93,12 @@ clicks 8–150, forward-filled.
 
 ### The head, with the rule held fixed
 
-![paired contrasts](figures/paired_aulc__ALL.png)
+![paired contrasts](figures/paired_aulc__ALL.webp)
 
 **Figure 1.** Every contrast, area under clicks 8–150, 869 cells (±2 SE; grey = not resolvable).
 Left: the cost a user gets. Middle and right: its exact split into ranking and cut. Per dataset:
-[`paired_aulc__coco_better.png`](figures/paired_aulc__coco_better.png),
-[`paired_aulc__coco_val.png`](figures/paired_aulc__coco_val.png).
+[`paired_aulc__coco_better.webp`](figures/paired_aulc__coco_better.webp),
+[`paired_aulc__coco_val.webp`](figures/paired_aulc__coco_val.webp).
 
 | GP − SVM, same rule (AULC) | `coco_better` cost | `coco_val` cost | oracle cost (both) | regret (both) |
 |---|---|---|---|---|
@@ -139,15 +139,15 @@ haystack on 11% of `coco_better` steps (5.4% on `coco_val`); the SVM does so on 
 that is FPR 0.58 against 0.25 for the fold-anchored GP. The GP-native cut brings the flag-everything
 rate to 0.6%.
 
-![cost vs clicks, coco_better](figures/coco_better/cost_vs_clicks.png)
+![cost vs clicks, coco_better](figures/coco_better/cost_vs_clicks.webp)
 
 **Figure 2.** Cost over clicks on `coco_better`, one panel per embedder, mean over cells with an
 inter-quartile band. Click 0 is the free text sort. `gp_rbf_xcal` (purple) is the collapse; every
 other arm sits in one band, and `app` (blue) is at its bottom. The lower strip is the share of
 cells measured; the curves are dashed where it is under 95%. Per-seed panels:
-[`siglip`](figures/coco_better/cost_vs_clicks_runs__coco_better·siglip.png),
-[`siglip2_l`](figures/coco_better/cost_vs_clicks_runs__coco_better·siglip2_l.png);
-`coco_val`: [`cost_vs_clicks.png`](figures/coco_val/cost_vs_clicks.png).
+[`siglip`](figures/coco_better/cost_vs_clicks_runs__coco_better·siglip.webp),
+[`siglip2_l`](figures/coco_better/cost_vs_clicks_runs__coco_better·siglip2_l.webp);
+`coco_val`: [`cost_vs_clicks.webp`](figures/coco_val/cost_vs_clicks.webp).
 
 ### Kernel and acquisition
 

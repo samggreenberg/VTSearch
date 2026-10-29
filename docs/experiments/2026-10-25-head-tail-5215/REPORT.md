@@ -78,7 +78,7 @@ snapshot, against 0.71 beta. ± is the SE over classes. Heads run at their own p
 | #4603's count everywhere, beta 1 | -0.007 / -0.012 / +0.004 | -0.040 / -0.033 / -0.030 | -0.0006 / -0.0080 / +0.0030 |
 | per-head best of the two (ceiling), beta 1 | +0.010 / +0.006 / +0.017 | +0.006 / +0.003 / +0.016 | +0.008 / +0.0004 / +0.007 |
 
-![Gate vs the shipped line](figures/gate_vs_shipped.png)
+![Gate vs the shipped line](figures/gate_vs_shipped.webp)
 
 *Figure 1. F-beta over the shipped 0.71 beta, class mean ± SE, per preset and prevalence: #4603's count on every head
 (grey), and the gate (blue).*
@@ -119,12 +119,12 @@ Gains are class means ± SE over classes (`tables/ab_binary{,_p01,_c001}_summary
 | F-beta after the closing check | +0.0008 ± 0.0004 / +0.0003 ± 0.0002 / -0.0037 ± 0.0013 | +0.0003 ± 0.0001 / -0.0001 ± 0.0000 / +0.0003 ± 0.0006 |
 | runs whose clicks depart from the control | 0 / 0 / 0 | 0 / 0 / 1 |
 
-![Closed loop over clicks, 0.44%](figures/ab_binary_over_clicks.png)
+![Closed loop over clicks, 0.44%](figures/ab_binary_over_clicks.webp)
 
 *Figure 2. 0.44%. Top: F-beta of the returned set over clicks, the app (grey) and the gate (blue). Bottom: the paired
 gain, ± 1 SE over classes.*
 
-![Closed loop over clicks, 0.1%](figures/ab_binary_c001_over_clicks.png)
+![Closed loop over clicks, 0.1%](figures/ab_binary_c001_over_clicks.webp)
 
 *Figure 3. 0.1% (the whole cell), as figure 2. The 1% figure is `figures/ab_binary_p01_over_clicks.png`.*
 

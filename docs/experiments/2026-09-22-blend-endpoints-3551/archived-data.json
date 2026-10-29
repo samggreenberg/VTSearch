@@ -1,0 +1,103 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-blend-endpoints-3551.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/ab_binary_table_ab-binary-corridor_w_0.2.csv": {
+     "bytes": 1235,
+     "oid": "a1b49976f44a5f873f0b1eee108c163845ec1f85"
+    },
+    "agg/ab_binary_table_ab-binary-corridor_w_0.3.csv": {
+     "bytes": 1232,
+     "oid": "e17c83d8c6e241d7e31f8fd18255a3a7de3357d9"
+    },
+    "agg/ab_binary_verdicts.json": {
+     "bytes": 748,
+     "oid": "22f2f9af91c680511933eacd6acb7526beac2ca4"
+    },
+    "agg/ab_region_table_ab-region-corridor_w_0.05.csv": {
+     "bytes": 853,
+     "oid": "9d0db2e569aba4d33f654e339ddecc730d0d9cab"
+    },
+    "agg/ab_region_verdicts.json": {
+     "bytes": 376,
+     "oid": "e6f2ad99082377f672a08c530827103f2c5251a6"
+    },
+    "agg/census.csv": {
+     "bytes": 722,
+     "oid": "45079d410ea4fa80f909f461dfed3abed3f6e160"
+    },
+    "agg/examples.csv": {
+     "bytes": 1747,
+     "oid": "167ef4d6e54f66ea0be45e2e7e009acdba4b7306"
+    },
+    "agg/fidelity.json": {
+     "bytes": 173,
+     "oid": "40538109c7e097f33e4a7613c7d5ebb6cfe3429b"
+    },
+    "agg/pooled_within_mode.csv": {
+     "bytes": 23566,
+     "oid": "d352cff4239500e16fb0ef54b03faaff8add983e"
+    },
+    "agg/promotion_q1c.csv": {
+     "bytes": 6906,
+     "oid": "e70a00963e2907ed8afab6920e1323c45a279242"
+    },
+    "agg/promotion_q2.csv": {
+     "bytes": 8014,
+     "oid": "f8b3a980a832da9e2ea97dca555c8fb1ede4e60e"
+    },
+    "agg/summary.csv": {
+     "bytes": 224077,
+     "oid": "73b9a64f8b9d22363a55bb33a9652ab11c1bc679"
+    },
+    "figures/corridor_width_q1c.png": {
+     "bytes": 86438,
+     "oid": "57fb6036fe3f10b8333eb5f7cb83e1623ee89754"
+    },
+    "figures/corridor_width_q2.png": {
+     "bytes": 85973,
+     "oid": "226cf1f097b3c8a767452e22145381fed55f40bb"
+    },
+    "figures/cost_vs_clicks.png": {
+     "bytes": 383409,
+     "oid": "34e2b3b1f34c1979df12ca9a11b546161e4baee1"
+    },
+    "figures/cost_vs_clicks_runs__caltech101_m__binary.png": {
+     "bytes": 180913,
+     "oid": "3692b96d4f8aa08bf49906fd28bab95b24cc55b4"
+    },
+    "figures/cost_vs_clicks_runs__coco_val__binary.png": {
+     "bytes": 692807,
+     "oid": "a9f10d555882331a3200c4993e8408647adaaef1"
+    },
+    "figures/cost_vs_clicks_runs__coco_val__region.png": {
+     "bytes": 620858,
+     "oid": "85a6ee17427217d696a12cf3250a0b47305571c8"
+    },
+    "figures/cost_vs_clicks_runs__visual_genome_m__binary.png": {
+     "bytes": 693318,
+     "oid": "b37d3bb89dec409ca85467d393186fa8e12bd5f3"
+    },
+    "figures/cost_vs_clicks_runs__visual_genome_m__region.png": {
+     "bytes": 634514,
+     "oid": "6eb8ecb7801f69c01818c739ac24da89f8a4a3c6"
+    },
+    "figures/fallback_share.png": {
+     "bytes": 46883,
+     "oid": "d66f58b3c7fd708c589c203c986d79c8e76a7718"
+    },
+    "figures/rare_grid_q1c.png": {
+     "bytes": 109948,
+     "oid": "8dc5dea339902be402662e255bfbe453c86ed302"
+    },
+    "figures/rare_grid_q2.png": {
+     "bytes": 126043,
+     "oid": "b0018a286cf23c2ade69fae0aa5b35abd5eb302a"
+    }
+   }
+  }
+ ]
+}

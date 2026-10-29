@@ -1,0 +1,49 @@
+# Upload each study's archived bulk data to the rolling `experiments-data`
+# release, whenever a push to dev adds an archive batch:
+#
+#   https://github.com/samggreenberg/VTSearch/releases/tag/experiments-data
+#
+# `scripts/experiments/study_data.py archive` moves a study's bulk data (cell
+# CSVs, measurement tables, unlinked figures) out of the tree and records, in
+# the study's archived-data.json, the commit that last held each file. This job
+# packs every batch the release does not have yet from that commit and uploads
+# it, so `study_data.py fetch <study>` can put the files back. A batch already
+# on the release is never rebuilt; the tarballs are byte-for-byte reproducible
+# from git, so a lost one is rebuilt by deleting it and re-running this job.
+# A batch `archive --upload` sent straight from the GRID has no commit behind
+# it: the job leaves it alone, and fails, naming it, if it goes missing from
+# the release, since nothing can rebuild it.
+#
+# Like publish-slides.yml this tests nothing: `./run-tests.sh` is still the
+# whole gate.
+name: Publish experiment data
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'docs/experiments/*/archived-data.json'
+      - 'scripts/experiments/study_data.py'
+      - '.github/workflows/publish-experiment-data.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two pushes in a row must not both upload the same missing tarball.
+concurrency:
+  group: publish-experiment-data
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pure stdlib plus git and gh, so the runner's own python3 is enough.
+      # Each source commit is fetched on demand, so the checkout stays shallow.
+      - name: Upload missing study tarballs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/experiments/study_data.py publish

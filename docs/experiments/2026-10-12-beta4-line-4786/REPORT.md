@@ -43,7 +43,7 @@ up all help faces at β 4, but each loses on COCO, by 0.008 to 0.072 over votes 
 targets have many positives for each Good found. The issue asked for β 4 only; why the rule
 serves every balance is below (β ¼ and β 1).
 
-![What a Find returns at every vote at β 4](fig_find_by_vote.png)
+![What a Find returns at every vote at β 4](fig_find_by_vote.webp)
 
 *Figure 1. What a Find returns at every vote at β 4: F-beta of the withheld half. Today's line (blue)
 dips at the hand-over (vote 7 from one photo, 8 from four). The head's count line priced on today's
@@ -151,7 +151,7 @@ first clicks (Figure 2). In 30% of face sessions it keeps fewer images than the 
 withheld, and in 22% exactly one. In the worst tenth it keeps from 44 to thousands. A cap fixes
 only the second failure, and the capped rules gain about half as much.
 
-![The first trained click](fig_first_click.png)
+![The first trained click](fig_first_click.webp)
 
 *Figure 2. What each line keeps at the first trained click on faces at β 4, as the share of runs
 keeping at most that many (log scale), beside the person's withheld photos (dotted).*
@@ -291,7 +291,7 @@ and bounded: about 45% of runs lose 0.02 to 0.03, and none more than 0.07. That 
 whose photos today's line already kept, where the count keeps about twice as many. The gains run
 to +0.23, where today's line kept one face or thousands. On COCO the spread is small both ways.
 
-![Every run, the arm against today](fig_per_run.png)
+![Every run, the arm against today](fig_per_run.webp)
 
 *Figure 3. Every run's paired difference, the arm minus today, in Find's F-beta over votes 1–150,
 sorted. Faces at β 4 (four sets) and COCO's Binary opening at β 4.*
@@ -343,7 +343,7 @@ photos (Figure 4). The head's count also keeps 3, and dips only to 0.78. At β �
 closer to right, and the gain is about a third of β 1's. The full-session arm, in the arm's table above, matches
 these to within 0.001 on faces.
 
-![What a Find returns at every vote at β ¼ and β 1](fig_find_low.png)
+![What a Find returns at every vote at β ¼ and β 1](fig_find_low.webp)
 
 *Figure 4. What a Find returns at every vote at β ¼ and β 1: faces from four starting photos at
 1024 px, and COCO's Binary opening. Same lines as Figure 1. On faces the head's count runs above

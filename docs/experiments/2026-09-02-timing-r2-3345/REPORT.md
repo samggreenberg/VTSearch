@@ -118,7 +118,7 @@ each for audio, image, text and video, and a single documents set.
 so-much per item", and the fit says so at 3 % and 7 % median prediction error.
 That is the good news, and it is the whole of it.
 
-![How each step was fitted](figures/fit_kinds_by_step.png)
+![How each step was fitted](figures/fit_kinds_by_step.webp)
 
 *Every profile cell, coloured by which branch of `fit_step` produced it. The
 blue band — the only one with an r² — is a minority of the steps in every
@@ -160,7 +160,7 @@ branch nobody waits on.** A 55-second model load and an 11-millisecond atlas
 restore are both real measurements. Only one of them is the number a progress
 bar needs.
 
-![Observed against predicted](figures/observed_vs_predicted_generic.png)
+![Observed against predicted](figures/observed_vs_predicted_generic.webp)
 
 *The exact cells of the generic recorder's run — one colour and one line per
 cell (blue `clap_general`, red `siglip`), each line drawn only through its own
@@ -237,7 +237,7 @@ contradicting each other, because they are finally describing the same line.
 
 Everything else in this report was regenerated with both guards in place.
 
-![r² against prediction error](figures/r2_vs_prediction_error.png)
+![r² against prediction error](figures/r2_vs_prediction_error.webp)
 
 *Every affine cell in every profile, after both guards. The mass now runs down
 the right-hand edge — high r², low error — which is what agreement looks like.
@@ -247,7 +247,7 @@ serialize` and `dataset_promote · serialize` sit top-right (r² 0.99–1.00,
 error under 20 %). Point size is the step's median cost, so the large points are
 the ones a user would notice.*
 
-![The price of the rollups](figures/rollup_cost.png)
+![The price of the rollups](figures/rollup_cost.webp)
 
 ## 4 — What this does to the bar
 
@@ -324,7 +324,7 @@ rows from the model-load fit and keeps them for embed and finalize, so a
 mis-flagged row lands in the wrong regression. The set is now keyed
 `(media_type, embedder)`.
 
-![Post-fix fits](figures/observed_vs_predicted_fixed.png)
+![Post-fix fits](figures/observed_vs_predicted_fixed.webp)
 
 *The same picture for leg 2, and the fix is the top row: `dataset_load` now has
 panels at all, because its rows carry `siglip` and `clap_general` instead of a

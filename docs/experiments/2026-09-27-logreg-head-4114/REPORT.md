@@ -61,15 +61,15 @@ The `linear` arm (old early-stopped logistic head) against the SVM, mean over cl
 
 **The band split** ([`figures_4114.py`](../../../scripts/experiments/svm_vs_logistic/figures_4114.py)): the paired difference from the SVM at every click, one column per band, ±2 SE clustered on category.
 
-![paired difference by band](figures/paired_delta_by_band.png)
+![paired difference by band](figures/paired_delta_by_band.webp)
 
 *Orange is the converged logistic head, green the old early-stopped one; both are measured against the SVM, so 0 is the shipped head. Small band: the converged head is ahead on cost and oracle cost from the first few clicks to 150, and slightly ahead on AP until click ~100, level after. Large band: level on oracle cost, a little behind on cost between clicks ~25 and ~100, and behind on AP throughout. The green line is above zero in every band on cost: the old head's loss to the SVM is not a band effect. The x-axis starts where at least 10 categories are measured; the first clicks are thin.*
 
 **The quality-over-clicks pair** (`curves.py`), averaged over the whole bench. The left end is the zero-click text sort.
 
-![cost over clicks](figures/cost_vs_clicks.png)
+![cost over clicks](figures/cost_vs_clicks.webp)
 
-*Mean cost per click, one line per arm, inter-quartile band shaded, dashed while fewer than 95% of cells are measured. The paired gap between svm and lrconv (0.01) is much smaller than the spread between cells, so the lines are close and the shaded bands overlap; the tables above, which pair on the cell, are what resolve it. Every run's own curve: [`figures/cost_vs_clicks_runs__coco_better.png`](figures/cost_vs_clicks_runs__coco_better.png). The same pair for oracle cost and AP is in `figures/`.*
+*Mean cost per click, one line per arm, inter-quartile band shaded, dashed while fewer than 95% of cells are measured. The paired gap between svm and lrconv (0.01) is much smaller than the spread between cells, so the lines are close and the shaded bands overlap; the tables above, which pair on the cell, are what resolve it. Every run's own curve: [`figures/cost_vs_clicks_runs__coco_better.webp`](figures/cost_vs_clicks_runs__coco_better.webp). The same pair for oracle cost and AP is in `figures/`.*
 
 **When clicking beats typing.** All three arms beat the text sort on cost by click 9–10, and on AP by click 9–10. On **oracle cost** (the ranking alone) they separate: the converged logistic head passes the text sort at click **40**, the SVM at **56**, the old head at **85** (`curves.py` crossover, same-cell means).
 

@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-25-overtrain-3945.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "D_curve.csv": {
+     "bytes": 172040,
+     "oid": "587a31dc18957f3176ce56581fd1140d1e2ccb2d"
+    },
+    "R150_bestC.csv": {
+     "bytes": 160,
+     "oid": "025455c2a31ca873942555a2dcac2da04f7511c3"
+    },
+    "R150_bestC_by_ds.csv": {
+     "bytes": 218,
+     "oid": "c2950bf77be0d31a4a3ebe91f6f9bc0c1c3c4c16"
+    },
+    "R150_degrade.csv": {
+     "bytes": 595,
+     "oid": "de28c81304f3d43e371ad67a701312588c7131ed"
+    },
+    "R150_growth.csv": {
+     "bytes": 347,
+     "oid": "cf36b0d3683d9c4c2ec3097739b975fac171fef9"
+    },
+    "R150_path.csv": {
+     "bytes": 27444,
+     "oid": "0c38905ee9f6cf6cac52e496a9e8f5ac5ae9e3fa"
+    },
+    "R400_path.csv": {
+     "bytes": 40132,
+     "oid": "42d69e663b1fed28b1564e771edd5d47495c8397"
+    }
+   }
+  }
+ ]
+}

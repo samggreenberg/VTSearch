@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-07-acquisition-inclusion.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/env_pair_region_fig2_lever_verification.png": {
+     "bytes": 71799,
+     "oid": "93b10992dd3eb4b21ad4af19a57fc2281b63d057"
+    },
+    "figures/env_pair_wi_fig2_lever_verification.png": {
+     "bytes": 71771,
+     "oid": "fbbe119a5666119b39c14faaaa3b52fb96a6b9ba"
+    },
+    "figures/env_siglip_fig2_lever_verification.png": {
+     "bytes": 71639,
+     "oid": "acb43f3fe1b576d3ae805bd878b2567983ed3938"
+    },
+    "figures/spike_timing_3547.txt": {
+     "bytes": 480,
+     "oid": "41999ae331539e638e2e461c4ba69c6026710122"
+    },
+    "figures/spike_timing_3547_ctrl.txt": {
+     "bytes": 365,
+     "oid": "277ab9df65946a5570792a94743cf59d1a1601c1"
+    }
+   }
+  }
+ ]
+}

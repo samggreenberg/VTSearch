@@ -1,0 +1,159 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-17-chances-5040.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/binary/examples_bad_ssl_bound_x4_b1_vote50.png": {
+     "bytes": 182292,
+     "oid": "40907daa47d0b272485b676c8831209f5f7bdc35"
+    },
+    "figures/binary/examples_bad_ssl_bound_x4_b4_vote50.png": {
+     "bytes": 170426,
+     "oid": "1a52e21c23426e23453fdafd11ee9f3b695afdd9"
+    },
+    "figures/binary/examples_bad_ssl_mean_bound_x4_b025_vote50.png": {
+     "bytes": 184866,
+     "oid": "991b1f4f4d767089190d0a83280ba381ee70abb9"
+    },
+    "figures/binary/examples_bad_ssl_mean_bound_x4_b1_vote50.png": {
+     "bytes": 176999,
+     "oid": "8c62def95712f69d869c727b8c5b34d3e6a7f73e"
+    },
+    "figures/binary/examples_bad_ssl_mean_bound_x4_b4_vote50.png": {
+     "bytes": 169771,
+     "oid": "7fc82c5bacb752683c2e7306d62a82b6642d2f70"
+    },
+    "figures/region/candidates.png": {
+     "bytes": 179936,
+     "oid": "07afc5b8768bb53cf7a599c6adac4e485eda1096"
+    },
+    "figures/region/examples_bad_ssl_bound_x4_b1_vote25.png": {
+     "bytes": 181270,
+     "oid": "1f15d7ed5fdf814810657f4691e9e269b1468fea"
+    },
+    "tables/ab_counts.json": {
+     "bytes": 221,
+     "oid": "c5213106a09ef645ae9e474ec83f4f98be7bbe2f"
+    },
+    "tables/ab_curves.csv": {
+     "bytes": 50785,
+     "oid": "405a07d17a50f0e23bda51cb4ab1a33eda53ae2b"
+    },
+    "tables/ab_examples.csv": {
+     "bytes": 10766,
+     "oid": "ec88565479b6a9ad83508652c31dc23dab455dca"
+    },
+    "tables/ab_gains.csv": {
+     "bytes": 71982,
+     "oid": "c3cead99cba6f973ef4bbf2d3c57b01ff66639c1"
+    },
+    "tables/ab_splits.csv": {
+     "bytes": 12869,
+     "oid": "f065ba1504bcc2cfc3f0ed1793612194059daea2"
+    },
+    "tables/ab_summary.csv": {
+     "bytes": 15030,
+     "oid": "8d563c64982455f27be23672149bb80792efbcf5"
+    },
+    "tables/binary/edge.csv": {
+     "bytes": 3551,
+     "oid": "55ce752337c0e3bb5313c46c270dd23e159f778c"
+    },
+    "tables/binary/efb.csv": {
+     "bytes": 9095,
+     "oid": "e675b175f321688242fba6d14026eb6ff6d74c9e"
+    },
+    "tables/binary/empty.csv": {
+     "bytes": 17741,
+     "oid": "d76a5e2c6e98043bc1e6082bd583820546711e16"
+    },
+    "tables/binary/examples_bad_ssl_bound_x4_b025_vote50.csv": {
+     "bytes": 427,
+     "oid": "a0527fecd7f6a8269e37f592cc205f6567dcc2c9"
+    },
+    "tables/binary/examples_bad_ssl_bound_x4_b1_vote50.csv": {
+     "bytes": 427,
+     "oid": "a07962722f85b19b8126378bbb35ca30b1ac11f1"
+    },
+    "tables/binary/examples_bad_ssl_bound_x4_b4_vote50.csv": {
+     "bytes": 424,
+     "oid": "9c8b7bde5b2a5ec59fe71b6a133d8ac18c9fadd8"
+    },
+    "tables/binary/examples_bad_ssl_mean_bound_x4_b025_vote50.csv": {
+     "bytes": 436,
+     "oid": "9c9bf00643a3ace4b48a608486dbc91739cf6e95"
+    },
+    "tables/binary/examples_bad_ssl_mean_bound_x4_b1_vote50.csv": {
+     "bytes": 433,
+     "oid": "b6cae1d051cd15478aff47deeab4a0a1b53293b6"
+    },
+    "tables/binary/examples_bad_ssl_mean_bound_x4_b4_vote50.csv": {
+     "bytes": 431,
+     "oid": "c4399efe557a1a036b81037241ea0f2d4a648d01"
+    },
+    "tables/binary/gain.csv": {
+     "bytes": 10103,
+     "oid": "f4849386b43bd4940def9fbda8dc1aa6b844b0c2"
+    },
+    "tables/binary/prevalence.csv": {
+     "bytes": 3700,
+     "oid": "e54d88489578be013141b9cd8e9bb147ec8f1014"
+    },
+    "tables/binary/served.csv": {
+     "bytes": 9125,
+     "oid": "d111f438972afcea7eeb84998bc6555171275e7c"
+    },
+    "tables/binary/sizes.csv": {
+     "bytes": 7079,
+     "oid": "f2b075528d1bae9aeb4d19ffc82e526232ab20cb"
+    },
+    "tables/binary/small.csv": {
+     "bytes": 9134,
+     "oid": "45897d7cec5509b43ca743be7b43bee356f9d4c9"
+    },
+    "tables/region/edge.csv": {
+     "bytes": 1577,
+     "oid": "adc920d5dcca287dd33f0d3628021af94297fa4b"
+    },
+    "tables/region/efb.csv": {
+     "bytes": 3117,
+     "oid": "c8bd08c284fb0be95294c3658017f4f78e958103"
+    },
+    "tables/region/empty.csv": {
+     "bytes": 5542,
+     "oid": "5c9d6dfa6db13dcacdfce1726aeb23280b387517"
+    },
+    "tables/region/examples_bad_ssl_bound_x4_b1_vote25.csv": {
+     "bytes": 429,
+     "oid": "b007b6edd38ec3127729151ac344e5a50f85530b"
+    },
+    "tables/region/examples_bad_ssl_mean_bound_x4_b1_vote25.csv": {
+     "bytes": 426,
+     "oid": "59b88b6fb65f128d73d59c7c1523a6bf619e2c96"
+    },
+    "tables/region/gain.csv": {
+     "bytes": 3397,
+     "oid": "21d88ec20fa54ca86668d94b52781291ecf7e537"
+    },
+    "tables/region/prevalence.csv": {
+     "bytes": 1646,
+     "oid": "efb04cc52e39546f9c9a0504aff13a50c90a2631"
+    },
+    "tables/region/served.csv": {
+     "bytes": 3069,
+     "oid": "dd37223fb74bf3302877eb95d5ee44135595f68d"
+    },
+    "tables/region/sizes.csv": {
+     "bytes": 2557,
+     "oid": "57f6951cabedb2ff7075e44585dffcb7ae2b859d"
+    },
+    "tables/region/small.csv": {
+     "bytes": 3077,
+     "oid": "cb9a25de529a1f3a902d3d9e45e45da2932b74df"
+    }
+   }
+  }
+ ]
+}

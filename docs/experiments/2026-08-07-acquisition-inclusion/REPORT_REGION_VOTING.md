@@ -530,8 +530,8 @@ version `starve2.py` corrects.
 
 Raw analyzer output is `GENERATED_TABLES_REGION_VOTING.md` beside this file.
 
-![the frontier](figures/region_fig1_frontier.png)
+![the frontier](figures/region_fig1_frontier.webp)
 
-![where each arm sampled](figures/region_fig2_lever_verification.png)
+![where each arm sampled](figures/region_fig2_lever_verification.webp)
 
-![guardrails](figures/region_fig3_guardrails.png)
+![guardrails](figures/region_fig3_guardrails.webp)

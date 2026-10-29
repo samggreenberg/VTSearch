@@ -1,8 +1,0 @@
-where,arm,per_s,reps,n,slower_than_siglip
-"CPU, 8 threads","EmbeddingGemma 2, 280",0.1,2,64,38.5
-"CPU, 8 threads","EmbeddingGemma 2, 70",0.56,2,64,6.9
-"CPU, 8 threads",SigLIP,3.85,2,64,1.0
-V100S-PCIE-32GB,"EmbeddingGemma 2, 140",17.46,3,512,9.5
-V100S-PCIE-32GB,"EmbeddingGemma 2, 280",7.69,3,512,21.5
-V100S-PCIE-32GB,"EmbeddingGemma 2, 70",32.93,3,512,5.0
-V100S-PCIE-32GB,SigLIP,165.71,3,512,1.0

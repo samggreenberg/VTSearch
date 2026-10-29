@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-29-opening-diversity-4197.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "class_paired.csv": {
+     "bytes": 20514,
+     "oid": "e700154730570b97c31ba23f8814f877b3850c4b"
+    },
+    "harvest.csv": {
+     "bytes": 467,
+     "oid": "cc04826ba6459aaeb532ae144ee203a92a8ce0d0"
+    },
+    "opening.csv": {
+     "bytes": 261,
+     "oid": "193b242ee26ff77e1e2000251d16fd86841e2f38"
+    },
+    "quality_paired.csv": {
+     "bytes": 17640,
+     "oid": "7b817c1a499127dff2d1205a8185d2586f9f2a99"
+    },
+    "sibling_share.csv": {
+     "bytes": 3900,
+     "oid": "48902a21f744cdebe7d5fafaf096be13fce0c342"
+    },
+    "sibling_share_old_vs_shipped.csv": {
+     "bytes": 1118,
+     "oid": "15e50b6ef42ec768c718222d7737f571aee655f4"
+    },
+    "starved.csv": {
+     "bytes": 1006,
+     "oid": "80ba9b79f0733af540601af92d3e3efc8c64711a"
+    }
+   }
+  }
+ ]
+}

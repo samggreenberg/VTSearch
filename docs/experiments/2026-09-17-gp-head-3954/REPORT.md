@@ -185,7 +185,7 @@ The two figures every simulated-user study owes, from
 on the cell CSVs, and the interactive [`viewer.html`](viewer.html) (every arm,
 category, seed and metric the run emitted; open it in a browser):
 
-![Cost vs clicks, averaged](figures/cost_vs_clicks.png)
+![Cost vs clicks, averaged](figures/cost_vs_clicks.webp)
 
 **Figure 1. Total error (cost = FPR + FNR at inclusion 0) as votes accumulate,
 mean over the 30 cells per arm, inter-quartile band.** Click 0 is the text sort
@@ -195,7 +195,7 @@ the *shape* of the GP arms; do not read a mean across categories as a level any
 one category experiences, and note that the band is an inter-quartile range
 over cells, not a confidence interval.
 
-![Cost vs clicks, every run](figures/cost_vs_clicks_runs__caltech101_m.png)
+![Cost vs clicks, every run](figures/cost_vs_clicks_runs__caltech101_m.webp)
 
 **Figure 2. The same, one panel per arm, every cell as its own line, the
 median in black.** This is where the mean's story is checked: `gp_rbf`'s mean

@@ -161,41 +161,41 @@ the answer you want is a slice this report did not think to plot.
 
 ## Figures
 
-![cost_vs_clicks.png](figures/cost_vs_clicks.png)
+![cost_vs_clicks.webp](figures/cost_vs_clicks.webp)
 
 ***The headline: how good the user's detector is as they keep clicking.** One panel per dataset, one line per arm, mean over every seed and category on that dataset, with an inter-quartile band. **Click 0 is the free text sort** - what the typed query got for nothing - drawn as each arm's own leftmost point, so the far left is what typing was worth and the far right is what clicking was worth. Nothing is measured between click 0 and an arm's first trained click, which is why that stretch is dashed; the click at which an arm overtakes its own start is reported as a number in the crossover table rather than eyeballed off the curve. The lower strip is the denominator: what fraction of that arm's cells are measured at that click (all of them at click 0, which has a text sort; from click 1 only the ones with a detector). The mean is **dashed** wherever that is below 95% - there it is a level over the subset of cells that trained, not over the grid, and an arm that starves looks better than it is on exactly those clicks. Read a level only off a solid segment. Averaged across a wide prevalence range, so it says which arm, not how well any one category does.*
 
-![cost_vs_clicks_runs__coco_val.png](figures/cost_vs_clicks_runs__coco_val.png)
+![cost_vs_clicks_runs__coco_val.webp](figures/cost_vs_clicks_runs__coco_val.webp)
 
 ***The individuals, on `coco_val`: every seed of every arm as its own line** (cost, lower is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
 
-![cost_vs_clicks_runs__visual_genome_m.png](figures/cost_vs_clicks_runs__visual_genome_m.png)
+![cost_vs_clicks_runs__visual_genome_m.webp](figures/cost_vs_clicks_runs__visual_genome_m.webp)
 
 ***The individuals, on `visual_genome_m`: every seed of every arm as its own line** (cost, lower is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
 
-![average_precision_vs_clicks.png](figures/average_precision_vs_clicks.png)
+![average_precision_vs_clicks.webp](figures/average_precision_vs_clicks.webp)
 
 *The same figure for **average precision** - the ranking, with the threshold taken out of it. Higher is better here. An arm that improves cost but not AP moved the *threshold*; one that improves both moved the *ranking*. Same dashed-means-subset rule.*
 
-![average_precision_vs_clicks_runs__coco_val.png](figures/average_precision_vs_clicks_runs__coco_val.png)
+![average_precision_vs_clicks_runs__coco_val.webp](figures/average_precision_vs_clicks_runs__coco_val.webp)
 
 ***The individuals, on `coco_val`: every seed of every arm as its own line** (average_precision, higher is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
 
-![average_precision_vs_clicks_runs__visual_genome_m.png](figures/average_precision_vs_clicks_runs__visual_genome_m.png)
+![average_precision_vs_clicks_runs__visual_genome_m.webp](figures/average_precision_vs_clicks_runs__visual_genome_m.webp)
 
 ***The individuals, on `visual_genome_m`: every seed of every arm as its own line** (average_precision, higher is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
 
-![mining_curve.png](figures/mining_curve.png)
+![mining_curve.webp](figures/mining_curve.webp)
 
-![mining_per_run.png](figures/mining_per_run.png)
+![mining_per_run.webp](figures/mining_per_run.webp)
 
-![opening_depth.png](figures/opening_depth.png)
+![opening_depth.webp](figures/opening_depth.webp)
 
-![mining_by_prevalence.png](figures/mining_by_prevalence.png)
+![mining_by_prevalence.webp](figures/mining_by_prevalence.webp)
 
-![starvation.png](figures/starvation.png)
+![starvation.webp](figures/starvation.webp)
 
-![premise_starvation_vs_cost.png](figures/premise_starvation_vs_cost.png)
+![premise_starvation_vs_cost.webp](figures/premise_starvation_vs_cost.webp)
 
 ## The openings themselves
 

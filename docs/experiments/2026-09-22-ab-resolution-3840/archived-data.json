@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-ab-resolution-3840.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/alloc.json": {
+     "bytes": 10241,
+     "oid": "8131ac676860baad7b3e3fc326f2bf25ca1cc319"
+    },
+    "agg/components.csv": {
+     "bytes": 616,
+     "oid": "b2966523c435ccb1eab1146cdbd9e735e61b077c"
+    },
+    "agg/curve.csv": {
+     "bytes": 5548,
+     "oid": "d6eaac5a1f5249cdf1dc43346c67a053cf0fab82"
+    },
+    "agg/design.csv": {
+     "bytes": 263,
+     "oid": "1077c78356b402166c513fd3e66cc5e48472d7d7"
+    },
+    "agg/env.csv": {
+     "bytes": 7041,
+     "oid": "55eec48c93f4457bafe5e459409f58ef8723ea78"
+    },
+    "agg/pairs.csv": {
+     "bytes": 1403,
+     "oid": "b6db20273a18bee02d59aee2172d7f88d5306cf5"
+    },
+    "agg/steps.csv": {
+     "bytes": 5105,
+     "oid": "2b6a631fc109ac8fec69966b1a9c4dd05d82e868"
+    },
+    "agg/text_baseline.csv": {
+     "bytes": 57763,
+     "oid": "44262802ff3b5a6293569d44b2498502c7901f6e"
+    },
+    "agg/validation.json": {
+     "bytes": 3061,
+     "oid": "d2473a4e31d0e43abdb0d4064e69da485688453c"
+    }
+   }
+  }
+ ]
+}

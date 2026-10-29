@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-12-find-typed-query-4758.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "summary.csv": {
+     "bytes": 2990,
+     "oid": "aceaa73cdd6869bbf5c2e857b70ddc42b9fb77a6"
+    },
+    "summary_region.csv": {
+     "bytes": 911,
+     "oid": "393962e161faa270a9b478b519dbbe9936a454a7"
+    },
+    "votes_under_quota.csv": {
+     "bytes": 3249,
+     "oid": "49c6c0630546fba7b8d16580a12526b1f8f7d624"
+    }
+   }
+  }
+ ]
+}

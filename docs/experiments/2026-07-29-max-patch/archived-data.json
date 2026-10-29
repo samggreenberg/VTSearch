@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-07-29-max-patch.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "metrics.json": {
+     "bytes": 25987,
+     "oid": "cc7520b059ee486afbf62ccc75b8bc678d14e288"
+    },
+    "prepare_info.json": {
+     "bytes": 25452,
+     "oid": "6ea9afde42c86b9277f804641bf5106bb3e7e970"
+    }
+   }
+  }
+ ]
+}

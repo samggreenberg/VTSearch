@@ -22,7 +22,7 @@ The harness gets a new mode, `spot_check="weak"` (`vtscore/eval/voting_iteration
 
 Binary, COCO Better, 144 cells × 5 seeds at presets 1/4, 1 and 4: 4,320 sessions. Each is paired with the #4492 end-to-end run on the same cell and seed, i.e. the shipped code with the end-of-run check only.
 
-![Paired objective over clicks and the over-200 share](figures/paired_over_clicks.png)
+![Paired objective over clicks and the over-200 share](figures/paired_over_clicks.webp)
 
 ## Results
 

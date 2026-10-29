@@ -1,0 +1,67 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-26-gp-head-grid-3959.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/by_click__coco_better.png": {
+     "bytes": 122823,
+     "oid": "58ecb529283a55a7da05b0d4a1bd2e6432387ebe"
+    },
+    "figures/by_click__coco_val.png": {
+     "bytes": 114644,
+     "oid": "0b16e1880f739e2232be76a31b3fcf90fb3012f1"
+    },
+    "figures/coco_better/average_precision_vs_clicks.csv": {
+     "bytes": 285930,
+     "oid": "c8821a4b6468c232818c271b2d266b649513f061"
+    },
+    "figures/coco_better/average_precision_vs_clicks.png": {
+     "bytes": 176350,
+     "oid": "44b769b4fd7dce469f004281cb6d242592675011"
+    },
+    "figures/coco_better/average_precision_vs_clicks_runs__coco_better\u00b7siglip.png": {
+     "bytes": 1716379,
+     "oid": "eee5997b3d46a12fd330a902365d2f9382efd3fb"
+    },
+    "figures/coco_better/average_precision_vs_clicks_runs__coco_better\u00b7siglip2_l.png": {
+     "bytes": 1713014,
+     "oid": "5ce54834509e6ad9b791e12fb63dcd192ce26b25"
+    },
+    "figures/coco_better/cost_vs_clicks.csv": {
+     "bytes": 284194,
+     "oid": "42b8096c1d4d94aba020e7ef222a16d7730b3f45"
+    },
+    "figures/coco_val/average_precision_vs_clicks.csv": {
+     "bytes": 246956,
+     "oid": "9fbc5cc86f8f169c8714c9718bc606b769137182"
+    },
+    "figures/coco_val/average_precision_vs_clicks.png": {
+     "bytes": 186480,
+     "oid": "bbff95430d49e9e39be2e7512fccb02176437b18"
+    },
+    "figures/coco_val/average_precision_vs_clicks_runs__coco_val\u00b7siglip.png": {
+     "bytes": 1270323,
+     "oid": "dc8494bef2870f9a75c23423f2d391c93da7ff7e"
+    },
+    "figures/coco_val/average_precision_vs_clicks_runs__coco_val\u00b7siglip2_l.png": {
+     "bytes": 1158836,
+     "oid": "bf75c484c5ba76d3f88ec538d4495d662820fa41"
+    },
+    "figures/coco_val/cost_vs_clicks.csv": {
+     "bytes": 249614,
+     "oid": "28555bb6e7fc006d8b032d2e9863d4f211aa4cef"
+    },
+    "figures/coco_val/cost_vs_clicks_runs__coco_val\u00b7siglip.png": {
+     "bytes": 895679,
+     "oid": "9b4e4c0b349e81f757c2f863aca9d8e0fd018182"
+    },
+    "figures/coco_val/cost_vs_clicks_runs__coco_val\u00b7siglip2_l.png": {
+     "bytes": 863379,
+     "oid": "212426626e69d9a9b5b844536f8f370e87df0d9f"
+    }
+   }
+  }
+ ]
+}

@@ -49,7 +49,7 @@ follows the preference, which is what #4413's step 5 prices.
 | 50% | 31 | 60% | +0.10 | 61% | 0.38 | 0.50 | 0.75 |
 | 90% | 30 | 61% | **−0.29** | 38% | 0.38 | 0.38 | 0.99 |
 
-![The returned set at each P, each read off its own sessions](figures/returned_at_own_p.png)
+![The returned set at each P, each read off its own sessions](figures/returned_at_own_p.webp)
 
 - **At 10% the app over-delivers precision and under-delivers recall.** The set
   is 25% right against a 10% target, and keeps 0.61 of the positives where a
@@ -85,7 +85,7 @@ check (the mixture's F-beta argmax under the cap, `test_line_k_b*`):
 | 2 | 150 clicks | 128 | 0.24 | 0.62 | 0.47 | 0.56 | **0.82** |
 | 2 | full labels | 128 | 0.27 | 0.68 | 0.52 | 0.61 | 0.86 |
 
-![The returned set at each balance over clicks, read off the 50% sessions](figures/returned_at_beta.png)
+![The returned set at each balance over clicks, read off the 50% sessions](figures/returned_at_beta.webp)
 
 - The share at click 150 is 0.82 / 0.79 / 0.82 at beta 0.5 / 1 / 2, and it is
   the same off the 10%, 50% and 90% sessions (0.819 / 0.820 / 0.819 at beta 0.5).
@@ -97,8 +97,8 @@ check (the mixture's F-beta argmax under the cap, `test_line_k_b*`):
 
 ## Files
 
-- `figures/returned_at_own_p.png` (each P off its own sessions, `perp.py`),
-  `figures/returned_at_beta.png` (the 50% sessions at each balance).
+- `figures/returned_at_own_p.webp` (each P off its own sessions, `perp.py`),
+  `figures/returned_at_beta.webp` (the 50% sessions at each balance).
 - `perp_summary.md`: the per-P table with the 50% sessions' reading of the
   other floors beside each.
 - On the GRID: each run's `analysis-binary/{cells,lines,line_steps,balances,balance_steps,curves}.csv`

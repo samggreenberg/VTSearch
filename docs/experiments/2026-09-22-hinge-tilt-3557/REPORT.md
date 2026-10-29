@@ -218,7 +218,7 @@ readings is the trajectory-only contrast. The hinge is good at deciding what to
 
 ## Figures
 
-![Paired delta vs k](figures/fig1_delta_vs_k.png)
+![Paired delta vs k](figures/fig1_delta_vs_k.webp)
 
 *Per environment: the full ship (solid blue, with 95% band), the re-cut
 `hinge`, `hinge_raw`, `hinge_cont` and `cross_tilt` (dotted/dashed), and the
@@ -226,24 +226,24 @@ trajectory-only contrast (green). Dashed grey lines mark the +/-0.010 bar. Read
 the gap between solid and dotted blue as the price of the acquisition path.
 Panels are not in comparable units of user pain across environments.*
 
-![Seam](figures/fig2_seam.png)
+![Seam](figures/fig2_seam.webp)
 
 *`q_cross(0) - q_mid` over deep cell-steps, arm A. Mass left of the red line is
 where the literal hinge would break nesting. It is small in the deep band; the
 large violations are cold-start fits (section 1).*
 
-![Mechanism](figures/fig3_mechanism.png)
+![Mechanism](figures/fig3_mechanism.webp)
 
 *Per cell: the fitted prior odds against the re-cut hinge's gain at k=-1.*
 
-![Cost over clicks](figures/cost_vs_clicks.png)
+![Cost over clicks](figures/cost_vs_clicks.webp)
 
 *The quality-over-clicks pair, one line per arm and voting mode, anchored at
 click 0 on the free text sort. Green/red are incumbent/hinge on binary voting;
 blue/orange are incumbent/hinge on region voting (the legend sits on the
 caltech panel, which has no region cells). Per-seed panels are in `figures/*_runs__*.png`.*
 
-![AP over clicks](figures/average_precision_vs_clicks.png)
+![AP over clicks](figures/average_precision_vs_clicks.webp)
 
 ## Reproducing
 

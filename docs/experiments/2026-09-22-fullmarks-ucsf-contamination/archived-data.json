@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-fullmarks-ucsf-contamination.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/pools.json": {
+     "bytes": 3368,
+     "oid": "b629467d5e125edb3e20c157ef3b83bcbc90d843"
+    },
+    "measurements/verdicts.jsonl": {
+     "bytes": 75560,
+     "oid": "eae723fa6e9e25916d48badbe97067389972621a"
+    }
+   }
+  }
+ ]
+}

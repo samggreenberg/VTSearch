@@ -62,9 +62,9 @@ round 2 use replicate 1, which has round 2's halves, paired by class
 - **The ranking gained 0.02 AP,** consistent with what the fine tile layer
   measured on its own (#4415). This review does not separate the changes.
 
-![AP and Goods found](figures/ap_found.png)
+![AP and Goods found](figures/ap_found.webp)
 
-![F1 over clicks](figures/f1_over_clicks.png)
+![F1 over clicks](figures/f1_over_clicks.webp)
 
 ### The returned set at each balance
 
@@ -87,7 +87,7 @@ share of the best F-beta any cut of the same ranking reaches:
   is the plain inlier gate (H1's cuts apply only once there is a Good to vote
   with), and it over-returns.
 
-![The returned set at each balance](figures/returned_at_beta.png)
+![The returned set at each balance](figures/returned_at_beta.webp)
 
 ### Retrain time on the app's GPU
 
@@ -105,7 +105,7 @@ share of the best F-beta any cut of the same ranking reaches:
   against 6.6–6.8 s here. But this V100 shared its node with the live app and
   another user's vLLM jobs, so part of the gap may be contention, not the card.
 
-![Retrain time per click](figures/retrain.png)
+![Retrain time per click](figures/retrain.webp)
 
 **Floor-style cuts at P** (an oracle, since the structural path has no
 precision estimator) are in `measurements/rep*/summary.md` and
@@ -117,7 +117,7 @@ The structural path has none (owner decision). This section is omitted.
 
 ## 3. Where the app does well and where it does poorly
 
-![Per class, replicate 1](figures/per_class.png)
+![Per class, replicate 1](figures/per_class.webp)
 
 | source | final AP, 2 replicates | classes |
 |---|---:|---:|
@@ -159,7 +159,7 @@ have returned-set precision below 0.5; round 2 had 27.
 
 | `ucsf/logo_bat_leaf`, beyond the shortlist | `ucsf/logo_bw_oval_emblem`, beyond the shortlist |
 |---|---|
-| ![bat leaf](misses/ucsf__logo_bat_leaf-ucsf__fsyj0214_0.png) | ![bw oval](misses/ucsf__logo_bw_oval_emblem-ucsf__flly0212_0.png) |
+| ![bat leaf](misses/ucsf__logo_bat_leaf-ucsf__fsyj0214_0.webp) | ![bw oval](misses/ucsf__logo_bw_oval_emblem-ucsf__flly0212_0.webp) |
 
 ## 4. Headroom
 
@@ -205,11 +205,11 @@ removes the harm.
 
 | `stampds-00213`: −0.56 | `stampds-00223`: +0.42 |
 |---|---|
-| ![harmful](images/harmful-staver__stamp_stampds-00213_1-staver__stampds-00213.png) | ![helpful](images/helpful-staver__stamp_stampds-00213_1-staver__stampds-00223.png) |
+| ![harmful](images/harmful-staver__stamp_stampds-00213_1-staver__stampds-00213.webp) | ![helpful](images/helpful-staver__stamp_stampds-00213_1-staver__stampds-00223.webp) |
 
 | Lorillard, `gnwh0113`: −0.50 | Lorillard, `fydf0107`: +0.69 |
 |---|---|
-| ![harmful](images/harmful-ucsf__logo_p_lorillard_crest-ucsf__gnwh0113_0.png) | ![helpful](images/helpful-ucsf__logo_p_lorillard_crest-ucsf__fydf0107_0.png) |
+| ![harmful](images/harmful-ucsf__logo_p_lorillard_crest-ucsf__gnwh0113_0.webp) | ![helpful](images/helpful-ucsf__logo_p_lorillard_crest-ucsf__fydf0107_0.webp) |
 
 The Lorillard crest has 4 test positives. Its first Good costs 0.50–0.67 in
 both replicates, and in replicate 1 the next Good wins it back. In replicate

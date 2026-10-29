@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-hold-reprice-4876.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/holds.csv": {
+     "bytes": 162844,
+     "oid": "a5bdb96937ad46aab3ec7a7d1097efa91344a720"
+    }
+   }
+  }
+ ]
+}

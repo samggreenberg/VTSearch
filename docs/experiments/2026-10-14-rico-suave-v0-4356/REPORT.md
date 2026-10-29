@@ -26,7 +26,7 @@ query long before 30 labels. Holding the query costs **0.079** F-beta over votes
 balance 1 (0.026 over 1–150). A run with the hold off measured this session for session, and 77% of
 sessions do better without it.
 
-![F-beta of what Find returns over votes, app screens against photos, at 1% prevalence](fig_fbeta_by_vote_p001.png)
+![F-beta of what Find returns over votes, app screens against photos, at 1% prevalence](fig_fbeta_by_vote_p001.webp)
 
 *Figure 1. Mean F-beta of what Find returns on the withheld half at every vote, at each balance
 preset, every class thinned to 1% prevalence. Thick blue: the 11 Rico Suave classes pooled (110
@@ -117,7 +117,7 @@ returns a few hundred screens is still too tight for a recall-weighted balance. 
 0.995 here: an agreed settings screen is a prototypical one, and the hard ones are in the review
 queue.
 
-![The same at each class's own prevalence](fig_fbeta_by_vote_natural.png)
+![The same at each class's own prevalence](fig_fbeta_by_vote_natural.webp)
 
 *Figure 2. As Figure 1, unthinned: each class at its own share of the pool (1.1%–36%), against
 photos at 0.4%.*

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-06-pooled-taper-4560.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "variants.csv": {
+     "bytes": 7138,
+     "oid": "db5ec01389aa609a1dd100f785cd52c931ed5824"
+    }
+   }
+  }
+ ]
+}

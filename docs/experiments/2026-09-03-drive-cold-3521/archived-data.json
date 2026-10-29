@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-03-drive-cold-3521.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/observed_vs_predicted.png": {
+     "bytes": 78864,
+     "oid": "1453253d4b4d99d6dadd79c09b657e6a39431b45"
+    }
+   }
+  }
+ ]
+}

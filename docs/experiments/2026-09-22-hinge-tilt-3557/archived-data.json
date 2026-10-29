@@ -1,0 +1,75 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-hinge-tilt-3557.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/average_precision_vs_clicks.csv": {
+     "bytes": 292247,
+     "oid": "1180c4f558ff0cdc7c4557784a068a9cdaf1bbe3"
+    },
+    "figures/average_precision_vs_clicks_runs__caltech101_m.png": {
+     "bytes": 68616,
+     "oid": "aef60f6a2e8b3e1950412ed0d6fbff5cdea04395"
+    },
+    "figures/average_precision_vs_clicks_runs__coco_val.png": {
+     "bytes": 454122,
+     "oid": "028d0f64aef10ea9c70977ad6a2c6df60842e480"
+    },
+    "figures/average_precision_vs_clicks_runs__visual_genome_m.png": {
+     "bytes": 495211,
+     "oid": "5430a95216cd5bf8a5a02770f904ee4344e3fff3"
+    },
+    "figures/cost_vs_clicks.csv": {
+     "bytes": 302264,
+     "oid": "39198d6248eb898f527a2115b8ed666b2ccf3aa3"
+    },
+    "figures/cost_vs_clicks_runs__caltech101_m.png": {
+     "bytes": 91000,
+     "oid": "c86116e32af60f697e1de6508595e83593c3046d"
+    },
+    "figures/cost_vs_clicks_runs__coco_val.png": {
+     "bytes": 424603,
+     "oid": "634d357abd2fd327e56e4a4b86123f26fd1b97f1"
+    },
+    "figures/cost_vs_clicks_runs__visual_genome_m.png": {
+     "bytes": 386863,
+     "oid": "f8ae573faeba0736c6d0b183e6866a58c3ff91ec"
+    },
+    "hinge3557_contract.csv": {
+     "bytes": 5356,
+     "oid": "93101820a2b14274d2ba46f26e08f9cfd2e367af"
+    },
+    "hinge3557_crossover.csv": {
+     "bytes": 227,
+     "oid": "6792b85efe20db05f4f7b61cd9a5008d81d61eca"
+    },
+    "hinge3557_guard.csv": {
+     "bytes": 7894,
+     "oid": "9abc4e6f22cfac42bbb85c462562609008db945b"
+    },
+    "hinge3557_liveness.csv": {
+     "bytes": 5775,
+     "oid": "175d1d8b6aa3f84ec5ee16628c2d246d0dcdf170"
+    },
+    "hinge3557_paired.csv": {
+     "bytes": 192534,
+     "oid": "b979fd9ca9bc37c4604cd12bd09cf7c8e4e4457b"
+    },
+    "hinge3557_seam.csv": {
+     "bytes": 2594,
+     "oid": "61705e524fc21cf9779d95c84002cb2d0f28f431"
+    },
+    "hinge3557_speed.csv": {
+     "bytes": 3533,
+     "oid": "f31ad4672136a563f5d1e49d36a9045384e29ae5"
+    },
+    "hinge3557_summary.json": {
+     "bytes": 7689,
+     "oid": "49332c2e6fd02e8b464943d5dbe188eec2b9a4b1"
+    }
+   }
+  }
+ ]
+}

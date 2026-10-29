@@ -1,5 +1,0 @@
-session,seed,vote,picked as,kept / best,F today / best,Good mean - truth,selection,Good spread / truth,prevalence / truth,chance at edge: line / truth,F: good_true / shapes_true / post_true
-apple@large,2,40,median shortfall,63 / 103,0.83 / 0.92,+0.16,+0.27,0.27 / 0.50,1.32,0.00 / 0.09,0.91 / 0.91 / 0.92
-bus@medium,2,41,largest shortfall,22 / 503,0.29 / 0.52,+0.81,+0.82,0.42 / 0.66,0.26,0.00 / 0.02,0.51 / 0.50 / 0.52
-stop sign@medium,0,42,true Good component leaves the most,82 / 115,0.62 / 0.68,+0.55,+0.57,0.23 / 0.63,0.60,0.02 / 0.05,0.42 / 0.64 / 0.68
-airplane@large,0,40,"large band, set about right",47 / 47,0.97 / 0.97,+0.16,+0.18,0.37 / 0.34,0.33,0.12 / 0.26,0.97 / 0.97 / 0.97

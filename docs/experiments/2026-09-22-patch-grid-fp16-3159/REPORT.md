@@ -44,7 +44,7 @@ on the **embed batch size**, and a second build in the same pile root
 
 ## Figures
 
-![Drift by band](figures/drift_by_band.png)
+![Drift by band](figures/drift_by_band.webp)
 
 *Figure 1. Max-pooled score drift per exemplar query (one Good box vote), by the
 box band of the vote that made it. Left: the median image in the gallery.
@@ -52,25 +52,25 @@ Right: the worst image. The drift does not grow as the object shrinks. Caltech
 (image-level queries, boxless) is 10× smaller because its winning row is
 usually the CLS row, which the cast barely moves.*
 
-![dAP per query](figures/dap_per_query.png)
+![dAP per query](figures/dap_per_query.webp)
 
 *Figure 2. ΔAP (fp16 − fp32) for each of the 1,624 exemplar queries, split by
 dataset and band. None reaches the 0.005 margin.*
 
-![Bench trajectory, cost](figures/bench_trajectory_cost.png)
-![Bench trajectory, AP](figures/bench_trajectory_ap.png)
+![Bench trajectory, cost](figures/bench_trajectory_cost.webp)
+![Bench trajectory, AP](figures/bench_trajectory_ap.webp)
 
 *Figures 3–4. Mean cost and AP over the 150-vote trajectory, both arms, 312
 cells per dataset. The two lines lie on top of each other.*
 
-![Bench per cell, cost](figures/bench_percell_cost.png)
-![Bench per cell, AP](figures/bench_percell_ap.png)
+![Bench per cell, cost](figures/bench_percell_cost.webp)
+![Bench per cell, AP](figures/bench_percell_ap.webp)
 
 *Figures 5–6. Every cell's paired difference, one thin line each, with the
 mean in black. Individual runs spread by ±0.2 because the trajectories diverge
 (§3); the mean sits on zero.*
 
-![Bench by band](figures/bench_by_band.png)
+![Bench by band](figures/bench_by_band.webp)
 
 *Figure 7. Paired difference per dataset × band, whole trajectory, ±2 SE.
 Every interval covers zero. The sub-patch intervals are wide because there are

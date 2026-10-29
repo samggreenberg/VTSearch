@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-fullmarks-ucsf-classes-3921.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/crops.json": {
+     "bytes": 7184,
+     "oid": "126220ebe913d6e7343f65534ec87d7071ec1bd1"
+    },
+    "measurements/cross.json": {
+     "bytes": 6587,
+     "oid": "a3f40191f206c29c4af942f2185141b8db0e0021"
+    },
+    "measurements/first_pass_tally.json": {
+     "bytes": 3110,
+     "oid": "769802c206ba3abec695c375d30e5eb4298f66ad"
+    },
+    "measurements/summary.json": {
+     "bytes": 10091,
+     "oid": "d60adc74cd527ce04d56d68e67e54fdd78569cdf"
+    },
+    "measurements/verdicts_first_pass.jsonl": {
+     "bytes": 215151,
+     "oid": "a2fd8492e1d2d96ff7a1be1d127cf2855ab82b95"
+    }
+   }
+  }
+ ]
+}

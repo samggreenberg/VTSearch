@@ -21,7 +21,7 @@ threshold.
 | **cost** | 0.49 | **0.33** | 0.15 |
 | **F1** | 0.02 | **0.05** | — |
 
-![Mean cost over clicks](figures/cost_over_clicks.png)
+![Mean cost over clicks](figures/cost_over_clicks.webp)
 
 1. **Clicking roughly halves the distance to the ceiling, and no more.** Cost
    falls from 0.49 to 0.33, against a ceiling of 0.15: 150 clicks close 47% of
@@ -43,7 +43,7 @@ threshold.
    user sees roughly 50 false positives for every true one. Cost rewards that
    trade and F1 does not, which is why cost looks moderate while F1 is 0.05.
 
-![Mean F1 over clicks](figures/f1_over_clicks.png)
+![Mean F1 over clicks](figures/f1_over_clicks.webp)
 
 ## Where it does well and where it does poorly
 
@@ -86,7 +86,7 @@ scenes rather than stand out in them.
 
 Every cell, text only → final → full labels:
 
-![Per class and size](figures/per_cell.png)
+![Per class and size](figures/per_cell.webp)
 
 ## Images: what a click does, and when
 

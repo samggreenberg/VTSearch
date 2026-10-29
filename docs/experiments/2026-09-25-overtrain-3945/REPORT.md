@@ -26,7 +26,7 @@ Every contrast is paired within the session (and the cut), with SE clustered on 
 
 ## 1. How many votes? The C path on the same votes
 
-![C path](figures/c_path.png)
+![C path](figures/c_path.webp)
 
 *Held-out oracle cost against C, relative to C = 1, one line per click count. Below zero is better than the shipped head. R400 (this study's 400-click sessions).*
 
@@ -50,7 +50,7 @@ What memorisation looks like from inside (pooled, R150):
 
 **The penalty: C = 1 against the cross-fitted best fixed C, per click count.** The figure is R400; the table below it is R150 (#3197's sessions), and the R400 table follows.
 
-![penalty](figures/penalty_vs_clicks.png)
+![penalty](figures/penalty_vs_clicks.webp)
 
 | click | 10 | 20 | 40 | 80 | 150 |
 |---|---|---|---|---|---|
@@ -103,7 +103,7 @@ The fully adaptive oracle, a different best C at every click, beats the fixed on
 
 ## 3. Can the app detect it? Not from the votes
 
-![gauges](figures/gauges_vs_truth.png)
+![gauges](figures/gauges_vs_truth.webp)
 
 *R400, click 80: held-out AUROC (the truth) peaks at C ≈ 0.1 and falls towards C = 30. The app's cross-calibration split AUROC and 5-fold CV on the votes do the opposite, rising steeply towards large C.*
 
@@ -129,9 +129,9 @@ AUROC agrees (+0.0038 ± 0.0007 over clicks 1–400; +0.0064 ± 0.0013 at click 
 
 On VG alone, oracle cost over clicks 151–400 is **−0.016 ± 0.002**. The ranking gain grows with depth on-policy, as the replay predicted, and it is on-policy here: C = 0.1 chose its own votes. The cost the user sees does not move, because the shipped cut gives it all back. That is #4115's finding again at 2.7× the depth. It also finds 1.4 ± 0.6 fewer Goods over the session (on COCO, 3.8 ± 1.2 fewer), which is worth carrying into #4115's arm.
 
-![cost over clicks](figures/stageD_cost_vs_clicks.png)
+![cost over clicks](figures/stageD_cost_vs_clicks.webp)
 
-![oracle cost over clicks](figures/stageD_oracle_cost_vs_clicks.png)
+![oracle cost over clicks](figures/stageD_oracle_cost_vs_clicks.webp)
 
 *Mean over categories and seeds, one panel per dataset. The dotted line is click 150, where every previous study stopped.*
 
@@ -146,9 +146,9 @@ Per session, the last 50 clicks against the session's best 50-click stretch (smo
 | found < 80% | 262 | 39% | 16% | +0.024 | +0.007 |
 | C = 0.1 arm, found ≥ 80% | 209 | 75% | 9% | +0.082 | −0.007 |
 
-![per run, VG](figures/stageD_runs_visual_genome_m.png)
+![per run, VG](figures/stageD_runs_visual_genome_m.webp)
 
-*Every shipped-arm VG session as its own line (10-click rolling mean). Left: cost at the shipped cut, whose mean turns up after about 250 clicks. Right: oracle cost, which keeps falling. [COCO](figures/stageD_runs_coco_val.png) shows the same.*
+*Every shipped-arm VG session as its own line (10-click rolling mean). Left: cost at the shipped cut, whose mean turns up after about 250 clicks. Right: oracle cost, which keeps falling. [COCO](figures/stageD_runs_coco_val.webp) shows the same.*
 
 **The natural experiment.** Caltech's sim half holds 419 images, so the unvoted remainder crosses `EXCLUSION_MIN_REMAINDER = 60` at click 360 in every session, and vote exclusion switches off there ([`D_exclusion.csv`](D_exclusion.csv), all 60 sessions):
 

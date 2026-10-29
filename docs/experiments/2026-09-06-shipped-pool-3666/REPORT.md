@@ -75,7 +75,7 @@ is the subject of §5.*
 
 ## 2. #3635's extrapolation survives a second, per-class test
 
-![measured against predicted](figures/measured-vs-predicted.png)
+![measured against predicted](figures/measured-vs-predicted.webp)
 
 `pool_contamination.py` (#3635) measures per-class contamination on the VG–COCO
 overlap with COCO held back as the answer key, then extrapolates to the half
@@ -112,7 +112,7 @@ positives each**, and §4 is what that costs.
 
 ## 4. Six of the nine finds are rulings, not errors
 
-![the finds, asked alone](figures/finds-asked-alone.png)
+![the finds, asked alone](figures/finds-asked-alone.webp)
 
 A 2% rate over 100 draws is two photographs, so here they all are. The border
 colour is not the reviewer's verdict — it is a mechanical question asked of
@@ -163,7 +163,7 @@ canopy — and a fifth on the back of a sign nobody can read. Filed as **#3676**
 
 ## 5. The ranked stratum finds a different *kind* of contamination
 
-![the nine attributed by eye](figures/finds-attributed.png)
+![the nine attributed by eye](figures/finds-attributed.webp)
 
 Every uniform-stratum find above is marginal — small, peripheral, or a category
 boundary. Every **unambiguous** find in the whole pass is in the *ranked* half
@@ -227,7 +227,7 @@ uniform draw lands on a row already settled, so the same 70 judgements buy about
 
 ## 7. What another 840 draws would buy
 
-![sample size against a ruling](figures/sample-size-vs-ruling.png)
+![sample size against a ruling](figures/sample-size-vs-ruling.webp)
 
 | to get… | uniform draws per class |
 |---|---:|

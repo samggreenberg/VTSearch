@@ -66,12 +66,12 @@ On each check the exact band bound is never wider than the shipped range. Per ch
 shipped range's on a single band (most closing checks, and beta 1/4) and 0.67 / 0.76 at beta 1 / 4 during a session;
 without the split, 0.58 / 0.63.
 
-![coverage against width](figures/coverage_width.png)
+![coverage against width](figures/coverage_width.webp)
 
 Per check, at click 51: shipped (grey), exact band bound with the split (blue), and Jeffreys 90% (brown), against
 the truth (dot). At beta 4 the brown bars sit above low truths, which is the overclaim:
 
-![each check's range](figures/ranges_per_check.png)
+![each check's range](figures/ranges_per_check.webp)
 
 ## The line's own kept set
 

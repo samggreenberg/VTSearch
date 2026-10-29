@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-05-ladder-fbeta-4519.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "paired.csv": {
+     "bytes": 5705,
+     "oid": "304dc58dc18e4650fb4abea632d0b7ad55e2189b"
+    },
+    "presets/paired.csv": {
+     "bytes": 2592,
+     "oid": "5d8b3b7630ed118e882c5c1e639aad210af116f0"
+    },
+    "presets/paired_at_own_beta.csv": {
+     "bytes": 3713,
+     "oid": "98e8842d251d19126272057189056bcb73ef4795"
+    },
+    "presets/provenance.json": {
+     "bytes": 1405,
+     "oid": "1b5bf7b98eef7bce3a2c3ad6894142c97c0df357"
+    },
+    "provenance.json": {
+     "bytes": 2765,
+     "oid": "ebedf2c97374b8af463d46c67ebcb42f25f9851c"
+    }
+   }
+  }
+ ]
+}

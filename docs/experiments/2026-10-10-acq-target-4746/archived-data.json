@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-10-acq-target-4746.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/curves.csv": {
+     "bytes": 46391,
+     "oid": "abb89be7355a3ed03730a28cc61b1344b5e7bb87"
+    },
+    "tables/levels.csv": {
+     "bytes": 3267,
+     "oid": "e9c7d4d538ad371fccc71d86e7fbf026de41b82d"
+    },
+    "tables/paired.csv": {
+     "bytes": 2656,
+     "oid": "58c3947ee0c90e20f01d91cf4361efd05a3df863"
+    },
+    "tables/paired_curve.csv": {
+     "bytes": 11483,
+     "oid": "b1554c06616a821db71aaeebba054bd31361bdb9"
+    },
+    "tables/per_run.csv": {
+     "bytes": 451303,
+     "oid": "a72756fbb4bfa9d058ccf6f60cc2345695fa02cf"
+    },
+    "tables/provenance.json": {
+     "bytes": 1375,
+     "oid": "2a9998ca45b803fa33b5d2f4f68bda945d1d6c88"
+    },
+    "tables/rescore_3546_paired.csv": {
+     "bytes": 7701,
+     "oid": "64b035f39c2fcc00bcbc190ed4e853e38f794f58"
+    },
+    "tables/rescore_3546_provenance.json": {
+     "bytes": 1734,
+     "oid": "01287ad99ba1f7ab0969d1d782890252541cafff"
+    }
+   }
+  }
+ ]
+}

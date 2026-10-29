@@ -228,7 +228,7 @@ the rule decidable at all: the sweep produces ~100 intervals, and a
 alone. Harmed counts: `mid` 37, `cross_tilt` 12, `rate` **1**, `q_tilt` 13–36
 depending on step.
 
-![Paired regret against the shipped rule at every stop of the knob](figures/fig1_regret_vs_k.png)
+![Paired regret against the shipped rule at every stop of the knob](figures/fig1_regret_vs_k.webp)
 
 *Paired regret against `mid_tilt` at each stop of the Inclusion knob, one panel
 per environment, mean with bootstrap CI over cells. Dashed lines are the ±0.01
@@ -267,7 +267,7 @@ Three readings:
   fewer false alarms and the opposite of what it wants above zero. Twelve harmed
   (environment, k) points; rejected as a rule, kept as a lead.
 
-![Regret over the ramp at three stops of the knob](figures/fig3_regret_vs_votes.png)
+![Regret over the ramp at three stops of the knob](figures/fig3_regret_vs_votes.webp)
 
 *The same metric over the axis a user actually spends — votes — at k=−3, 0 and
 +3, mean ± SE over categories and seeds. The k=0 row is a fidelity check you can
@@ -275,7 +275,7 @@ read directly: `mid` and `mid_tilt` are the same line there, because `mid_tilt`
 is defined to reproduce the measured midpoint at inclusion 0. `q_tilt` is drawn
 at its shipped placeholder step (0.02); its step axis is Figure 5.*
 
-![One line per run at k=+3](figures/fig4_per_run.png)
+![One line per run at k=+3](figures/fig4_per_run.webp)
 
 *One line per run at k=+3, all environments pooled, with the mean in black. The
 mean understates what the null costs, because the damage is concentrated rather
@@ -326,13 +326,13 @@ only 0.4 belongs to `q_tilt` (0.005), which pays for it with +0.020 regret in
 that same environment. The largest margin from an arm that is *not* materially
 worse on regret is `rate`'s 0.2.
 
-![Distinct admitted sets per arm](figures/fig6_knob_yield.png)
+![Distinct admitted sets per arm](figures/fig6_knob_yield.webp)
 
 *How many of the 13 slider stops are their own answer, per arm and environment.
 `mid` sits on the "inert" line in every environment — that is one bar per
 environment at exactly 1.0, not a rounding artifact.*
 
-![What the slider does to the admitted set and to the cut](figures/fig2_knob_liveness.png)
+![What the slider does to the admitted set and to the cut](figures/fig2_knob_liveness.webp)
 
 *Top row: the admitted fraction against k — what the user sees the slider do.
 Bottom row: the combined fold quantile the cut sits at — what the rule did.
@@ -358,7 +358,7 @@ knob, decoupled from the mixture — the simplest rule that *cannot* be
 inclusion-blind. Its price is a step size with no principled value, so the sweep
 fits it rather than assuming the shipped placeholder.
 
-![q_tilt's step size](figures/fig5_qtilt_step.png)
+![q_tilt's step size](figures/fig5_qtilt_step.webp)
 
 *Left: what each step buys or spends against the incumbent, pooled over k.
 Right: how much of the slider it delivers. Every curve on the left is above

@@ -317,7 +317,7 @@ the contradiction resolves: the combine axis agrees in both modes, and only the
 *space* axis flips. A one-line change to the run design bought the difference
 between a paradox and a mechanism.
 
-![Region voting](figures/regret_over_votes_region_k4.png)
+![Region voting](figures/regret_over_votes_region_k4.webp)
 
 *Region voting, K=4: paired Δregret against the pooled cut over the vote axis,
 averaged over 48 runs with ±1 SE bands. Every combine rule beats pooling past
@@ -325,7 +325,7 @@ averaged over 48 runs with ±1 SE bands. Every combine rule beats pooling past
 the endpoint — the ordering before ~15 votes is reversed, and this figure does
 not license the deep-regime numbers being applied to the cold start.*
 
-![Binary voting](figures/regret_over_votes_binary_k4.png)
+![Binary voting](figures/regret_over_votes_binary_k4.webp)
 
 *Binary voting, same axes. The sign of the quantile-space arms (orange) flips
 relative to region: worse past ~20 votes, not better. The anchored rule's huge
@@ -413,7 +413,7 @@ Region's combine gap grows and saturates by K≈8; binary's is flat from K=2. Th
 *space* leg shrinks with K in both — the opposite of the predicted direction.
 Since production ships K=2, none of this changes what a user gets today.
 
-![Contrasts over K](figures/contrasts_over_k_region.png)
+![Contrasts over K](figures/contrasts_over_k_region.webp)
 
 *Region voting: each contrast over the fold count, ±1 SE. The shaded band at
 K<3 is where mean and median are the same rule by construction, so the median

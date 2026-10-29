@@ -101,6 +101,7 @@ same edit.
     `vs_binary_path.png`) and its table, against the newest Binary Photo review
     of the same app. It reads the two reports' committed `objective_by_click.csv`
     and `precision_recall_path.csv`, so it needs nothing from the GRID.
+    (`study_data.py archive` never moves those two out of a review's directory.)
   - The report names that binary review and its seeds, and says the two are not
     paired by seed. It is still two paths as they ship, not an A/B.
 - **Stable links that follow `dev` (owner, 2026-10-06):** the newest report

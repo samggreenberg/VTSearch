@@ -31,7 +31,7 @@ It keeps two thirds of K = 4,000's 10-vote gain at about half the cost, inside
 the 5 s budget. The first sort before any vote (example sort) takes 3.1 s
 median, against 2.1 s at K = 1,000.
 
-![Arms](figures/arms.png)
+![Arms](figures/arms.webp)
 
 The tier-`s` and tier-`m` AP of "before" (dashed) is hidden under the GPU arm,
 because it is identical.

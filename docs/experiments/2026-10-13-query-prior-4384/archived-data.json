@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-13-query-prior-4384.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "pair.csv": {
+     "bytes": 11272,
+     "oid": "16e26debc9796a5d6ca8915c863ca8e49e3bed09"
+    },
+    "per_class.csv": {
+     "bytes": 5939,
+     "oid": "770f9fe5cdf22d1eed516fcba0d326e4eeedaa65"
+    }
+   }
+  }
+ ]
+}

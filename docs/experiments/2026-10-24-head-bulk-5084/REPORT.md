@@ -69,7 +69,7 @@ heads, against today's line:
 (`tables/offline_presets.csv`). Faces' corpora are at a person's own prevalence (about 4 of 5,439 crops) and its
 thinned and sparse versions.*
 
-![Gain over today's line against the count's multiplier](figures/offline_gain_vs_multiplier.png)
+![Gain over today's line against the count's multiplier](figures/offline_gain_vs_multiplier.webp)
 
 *Figure 2: F-beta gain over today's line as the count's multiplier moves, today's count (Gaussian bulk, 4 spreads),
 per bench and preset; dashed: the two closed-loop arms. Region gains down to a third of today's multiplier at 0.44%
@@ -111,7 +111,7 @@ on Region Photo, and Binary if it moves.
 
 ## Why the count over-reads
 
-![The heads' bulk tails against a Gaussian](figures/bulk_tail.png)
+![The heads' bulk tails against a Gaussian](figures/bulk_tail.webp)
 
 *Figure 1: withheld negatives above median + z spreads (median over beta 1 heads, 0.44%) over what a Gaussian bulk of
 the same size puts there. Faces stop at 3 spreads: the median face head has no negative above.*
@@ -172,7 +172,7 @@ from the first z where the fit drops below 3 images.*
 
 ## The closed loop
 
-![Binary Photo closed loop](figures/ab_binary_over_clicks.png)
+![Binary Photo closed loop](figures/ab_binary_over_clicks.webp)
 
 *Figure 3: Binary Photo, Find's F-beta on the withheld half over clicks (top) and the paired gain over the app (bottom,
 ± one SE over classes), 720 sessions per arm.*
@@ -190,7 +190,7 @@ until the class model holds 6 held-out Goods (~40 for most classes):
 - Sessions barely part: 1.3% of beta 1 runs pick a different image before click 200 (median click 61), all on a
   phase change, and Done moves by under 0.06 clicks.
 
-![Region Photo closed loop](figures/ab_region_over_clicks.png)
+![Region Photo closed loop](figures/ab_region_over_clicks.webp)
 
 *Figure 4: Region Photo, as figure 3, 144 sessions per arm (1 seed, 100 clicks on the cpu partition).*
 

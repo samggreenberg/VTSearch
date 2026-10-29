@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-23-fullmarks-votes-4162.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/tier-m/rows-a6-0.csv": {
+     "bytes": 9574,
+     "oid": "813715834873b2f7f49fb779200c9679d846b134"
+    },
+    "measurements/tier-m/rows.csv": {
+     "bytes": 38884,
+     "oid": "394e0beee789be3d760d640823b3b03b14f0fb05"
+    },
+    "measurements/tier-m/run.json": {
+     "bytes": 251,
+     "oid": "9cb95fc2ae528cbbba2c4126e56065c9b8b3ab2f"
+    },
+    "measurements/tier-s/rows-a6-0.csv": {
+     "bytes": 2934,
+     "oid": "de319c7fa48bf37b7dc68060197a3e1726152250"
+    },
+    "measurements/tier-s/rows-a6-1.csv": {
+     "bytes": 2915,
+     "oid": "d31d8ae39cf4ee541d589959370cc008c70fcb65"
+    },
+    "measurements/tier-s/rows-a6-2.csv": {
+     "bytes": 1967,
+     "oid": "ce9700bad97a96a0f10d4a53edc76b54bdfd1879"
+    },
+    "measurements/tier-s/rows-a6-3.csv": {
+     "bytes": 2627,
+     "oid": "86f3c095ef028b59298a20402c276ed159cb18f7"
+    },
+    "measurements/tier-s/rows.csv": {
+     "bytes": 276095,
+     "oid": "822960434a8610978b24eb2d602cbcabc2eccf24"
+    },
+    "measurements/tier-s/run.json": {
+     "bytes": 341,
+     "oid": "e0e14c5f7c8705d0c7365c542496e6200e1a3f1e"
+    }
+   }
+  }
+ ]
+}

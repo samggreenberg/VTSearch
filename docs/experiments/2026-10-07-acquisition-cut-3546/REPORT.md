@@ -43,7 +43,7 @@ clustered on category. Bold means more than 2 SE from zero.
 
 ## Result
 
-![Every rule against today's cut](figures/rules.png)
+![Every rule against today's cut](figures/rules.webp)
 
 *Each rule minus today's cut, ±2 SE, one colour per preset. Target precision 0.5 is right of zero on Goods and
 AP at every preset, and on or right of zero on the objective. The old origin and the fixed pin are left of zero
@@ -74,13 +74,13 @@ on Goods; the old origin also loses AP and the objective.*
   objective. A fixed pin harvests even worse (Hard picks 8% Good, −6.7 Goods): it is computed over the whole
   simulation pool, voted items included, so it drifts toward items already voted.
 
-![The objective over votes, per preset](figures/curves.png)
+![The objective over votes, per preset](figures/curves.webp)
 
 *Today's cut (blue), target precision 0.5 (orange) and at the line (green). They are the same until the first
 detector shows at about vote 23. At beta 4 the target precision is ahead from about vote 40 on; at beta 1/4 and
 1 the curves overlap within 0.005 until the last 30 votes.*
 
-![Share of Hard picks that are Good](figures/hard_picks.png)
+![Share of Hard picks that are Good](figures/hard_picks.webp)
 
 *Target precision 0.5 is the only rule whose Hard picks are as often Good at beta 4 as at beta 1/4.*
 

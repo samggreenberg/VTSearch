@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-weak-check-faces-4778.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ab.csv": {
+     "bytes": 4805,
+     "oid": "05369e6a6b298674bcfa163aed82dd1cb327c35d"
+    },
+    "curves.csv": {
+     "bytes": 45641,
+     "oid": "47014a39bc768c02ce6b4f3e7dc924ad397e38ad"
+    },
+    "goods_strata_coco.csv": {
+     "bytes": 1162,
+     "oid": "cd8924284e2ac73b75548a992f861e38f6515157"
+    },
+    "goods_strata_faces.csv": {
+     "bytes": 1020,
+     "oid": "3d7914787807baff0cf2cfb5562dd34c3b9c42a4"
+    },
+    "vote_strata_coco.csv": {
+     "bytes": 965,
+     "oid": "e060a8225241ccc53135c6815231bade38e8f5a1"
+    }
+   }
+  }
+ ]
+}

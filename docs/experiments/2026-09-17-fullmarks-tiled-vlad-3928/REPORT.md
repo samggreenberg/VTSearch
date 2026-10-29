@@ -20,7 +20,7 @@ documents.
   0.75 exhaustive) and round SPODS stamps (0.46 against 0.61) lose the most, and
   three classes get nothing from Stage 1 at all.
 
-![Stage 1 shortlists](fig_stage1.png)
+![Stage 1 shortlists](fig_stage1.webp)
 
 ## What was run
 

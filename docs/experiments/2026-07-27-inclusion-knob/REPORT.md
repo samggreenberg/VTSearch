@@ -53,7 +53,7 @@ voted). Raw data: [`sweep.csv`](sweep.csv); full tables:
 
 ## Findings
 
-![knob response](fig_knob_response.png)
+![knob response](fig_knob_response.webp)
 
 ### 1. The root cause is the argmin, not over-training
 
@@ -100,7 +100,7 @@ votes). `bayes_temp` was as bad as or worse than `bayes` everywhere.
 
 ### 5. The conformal quantile rule works
 
-![recall and FPR](fig_recall_fpr.png)
+![recall and FPR](fig_recall_fpr.webp)
 
 Because it is defined on *quantiles of the held-out score distributions* rather
 than on cost argmins or absolute probabilities, it moves whenever the

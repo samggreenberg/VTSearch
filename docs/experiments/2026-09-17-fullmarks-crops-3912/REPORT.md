@@ -11,7 +11,7 @@ similarity model in normalized coordinates and rejected any fit with
 LightGlue path fits through `structural_geometry.fit_model`, which imports the
 same constant, so it had the same floor.
 
-![fitted scale vs inliers](fig_scale_vs_inliers.png)
+![fitted scale vs inliers](fig_scale_vs_inliers.webp)
 
 ## The crops are right
 
@@ -20,7 +20,7 @@ stored crop identical to a re-cut from the raw TIFF, a decode scale of 1.0, and
 the box on the mark. Every Tobacco800 page is a 1-bit Group 4 TIFF, the working
 classes included.
 
-![azb11c00: crop, page with box, decoded box region](panel_azb11c00.png)
+![azb11c00: crop, page with box, decoded box region](panel_azb11c00.webp)
 
 | class | crop | page | crop w / page w | fitted scale | own page, old floor |
 |---|---|---|---:|---:|---|

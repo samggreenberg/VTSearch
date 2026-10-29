@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-31-enrich-descriptions-3127.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/category_scatter.png": {
+     "bytes": 127695,
+     "oid": "7e14a9f0e3722ffce0013a0020d0056e474ef4e9"
+    },
+    "tables/examples.csv": {
+     "bytes": 1813,
+     "oid": "8ceede67b3955698b299252221c126a26e38e704"
+    },
+    "tables/mechanism_wrapper_length.csv": {
+     "bytes": 2198,
+     "oid": "c4e6b397b4e2a40f5ac005eb2f4b1a2069bddf16"
+    },
+    "tables/paired_categories.csv": {
+     "bytes": 91830,
+     "oid": "9d1e767484dac1ccb6cf5853292f0948fbe00d2d"
+    },
+    "tables/per_dataset.csv": {
+     "bytes": 4820,
+     "oid": "af0f5d1050b2c256c3bcf782d46c450230431efc"
+    },
+    "tables/per_media_type_p5.csv": {
+     "bytes": 975,
+     "oid": "3e5ad72d13e8ed3104b00505c31c5e737e23ecfb"
+    },
+    "tables/per_wrapper.csv": {
+     "bytes": 4089,
+     "oid": "720febb9de23f20e160481ef2d35bb758a27031a"
+    }
+   }
+  }
+ ]
+}

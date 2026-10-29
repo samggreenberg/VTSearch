@@ -1,0 +1,87 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-03-state-of-the-app-document-logo-4457.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/line_at_floors.png": {
+     "bytes": 168075,
+     "oid": "3a647f19abff8cc1ca9e680efd1c5956febf32f6"
+    },
+    "images/harmful-spods__stamp_00293_1-spods__00337.png": {
+     "bytes": 98754,
+     "oid": "03e698fb927a0892ea75be6441e921f77eb7f510"
+    },
+    "images/harmful-spods__stamp_00577_1-spods__00604.png": {
+     "bytes": 44215,
+     "oid": "8313f67d04940f6bcfaaf6f0bfa0c877b72bfbaa"
+    },
+    "images/harmful-tobacco800__logo_asg54f00_1-tobacco800__bjn43c00-page02_2.png": {
+     "bytes": 42831,
+     "oid": "bab689fa0c77e64f00e1535b0442da6e310aeb34"
+    },
+    "images/harmful-tobacco800__logo_cgr96c00_1-tobacco800__sia26d00.png": {
+     "bytes": 56738,
+     "oid": "a48553573531a5319c0920c49b0dbed2eb7d7dce"
+    },
+    "images/helpful-tobacco800__logo_aah97e00-page02_1_0-ucsf__fmgk0164_0.png": {
+     "bytes": 42777,
+     "oid": "ee2f04be113405a09a8671b307e3acd1b9a87641"
+    },
+    "images/helpful-tobacco800__logo_aeq93a00_1-ucsf__ffbf0003_0.png": {
+     "bytes": 47656,
+     "oid": "71d74ee446123941a74a3c78d43bc8fa2a77a9fa"
+    },
+    "images/helpful-tobacco800__logo_ald41a00-ernest_1-tobacco800__vbd23f00.png": {
+     "bytes": 45373,
+     "oid": "3c8b5791157fdaa27ae5792a62ca7c6146718e97"
+    },
+    "images/helpful-tobacco800__logo_cgr96c00_1-tobacco800__zjy03e00-page02_2.png": {
+     "bytes": 34920,
+     "oid": "09a2bb94b009e7cf9c5c11cd54ab4ec5eb8232d6"
+    },
+    "measurements/rep1/clicks.csv": {
+     "bytes": 152535,
+     "oid": "663ef8742763d5b51bbb121f8fd9c5c3763dc1b6"
+    },
+    "measurements/rep1/positives_final.csv": {
+     "bytes": 64466,
+     "oid": "331d882d4fe1dcd9bfef19a7b9f8ed78e8bef99b"
+    },
+    "measurements/rep1/run.json": {
+     "bytes": 337,
+     "oid": "94b5b9610f62b7921b19cc0604ca63e8bf45231d"
+    },
+    "measurements/rep2/clicks.csv": {
+     "bytes": 146180,
+     "oid": "e34702d65ebdb37ea030a50a05decdf909d0958b"
+    },
+    "measurements/rep2/positives_final.csv": {
+     "bytes": 65479,
+     "oid": "7b67abfd83be785f0785d92f19b43f16e13df92f"
+    },
+    "measurements/rep2/run.json": {
+     "bytes": 336,
+     "oid": "2f833061b77a483556c36e46934b2fa629c3c995"
+    },
+    "misses/tobacco800__logo_asg54f00_1-tobacco800__jdc94f00.png": {
+     "bytes": 30615,
+     "oid": "afd171b18c039e7fad2e8078e8fcc174efb98391"
+    },
+    "misses/tobacco800__logo_cgr96c00_1-tobacco800__alk3aa00.png": {
+     "bytes": 59135,
+     "oid": "4d15d0b6582ebc883966d1c1be4957db6b643da7"
+    },
+    "misses/ucsf__logo_bat_leaf-ucsf__ffmg0199_0.png": {
+     "bytes": 35296,
+     "oid": "14e6952a191ce3da5ac1ec29859f339e1fb09ea5"
+    },
+    "misses/ucsf__logo_bw_oval_emblem-ucsf__jnww0193_0.png": {
+     "bytes": 118839,
+     "oid": "e34c3afdd569171daf6ea4b6a948b27cd8c946f6"
+    }
+   }
+  }
+ ]
+}
