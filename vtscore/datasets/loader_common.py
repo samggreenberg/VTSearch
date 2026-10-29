@@ -10,8 +10,8 @@ the file behind ``# noqa: E402``.
 
 Nothing here performs I/O or touches the media registry; the module-level
 imports are deliberately limited to numpy and
-:mod:`vtscore.concurrency.progress` (itself a stdlib-only leaf) so importing it
-can never pull in a cycle.
+:mod:`vtscore.concurrency.progress` (stdlib-only, like the progress modules it
+re-exports) so importing it can never pull in a cycle.
 """
 
 from __future__ import annotations
