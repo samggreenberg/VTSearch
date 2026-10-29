@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The calibration folds left `thresholds.conformal` for `thresholds.fold_orderings`** (issue #5428).
+  The Train/Calibrate splits and the per-fold fits (`compute_fold_orderings`,
+  `compute_grouped_fold_node_scores`, `nearest_holdout`, `CALIBRATION_SPLIT_SEED` and their private helpers)
+  now live in `vtscore.training.thresholds.fold_orderings`; `conformal` keeps the quantile rule, the fold
+  combiners and the fold cache. Every name still imports from `vtscore.training.thresholds`, and the public
+  fold names still import from `vtscore.training.thresholds.conformal`. The private helpers (`_grouped_folds`,
+  `_split_train_counts`, ...) and the module's `time` are no longer reachable as `conformal._name`: a stub for
+  anything the fold code reads (its per-fold clock, the split sizing) patches `fold_orderings`, while a stub for
+  `compute_fold_orderings` that should reach `calibration_folds` still patches `conformal`. Behaviour is
+  unchanged.
+
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
   module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
   `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
