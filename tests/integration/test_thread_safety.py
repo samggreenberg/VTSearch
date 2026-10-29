@@ -404,7 +404,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
             # unexpected goes wrong; the test releases this in <1s.
             unblock.wait(timeout=30)
 
-        monkeypatch.setattr(_settings_mod, "_sync_to_source", slow_sync)
+        monkeypatch.setattr(settings_tiers, "_sync_to_source", slow_sync)
 
         errors: list[BaseException] = []
         reader_done = threading.Event()

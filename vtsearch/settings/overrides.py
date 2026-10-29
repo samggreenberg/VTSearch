@@ -24,9 +24,9 @@ from collections.abc import Iterable
 from typing import Any
 
 from vtsearch import settings
+from vtsearch.settings import tiers
 from vtsearch.settings import admin_overrides as _admin
 from vtsearch.settings.models import partition_docs_links
-from vtsearch.settings.tiers import _read_value
 
 
 def get_effective_override(name: str) -> Any:
@@ -169,7 +169,7 @@ def get_rejected_docs_links() -> list[Any]:
     whose link is missing from the Help modal would otherwise have nothing to
     go on. ``app.py`` names each of these in the startup log instead.
     """
-    raw = _read_value("docs_links")
+    raw = tiers._read_value("docs_links")
     return partition_docs_links(raw)[1] if isinstance(raw, list) else []
 
 

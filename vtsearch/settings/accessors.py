@@ -26,26 +26,9 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch import settings
-from vtsearch.settings import tiers
+from vtsearch.settings import schema, tiers
 from vtsearch.settings.models import VALID_PANEL_PX
-from vtsearch.settings.schema import (
-    _EXCLUDE_FROM_DEFAULTS,
-    _all_defaults,
-    _server_defaults,
-    _user_defaults,
-    _validate_field,
-)
-from vtsearch.settings.tiers import (
-    _ensure_server_loaded,
-    _ensure_user_loaded,
-    _mutate_server_locked,
-    _read_value,
-    _settings_lock,
-    _user_caches,
-    _write_value,
-    mutate_user,
-    snapshot_user,
-)
+from vtsearch.settings.schema import _EXCLUDE_FROM_DEFAULTS
 
 # -------------------------------------------------------------------
 # Pydantic-driven generation of simple get_<key> / set_<key> pairs.
@@ -63,16 +46,16 @@ def _make_scalar_accessors(model: type, key: str):
         # read only. Wrapping the call in the lock here would put the
         # ensure-loaded file/sync locks underneath it and invert the
         # canonical file_lock → settings_lock order.
-        raw = _read_value(key)
+        raw = tiers._read_value(key)
         try:
-            return _validate_field(model, key, raw)
+            return schema._validate_field(model, key, raw)
         except ValueError:
             # Corrupt disk value - fall back to the default so callers
             # never see partially-typed garbage.
             return model.model_fields[key].get_default(call_default_factory=True)
 
     def validate(value):
-        return _validate_field(model, key, value)
+        return schema._validate_field(model, key, value)
 
     def setter(value):
         # Lock acquisition is delegated to ``_write_value`` →
@@ -81,7 +64,7 @@ def _make_scalar_accessors(model: type, key: str):
         # would invert the order and risk an AB-BA deadlock with paths
         # that enter ``_mutate_*_locked`` directly.
         coerced = validate(value)
-        _write_value(key, coerced)
+        tiers._write_value(key, coerced)
 
     getter.__name__ = f"get_{key}"
     setter.__name__ = f"set_{key}"
@@ -160,7 +143,7 @@ def _make_per_side_setting(  # noqa: C901
         default_val = defaults.get(side, next(iter(defaults.values())))
         # Unlocked: ``_read_value`` locks its own cache read (see
         # ``_make_scalar_accessors.getter``).
-        raw = _read_value(key)
+        raw = tiers._read_value(key)
         types = _valid_media_types()
         if not isinstance(raw, dict):
             return {tid: default_val for tid in types}
@@ -204,7 +187,7 @@ def _make_per_side_setting(  # noqa: C901
     def _set_dict(key: str, value) -> None:
         # Locks are taken inside ``_write_value`` in the canonical
         # order (file_lock → settings_lock); see ``_make_scalar_accessors.setter``.
-        _write_value(key, _validate_dict(key, value))
+        tiers._write_value(key, _validate_dict(key, value))
 
     def get_left():
         return _get_dict(f"{key_base}_left")
@@ -265,7 +248,7 @@ def get_autofind_detectors() -> list[str]:
     loaded dataset. Per-user (with a read-through to the server file for the
     built-in "default" user; see :func:`~vtsearch.settings.tiers._read_value`).
     """
-    raw = _read_value("autofind_detectors")
+    raw = tiers._read_value("autofind_detectors")
     return list(raw) if isinstance(raw, list) else []
 
 
@@ -276,7 +259,7 @@ def validate_autofind_detectors(value: list[str]) -> list[str]:
 
 def set_autofind_detectors(value: list[str]) -> None:
     """Set and persist the current user's full AutoFind detector list."""
-    _write_value("autofind_detectors", validate_autofind_detectors(value))
+    tiers._write_value("autofind_detectors", validate_autofind_detectors(value))
 
 
 def add_autofind_detector(name: str) -> None:
@@ -294,7 +277,7 @@ def add_autofind_detector(name: str) -> None:
         base = cache["autofind_detectors"] if "autofind_detectors" in cache else seed
         cache["autofind_detectors"] = list(dict.fromkeys([*base, name]))
 
-    mutate_user(_add)
+    tiers.mutate_user(_add)
 
 
 def remove_autofind_detector(name: str) -> bool:
@@ -310,7 +293,7 @@ def remove_autofind_detector(name: str) -> bool:
         base = cache["autofind_detectors"] if "autofind_detectors" in cache else seed
         cache["autofind_detectors"] = [n for n in base if n != name]
 
-    mutate_user(_remove)
+    tiers.mutate_user(_remove)
     return found
 
 
@@ -330,18 +313,18 @@ def _get_dir(key: str) -> Path:
     ``_ensure_server_loaded`` runs outside ``_settings_lock`` (it takes the
     server ``file_lock`` on a cold cache); only the cache read is locked.
     """
-    _ensure_server_loaded()
-    with _settings_lock:
+    tiers._ensure_server_loaded()
+    with tiers._settings_lock:
         server_cache = tiers._store.server_cache or {}
-        raw = server_cache.get(key, _server_defaults()[key])
+        raw = server_cache.get(key, schema._server_defaults()[key])
     return Path(raw)
 
 
 def _set_dir(key: str, value: str | Path) -> None:
     """Persist a server-tier directory path setting."""
-    _ensure_server_loaded()
+    tiers._ensure_server_loaded()
     coerced = str(value)
-    _mutate_server_locked(lambda c: c.__setitem__(key, coerced))
+    tiers._mutate_server_locked(lambda c: c.__setitem__(key, coerced))
 
 
 def get_saved_datasets_dir() -> Path:
@@ -371,7 +354,7 @@ def set_detectors_dir(value: str | Path) -> None:
 
 def get_defaults() -> dict[str, Any]:
     """Return a copy of the default settings (excluding infrastructure keys)."""
-    result = {k: v for k, v in _all_defaults().items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    result = {k: v for k, v in schema._all_defaults().items() if k not in _EXCLUDE_FROM_DEFAULTS}
     valid_types = _valid_media_types()
     result["grid_icon_size_left"] = {tid: _GRID_ICON_SIZE_DEFAULT for tid in valid_types}
     result["grid_icon_size_right"] = {tid: _GRID_ICON_SIZE_DEFAULT for tid in valid_types}
@@ -392,8 +375,8 @@ def get_user_settings() -> dict[str, Any]:
     """
     from vtsearch.auth import get_current_user
 
-    user_copy = snapshot_user(get_current_user())
-    result = dict(_user_defaults())
+    user_copy = tiers.snapshot_user(get_current_user())
+    result = dict(schema._user_defaults())
     result.update(user_copy)
     result["grid_icon_size_left"] = settings.get_grid_icon_size_left()
     result["grid_icon_size_right"] = settings.get_grid_icon_size_right()
@@ -414,12 +397,12 @@ def get_all() -> dict[str, Any]:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    _ensure_server_loaded()
-    _ensure_user_loaded(username)
-    with _settings_lock:
+    tiers._ensure_server_loaded()
+    tiers._ensure_user_loaded(username)
+    with tiers._settings_lock:
         server_copy = dict(tiers._store.server_cache or {})
-        user_copy = dict(_user_caches.get(username, {}))
-    result = dict(_all_defaults())
+        user_copy = dict(tiers._user_caches.get(username, {}))
+    result = dict(schema._all_defaults())
     result.update(server_copy)
     result.update(user_copy)
     # Always return expanded per-media-type size/focus/panel dicts.

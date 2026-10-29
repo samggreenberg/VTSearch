@@ -47,15 +47,18 @@ The last three call generated accessors, so they reach them through this
 package; it imports :mod:`~vtsearch.settings.overrides` and
 :mod:`~vtsearch.settings.sync` only once those exist.
 
-**Patch where the name is looked up.**  A caller outside the package resolves
-``vtsearch.settings.X`` when it runs, so patching the package reaches it.  A
-function inside a submodule resolves its own module global, of which this
-package's attribute is only a copy: stubbing ``get_effective_hidden_plugins``
-for :func:`filter_visible_plugins` means patching
-:mod:`vtsearch.settings.overrides`, and patching it here is silently ignored.
-The generated accessors are the exception - they live here, and the submodules
-call them through the package, so patching ``vtsearch.settings.get_beta``
-reaches every caller.  Private names, and the paths
+**Patch the module that defines the name.**  A caller outside the package
+resolves ``vtsearch.settings.X`` when it runs, so patching the package reaches
+it - but a function inside a submodule does not look there.  Within the
+package, a module calls another module's functions through that module
+(``tiers._read_value(...)``, ``settings.get_beta()``), so a stub installed on
+the defining module reaches every caller; a call inside one module resolves
+that module's own global.  So stubbing ``get_effective_hidden_plugins`` for
+:func:`filter_visible_plugins` means patching
+:mod:`vtsearch.settings.overrides` (patching it here is silently ignored), and
+stubbing ``_sync_to_source`` means patching :mod:`vtsearch.settings.tiers`.  The
+generated accessors are defined here, so ``vtsearch.settings.get_beta`` is the
+one target for them.  Private names, and the paths
 :mod:`~vtsearch.settings.tiers` rebinds at run time (``SETTINGS_PATH``), are not
 re-exported: read and patch them on the module that owns them.
 """

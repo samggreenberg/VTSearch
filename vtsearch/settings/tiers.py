@@ -23,13 +23,12 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
+from vtsearch.settings import schema
 from vtsearch.settings.schema import (
     _DEFAULT_USER_FALLBACK_KEYS,
     _EXCLUDE_FROM_SOURCE_EXPORT,
     _SERVER_KEYS,
     _sanitize_tier,
-    _server_defaults,
-    _user_defaults,
 )
 from vtsearch.settings.store import AppliedSettings, UserSettingsStore, UserSyncState as _UserSyncState
 
@@ -214,7 +213,7 @@ def _read_value(key: str) -> Any:
             server_cache = _store.server_cache or {}
             if key in server_cache:
                 return server_cache[key]
-        return _server_defaults()[key]
+        return schema._server_defaults()[key]
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
@@ -237,7 +236,7 @@ def _read_value(key: str) -> Any:
             server_cache = _store.server_cache or {}
             if key in server_cache:
                 return server_cache[key]
-    return _user_defaults().get(key)
+    return schema._user_defaults().get(key)
 
 
 def _write_value(key: str, value: Any) -> None:

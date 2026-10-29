@@ -28,7 +28,6 @@ from vtsearch.settings import tiers
 from vtsearch.settings.overrides import apply_user_solo_embedder_per_media_type
 from vtsearch.settings.schema import _USER_KEYS
 from vtsearch.settings.store import AppliedSettings
-from vtsearch.settings.tiers import _ensure_user_loaded, _mutate_user_locked, _sync_to_source
 
 
 # -------------------------------------------------------------------
@@ -75,7 +74,7 @@ def get_settings_source_config_resolved() -> tuple[dict[str, Any] | None, bool]:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    _ensure_user_loaded(username)
+    tiers._ensure_user_loaded(username)
     return tiers._store.resolve_settings_source(username)
 
 
@@ -94,7 +93,7 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    _ensure_user_loaded(username)
+    tiers._ensure_user_loaded(username)
 
     def _apply(cache: dict[str, Any]) -> None:
         if config is None:
@@ -102,7 +101,7 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
         else:
             cache["settings_source"] = config
 
-    sync_data = _mutate_user_locked(username, _apply)
+    sync_data = tiers._mutate_user_locked(username, _apply)
 
     # Resolve the *effective* source after the write: clearing the explicit
     # key may leave the user inheriting the deployment default, and ``"none"``
@@ -119,7 +118,7 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
         # source location and stamps the user as freshly synced (so the next
         # ``_ensure_user_loaded`` doesn't immediately pull what we just
         # pushed).
-        _sync_to_source(username, sync_data)
+        tiers._sync_to_source(username, sync_data)
 
 
 # Map of setting key → setter function (generated dynamically).
