@@ -1,11 +1,13 @@
-"""Flask-aware glue between the (library-candidate) ``vtsearch.state`` core
-and the Flask request lifecycle.
+"""Fill the library's host seams with the app's Flask and settings wiring.
 
-The library is being split into a Flask-free ``vtscore`` and a Flask-
-wrapping ``vtsearch`` app - see ``../../vtscore/docs/architecture.md``.  Any
-piece of code that wants to read or override the per-request
-``DatasetContext`` / ``DetectorContext`` via ``flask.g`` belongs here
-so the core package can stay import-clean.
+``vtscore`` runs without Flask and without ``vtsearch.settings``, so wherever
+it needs an answer only the host app has - the per-request
+``DatasetContext`` / ``DetectorContext`` on ``flask.g``, a persisted user
+setting, an achievement counter - it exposes a ``register_*`` hook (the
+*host seams*, listed in :mod:`vtscore.host_seams`; see
+``../vtscore/docs/architecture.md``).  ``app.py`` calls the ``register_*``
+functions here once at startup to install the app's answers, so the library
+stays import-clean.
 """
 
 from __future__ import annotations
@@ -128,7 +130,7 @@ def register_app_persistence_hooks() -> None:
 
     The library exposes a few "let the app persist this" hook points so it
     doesn't import settings directly (the Settings seam in
-    ``../../vtscore/docs/architecture.md``).  This function installs the Flask
+    ``../vtscore/docs/architecture.md``).  This function installs the Flask
     app's settings as the backing store for each hook.
     """
     from vtsearch import settings
@@ -236,7 +238,7 @@ def register_app_plugin_families() -> None:
     ``vtsearch.settings`` to disk).  Registering them here keeps
     ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
     import - see the Plugin discovery seam in
-    ``../../vtscore/docs/architecture.md``.
+    ``../vtscore/docs/architecture.md``.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.
