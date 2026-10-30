@@ -9,7 +9,7 @@ type AttributesFn = (req: HttpRequest<unknown>, match: RegExpMatchArray) => Attr
 /** One action endpoint whose success is a usage event (#5475). */
 interface TrackedRoute {
   method: 'GET' | 'POST';
-  /** Anchored, matched against the path without its query string. */
+  /** Anchored, matched against the path after `/api/`, without its query string. */
   pattern: RegExp;
   group: string;
   /** Event details from the request; `null` / `undefined` entries are dropped. */
@@ -49,41 +49,41 @@ const datasetImport =
  * counted.
  */
 const TRACKED_ROUTES: TrackedRoute[] = [
-  route(/^\/api\/dataset\/import\/([^/]+)$/, 'datasetImported', datasetImport()),
-  route(/^\/api\/dataset\/import-local-folder$/, 'datasetImported', datasetImport('local_folder')),
-  route(/^\/api\/dataset\/import-local-files$/, 'datasetImported', datasetImport('local_files')),
-  route(/^\/api\/dataset\/load-file$/, 'datasetImported', datasetImport('pickle_file')),
-  route(/^\/api\/dataset\/load-demo$/, 'datasetImported', (req) => ({ importer: 'demo', demo: bodyField(req, 'name') })),
-  route(/^\/api\/dataset\/combine$/, 'datasetsCombined'),
-  route(/^\/api\/dataset\/promote$/, 'datasetPromoted'),
-  route(/^\/api\/dataset\/export$/, 'datasetExported', undefined, 'GET'),
-  route(/^\/api\/exporters\/export$/, 'resultsExported', (req) => ({
+  route(/^dataset\/import\/([^/]+)$/, 'datasetImported', datasetImport()),
+  route(/^dataset\/import-local-folder$/, 'datasetImported', datasetImport('local_folder')),
+  route(/^dataset\/import-local-files$/, 'datasetImported', datasetImport('local_files')),
+  route(/^dataset\/load-file$/, 'datasetImported', datasetImport('pickle_file')),
+  route(/^dataset\/load-demo$/, 'datasetImported', (req) => ({ importer: 'demo', demo: bodyField(req, 'name') })),
+  route(/^dataset\/combine$/, 'datasetsCombined'),
+  route(/^dataset\/promote$/, 'datasetPromoted'),
+  route(/^dataset\/export$/, 'datasetExported', undefined, 'GET'),
+  route(/^exporters\/export$/, 'resultsExported', (req) => ({
     exporter: bodyField(req, 'exporter_name'),
     payload: bodyField(req, 'payload_kind'),
   })),
-  route(/^\/api\/label-importers\/import\/([^/]+)$/, 'labelsImported', (_req, match) => ({
+  route(/^label-importers\/import\/([^/]+)$/, 'labelsImported', (_req, match) => ({
     importer: pathName(match),
     into: 'new_detector',
   })),
-  route(/^\/api\/detectors\/[^/]+\/import-labels\/([^/]+)$/, 'labelsImported', (_req, match) => ({
+  route(/^detectors\/[^/]+\/import-labels\/([^/]+)$/, 'labelsImported', (_req, match) => ({
     importer: pathName(match),
     into: 'existing_detector',
   })),
-  route(/^\/api\/detectors$/, 'detectorCreated', (req) => ({
+  route(/^detectors$/, 'detectorCreated', (req) => ({
     source: 'new_detector_form',
     media_type: bodyField(req, 'media_type'),
     embedder_type: bodyField(req, 'embedder_type'),
   })),
-  route(/^\/api\/detectors\/registry\/from-labelset\/([^/]+)$/, 'detectorCreated', (_req, match) => ({
+  route(/^detectors\/registry\/from-labelset\/([^/]+)$/, 'detectorCreated', (_req, match) => ({
     source: 'labelset',
     importer: pathName(match),
   })),
-  route(/^\/api\/detectors\/[^/]+\/portable-bundle$/, 'detectorExported'),
-  route(/^\/api\/find$/, 'find'),
-  route(/^\/api\/settings-importers\/import\/([^/]+)$/, 'settingsImported', (_req, match) => ({
+  route(/^detectors\/[^/]+\/portable-bundle$/, 'detectorExported'),
+  route(/^find$/, 'find'),
+  route(/^settings-importers\/import\/([^/]+)$/, 'settingsImported', (_req, match) => ({
     importer: pathName(match),
   })),
-  route(/^\/api\/settings-exporters\/export$/, 'settingsExported', (req) => ({
+  route(/^settings-exporters\/export$/, 'settingsExported', (req) => ({
     exporter: bodyField(req, 'exporter_name'),
   })),
 ];
@@ -106,24 +106,28 @@ function compact(attributes: Attributes): Record<string, MetricsAttributeValue> 
  * happen; see `MetricsService`.
  */
 export const metricsInterceptor: HttpInterceptorFn = (req, next) => {
-  const path = req.url.split('?')[0];
-  let route: TrackedRoute | undefined;
+  const url = req.url.split('?')[0];
+  if (!url.startsWith('/api/')) {
+    return next(req);
+  }
+  const path = url.slice('/api/'.length);
+  let tracked: TrackedRoute | undefined;
   let match: RegExpMatchArray | null = null;
   for (const candidate of TRACKED_ROUTES) {
     if (candidate.method !== req.method) continue;
     match = path.match(candidate.pattern);
     if (match) {
-      route = candidate;
+      tracked = candidate;
       break;
     }
   }
-  if (!route || !match) {
+  if (!tracked || !match) {
     return next(req);
   }
 
   const metrics = inject(MetricsService);
-  const attributes = compact(route.attributes?.(req, match) ?? {});
-  const group = route.group;
+  const attributes = compact(tracked.attributes?.(req, match) ?? {});
+  const group = tracked.group;
   return next(req).pipe(
     tap({
       next: (event) => {

@@ -13,15 +13,13 @@ export const METRICS_FLUSH_DELAY_MS = 10_000;
 /** A batch this large goes at once rather than waiting out the delay. */
 export const METRICS_FLUSH_AT = 50;
 
-/** An id for this page load, so the server can group a visit's events. */
+/**
+ * An id for this page load, so the server can group a visit's events. It only
+ * has to tell visits apart (`crypto.randomUUID` would need a secure context,
+ * which an intranet deployment on plain http is not).
+ */
 function newSessionId(): string {
-  // `crypto.randomUUID` exists only in secure contexts, and an intranet
-  // deployment on plain http is not one; the fallback only has to be unique
-  // enough to tell visits apart.
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 /**
