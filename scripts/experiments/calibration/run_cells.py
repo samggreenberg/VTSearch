@@ -413,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} smart_signal={cfg.SMART_SIGNAL}{'+readings' if cfg.SMART_READINGS else ''} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} span_green={cfg.SPAN_GREEN if cfg.SPAN_GREEN is not None else 'app'} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} span_green={cfg.SPAN_GREEN if cfg.SPAN_GREEN is not None else 'app'} min_good={cfg.MIN_GOOD or 'app'} hard_dry_run={cfg.HARD_DRY_RUN or 'off'} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -638,6 +638,8 @@ def main(argv: list[str] | None = None) -> int:
                 more_walk=cfg.MORE_WALK,
                 new_walk=cfg.NEW_WALK,
                 **({"span_green": cfg.SPAN_GREEN} if cfg.SPAN_GREEN is not None else {}),
+                **({"min_good": cfg.MIN_GOOD} if cfg.MIN_GOOD is not None else {}),
+                **({"hard_dry_run": cfg.HARD_DRY_RUN} if cfg.HARD_DRY_RUN is not None else {}),
                 band_share=cfg.BAND_SHARE,
                 pick_sink=picks_local,
                 precision_frame_sink=pframes_local,

@@ -94,7 +94,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from vtscore.detectors.stability import MIN_PER_CLASS
+from vtscore.detectors.stability import MIN_PER_CLASS, minimum_reason
 
 Status = Literal["red", "yellow", "green"]
 
@@ -184,7 +184,9 @@ def cost_trend(costs: Sequence[float]) -> CostTrend:
     return CostTrend(relative_slope=relative_slope, t_stat=t_stat)
 
 
-def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict[str, Any]:
+def smart_status_from_costs(
+    costs: Sequence[float], good: int, bad: int, *, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The Smart indicator over one window of error costs, oldest first.
 
     Returns the ``/api/labeling-status`` sub-object: ``status`` (red / yellow /
@@ -195,13 +197,11 @@ def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict
     scatter - the UI says so rather than claiming the run has converged.
 
     Only the last :data:`SMART_WINDOW` costs are read, so a caller may hand in
-    a longer history.
+    a longer history.  *min_good* is the Goods the light needs (issue #5477),
+    as :func:`~vtscore.detectors.stability.stable_status_from_entries` reads it.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return {
-            "status": "red",
-            "reason": f"Need at least {MIN_PER_CLASS} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b.",
-        }
+    if good < min_good or bad < MIN_PER_CLASS:
+        return {"status": "red", "reason": minimum_reason(good, bad, min_good)}
 
     window = [float(c) for c in costs][-SMART_WINDOW:]
     if len(window) < SMART_MIN_POINTS:
@@ -279,7 +279,9 @@ def smart_beta(beta: float | None) -> float:
     return SMART_NO_BALANCE_BETA if beta is None else float(beta)
 
 
-def rising_status_from_scores(scores: Sequence[float], good: int, bad: int) -> dict[str, Any]:
+def rising_status_from_scores(
+    scores: Sequence[float], good: int, bad: int, *, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The Smart indicator over one window of F-beta points, oldest first (issue #5134).
 
     The app's rule since #5134, on :func:`best_fbeta` points; the eval's other
@@ -289,13 +291,11 @@ def rising_status_from_scores(scores: Sequence[float], good: int, bad: int) -> d
     is below :data:`SMART_RISE_THRESHOLD`, or its rise is within
     :data:`SMART_SLOPE_T` standard errors of nothing.  ``drift_within_noise``
     marks the second kind of green.  Non-finite entries (a model that could not
-    be scored) are dropped before the window is cut.
+    be scored) are dropped before the window is cut.  *min_good* is the Goods
+    the light needs (issue #5477), as for :func:`smart_status_from_costs`.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return {
-            "status": "red",
-            "reason": f"Need at least {MIN_PER_CLASS} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b.",
-        }
+    if good < min_good or bad < MIN_PER_CLASS:
+        return {"status": "red", "reason": minimum_reason(good, bad, min_good)}
 
     window = [float(s) for s in scores if math.isfinite(float(s))][-SMART_WINDOW:]
     if len(window) < SMART_MIN_POINTS:

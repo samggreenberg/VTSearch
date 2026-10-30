@@ -84,6 +84,11 @@ STABLE_BAND_STD_FRACTION = 0.25
 STABLE_FALLING_RATIO = 0.5
 
 
+def minimum_reason(good: int, bad: int, min_good: int = MIN_PER_CLASS) -> str:
+    """Why Smart or Stable is red below the per-class minimum: the counts it needs and has."""
+    return f"Need at least {min_good} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b."
+
+
 def ambiguity_band(scores: Iterable[float]) -> float:
     """Half-width of the ambiguity band for one detector's *scores*.
 
@@ -163,7 +168,9 @@ def _rates(entries: Sequence[Mapping[str, Any]], key: str) -> list[float]:
     return [e[key] / e["num_pool"] if e["num_pool"] > 0 else 0.0 for e in entries]
 
 
-def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, bad: int) -> dict[str, Any]:
+def stable_status_from_entries(
+    entries: Sequence[Mapping[str, Any]], good: int, bad: int, *, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The Stable indicator over a history of :func:`stability_entry` records.
 
     Returns the ``/api/labeling-status`` sub-object: ``status`` (red / yellow /
@@ -184,12 +191,13 @@ def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, 
     eval harness to record per step.  All five rates are rounded to six places
     rather than four: on a haystack of tens of thousands a single flip is finer
     than 1e-4, and these are reporting numbers that no rule reads back.
+
+    *min_good* is the Goods the light needs, :data:`MIN_PER_CLASS` unless a
+    caller lowers it for a target with fewer to find (issue #5477); the Bads'
+    minimum is always :data:`MIN_PER_CLASS`.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return {
-            "status": "red",
-            "reason": f"Need at least {MIN_PER_CLASS} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b.",
-        }
+    if good < min_good or bad < MIN_PER_CLASS:
+        return {"status": "red", "reason": minimum_reason(good, bad, min_good)}
     if len(entries) < STABLE_MIN_ENTRIES:
         return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
 

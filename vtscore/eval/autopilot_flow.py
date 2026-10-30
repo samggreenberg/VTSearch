@@ -152,7 +152,7 @@ SPAN_GREEN_DEFAULT = 0
 SPAN_GREEN_ON = 40
 
 
-def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, Any]:
+def smart_detail(recent_fbetas: list[float], good: int, bad: int, min_good: int = MIN_PER_CLASS) -> dict[str, Any]:
     """The app's Smart sub-object, *whole*: the light and the numbers behind it.
 
     *recent_fbetas* are the last :data:`SMART_WINDOW` cached models' best
@@ -164,9 +164,10 @@ def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, A
 
     :func:`smart_status` keeps only ``status``.  This keeps ``slope`` and
     ``slope_t`` as well, which is what lets a study say how *close* a yellow was
-    to green rather than only that it was not green (issue #3560).
+    to green rather than only that it was not green (issue #3560).  *min_good*
+    is the Goods the light needs (:attr:`AutopilotFlow.min_good_now`, #5477).
     """
-    return rising_status_from_scores(recent_fbetas, good, bad)
+    return rising_status_from_scores(recent_fbetas, good, bad, min_good=min_good)
 
 
 def smart_status(recent_fbetas: list[float], good: int, bad: int) -> Status:
@@ -178,7 +179,9 @@ def smart_status(recent_fbetas: list[float], good: int, bad: int) -> Status:
     return smart_detail(recent_fbetas, good, bad)["status"]  # type: ignore[return-value]
 
 
-def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) -> dict[str, Any]:
+def stable_detail(
+    stability_entries: list[dict[str, Any]], good: int, bad: int, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The app's Stable sub-object, *whole*: the light and the numbers behind it.
 
     Each entry is one :func:`vtscore.detectors.stability.stability_entry`
@@ -190,9 +193,9 @@ def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) 
     :func:`stable_status` keeps only ``status``.  This keeps the three rates
     Stable's three gates turn on - the confident average and its worst step,
     and the two halves of the raw window - so a study can say which gate was
-    binding and by how much (issue #3560).
+    binding and by how much (issue #3560).  *min_good* as for :func:`smart_detail`.
     """
-    return stable_status_from_entries(stability_entries, good, bad)
+    return stable_status_from_entries(stability_entries, good, bad, min_good=min_good)
 
 
 def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:
@@ -579,9 +582,28 @@ class AutopilotFlow:
         stop_cap: int | None = STOP_CAP,
         smart_signal: str = APP_SMART_SIGNAL,
         record_readings: bool = False,
+        min_good: int = MIN_PER_CLASS,
+        hard_dry_run: int | None = None,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
+        #: The Goods Smart and Stable need before either leaves red (#5477):
+        #: :data:`MIN_PER_CLASS`, the app's, unless an arm lowers it.  The Bads'
+        #: minimum stays :data:`MIN_PER_CLASS`.
+        if isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS:
+            raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS}, got {min_good!r}")
+        self.min_good = min_good
+        #: #5477's dry run past the opening: once this many votes in a row on a
+        #: learned sort (:data:`TRAINED_PHASES`) held no Good, the Goods minimum
+        #: drops to the Goods in hand - the target has shown what it can supply.
+        #: Latched.  ``None`` (the app) never waives it.
+        if hard_dry_run is not None and (
+            isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 1
+        ):
+            raise ValueError(f"hard_dry_run must be an integer >= 1 or None, got {hard_dry_run!r}")
+        self.hard_dry_run = hard_dry_run
+        self.hard_misses = 0
+        self.hard_dry = False
         self.more_target = more_target
         self.more_dry_run = more_dry_run
         #: The Good walk's dry run (#4731, the app's ``moreDryRun``): the Good
@@ -812,16 +834,18 @@ class AutopilotFlow:
                 self.phase = self.startup.phase_name()  # type: ignore[assignment]
                 return self.phase
         else:
+            self._note_hard_vote(good_count, bad_count)
             self._note_more_vote(good_count, bad_count)
+        min_good = self.min_good_now(good_count)
         if self.smart_signal == "cost":
             # #5134's arm: the light before #5134, FPR + FNR going flat.
-            smart_d = smart_status_from_costs(self.recent_error_costs, good_count, bad_count)
+            smart_d = smart_status_from_costs(self.recent_error_costs, good_count, bad_count, min_good=min_good)
         else:
-            smart_d = smart_detail(self.smart_reading(self.smart_signal), good_count, bad_count)
-        stable_d = stable_detail(self.stability, good_count, bad_count)
+            smart_d = smart_detail(self.smart_reading(self.smart_signal), good_count, bad_count, min_good)
+        stable_d = stable_detail(self.stability, good_count, bad_count, min_good)
         smart: Status = smart_d["status"]
         self.smart_reading_columns = (
-            self._reading_columns(good_count, bad_count) if self.record_readings else reading_columns_nan()
+            self._reading_columns(good_count, bad_count, min_good) if self.record_readings else reading_columns_nan()
         )
         stable: Status = stable_d["status"]
         # No atlas reading is red, as in the app, unless the Diversity step is off (#5473).
@@ -876,10 +900,16 @@ class AutopilotFlow:
             return list(self.smart_windows.get(name, []))
         return list(self.smart_histories.get(name, []))
 
-    def _reading_columns(self, good: int, bad: int) -> dict[str, float]:
+    def min_good_now(self, good_count: int) -> int:
+        """The Goods Smart and Stable need at this vote (#5477): :attr:`min_good`, or those in hand once dry."""
+        if self.hard_dry:
+            return max(1, min(self.min_good, good_count))
+        return self.min_good
+
+    def _reading_columns(self, good: int, bad: int, min_good: int = MIN_PER_CLASS) -> dict[str, float]:
         """Every reading's trend, as :data:`SMART_READING_PARTS` (#5134); NaN where the rule would not fit one."""
         out = reading_columns_nan()
-        if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+        if good < min_good or bad < MIN_PER_CLASS:
             return out
         for name in SMART_READINGS:
             window = [v for v in self.smart_reading(name) if math.isfinite(v)][-SMART_WINDOW:]
@@ -936,6 +966,22 @@ class AutopilotFlow:
         """The check before Done does not run (the app's ``skipDoneCheck``): latch it, and the phase goes on."""
         self.done_checked = True
         return self._derive() if self._last_args is not None else self.phase
+
+    def _note_hard_vote(self, good_count: int, bad_count: int) -> None:
+        """Fold the vote just cast into #5477's dry run past the opening, read off the counts as the walks are.
+
+        Called before :meth:`_note_more_vote`, which moves the counts on.  The
+        phase held here is the one the vote was cast in.
+        """
+        if self.hard_dry_run is None or self.hard_dry or self.phase not in TRAINED_PHASES:
+            return
+        prev_good, prev_bad = self._counts
+        if good_count > prev_good:
+            self.hard_misses = 0
+        elif bad_count > prev_bad:
+            self.hard_misses += 1
+            if self.hard_misses >= self.hard_dry_run:
+                self.hard_dry = True
 
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.
