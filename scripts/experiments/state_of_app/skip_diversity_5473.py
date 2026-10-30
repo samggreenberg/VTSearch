@@ -17,6 +17,8 @@ every vote 1..150, the check rows left out, carried between rows, 0 before the f
   share told to stop by 150 and the clicks to the stop;
 * F at the stop (what the user leaves with when they stop where Autopilot says), and F at votes 50 and 150 and the
   session means over 1-50, 51-150 and 1-150 (what a user who keeps clicking gets);
+* matched clicks: both arms read at nodiv's stop, and both at the control's, which parts the stop rule from the
+  picks;
 * the same split by whether the control entered New, the only sessions the arm can change;
 * the pairing check: the first vote where a pair's picks differ must not come before the control's first New vote.
 
@@ -101,6 +103,15 @@ def effect(keys: list, A: dict, C: dict, PA: dict, PC: dict) -> dict:
         d_F_stop_se=se_cat(keys, fa - fc),
         worse_F_stop_005=float(np.mean(fa - fc < -0.05)),
         better_F_stop_005=float(np.mean(fa - fc > 0.05)),
+    )
+    # Matched clicks: each arm read at the other's stop, so the stop rule and the picks come apart.
+    ca = np.array([C[k]["F"][int(s) - 1] for k, s in zip(keys, sa, strict=True)])
+    ac = np.array([A[k]["F"][int(s) - 1] for k, s in zip(keys, sc, strict=True)])
+    row.update(
+        d_F_at_nodiv_stop=float((fa - ca).mean()),
+        d_F_at_nodiv_stop_se=se_cat(keys, fa - ca),
+        d_F_at_ctl_stop=float((ac - fc).mean()),
+        d_F_at_ctl_stop_se=se_cat(keys, ac - fc),
     )
     for v in AT:
         d = np.array([A[k]["F"][v - 1] - C[k]["F"][v - 1] for k in keys])
