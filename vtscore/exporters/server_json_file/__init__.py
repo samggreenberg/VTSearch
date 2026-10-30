@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
+from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume, hit_column_value
 from vtscore.utils.io import atomic_write_json, atomic_write_stream, commit_write_stream, resumable_write_stream
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
@@ -44,6 +44,31 @@ def _ndjson_meta(header: dict[str, Any]) -> dict[str, Any]:
         # by score, not chunk-ordered.
         meta["max_results"] = header["max_results"]
     return meta
+
+
+def _select_hit_columns(results: dict[str, Any]) -> dict[str, Any]:
+    """*results* with each hit cut to its ``selected_columns``, or *results* as is without them.
+
+    Each kept hit holds exactly the chosen keys it has a value for, read through
+    :func:`~vtscore.exporters.base.hit_column_value` (so ``detector`` and
+    ``threshold`` come off the detector result, and a ``custom_metadata`` key is
+    lifted to the top level), with ``origin`` still a nested dict.
+    """
+    columns = results.get("selected_columns")
+    if not columns:
+        return results
+    trimmed: dict[str, Any] = {}
+    for name, det_result in results.get("results", {}).items():
+        hits = []
+        for hit in det_result.get("hits", []):
+            row = {}
+            for col in columns:
+                value = hit_column_value(det_result, hit, col)
+                if value is not None:
+                    row[col] = value
+            hits.append(row)
+        trimmed[name] = {**det_result, "hits": hits}
+    return {**results, "results": trimmed}
 
 
 def _ndjson_hit_line(detector_name: str, hit: dict[str, Any]) -> str:
@@ -81,9 +106,9 @@ class ServerJsonResultsExporter(ResultsExporter):
     ]
 
     def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        """Write the scored run verbatim as JSON."""
+        """Write the scored run as JSON: verbatim, or each hit cut to the ``selected_columns``."""
         filepath = Path(field_values["filepath"])
-        atomic_write_json(filepath, results)
+        atomic_write_json(filepath, _select_hit_columns(results))
 
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {

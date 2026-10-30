@@ -1,0 +1,55 @@
+// The column checkboxes, under their heading and its select-all (#5464).
+// Lifted from the Export dialog so Find Results shows the same control.
+
+:host {
+  display: block;
+}
+
+// The host's projected heading on the left, the select-all at the far end.
+.column-chooser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+// Tri-state master checkbox (empty / dash / check for none / partial / all),
+// mirroring the dashboard/bin-popup/browse-selection-panel select-all controls.
+.column-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+    color: var(--text-primary);
+  }
+}
+
+.column-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-md);
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    cursor: pointer;
+  }
+}

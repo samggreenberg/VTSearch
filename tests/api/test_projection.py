@@ -20,6 +20,7 @@ import pytest
 
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.projection import Projection, build_pyramid
+from vtscore.projection.similarity_order import SimilarityOrder
 from vtscore.state.core import DatasetContext, get_active_context, register_context
 
 
@@ -33,8 +34,17 @@ def _default_hex_media_type():
     lattice-agnostic tests below on the hex path. Tests that exercise a specific
     media type (image → square, audio → square) patch ``service.media_type_for``
     themselves, which overrides this.
+
+    A full build also fits the dataset's 1-D similarity order (#5464); that fit
+    is faked here, as each test fakes the 2-D one, so no build JITs UMAP.
     """
-    with patch("vtscore.projection.service.media_type_for", return_value="text"):
+    with (
+        patch("vtscore.projection.service.media_type_for", return_value="text"),
+        patch(
+            "vtscore.projection.similarity_order.fit_similarity_order",
+            side_effect=lambda matrix, ids, **kwargs: SimilarityOrder(list(ids), "fake"),
+        ),
+    ):
         yield
 
 

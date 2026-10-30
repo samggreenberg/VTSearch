@@ -44,6 +44,12 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   readonly disabled = input(false);
   readonly copyLabel = input('Copy');
   readonly buttonVariant = input<'primary' | 'secondary'>('primary');
+  /** Whether the control has its own Copy button. A host whose own action
+   *  copies (Find Results' Export, #5464) hides it and calls {@link copy}. */
+  readonly showButton = input(true);
+  /** Table mode: offer a "Header row" checkbox, so one column can be copied
+   *  as a bare list of its values. Off, the header row is always copied. */
+  readonly headerOption = input(false);
 
   /** Unified delimiter vocabulary, shared across both modes. */
   static readonly DELIMITERS: DelimiterOption[] = [
@@ -59,8 +65,11 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   private readonly idPrefix = `clipboard-copy-${ClipboardCopyComponent.nextId++}`;
   readonly columnId = `${this.idPrefix}-column`;
   readonly delimiterId = `${this.idPrefix}-delimiter`;
+  readonly headerId = `${this.idPrefix}-header`;
 
   delimiter = ',';
+  /** Table mode: copy the column names as the first line (see {@link headerOption}). */
+  includeHeader = true;
   /** List mode: which single column to copy. */
   selectedColumnKey = '';
   /** Transient copy-feedback label ("Copied!" / "Copy failed"). A signal so the
@@ -101,12 +110,15 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
   }
 
-  async copy(): Promise<void> {
+  /** Write the rows to the clipboard; resolves whether the write went through. */
+  async copy(): Promise<boolean> {
     try {
       await navigator.clipboard.writeText(this.buildText());
       this.flash('Copied!');
+      return true;
     } catch {
       this.flash('Copy failed');
+      return false;
     }
   }
 
@@ -121,7 +133,8 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
     const body = this.rows().map((r) =>
       this.columns().map((c) => this.cell(r, c.key)).join(this.delimiter),
     );
-    return [header, ...body].join('\n');
+    const withHeader = this.includeHeader || !this.headerOption();
+    return (withHeader ? [header, ...body] : body).join('\n');
   }
 
   private cell(row: Record<string, unknown>, key: string): string {
