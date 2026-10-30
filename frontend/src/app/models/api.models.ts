@@ -293,6 +293,8 @@ export interface AutoDetectResultsData {
   dataset_name?: string;
   /** The background run these results came from (`GET /api/autofind/runs/<run_id>`). */
   run_id?: string;
+  /** The Find Results dialog's ticked columns, sent with an export (#5464). */
+  selected_columns?: string[];
 }
 
 /**

@@ -1,3 +1,8 @@
+// Wide enough for a thumbnail beside several columns of text.
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-lg);
+}
+
 .results-summary {
   display: flex;
   flex-wrap: wrap;
@@ -6,41 +11,155 @@
   font-size: var(--font-md);
 }
 
-// Browse, centred on its own row over the list it maps (#5102).
-.browse-lead {
+// The media type with its icon, as the Dashboard's Type column shows it.
+.type-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.type-icon {
+  flex-shrink: 0;
+  opacity: var(--opacity-dim);
+}
+
+// --- What the list shows (above it) ---
+
+.results-controls {
   display: flex;
-  justify-content: center;
-  margin-bottom: var(--space-xl);
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
 }
 
-.results-table-wrapper {
-  // Claim the modal body's remaining height and scroll internally, rather
-  // than capping at a fixed height that would nest a second scrollbar inside
-  // the body's own scrollbar. The summary above and export controls below
-  // stay at natural height; this table absorbs the slack.
-  flex: 1;
-  // But never all of it: a crowded dialog (notes, an auto-export line, an
-  // exporter with several fields) on a laptop screen left no slack at all, and
-  // a zero floor let the list, or Browse's progress in its place, collapse to
-  // nothing under counts saying there were hundreds of hits. So keep a few
-  // rows; the body scrolls for the rest.
-  min-height: 12rem;
-  overflow-y: auto;
-  margin-bottom: var(--space-xl);
+.results-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md) var(--space-xl);
 }
 
-// Builds on the shared `.data-table` primitive (`_data-table.scss`); the knob
-// tightens the cell padding and the sticky header keeps the column labels
-// visible while the results list scrolls.
-.results-table {
-  --dt-cell-pad-y: var(--space-xs);
+.results-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.results-control-label {
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
+}
+
+// The size buttons sit at the far end of the row.
+.results-size {
+  margin-left: auto;
+}
+
+// The Similarity sort waiting on its fit: message, bar, Cancel on one line.
+.similarity-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
   font-size: var(--font-sm);
+  color: var(--text-secondary);
 
-  th {
-    position: sticky;
-    top: 0;
-    background: var(--bg-subtle);
+  vt-progress-bar {
+    flex: 1 1 8rem;
   }
+}
+
+.similarity-wait-message {
+  flex: 0 1 auto;
+}
+
+.similarity-error {
+  margin: 0;
+}
+
+// --- The list ---
+
+// Claims the modal body's remaining height and scrolls internally, as the
+// body's one inner scroller; but never all of it: a crowded dialog on a laptop
+// screen would otherwise leave the list no rows at all. So it keeps a few, and
+// the body scrolls for the rest.
+.results-table {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 12rem;
+  margin-bottom: var(--space-xl);
+  font-size: var(--font-sm);
+}
+
+// A row of the list, and its header: a CSS grid of the ticked columns. Both
+// reserve the scrollbar's gutter, so the header lines up with the rows.
+.results-head,
+.results-row {
+  display: grid;
+  align-items: center;
+  column-gap: var(--space-sm);
+  padding-inline: var(--space-sm);
+}
+
+.results-head {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  padding-block: var(--space-xs);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+// A CDK viewport lays out with `contain: strict`, so it needs a definite
+// height: as tall as its rows, shrinking (to the list's floor) to fit the body.
+.results-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: var(--results-list-h, 12rem);
+  scrollbar-gutter: stable;
+}
+
+.results-row {
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-subtle);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.results-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// One thumbnail, a square tile of the size buttons' side. Until its image
+// loads (once the scroll rests on it) the tile is just its fill.
+.results-thumb {
+  width: var(--thumb, 80px);
+  height: var(--thumb, 80px);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+// Audio waveform (#2369): the shared `.waveform-mask` paints the accent and
+// masks it to the wave; this only sizes it to the tile.
+.results-thumb-wave {
+  display: block;
+  width: 100%;
+  height: 100%;
+  mask-size: contain;
+  -webkit-mask-size: contain;
 }
 
 .col-secondary {
@@ -53,27 +172,44 @@
   font-size: var(--font-xs);
 }
 
-.export-controls {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+.label-good {
+  color: var(--color-good);
 }
 
-.export-sides {
-  display: flex;
-  gap: var(--space-xl);
-  font-size: var(--font-md);
+.label-bad {
+  color: var(--color-bad);
+}
 
-  label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    cursor: pointer;
+// --- Below the list ---
+
+// Browse, centred on its own row under the list it maps (#5102, #5464).
+.browse-lead {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
+// The destination tabs are the shared `.tab-bar` / `.tab` strip
+// (`_picker-shared.scss`); this is the box the active tab opens into.
+.tab-content {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: var(--space-lg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-lg);
+
+  .form-group {
+    flex: 1 1 200px;
+    min-width: 0;
+    margin-bottom: 0;
   }
-}
 
-.export-row {
-  max-width: 300px;
+  .info-text {
+    margin: 0;
+  }
 }
 
 .centroid-note,
@@ -103,7 +239,7 @@
   vertical-align: baseline;
 }
 
-// Browse building its map, in place of the table it is mapping.
+// Browse building its map, in place of the list it is mapping.
 .browse-wait {
   display: flex;
   flex-direction: column;
