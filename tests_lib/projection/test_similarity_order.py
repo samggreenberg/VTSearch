@@ -279,7 +279,9 @@ class TestWithTheLayout:
     """Every full-dataset layout fit brings the order with it (#5464)."""
 
     def _fit_layout(self, ctx: DatasetContext, *, subset: bool = False) -> None:
-        ids, matrix = so._matrix_for(ctx)
+        found = so._matrix_for(ctx)
+        assert found is not None
+        ids, matrix = found
         with patch("vtscore.projection.fit_projection", side_effect=_fake_layout_fit), _no_signs():
             svc.fit_and_install_layout(ctx, ids, matrix, svc.shape_for(ctx), subset=subset)
 
@@ -360,7 +362,8 @@ class TestRequest:
         ):
             first = so.request_similarity_order(ctx)
             assert first["status"] == "building"
-            assert projection_jobs.get(first["job_id"]).signature[1] == "similarity_order"
+            job = projection_jobs.get(first["job_id"])
+            assert job is not None and job.signature[1] == "similarity_order"
             _await_jobs()
             ready = so.request_similarity_order(ctx)
         layout_fit.assert_not_called()
