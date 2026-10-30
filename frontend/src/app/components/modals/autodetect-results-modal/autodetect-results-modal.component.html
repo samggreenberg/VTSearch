@@ -9,16 +9,16 @@
       <span><strong>Dataset:</strong> {{ data().dataset_name }}</span>
     }
     @if (showMediaType) {
-      <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+      <!-- With its icon, as the Dashboard's Type column shows it (#5464). -->
+      <span class="type-cell">
+        <strong>Media Type:</strong>
+        @if (mediaTypeIcon()) {
+          <vt-icon class="type-icon" aria-hidden="true" [type]="mediaTypeIcon()" [size]="14"></vt-icon>
+        }
+        {{ mediaTypeName() }}
+      </span>
     }
     <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
-    @if (exportSides === 'good') {
-      <span><strong>Good Results:</strong> {{ goodCount }}</span>
-    } @else if (exportSides === 'bad') {
-      <span><strong>Bad Results:</strong> {{ badCount }}</span>
-    } @else {
-      <span><strong>Good:</strong> {{ goodCount }} <strong>Bad:</strong> {{ badCount }}</span>
-    }
   </div>
 
   <!-- Detectors under the label quota ran as their typed query (#4758), or with
@@ -71,24 +71,70 @@
     </div>
   }
 
-  <!-- Browse, the way in to the results (#5102): large and centred over the
-       list it maps, rather than one small button between Close and Export. -->
-  <div class="browse-lead">
-    <button
-      class="btn btn--primary btn--lg"
-      (click)="browse()"
-      [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
-      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
-    >
-      <vt-icon type="eye" [size]="18"></vt-icon>
-      Browse
-    </button>
+  <!-- What the list shows. Each of these changes the list, so they sit above
+       it (#5464). -->
+  <div class="results-controls">
+    <div class="results-controls-row">
+      <div class="segmented-toggle segmented-toggle--compact results-sides" role="radiogroup" aria-label="Which predictions to list">
+        <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sides() === 'good'"
+          [attr.aria-checked]="sides() === 'good'" (click)="sides.set('good')" title="List the items predicted Good">
+          Good ({{ goodCount }})
+        </button>
+        <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sides() === 'bad'"
+          [attr.aria-checked]="sides() === 'bad'" (click)="sides.set('bad')" title="List the items predicted Bad">
+          Bad ({{ badCount }})
+        </button>
+        <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sides() === 'both'"
+          [attr.aria-checked]="sides() === 'both'" (click)="sides.set('both')" title="List every item, Good and Bad">
+          Both
+        </button>
+      </div>
+      <span class="results-control">
+        <span class="results-control-label">Sort by</span>
+        <span class="segmented-toggle segmented-toggle--compact results-sort" role="radiogroup" aria-label="Order of the list">
+          <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sortMode() === 'score'"
+            [attr.aria-checked]="sortMode() === 'score'" (click)="setSort('score')" title="Highest score first, across every detector">
+            Score
+          </button>
+          <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sortMode() === 'similarity'"
+            [attr.aria-checked]="sortMode() === 'similarity'" (click)="setSort('similarity')"
+            title="Look-alikes side by side: the dataset's 1-D UMAP, fit with its Browse map">
+            Similarity
+          </button>
+        </span>
+      </span>
+      @if (showThumbs()) {
+        <vt-view-controls class="results-size" side="results" [currentMediaType]="mediaType()" [showFocus]="false" />
+      }
+    </div>
+    <vt-column-chooser [columns]="columns()" (toggled)="setColumnEnabled($event.key, $event.enabled)" (allToggled)="toggleAllColumns()">
+      <span class="results-control-label" title="What the list shows, and what Export copies or sends">Columns</span>
+    </vt-column-chooser>
+    @switch (similarity().status) {
+      @case ('building') {
+        <div class="similarity-wait" role="status" aria-live="polite">
+          <span class="similarity-wait-message">Ordering by similarity: fitting this dataset's 1-D UMAP with its Browse map…</span>
+          <vt-progress-bar
+            [indeterminate]="similarityFraction(similarity()) === null"
+            [value]="similarityFraction(similarity()) ?? 0"
+            [max]="1"
+            [smooth]="true"
+          />
+          <button type="button" class="btn btn--secondary btn--sm" (click)="cancelSimilarity()" title="Sort by score instead">Cancel</button>
+        </div>
+      }
+      @case ('error') {
+        @if (sortMode() === 'similarity') {
+          <p class="error-text similarity-error" role="alert">{{ similarityError() }}</p>
+        }
+      }
+    }
   </div>
 
-  <!-- Results table, or Browse building its map: built here, behind a bar
-       with a Cancel, as the Tune view's Browse does, and opened only once the
-       map is ready. -->
-  <div class="results-table-wrapper">
+  <!-- The list, or Browse building its map: built here, behind a bar with a
+       Cancel, as the Tune view's Browse does, and opened only once the map is
+       ready. -->
+  <div class="results-table" role="table" aria-label="The listed results">
     @if (browsePrep.preparing()) {
       <div class="browse-wait" role="status" aria-live="polite">
         <p class="browse-wait-message">Please wait: building the map to browse…</p>
@@ -104,109 +150,161 @@
         <span class="browse-wait-line">{{ browsePrep.detail() }}</span>
         <button class="btn btn--secondary btn--sm" (click)="browsePrep.cancel()">Cancel</button>
       </div>
-    } @else if (displayHits.length === 0) {
+    } @else if (displayHits().length === 0) {
       <p class="empty-state">No hits found.</p>
     } @else {
-      <table class="data-table results-table">
-        <thead>
-          <tr>
-            <th title="Source origin of the media item">Origin</th>
-            <th title="Display name of the media item">Name</th>
-            <th title="MD5 content hash of the media file">MD5</th>
-            <th title="Original filename on disk">Filename</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (hit of displayHits; track hit.md5) {
-            <tr>
-              <td class="col-secondary">{{ formatOrigin(hit) }}</td>
-              <td>{{ hit.origin_name || hit.filename || '' }}</td>
-              <td class="col-muted">{{ hit.md5 }}</td>
-              <td class="col-secondary">{{ hit.filename }}</td>
-            </tr>
+      <div class="results-head" role="row" [style.grid-template-columns]="gridTemplate()">
+        @for (col of listedColumns(); track col.key) {
+          <span class="results-cell" role="columnheader" [title]="col.title || col.label">{{ col.label }}</span>
+        }
+      </div>
+      <cdk-virtual-scroll-viewport
+        class="results-viewport"
+        [itemSize]="rowHeight()"
+        [minBufferPx]="rowHeight() * 4"
+        [maxBufferPx]="rowHeight() * 8"
+        [style.--results-list-h]="displayHits().length * rowHeight() + 'px'">
+        <div
+          *cdkVirtualFor="let row of sortedRows(); trackBy: trackRow"
+          class="results-row"
+          role="row"
+          [style.height.px]="rowHeight()"
+          [style.grid-template-columns]="gridTemplate()">
+          @for (col of listedColumns(); track col.key) {
+            @switch (col.key) {
+              @case ('thumbnail') {
+                <span class="results-cell results-thumb" role="cell" [style.--thumb]="thumbPx() + 'px'">
+                  @if (row.hit.id != null && thumbReady(row.hit.id)) {
+                    @if (isAudioWaveform()) {
+                      <span
+                        class="results-thumb-wave waveform-mask"
+                        [style.-webkit-mask-image]="'url(' + thumbnailUrl(row.hit.id) + ')'"
+                        [style.mask-image]="'url(' + thumbnailUrl(row.hit.id) + ')'"></span>
+                    } @else {
+                      <img [src]="thumbnailUrl(row.hit.id)" alt="" decoding="async" (error)="onThumbnailError(row.hit.id)" />
+                    }
+                  }
+                </span>
+              }
+              @case ('label') {
+                <span class="results-cell" role="cell" [class.label-good]="row.label === 'good'" [class.label-bad]="row.label === 'bad'">
+                  {{ cellValue(row, 'label') }}
+                </span>
+              }
+              @default {
+                <span class="results-cell" role="cell" [class.col-muted]="col.key === 'md5'"
+                  [class.col-secondary]="col.key === 'origin' || col.key === 'filename'" [title]="cellValue(row, col.key)">
+                  {{ cellValue(row, col.key) }}
+                </span>
+              }
+            }
           }
-        </tbody>
-      </table>
+        </div>
+      </cdk-virtual-scroll-viewport>
     }
   </div>
 
-  <!-- Export controls -->
-  <div class="export-controls">
-    <div class="export-sides" role="radiogroup" aria-label="Filter which predictions to show">
-      <label title="Show only items predicted as good"><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
-      <label title="Show only items predicted as bad"><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
-      <label title="Show both good and bad predictions"><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
-    </div>
+  <!-- Browse acts on the listed rows rather than changing them, so it sits
+       below the list (#5464). Large and centred (#5102). -->
+  <div class="browse-lead">
+    <button
+      class="btn btn--primary btn--lg"
+      (click)="browse()"
+      [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
+      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
+    >
+      <vt-icon type="eye" [size]="18"></vt-icon>
+      Browse
+    </button>
+  </div>
 
-    @if (exporters().length > 1) {
-      <div class="export-row">
-        <select class="form-select" [ngModel]="selectedExporter()" (ngModelChange)="selectedExporter.set($event); onExporterChange()" title="Choose export destination">
-          @for (exp of exporters(); track exp.name) {
-            <option [value]="exp.name">{{ exp.display_name || exp.name }}</option>
-          }
-        </select>
-      </div>
+  <!-- Where the listed rows go: a tab per destination, Clipboard first, so
+       what is chosen and what it opens are both in view (#5464). -->
+  <div class="tab-bar export-tabs" role="tablist" aria-label="Where to send the listed rows">
+    <button type="button" class="tab export-tab" role="tab" [class.active]="activeTab() === 'clipboard'"
+      [attr.aria-selected]="activeTab() === 'clipboard'" (click)="selectTab('clipboard')"
+      title="Copy the listed rows to your clipboard as delimited text">
+      <vt-icon type="copy" [size]="16"></vt-icon> Clipboard
+    </button>
+    @for (exp of exporters(); track exp.name) {
+      <button type="button" class="tab export-tab" role="tab" [class.active]="activeTab() === exp.name"
+        [attr.aria-selected]="activeTab() === exp.name" (click)="selectTab(exp.name)"
+        [title]="exp.description || exp.display_name || exp.name">
+        <vt-icon [type]="exporterIcon(exp)" [size]="16"></vt-icon> {{ exp.display_name || exp.name }}
+      </button>
     }
-
-    @for (field of exporterFields(); track field.key) {
-      <div class="form-group">
-        <label class="form-label" [for]="'adr-' + field.key">
-          @if (field.field_type === 'checkbox') {
-            <vt-plugin-checkbox
-              [inputId]="'adr-' + field.key"
-              [value]="exportFieldValues[field.key]"
-              (valueChange)="exportFieldValues[field.key] = $event"
-              [title]="field.description || field.label || field.key"
-            ></vt-plugin-checkbox>
-          }
-          {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
-          @if (field.required) {
-            <span class="required">*</span>
-          }
-        </label>
-        @if (field.field_type === 'select') {
-          <select class="form-select" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]">
-            @for (opt of field.options || []; track opt) {
-              <option [value]="opt">{{ opt }}</option>
+  </div>
+  <div class="tab-content" role="tabpanel">
+    @if (!activeExporter) {
+      <vt-clipboard-copy
+        mode="table"
+        [rows]="clipboardRows()"
+        [columns]="clipboardColumns()"
+        [showButton]="false"
+        [headerOption]="true"
+      ></vt-clipboard-copy>
+    } @else {
+      @for (field of exporterFields(); track field.key) {
+        <div class="form-group">
+          <label class="form-label" [for]="'adr-' + field.key">
+            @if (field.field_type === 'checkbox') {
+              <vt-plugin-checkbox
+                [inputId]="'adr-' + field.key"
+                [value]="exportFieldValues[field.key]"
+                (valueChange)="exportFieldValues[field.key] = $event"
+                [title]="field.description || field.label || field.key"
+              ></vt-plugin-checkbox>
             }
-          </select>
-        } @else if (field.field_type === 'number') {
-          <input
-            type="number"
-            class="form-input"
-            [required]="!!field.required"
-            [(ngModel)]="exportFieldValues[field.key]"
-            [placeholder]="field.placeholder || field.description || ''"
-            [attr.min]="field.min || null"
-            [attr.max]="field.max || null"
-            [attr.step]="field.step || null"
-          />
-        } @else if (field.field_type !== 'checkbox') {
-          <input [id]="'adr-' + field.key" [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'" class="form-input" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
-        }
-      </div>
+            {{ field.label || field.key }}{{ field.field_type === 'checkbox' ? '' : ':' }}
+            @if (field.required) {
+              <span class="required">*</span>
+            }
+          </label>
+          @if (field.field_type === 'select') {
+            <select [id]="'adr-' + field.key" class="form-select" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]">
+              @for (opt of field.options || []; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          } @else if (field.field_type === 'number') {
+            <input
+              [id]="'adr-' + field.key"
+              type="number"
+              class="form-input"
+              [required]="!!field.required"
+              [(ngModel)]="exportFieldValues[field.key]"
+              [placeholder]="field.placeholder || field.description || ''"
+              [attr.min]="field.min || null"
+              [attr.max]="field.max || null"
+              [attr.step]="field.step || null"
+            />
+          } @else if (field.field_type !== 'checkbox') {
+            <input [id]="'adr-' + field.key" [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'" class="form-input" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
+          }
+        </div>
+      } @empty {
+        <p class="info-text">Nothing to fill in: Export sends the listed rows straight to {{ activeExporter.display_name || activeExporter.name }}.</p>
+      }
     }
-
-    <vt-clipboard-copy
-      mode="list"
-      [rows]="clipboardRows"
-      [columns]="clipboardColumns"
-      buttonVariant="secondary"
-      copyLabel="Copy to Clipboard"
-    ></vt-clipboard-copy>
   </div>
 
   <div class="form-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Close</button>
-    @if (activeExporter; as exp) {
-      <button
-        class="btn btn--primary"
-        (click)="exportResults()"
-        [disabled]="exporting() || displayHits.length === 0"
-        [title]="'Send the listed results to ' + (exp.display_name || exp.name)"
-      >
-        {{ exporting() ? 'Exporting…' : 'Export' }}
-      </button>
-    }
+    <button
+      class="btn btn--secondary"
+      (click)="exportResults()"
+      [disabled]="exporting() || !!exportBlocker"
+      [title]="exportBlocker || exportAction"
+    >
+      {{ exporting() ? 'Exporting…' : 'Export' }}
+    </button>
+    <button
+      class="btn btn--primary"
+      (click)="exportResults(true)"
+      [disabled]="exporting() || !!exportBlocker"
+      [title]="exportBlocker || exportAction + ', then close this dialog'"
+    >
+      Export and Close
+    </button>
   </div>
 </vt-modal>

@@ -39,15 +39,43 @@ X-Dataset-Id: <dataset id>
 
 → `{ "ids": [...], "total": N, "order": "similarity" | "dataset" }`: the ids
 New Detector's **Pick from Dataset** grid lists, in the order it lists them.
-A Face dataset's come in `similarity` order, look-alikes side by side: its ids
-sorted by a 1-D UMAP of their embeddings, fit when the dataset is built (or
-here, once, for a dataset built before that) and kept in its container. Every
-other dataset lists in `dataset` (import) order. `q` keeps only the items whose
+They come in `similarity` order, look-alikes side by side, when the dataset has
+one: its ids sorted by a 1-D UMAP of their embeddings, kept in its container
+(see [Similarity order](#similarity-order)). A Face dataset's is fit when the
+dataset is built (or here, once, for a dataset built before that); any other
+dataset has one once its Browse layout has been built, and lists in `dataset`
+(import) order until then. `q` keeps only the items whose
 `filename` or `origin_name` holds every whitespace-separated word of it,
 ignoring case; a face's name starts with the photo it was cropped from, so a
 photo's name finds its faces. `total` counts the dataset's items, matching or
 not. Answers 400 without a dataset header. Names and thumbnails come from
 [Batch fetch](#batch-fetch-metadata) and the [thumbnail](#thumbnail) route.
+
+### Similarity order
+
+```
+POST /api/medias/similarity-order
+X-Dataset-Id: <dataset id>
+Content-Type: application/json
+
+{ "ids": [12, 7, 40] }
+```
+
+→ `{ "status": "ready", "ids": [...], "method": "umap" | "pca" | "trivial" }`:
+the asked ids in the dataset's similarity order, look-alikes side by side (the
+Find Results list's **Similarity** sort). Ids the dataset lacks are dropped.
+The order is a 1-D UMAP of the whole dataset's embeddings, fit together with
+its 2-D [Browse layout](datasets.md#vtsbrowse-projection) and kept in its container, so a dataset
+that has been browsed answers at once.
+
+One that has not answers `{ "status": "building", "job_id": ..., ... }`, with
+the progress fields of [`GET /api/projection/meta`](datasets.md#vtsbrowse-projection), while the
+fit runs: the full Browse layout with the order, or, for a layout built before
+the order came with it, the order alone. Ask again until it is `ready`. A fit
+that failed answers `{ "status": "error", "error": ... }` once; the next ask
+starts over. A Face dataset's order is fit at build, or synchronously on its
+first ask. Answers 400 without a dataset header and 409 when the dataset has no
+embeddings to order.
 
 ### Batch fetch metadata
 

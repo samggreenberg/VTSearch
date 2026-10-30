@@ -26,6 +26,7 @@ from vtsearch.routes.health import health_bp
 from vtsearch.routes.jobs import jobs_bp
 from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
+from vtsearch.routes.metrics import metrics_bp
 from vtsearch.routes.media import (
     datasource_importers_bp,
     embed_bp,
@@ -70,6 +71,7 @@ __all__ = [
     "main_bp",
     "media_server_bp",
     "medias_bp",
+    "metrics_bp",
     "precision_check_bp",
     "projection_bp",
     "seed_importers_bp",

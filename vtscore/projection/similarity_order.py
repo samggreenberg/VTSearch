@@ -1,20 +1,27 @@
 """A 1-D similarity order over a dataset's items: look-alikes side by side.
 
 The Browse canvas lays a dataset out in 2-D (:mod:`.umap_projection`); a list
-has one axis, so a scroll of every item — New Detector's *Pick from Dataset*
-grid (#5465) — wants an order in which neighbours look alike.  This fits UMAP
-with ``n_components=1`` on the same embedding matrix the 2-D layout uses and
-sorts the ids by that coordinate, so the faces of one person run together
-instead of sitting wherever the import happened to put them.
+has one axis, so a scroll of items — New Detector's *Pick from Dataset* grid
+(#5465), the Find Results list's *Similarity* sort (#5464) — wants an order in
+which neighbours look alike.  This fits UMAP with ``n_components=1`` on the
+same embedding matrix the 2-D layout uses and sorts the ids by that
+coordinate, so the faces of one person run together instead of sitting
+wherever the import happened to put them.
 
-**Which datasets get one.**  Only the media types in :data:`ORDERED_MEDIA_TYPES`
-(Face): a Face dataset is a few thousand crops at most and can't be searched by
-text, so its picker is the main way to start a detector, and the fit costs a
-second or two next to the face detection the build already paid for.  It is fit
-when the dataset is built (the load pipeline's similarity-order stage, in
-:mod:`vtscore.datasets.stages.projection`) and, for a
-Face dataset built before that existed, the first time the picker asks.  Every
-other type keeps dataset order.
+**When it is fit.**  Alongside the 2-D layout: every full-dataset fit of the
+Browse layout (:func:`vtscore.projection.service.fit_and_install_layout` — the
+opt-in ingest pre-build and the lazy first Browse alike) fits this order right
+after the layout is installed, so any dataset with a Browse map has one.  The
+media types in :data:`ORDERED_MEDIA_TYPES` (Face) also get one on their own: a
+Face dataset is a few thousand crops at most and can't be searched by text, so
+its picker is the main way to start a detector, and the fit costs a second or
+two next to the face detection the build already paid for.  Theirs is fit when
+the dataset is built (the load pipeline's similarity-order stage, in
+:mod:`vtscore.datasets.stages.projection`) and, for a Face dataset built before
+that existed, the first time it is asked for.  For any other type,
+:func:`request_similarity_order` is what a list asks: it answers the stored
+order, or starts the fit that makes one (the 2-D layout with it, when the
+dataset has none yet).
 
 **Persistence.**  The order is a list of media ids — no vectors — stored
 beside the dataset in its container (``similarity_order.json``) and cached on
@@ -46,7 +53,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Media types whose datasets are given a similarity order (module docstring).
+#: Media types whose datasets are given a similarity order on their own, at
+#: build and on first ask, without waiting for a 2-D layout (module docstring).
 ORDERED_MEDIA_TYPES = frozenset({"face"})
 
 #: ``(current, total, message)`` progress sink, as the load stages take it.
@@ -210,26 +218,24 @@ def _persist(dataset_id: str, order: SimilarityOrder) -> None:
         logger.warning("Failed to persist similarity order for %s", dataset_id, exc_info=True)
 
 
-def similarity_order_for(
+def ensure_similarity_order(
     ctx: DatasetContext,
+    sorted_ids: list[int],
+    matrix: np.ndarray,
     *,
-    fit: bool = True,
     on_progress: ProgressFn | None = None,
-) -> SimilarityOrder | None:
-    """*ctx*'s similarity order: cached, else persisted, else (with *fit*) fit now.
+) -> SimilarityOrder:
+    """*ctx*'s order over *sorted_ids*: the stored one, else a fit of *matrix* now.
 
-    ``None`` for a dataset of a type :func:`wants_similarity_order` leaves in
-    dataset order, one with no usable embeddings, or (``fit=False``) one with
-    nothing stored yet.  A fresh fit is cached on *ctx* and persisted.
+    *matrix* is the embedding matrix the 2-D layout clusters in, row ``i``
+    being ``sorted_ids[i]``; a caller that already holds it (the layout build,
+    :func:`~vtscore.projection.service.fit_and_install_layout`) passes it
+    rather than have it stacked again.  A fresh fit is cached on *ctx* and
+    persisted.  One fit at a time per dataset: a second caller waits, then
+    finds the first one's order.
     """
-    if not wants_similarity_order(ctx):
-        return None
-    found = _matrix_for(ctx)
-    if found is None:
-        return None
-    sorted_ids, matrix = found
     stored = _stored_order(ctx, sorted_ids)
-    if stored is not None or not fit:
+    if stored is not None:
         return stored
     with _fit_lock(ctx.dataset_id):
         # Whoever held the lock may have just fit it.
@@ -261,11 +267,110 @@ def similarity_order_for(
         return order
 
 
+def similarity_order_for(
+    ctx: DatasetContext,
+    *,
+    fit: bool = True,
+    on_progress: ProgressFn | None = None,
+) -> SimilarityOrder | None:
+    """*ctx*'s similarity order: cached, else persisted, else (with *fit*) fit now.
+
+    Only a type :func:`wants_similarity_order` orders on its own is fit here;
+    any other type's order comes with its 2-D layout (module docstring), so
+    this answers the stored one or ``None``.  Also ``None`` for a dataset with
+    no usable embeddings, or (``fit=False``) one with nothing stored yet.
+    """
+    found = _matrix_for(ctx)
+    if found is None:
+        return None
+    sorted_ids, matrix = found
+    if not fit or not wants_similarity_order(ctx):
+        return _stored_order(ctx, sorted_ids)
+    return ensure_similarity_order(ctx, sorted_ids, matrix, on_progress=on_progress)
+
+
+def request_similarity_order(ctx: DatasetContext) -> dict:
+    """What a list sorting *ctx*'s items by similarity is told (#5464).
+
+    ``{"status": "ready", "order": SimilarityOrder}`` once an order is stored;
+    a type :func:`wants_similarity_order` orders on its own (Face) is fit here
+    and now if it has none, as the picker's is.  Any other type's order comes
+    with its 2-D layout, so the first ask starts the fit that makes one and is
+    answered with that fit's progress (``{"status": "building", ...}``, as
+    :func:`~vtscore.projection.service.build_progress` words it) until a later
+    ask finds the order stored:
+
+    - a dataset with no 2-D layout gets the full layout build, which fits this
+      order right after the layout (``fit_and_install_layout``);
+    - one whose layout was fit before the order came with it gets a fit of the
+      order alone, on the layout builds' single-slot runner.
+
+    A fit that failed is answered once as ``{"status": "error", "error": ...}``
+    and then forgotten, so the next ask (a new request from the user, not a
+    poll) starts over rather than every poll re-running a failing fit.  Raises
+    :class:`~vtscore.projection.service.NothingToProject` when the dataset has
+    nothing to order.
+    """
+    from vtscore.concurrency.async_jobs import projection_jobs  # noqa: PLC0415
+    from vtscore.projection import service  # noqa: PLC0415
+
+    found = _matrix_for(ctx)
+    if found is None:
+        raise service.NothingToProject("This dataset has no embeddings to order by similarity.")
+    sorted_ids, matrix = found
+    stored = _stored_order(ctx, sorted_ids)
+    if stored is None and wants_similarity_order(ctx):
+        stored = ensure_similarity_order(ctx, sorted_ids, matrix)
+    if stored is not None:
+        return {"status": "ready", "order": stored}
+
+    job = projection_jobs.get(ctx._order_job_id) if ctx._order_job_id else None
+    if job is not None:
+        if job.status in ("running", "pending"):
+            return service.build_progress(job)
+        ctx._order_job_id = None
+        if job.status == "error":
+            return {"status": "error", "error": job.error or "Ordering by similarity failed."}
+        # Done with no order stored (its best-effort order fit failed, or the
+        # items changed under it), or cancelled: start over below.
+
+    answer = service.build_layout(ctx)
+    if answer["status"] != "building":
+        # A layout fit before the order came with it: fit the order alone.
+        sig = (ctx.dataset_id, "similarity_order", tuple(sorted_ids))
+        job = projection_jobs.start(sig, _order_runner(ctx, sorted_ids, matrix), dataset_id=ctx.dataset_id)
+        answer = {"status": "building", "job_id": job.job_id}
+    ctx._order_job_id = answer["job_id"]
+    job = projection_jobs.get(answer["job_id"])
+    return service.build_progress(job) if job is not None else answer
+
+
+def _order_runner(ctx: DatasetContext, sorted_ids: list[int], matrix: np.ndarray):
+    """The worker-thread body of an order-only fit, as the layout build's runner is shaped.
+
+    Snapshots the matrix and ids so the job is independent of any later change
+    to the dataset, and re-binds the worker thread to *ctx*.
+    """
+    mat_copy = matrix.copy()
+    ids_copy = list(sorted_ids)
+
+    def _run(job):
+        from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
+
+        with thread_dataset_context(ctx):
+            job.set_phase(1, 1, "ordering items by similarity")
+            job.result = ensure_similarity_order(ctx, ids_copy, mat_copy, on_progress=job.update_progress)
+
+    return _run
+
+
 __all__ = [
     "ORDERED_MEDIA_TYPES",
     "SimilarityOrder",
+    "ensure_similarity_order",
     "fit_similarity_order",
     "ordered_ids",
+    "request_similarity_order",
     "similarity_order_for",
     "wants_similarity_order",
 ]

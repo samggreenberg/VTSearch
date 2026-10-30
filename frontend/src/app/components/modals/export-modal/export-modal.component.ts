@@ -15,6 +15,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
+import { ColumnChooserComponent } from '../../column-chooser/column-chooser.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { IconComponent } from '../../icon/icon.component';
 import {
@@ -31,6 +32,7 @@ import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
 import { visibleFields } from '../../../utils/plugin-fields';
+import { exporterIconKind } from '../../../utils/exporter-icon';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import {
   openBlankTab,
@@ -53,7 +55,7 @@ export interface ColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, ColumnChooserComponent, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -364,6 +366,12 @@ export class ExportModalComponent implements OnInit {
     if (enabled === 0) return 'none';
     if (enabled >= this.columns.length) return 'all';
     return 'some';
+  }
+
+  /** One column's checkbox, ticked or cleared. */
+  setColumnEnabled(key: string, enabled: boolean): void {
+    const col = this.columns.find((c) => c.key === key);
+    if (col) col.enabled = enabled;
   }
 
   /** From [x] (all enabled), clear every column; from [ ]/[-], enable them all. */
@@ -842,26 +850,9 @@ export class ExportModalComponent implements OnInit {
       });
   }
 
-  /** Map an exporter's emoji icon to an SVG icon type. */
+  /** The icon kind for *exp*'s tab (shared with Find Results' tabs). */
   getExporterIconType(exp: ExporterEntry): string {
-    const icon = exp.icon || '';
-    if (icon === '📧' || icon.includes('📧')) return 'email';
-    if (
-      icon === '🖥️' ||
-      icon === '\uD83D\uDDA5' ||
-      icon === '\uD83D\uDDA5\uFE0F'
-    )
-      return 'server';
-    if (icon === '🌐' || icon === '\uD83C\uDF10') return 'webhook';
-    // An exporter that ends in a new browser tab reads as a link, whichever
-    // emoji its author picked.
-    if (exp.opens_url) return 'external-link';
-    // Also match by name as fallback
-    const name = (exp.name || '').toLowerCase();
-    if (name.includes('email') || name.includes('smtp')) return 'email';
-    if (name.includes('webhook')) return 'webhook';
-    if (name.includes('server') || name.includes('file')) return 'server';
-    return 'upload';
+    return exporterIconKind(exp);
   }
 
   /** Modal heading, noting the server-side partition (and category slice) when present. */

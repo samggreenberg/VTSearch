@@ -369,10 +369,51 @@ The ones worth knowing before changing anything:
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
+| `MetricsService` | Usage events (#5475): `logEvent()`, the `data-metric` click listener, and the `METRICS_PROVIDER` token that decides where events go ([Usage metrics](#usage-metrics)) |
 | `KeyboardService`, `ThemeService`, `AchievementsService`, `AuthService` | App-wide concerns wired in `AppComponent` |
 
 `adaptive-poll.ts` is not a service but a shared operator; see
 [§7](#7-talking-to-the-backend).
+
+### Usage metrics
+
+`MetricsService` is the one door usage events go through (#5475). An event is a
+`group` (what happened) and flat scalar `attributes`. Four places log them, so
+a feature usually needs no new code:
+
+- **Views.** `AppComponent` logs `view` when the route's first segment changes
+  (`/label` is logged as `train`, the name users see).
+- **Action endpoints.** `metricsInterceptor` logs imports, exports, detector
+  creation and Find once the request succeeds. To count another route, add a
+  row to its `TRACKED_ROUTES`.
+- **Settings.** `SettingsStateService.update()` logs `settingChanged` for each
+  key whose value the write actually changed, per media type for the
+  `{media_type: value}` dicts. Display options that persist as settings (panel
+  drag bars, thumbnail sizes, focus modes) are counted this way, and the
+  Settings dialog's whole-object save counts only what moved.
+- **Clicks.** Put `data-metric="<name>"` on a control (or an ancestor) and
+  every click on it logs `click` with `target: <name>`. The listener is
+  document-level and capture-phase, so no import and no handler is needed, and
+  a handler that stops propagation does not hide the click.
+
+Call `metrics.logEvent({ group, attributes })` directly only for an event none
+of these see. Keep attribute values to names and choices (an exporter, a media
+type, a size); a metrics line answers "who used what", not "with which data".
+
+Where events go is the `METRICS_PROVIDER` token. Its default,
+`ServerMetricsProvider`, batches events to `POST /api/metrics` (ten seconds
+after the first, or at fifty), sends the rest on `pagehide` with a `keepalive`
+fetch, drops a failed batch, and stops for the visit once the server answers
+`enabled: false`. What the server writes is in
+[DEPLOYMENT.md § Usage metrics](DEPLOYMENT.md#usage-metrics). A deployment that
+wants events elsewhere replaces the provider in `app.config.ts`:
+
+```ts
+{ provide: METRICS_PROVIDER, useClass: MyCustomMetricsProvider },
+```
+
+A custom provider replaces the server sink; to keep both, inject
+`ServerMetricsProvider` in it and forward each event there too.
 
 ---
 
@@ -723,7 +764,11 @@ Order matters; it is fixed in `app.config.ts`.
 3. **`achievementsRefreshInterceptor`** — after a POST to any endpoint that
    could unlock a tier (vote, find, label import, dataset load), schedules a
    coalesced achievements refresh.
-4. **`errorInterceptor`** — the failure chokepoint. Turns every failed response
+4. **`metricsInterceptor`** — after a successful call to an action endpoint
+   (an import, an export, detector creation, Find), logs a usage event through
+   `MetricsService` ([Usage metrics](#usage-metrics)). Its `TRACKED_ROUTES`
+   table is the one list of which routes count.
+5. **`errorInterceptor`** — the failure chokepoint. Turns every failed response
    into a structured `ErrorContext` toast (endpoint, status, `request_id`, and
    the active pair at the time), deduped by status + message so one backend
    condition surfacing from several in-flight requests shows once. It also
@@ -962,8 +1007,9 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
-`skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
+`skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` and
+`column-chooser/` (a checkbox per column under a select-all, which the Export
+and Find Results dialogs share, #5464) are the small shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and

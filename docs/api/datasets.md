@@ -904,7 +904,9 @@ image/video/document, hexagons otherwise) is fixed by the media type and never
 sent by the client; `meta` reports it as `bin_shape`. Every read endpoint takes
 `?subset=true` to address the ephemeral subset layout instead of the
 full-dataset one. Nothing here persists vectors: the layout is derived from the
-dataset's own embeddings (see `vtscore.projection.service`).
+dataset's own embeddings (see `vtscore.projection.service`). A full-dataset fit
+also fits the dataset's 1-D similarity order once the map is ready, the order
+[`POST /api/medias/similarity-order`](medias.md#similarity-order) sorts by.
 
 | Method | Path | Purpose |
 |--------|------|---------|

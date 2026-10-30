@@ -1,7 +1,8 @@
 """``GET /api/medias/picker``: what New Detector's *Pick from Dataset* grid lists (#5465).
 
 A Face dataset's ids come in similarity order (the 1-D order fit at build, or
-here on first ask); every other dataset lists in import order.  ``q`` keeps
+here on first ask); any other dataset does once its Browse layout brought it
+one (#5464), and lists in import order until then.  ``q`` keeps
 the items whose name holds every word of it, so a photo's name finds the faces
 cropped from it.  The fit is faked: what is under test is the route's use of
 the order, not the arrangement.
@@ -73,6 +74,15 @@ class TestPickerListing:
             res = _get(client, "photos")
         fit.assert_not_called()
         assert res.get_json() == {"ids": [1, 2, 3], "total": 3, "order": "dataset"}
+
+    def test_other_types_list_in_an_order_their_layout_brought(self, client):
+        """Any type's order comes with its Browse layout (#5464); none is fit here."""
+        ctx = _load("photos", "image", ["c.jpg", "a.jpg", "b.jpg"])
+        ctx._similarity_order = SimilarityOrder([2, 3, 1], "umap")
+        with patch.object(so, "fit_similarity_order") as fit:
+            res = _get(client, "photos")
+        fit.assert_not_called()
+        assert res.get_json() == {"ids": [2, 3, 1], "total": 3, "order": "similarity"}
 
     def test_search_keeps_items_naming_every_word(self, client):
         _load("faces", "face", FACES)
