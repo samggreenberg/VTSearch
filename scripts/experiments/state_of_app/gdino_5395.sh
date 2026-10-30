@@ -7,6 +7,7 @@
 #                                        the checks: fp32 vs bf16, and the backbone cache vs none (50 images)
 #   gdino_5395.sh score MODEL [NSHARDS]  every image of the grid's pool, as an array of NSHARDS (default 12) shards
 #   gdino_5395.sh baseline MODEL         text_baseline.py --sam3 on its scores, both prompt sets -> <root>/gdino_MODEL_*.csv
+#   gdino_5395.sh overlap MODEL          #5240's split: both sets graded on in-VG / not-in-VG images -> <root>/overlap
 #
 # MODEL is a tag: tiny (IDEA-Research/grounding-dino-tiny, the original), mmt (MM-GDINO-T o365v1_goldg_v3det), mml
 # (MM-GDINO-L o365v2_oiv6_goldg). All three train without COCO; the pool is COCO train2017.
@@ -87,8 +88,23 @@ baseline)
   sbatch --parsable -p cpu -c 4 --mem 32G -t 2:00:00 -J "gdino-baseline-$m" -o "$ROOT/logs/baseline-$m-%j.out" \
     "$ROOT/baseline-$m.sh"
   ;;
+overlap)
+  m="${2:?model tag}"; ids="${GDINO_VG_IDS:-/expscratch/$USER/sam3-5240}"; mkdir -p "$ROOT/overlap"
+  {
+    echo '#!/bin/bash'
+    echo 'set -euo pipefail'
+    env_lines
+    for half in vg novg; do
+      for p in typed noun; do
+        echo "python text_baseline.py --results $GRID/results --out $ROOT/overlap/gdino_${m}_${p}_$half.csv --sam3 $ROOT/scores-$m --sam3-prompts $p --zs-name gdino_$m --native-cut 0.35 --keep-ids $ids/${half}_ids.txt"
+      done
+    done
+  } >"$ROOT/overlap-$m.sh"
+  sbatch --parsable -p cpu -c 4 --mem 32G -t 3:00:00 -J "gdino-overlap-$m" -o "$ROOT/logs/overlap-$m-%j.out" \
+    "$ROOT/overlap-$m.sh"
+  ;;
 *)
-  sed -n '2,16p' "$0"
+  sed -n '2,17p' "$0"
   exit 2
   ;;
 esac
