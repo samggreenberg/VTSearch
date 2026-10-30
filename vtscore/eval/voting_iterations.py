@@ -3209,6 +3209,7 @@ def simulate_voting_iterations(  # noqa: C901
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
     new_walk: str = "atlas",
+    span_green: Optional[int] = None,
     band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
@@ -3636,6 +3637,12 @@ def simulate_voting_iterations(  # noqa: C901
             Coverage Atlas's walk.  ``"hard"`` takes the Hard pick in ``new``
             instead, with the phase machine (and so when Span gates ``done``)
             unchanged.  Needs the phase machine.
+        span_green: How many evidence-bearing atlas nodes turn Span green (issue
+            #5473), the app's ``autopilot_goal_diversity``.  ``None`` - the
+            default - is the app's default, 40.  ``0`` reads Span green from the
+            first vote, so Autopilot never enters ``new`` (the Diversity step)
+            and says Done once Smart and Stable are green.  The app clamps its
+            setting to 1, which its first vote meets.  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -4044,6 +4051,8 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
     if new_walk not in NEW_WALKS:
         raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
+    if span_green is not None and (isinstance(span_green, bool) or not isinstance(span_green, int) or span_green < 0):
+        raise ValueError(f"span_green must be an integer >= 0 or None; got {span_green!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
@@ -4454,6 +4463,7 @@ def simulate_voting_iterations(  # noqa: C901
             stop_cap=stop_cap,
             smart_signal=smart_signal,
             record_readings=smart_readings,
+            span_green=span_green,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4463,6 +4473,8 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("good_dry_run needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     elif new_walk != "atlas":
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif span_green is not None:
+        raise ValueError("span_green needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
     if smart_signal != APP_SMART_SIGNAL and flow is None:
