@@ -128,7 +128,7 @@ class TestImportRoute:
         assert data["keys"] == ["volume"]
         assert set(data["skipped"]) == settings_schema._SERVER_KEYS
         assert "Imported 1 setting(s)" in data["message"]
-        assert "Skipped 17" in data["message"]
+        assert f"Skipped {len(settings_schema._SERVER_KEYS)}" in data["message"]
         assert _server_values() == before
         assert settings.get_volume() == 0.31
 
