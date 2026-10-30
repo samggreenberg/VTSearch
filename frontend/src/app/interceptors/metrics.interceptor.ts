@@ -4,6 +4,7 @@ import { tap } from 'rxjs/operators';
 import { MetricsAttributeValue, MetricsService } from '../services/metrics.service';
 
 type Attributes = Record<string, MetricsAttributeValue | undefined>;
+type AttributesFn = (req: HttpRequest<unknown>, match: RegExpMatchArray) => Attributes;
 
 /** One action endpoint whose success is a usage event (#5475). */
 interface TrackedRoute {
@@ -12,7 +13,7 @@ interface TrackedRoute {
   pattern: RegExp;
   group: string;
   /** Event details from the request; `null` / `undefined` entries are dropped. */
-  attributes?: (req: HttpRequest<unknown>, match: RegExpMatchArray) => Attributes;
+  attributes?: AttributesFn;
 }
 
 /** A scalar field of a JSON or multipart request body, if present. */
@@ -29,105 +30,62 @@ function bodyField(req: HttpRequest<unknown>, key: string): MetricsAttributeValu
   return undefined;
 }
 
-/** The plugin name a route carries in its path. */
-const pathName = (index: number) => (_req: HttpRequest<unknown>, match: RegExpMatchArray) =>
-  decodeURIComponent(match[index]);
+/** A row of {@link TRACKED_ROUTES}; a helper so each row stays one line. */
+function route(pattern: RegExp, group: string, attributes?: AttributesFn, method: TrackedRoute['method'] = 'POST'): TrackedRoute {
+  return { method, pattern, group, attributes };
+}
 
+/** The plugin name a route carries in its path (its first capture group). */
+const pathName = (match: RegExpMatchArray) => decodeURIComponent(match[1]);
+
+/** Every way of adding a dataset is a `datasetImported`, told apart by `importer`. */
 const datasetImport =
-  (importer: (req: HttpRequest<unknown>, match: RegExpMatchArray) => string) =>
-  (req: HttpRequest<unknown>, match: RegExpMatchArray): Attributes => ({
-    importer: importer(req, match),
-    media_type: bodyField(req, 'media_type'),
-  });
+  (importer?: string): AttributesFn =>
+  (req, match) => ({ importer: importer ?? pathName(match), media_type: bodyField(req, 'media_type') });
 
 /**
  * The action endpoints counted as usage events, one row per route. A row
  * fires once the request succeeds, so a rejected import or export is not
- * counted. Several routes can share a group (every way of adding a dataset is
- * a `datasetImported`, told apart by `importer`).
+ * counted.
  */
 const TRACKED_ROUTES: TrackedRoute[] = [
-  {
-    method: 'POST',
-    pattern: /^\/api\/dataset\/import\/([^/]+)$/,
-    group: 'datasetImported',
-    attributes: datasetImport(pathName(1)),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/dataset\/import-local-folder$/,
-    group: 'datasetImported',
-    attributes: datasetImport(() => 'local_folder'),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/dataset\/import-local-files$/,
-    group: 'datasetImported',
-    attributes: datasetImport(() => 'local_files'),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/dataset\/load-file$/,
-    group: 'datasetImported',
-    attributes: datasetImport(() => 'pickle_file'),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/dataset\/load-demo$/,
-    group: 'datasetImported',
-    attributes: (req) => ({ importer: 'demo', demo: bodyField(req, 'name') }),
-  },
-  { method: 'POST', pattern: /^\/api\/dataset\/combine$/, group: 'datasetsCombined' },
-  { method: 'POST', pattern: /^\/api\/dataset\/promote$/, group: 'datasetPromoted' },
-  { method: 'GET', pattern: /^\/api\/dataset\/export$/, group: 'datasetExported' },
-  {
-    method: 'POST',
-    pattern: /^\/api\/exporters\/export$/,
-    group: 'resultsExported',
-    attributes: (req) => ({ exporter: bodyField(req, 'exporter_name'), payload: bodyField(req, 'payload_kind') }),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/label-importers\/import\/([^/]+)$/,
-    group: 'labelsImported',
-    attributes: (req, match) => ({ importer: pathName(1)(req, match), into: 'new_detector' }),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/detectors\/[^/]+\/import-labels\/([^/]+)$/,
-    group: 'labelsImported',
-    attributes: (req, match) => ({ importer: pathName(1)(req, match), into: 'existing_detector' }),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/detectors$/,
-    group: 'detectorCreated',
-    attributes: (req) => ({
-      source: 'new_detector_form',
-      media_type: bodyField(req, 'media_type'),
-      embedder_type: bodyField(req, 'embedder_type'),
-    }),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/detectors\/registry\/from-labelset\/([^/]+)$/,
-    group: 'detectorCreated',
-    attributes: (req, match) => ({ source: 'labelset', importer: pathName(1)(req, match) }),
-  },
-  { method: 'POST', pattern: /^\/api\/detectors\/[^/]+\/portable-bundle$/, group: 'detectorExported' },
-  { method: 'POST', pattern: /^\/api\/find$/, group: 'find' },
-  {
-    method: 'POST',
-    pattern: /^\/api\/settings-importers\/import\/([^/]+)$/,
-    group: 'settingsImported',
-    attributes: (req, match) => ({ importer: pathName(1)(req, match) }),
-  },
-  {
-    method: 'POST',
-    pattern: /^\/api\/settings-exporters\/export$/,
-    group: 'settingsExported',
-    attributes: (req) => ({ exporter: bodyField(req, 'exporter_name') }),
-  },
+  route(/^\/api\/dataset\/import\/([^/]+)$/, 'datasetImported', datasetImport()),
+  route(/^\/api\/dataset\/import-local-folder$/, 'datasetImported', datasetImport('local_folder')),
+  route(/^\/api\/dataset\/import-local-files$/, 'datasetImported', datasetImport('local_files')),
+  route(/^\/api\/dataset\/load-file$/, 'datasetImported', datasetImport('pickle_file')),
+  route(/^\/api\/dataset\/load-demo$/, 'datasetImported', (req) => ({ importer: 'demo', demo: bodyField(req, 'name') })),
+  route(/^\/api\/dataset\/combine$/, 'datasetsCombined'),
+  route(/^\/api\/dataset\/promote$/, 'datasetPromoted'),
+  route(/^\/api\/dataset\/export$/, 'datasetExported', undefined, 'GET'),
+  route(/^\/api\/exporters\/export$/, 'resultsExported', (req) => ({
+    exporter: bodyField(req, 'exporter_name'),
+    payload: bodyField(req, 'payload_kind'),
+  })),
+  route(/^\/api\/label-importers\/import\/([^/]+)$/, 'labelsImported', (_req, match) => ({
+    importer: pathName(match),
+    into: 'new_detector',
+  })),
+  route(/^\/api\/detectors\/[^/]+\/import-labels\/([^/]+)$/, 'labelsImported', (_req, match) => ({
+    importer: pathName(match),
+    into: 'existing_detector',
+  })),
+  route(/^\/api\/detectors$/, 'detectorCreated', (req) => ({
+    source: 'new_detector_form',
+    media_type: bodyField(req, 'media_type'),
+    embedder_type: bodyField(req, 'embedder_type'),
+  })),
+  route(/^\/api\/detectors\/registry\/from-labelset\/([^/]+)$/, 'detectorCreated', (_req, match) => ({
+    source: 'labelset',
+    importer: pathName(match),
+  })),
+  route(/^\/api\/detectors\/[^/]+\/portable-bundle$/, 'detectorExported'),
+  route(/^\/api\/find$/, 'find'),
+  route(/^\/api\/settings-importers\/import\/([^/]+)$/, 'settingsImported', (_req, match) => ({
+    importer: pathName(match),
+  })),
+  route(/^\/api\/settings-exporters\/export$/, 'settingsExported', (req) => ({
+    exporter: bodyField(req, 'exporter_name'),
+  })),
 ];
 
 function compact(attributes: Attributes): Record<string, MetricsAttributeValue> {
