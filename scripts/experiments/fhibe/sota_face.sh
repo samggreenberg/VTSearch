@@ -37,7 +37,8 @@
 # identity file, so every session pairs with the plain arm's by person, size, K and beta.
 #
 # CALIB_SPOT_CHECK (end | off) runs a study's arm without the app's weak-separation check (#4778);
-# `dirs` declares it to the preflight and `pack` pins it in every cell's environment.
+# `dirs` declares it to the preflight and `pack` pins it in every cell's environment. CALIB_SPAN_GREEN (0 = no
+# Diversity step, #5473) likewise.
 #
 # SOTA_FACE_BETAS="1" runs fewer presets than the three (#4780). SOTA_FACE_BASE names the prepared
 # grids (<base>-k<K>) that `prepare` writes and `dirs` links, so an arm on other vectors under the same
@@ -158,7 +159,7 @@ pack)
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
       --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
-SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} \
+SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-} \
 SOTA_FACE_RUNNER=${SOTA_FACE_RUNNER:-} HARD_FACE_SWAP=${HARD_FACE_SWAP:-} && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }

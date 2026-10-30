@@ -184,6 +184,8 @@ ENVX="$ENVX CALIB_LINE_BAD=${CALIB_LINE_BAD:-} CALIB_LINE_BOUND_MARGIN=${CALIB_L
 ENVX="$ENVX CALIB_QUERY_HOLD=${CALIB_QUERY_HOLD:-} CALIB_QUERY_MISS=${CALIB_QUERY_MISS:-}"
 # An eval head (CALIB_HEAD): unset is the shipped linear SVM; a set head is declared to preflight (PREFLIGHT_DIVERGES=head).
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
+# The Span target (#5473): unset is the app's 40; 0 skips the Diversity step.
+ENVX="$ENVX CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
