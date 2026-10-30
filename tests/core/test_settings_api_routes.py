@@ -712,9 +712,9 @@ class TestSettingsAPI:
         assert res2.get_json()["autopilot_goal_diversity"] == 60
 
     def test_update_autopilot_goal_diversity_clamped(self, client):
-        res = client.put("/api/settings", json={"autopilot_goal_diversity": 0})
+        res = client.put("/api/settings", json={"autopilot_goal_diversity": -3})
         assert res.status_code == 200
-        assert res.get_json()["autopilot_goal_diversity"] == 1
+        assert res.get_json()["autopilot_goal_diversity"] == 0
 
     def test_update_autopilot_goal_diversity_invalid(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": "not a number"})
@@ -736,7 +736,7 @@ class TestSettingsAPI:
         assert data["autopilot_enabled"] is True
         assert data["autopilot_top_greens"] == 3
         assert data["autopilot_hard_reds"] == 4
-        assert data["autopilot_goal_diversity"] == 40
+        assert data["autopilot_goal_diversity"] == 0
 
     def test_get_defaults_excludes_directory_settings(self, client):
         res = client.get("/api/settings/defaults")

@@ -490,7 +490,11 @@ class UserSettings(BaseModel):
     autopilot_top_greens: Annotated[int, _clamp_min(1)] = 3
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
-    autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
+    # Atlas nodes Autopilot's Diversity step must cover before Done.  0 (the
+    # default since #5473) skips the step: Done waits on Smart and Stable only.
+    # Diversity's value depends on the embedder and the data, so a positive
+    # goal (40 was the default before) turns the step back on.
+    autopilot_goal_diversity: Annotated[int, _clamp_min(0)] = 0
 
     # AutoFind: each user's own list of detectors that auto-run against a newly
     # imported dataset, plus what to do with the results. Per-user (everyone

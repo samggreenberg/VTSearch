@@ -1248,7 +1248,8 @@ NEW_WALK = os.environ.get("CALIB_NEW_WALK", "").strip() or "atlas"
 #: Issue #5473's Span target: how many evidence-bearing atlas nodes turn Span
 #: green, the app's ``autopilot_goal_diversity``.  ``0`` skips the Diversity step:
 #: Span reads green from the first vote, so Done waits on Smart and Stable alone.
-#: Unset (the default) is the app's default, 40.  Not an int is refused by preflight.
+#: Unset is the app's default, 0 since #5473; ``40`` is the step on, the default
+#: before.  Not an int is refused by preflight.
 _SPAN_GREEN_RAW = os.environ.get("CALIB_SPAN_GREEN", "").strip()
 SPAN_GREEN: "int | str | None" = (
     int(_SPAN_GREEN_RAW) if _SPAN_GREEN_RAW.lstrip("-").isdigit() else (_SPAN_GREEN_RAW or None)

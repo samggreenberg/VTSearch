@@ -101,7 +101,7 @@ _DIVERGENT = [
     ({"CALIB_OPENING_DIVERSITY": "0.85/1"}, "opening_diversity"),
     ({"CALIB_MORE_WALK": "detector"}, "more_walk"),
     ({"CALIB_NEW_WALK": "hard"}, "new_walk"),
-    ({"CALIB_SPAN_GREEN": "0"}, "span_green"),
+    ({"CALIB_SPAN_GREEN": "40"}, "span_green"),
     ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_EARLY_CHECK": "50"}, "early_check"),
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),

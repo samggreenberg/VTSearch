@@ -865,10 +865,15 @@ The phase panel labels them, in order:
    item stays the description's until your 30th vote: the detector asks
    the questions, but its matches only beat the description's from about
    there.
-4. **Explore Diversity.** - Autopilot serves items from parts of the
-   dataset the detector hasn't seen yet, so your votes cover a broad
-   mix. This catches edge cases the previous phase missed. The phase
-   ends when this coverage hits your goal (default: 40).
+4. **Explore Diversity** (off by default). - Autopilot serves items from
+   parts of the dataset the detector hasn't seen yet, so your votes cover
+   a broad mix. The phase ends when this coverage hits your goal. The
+   goal is 0 by default, which skips the phase and leaves it off the
+   panel: measured on faces and photos, skipping it stops a session
+   about 20 votes sooner, with the same detector on faces and a slightly
+   weaker one on photos. Set **Goal
+   diversity** in Settings (40 was the old default) to turn it back on
+   for a model or collection where it helps.
 5. **Spot Check.** - With every quality light green, or once the
    detector expects an F-beta of at least 0.5 at your balance (its own
    estimate of how much of what it returns is right, and how much of what

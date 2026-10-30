@@ -3639,10 +3639,11 @@ def simulate_voting_iterations(  # noqa: C901
             unchanged.  Needs the phase machine.
         span_green: How many evidence-bearing atlas nodes turn Span green (issue
             #5473), the app's ``autopilot_goal_diversity``.  ``None`` - the
-            default - is the app's default, 40.  ``0`` reads Span green from the
-            first vote, so Autopilot never enters ``new`` (the Diversity step)
-            and says Done once Smart and Stable are green.  The app clamps its
-            setting to 1, which its first vote meets.  Needs the phase machine.
+            default - is the app's default, 0: Span reads green from the first
+            vote, so Autopilot never enters ``new`` (the Diversity step) and
+            says Done once Smart and Stable are green.  A positive goal turns
+            the step back on (40, ``SPAN_GREEN_ON``, was the default before
+            #5473).  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw

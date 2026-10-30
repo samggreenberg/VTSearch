@@ -1184,6 +1184,14 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
 
     SPAN_GREEN = get_setting("autopilot_goal_diversity")
     SPAN_YELLOW = 10
+    if SPAN_GREEN <= 0:
+        # The Diversity step is off (the default since #5473): Span never holds Done.
+        return {
+            "status": "green",
+            "reason": "Diversity step off.",
+            **(span_info or {"level": 0, "depth": 0}),
+            "target": 0,
+        }
     if span_info is None:
         return {
             "status": "red",

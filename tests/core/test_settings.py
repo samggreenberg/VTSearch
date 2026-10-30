@@ -510,7 +510,7 @@ class TestSettingsModule:
         assert defaults["autopilot_enabled"] is True
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
-        assert defaults["autopilot_goal_diversity"] == 40
+        assert defaults["autopilot_goal_diversity"] == 0
         assert "autofind_detectors" not in defaults
         # Directory settings excluded from defaults (not reset by Default button)
         assert "saved_datasets_dir" not in defaults
@@ -598,14 +598,15 @@ class TestSettingsModule:
         assert raw["autopilot_goal_diversity"] == 60
 
     def test_autopilot_goal_diversity_clamped(self):
+        # 0 is the Diversity step off (#5473), so it is kept; below it clamps.
         settings_mod.set_autopilot_goal_diversity(0)
-        assert settings_mod.get_autopilot_goal_diversity() == 1
+        assert settings_mod.get_autopilot_goal_diversity() == 0
 
         settings_mod.set_autopilot_goal_diversity(-5)
-        assert settings_mod.get_autopilot_goal_diversity() == 1
+        assert settings_mod.get_autopilot_goal_diversity() == 0
 
     def test_autopilot_goal_diversity_default(self):
-        assert settings_mod.get_autopilot_goal_diversity() == 40
+        assert settings_mod.get_autopilot_goal_diversity() == 0
 
     def test_autopilot_goal_diversity_persists_across_reset(self, isolated_settings):
         settings_mod.set_autopilot_goal_diversity(80)

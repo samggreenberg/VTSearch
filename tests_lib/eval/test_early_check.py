@@ -11,6 +11,8 @@ from typing import Any
 
 import pytest
 
+from vtscore.eval.autopilot_flow import SPAN_GREEN_ON
+
 from .sweep_cache import memoize_sweep
 
 # One worker, so each session below runs once rather than once per worker that
@@ -37,7 +39,8 @@ def _run(early_check: Any = None, *, max_steps: int = 60, **kw: Any) -> list[dic
         atlas_min_node_size=8,
         early_check=early_check,
         pick_sink=picks,
-        **kw,
+        # With the Diversity step on (it is off by default since #5473), the session runs past the votes under test.
+        **{"span_green": SPAN_GREEN_ON, **kw},
     )
     return picks
 

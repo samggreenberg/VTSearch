@@ -1,8 +1,11 @@
+import { signal, type WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { BehaviorSubject } from 'rxjs';
 import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from '../../../services/autopilot-state.service';
+import type { AppSettings } from '../../../generated/api-client/models/app-settings';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -46,11 +49,19 @@ describe('AutopilotPanelComponent', () => {
   let component: AutopilotPanelComponent;
   let fixture: ComponentFixture<AutopilotPanelComponent>;
   let autopilotState: AutopilotStateService;
+  // The panel reads only the Diversity goal from the settings. These specs run
+  // with the step on (40); a goal of 0, the default since #5473, leaves it out.
+  let settings: WritableSignal<Partial<AppSettings> | null>;
 
   beforeEach(async () => {
+    settings = signal<Partial<AppSettings> | null>({ autopilot_goal_diversity: 40 });
     await TestBed.configureTestingModule({
       imports: [AutopilotPanelComponent],
-      providers: [...provideZoneless(), provideRouter([])],
+      providers: [
+        ...provideZoneless(),
+        provideRouter([]),
+        { provide: SettingsStateService, useValue: { settingsSignal: settings } },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AutopilotPanelComponent);
@@ -124,6 +135,13 @@ describe('AutopilotPanelComponent', () => {
       'Spot Check.',
       'Done!',
     ]);
+  });
+
+  it('leaves the Diversity step out when its goal is 0, the default (#5473)', () => {
+    settings.set({ autopilot_goal_diversity: 0 });
+    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'spot', 'done']);
+    settings.set(null);
+    expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'hard', 'spot', 'done']);
   });
 
   it('lists the More step when a walk is configured (#4282)', async () => {
