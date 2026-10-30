@@ -77,4 +77,35 @@ describe('ClipboardCopyComponent', () => {
     await fixture.whenStable();
     expect(btn.textContent?.trim()).toBe('Copy');
   });
+
+  // #5464: Find Results copies from its own footer, and may want a bare list.
+  describe('for a host that copies from its own button', () => {
+    let writeText: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      fixture.componentRef.setInput('showButton', false);
+      fixture.componentRef.setInput('headerOption', true);
+      fixture.componentRef.setInput('rows', [{ a: '1' }, { a: '2' }]);
+      await settleZoneless(fixture);
+    });
+
+    it('has no button of its own, and resolves whether the copy went through', async () => {
+      expect(fixture.nativeElement.querySelector('button.btn')).toBeNull();
+      expect(await fixture.componentInstance.copy()).toBe(true);
+      writeText.mockRejectedValueOnce(new Error('denied'));
+      expect(await fixture.componentInstance.copy()).toBe(false);
+    });
+
+    it('copies the header row unless it is unticked', async () => {
+      await fixture.componentInstance.copy();
+      expect(writeText).toHaveBeenLastCalledWith('A\n1\n2');
+      const box = fixture.nativeElement.querySelector('.clipboard-header-toggle input') as HTMLInputElement;
+      box.click();
+      await settleZoneless(fixture);
+      await fixture.componentInstance.copy();
+      expect(writeText).toHaveBeenLastCalledWith('1\n2');
+    });
+  });
 });

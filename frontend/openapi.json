@@ -346,6 +346,12 @@
             },
             "type": "object"
           },
+          "grid_icon_size_results": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "grid_icon_size_right": {
             "additionalProperties": {
               "type": "string"
@@ -6017,6 +6023,105 @@
         ],
         "type": "object"
       },
+      "MediaSimilarityOrder": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "eta_seconds": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "ids": {
+            "default": null,
+            "description": "When ``ready``: the asked ids, look-alikes side by side (a 1-D UMAP).",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "description": "When ``ready``: how the order was fit (``umap``, ``pca`` or ``trivial``).",
+            "nullable": true,
+            "type": "string"
+          },
+          "overall": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "overall_step_end": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "status": {
+            "description": "``ready``: ``ids`` holds the asked ids in order. ``building``: the dataset's order is being fit (with its Browse layout, when it has none); ask again. ``error``: that fit failed.",
+            "enum": [
+              "ready",
+              "building",
+              "error"
+            ],
+            "type": "string"
+          },
+          "step": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total_steps": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "MediaSimilarityOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "The items to put in similarity order; ids the dataset lacks are dropped.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
       "MediaSourceBatchEntry": {
         "additionalProperties": false,
         "properties": {
@@ -7276,6 +7381,7 @@
           "grid_icon_size_left": {},
           "grid_icon_size_picker": {},
           "grid_icon_size_popup": {},
+          "grid_icon_size_results": {},
           "grid_icon_size_right": {},
           "hidden_hints": {
             "items": {
@@ -14390,6 +14496,50 @@
           }
         },
         "summary": "List the ids New Detector's *Pick from Dataset* grid shows, in the order it shows them.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
+    "/api/medias/similarity-order": {
+      "post": {
+        "description": "The Find Results list's *Similarity* sort.  The order is a 1-D UMAP of the\nwhole dataset, fit with its 2-D Browse layout and saved beside it, so a\ndataset that has been browsed answers ``ready`` at once.  One that has not\nis answered ``building`` while the fit runs (the Browse layout with it, when\nit has none), and the caller asks again until it is ``ready``; see\n:func:`~vtscore.projection.similarity_order.request_similarity_order`.",
+        "operationId": "similarity_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaSimilarityOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSimilarityOrder"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no embeddings to order."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Put *ids* in the dataset's similarity order: look-alikes side by side (#5464).",
         "tags": [
           "medias"
         ]

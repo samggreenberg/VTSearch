@@ -1,0 +1,28 @@
+<div class="column-chooser-header">
+  <ng-content />
+  <button
+    type="button"
+    class="column-select-all"
+    role="checkbox"
+    [attr.aria-checked]="state === 'all' ? 'true' : state === 'some' ? 'mixed' : 'false'"
+    [attr.aria-label]="state === 'all' ? 'Deselect all columns' : 'Select all columns'"
+    [title]="state === 'all' ? 'Deselect all columns' : 'Select all columns'"
+    (click)="allToggled.emit()">
+    @switch (state) {
+      @case ('all') { <vt-icon type="checkbox-checked" [size]="15"></vt-icon> }
+      @case ('some') { <vt-icon type="checkbox-some" [size]="15"></vt-icon> }
+      @default { <vt-icon type="checkbox-blank" [size]="15"></vt-icon> }
+    }
+  </button>
+</div>
+<div class="column-checkboxes">
+  @for (col of columns(); track col.key) {
+    <label class="column-toggle" [title]="col.title || ''">
+      <input
+        type="checkbox"
+        [checked]="col.enabled"
+        (change)="toggled.emit({ key: col.key, enabled: $any($event.target).checked })" />
+      {{ col.label }}
+    </label>
+  }
+</div>

@@ -12,6 +12,7 @@ import type { MediaVoteRequest } from '../generated/api-client/models/media-vote
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
 import type { MediaSourceResponse } from '../generated/api-client/models/media-source-response';
+import type { MediaSimilarityOrder } from '../generated/api-client/models/media-similarity-order';
 import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 import type { PayloadVariant } from '../models/api.models';
 import type { VoteProvenance } from './vote-provenance.service';
@@ -21,6 +22,7 @@ import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
 import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
 import { voteMedia } from '../generated/api-client/fn/medias/vote-media';
 import { mediaSource } from '../generated/api-client/fn/medias/media-source';
+import { similarityOrder } from '../generated/api-client/fn/medias/similarity-order';
 
 @Injectable({ providedIn: 'root' })
 export class MediasApiService {
@@ -47,6 +49,18 @@ export class MediasApiService {
   getPickerListingIn(datasetId: string, q = ''): Observable<MediaPickerListing> {
     const context = new HttpContext().set(DATASET_OVERRIDE, datasetId);
     return mediaPickerListing(this.http, this.config.rootUrl, q ? { q } : undefined, context).pipe(map((r) => r.body));
+  }
+
+  /**
+   * *ids* in *datasetId*'s similarity order, look-alikes side by side: the
+   * Find Results list's Similarity sort (#5464). Answers `building` (with the
+   * fit's progress) while the dataset's order is being fit, with its Browse
+   * layout when it has none; ask again until it is `ready`.
+   */
+  getSimilarityOrderIn(datasetId: string, ids: number[], context = new HttpContext()): Observable<MediaSimilarityOrder> {
+    return similarityOrder(this.http, this.config.rootUrl, { body: { ids } }, context.set(DATASET_OVERRIDE, datasetId)).pipe(
+      map((r) => r.body),
+    );
   }
 
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {

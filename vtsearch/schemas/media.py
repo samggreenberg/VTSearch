@@ -6,6 +6,8 @@ Listing / per-media routes (``vtsearch/routes/media/list.py``, ``content.py``,
 * ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
 * ``GET  /api/medias/picker`` -> :class:`MediaPickerQuerySchema` ->
                                  :class:`MediaPickerListingSchema`
+* ``POST /api/medias/similarity-order`` -> :class:`MediaSimilarityOrderRequestSchema` ->
+                                           :class:`MediaSimilarityOrderSchema`
 * ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
                                 :class:`MediaBatchResponseSchema`
 * ``POST /api/medias/<id>/vote`` -> :class:`MediaVoteRequestSchema` ->
@@ -180,6 +182,51 @@ class MediaPickerListingSchema(Schema):
             )
         },
     )
+
+
+class MediaSimilarityOrderRequestSchema(Schema):
+    """Body for ``POST /api/medias/similarity-order``."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "The items to put in similarity order; ids the dataset lacks are dropped."},
+    )
+
+
+class MediaSimilarityOrderSchema(Schema):
+    """Response for ``POST /api/medias/similarity-order``: the ids in order, or how far the fit has got."""
+
+    status = fields.String(
+        required=True,
+        validate=validate.OneOf(["ready", "building", "error"]),
+        metadata={
+            "description": (
+                "``ready``: ``ids`` holds the asked ids in order. ``building``: the dataset's order is "
+                "being fit (with its Browse layout, when it has none); ask again. ``error``: that fit failed."
+            )
+        },
+    )
+    ids = fields.List(
+        fields.Integer(),
+        load_default=None,
+        metadata={"description": "When ``ready``: the asked ids, look-alikes side by side (a 1-D UMAP)."},
+    )
+    method = fields.String(
+        load_default=None,
+        metadata={"description": "When ``ready``: how the order was fit (``umap``, ``pca`` or ``trivial``)."},
+    )
+    # Fit progress (when status == "building"), as GET /api/projection/meta reports a build's.
+    job_id = fields.String(load_default=None)
+    current = fields.Integer(load_default=None)
+    total = fields.Integer(load_default=None)
+    message = fields.String(load_default=None)
+    step = fields.Integer(load_default=None)
+    total_steps = fields.Integer(load_default=None)
+    overall = fields.Float(load_default=None)
+    overall_step_end = fields.Float(load_default=None)
+    eta_seconds = fields.Float(load_default=None)
+    error = fields.String(load_default=None)
 
 
 class MediaBatchRequestSchema(Schema):

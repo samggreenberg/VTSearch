@@ -271,6 +271,11 @@ def fit_and_install_layout(
     best-effort and runs before the layout is cached, so the canvas finds the
     signs together with the map.  Full-dataset layouts are persisted into the
     dataset container; subset layouts are ephemeral and never written.
+
+    A full-dataset layout also brings the dataset's 1-D similarity order with
+    it (#5464), fit on the same matrix once the layout is cached and saved:
+    Browse reads its readiness off the cached pyramid, so the map opens
+    without waiting for the order.  See :func:`_fit_order_best_effort`.
     """
     from vtscore.projection import build_pyramid, fit_projection  # noqa: PLC0415
     from vtscore.projection.params import resolve_projection_params  # noqa: PLC0415
@@ -306,7 +311,30 @@ def fit_and_install_layout(
     install_layout(ctx, proj, pyr, subset=subset)
     if not subset:
         store.persist_projection(ctx.dataset_id, proj, pyr)
+        _fit_order_best_effort(ctx, list(sorted_ids), matrix, on_progress)
     return proj, pyr
+
+
+def _fit_order_best_effort(ctx: DatasetContext, sorted_ids: list[int], matrix, on_progress: ProgressFn | None) -> None:
+    """Fit and save the dataset's 1-D similarity order beside its fresh 2-D layout.
+
+    The order a list of the dataset's items sorts by when look-alikes should sit
+    together (:mod:`vtscore.projection.similarity_order`).  An order already
+    stored for these ids is kept rather than re-fit: it is as good a function of
+    the same matrix as a new one, and a re-projection is about the map.  Best
+    effort, since the layout it rides with is already cached and saved: a failed
+    fit is logged and leaves the order to be fit on its own when a list asks for
+    it.  A cancellation is not a failure, and propagates.
+    """
+    from vtscore.concurrency.progress_tracker import CancelledError  # noqa: PLC0415
+    from vtscore.projection.similarity_order import ensure_similarity_order  # noqa: PLC0415
+
+    try:
+        ensure_similarity_order(ctx, sorted_ids, matrix, on_progress=on_progress)
+    except CancelledError:
+        raise
+    except Exception:
+        logger.warning("Similarity order fit failed for %s; the layout stands.", ctx.dataset_id, exc_info=True)
 
 
 def install_layout(ctx: DatasetContext, proj: Projection, pyr: Pyramid, *, subset: bool = False) -> None:

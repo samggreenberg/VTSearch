@@ -56,6 +56,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Find Results is laid out by what each control does** (issue #5464). What changes the list sits above it:
+  Good / Bad / Both, a new **Sort by** Score or **Similarity** (look-alikes side by side, by a 1-D UMAP of the whole
+  dataset that is now fit and saved with its Browse map), and the same **Columns** checkboxes the Export dialog has,
+  which decide what the list shows, what is copied and what is exported. The list can show a **Thumbnail** of each
+  item, sized by its own smaller / bigger buttons and loaded as you scroll. **Browse** sits under the list; the
+  destinations are tabs, **Clipboard** first and opening by default, in place of the unlabelled exporter pulldown;
+  and the footer is **Close**, **Export** and **Export and Close**. The Media Type in its summary carries its
+  icon, as on the Dashboard.
+
 - **Autopilot skips its Explore Diversity step by default** (issue #5473). The **Goal diversity** setting
   (`autopilot_goal_diversity`) now defaults to 0, which skips the step: Done waits on the Smart and Stable lights
   (or the expected F-beta level) alone, and the Autopilot panel leaves the step out. Measured on FHIBE faces and COCO
