@@ -218,6 +218,11 @@ class AppSettingsSchema(Schema):
     # tab can report which types carry a custom vocabulary. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     browse_signpost_vocab = _PerMediaTypeStringListDict(dump_only=True)
+    # Server-tier usage-metrics switch (#5475). Set by editing the persisted
+    # settings file; surfaced read-only here so the Server settings tab can
+    # report whether ``POST /api/metrics`` records anything. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    enable_metrics = fields.Boolean(dump_only=True)
 
     # AutoFind (per-user, editable from the AutoFind settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run

@@ -13,6 +13,7 @@
         aria-label="Recent sessions"
         [attr.aria-expanded]="menuOpen"
         aria-haspopup="true"
+        data-metric="recentSessionsMenu"
         (click)="toggleMenu($event)"
         >
         <span aria-hidden="true"></span>
@@ -33,6 +34,7 @@
               class="burger-item burger-subitem"
               role="menuitem"
               tabindex="-1"
+              data-metric="recentSession"
               (click)="onRecentClicked(s)"
               [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
               >
@@ -50,6 +52,7 @@
     <button
       class="logo-btn"
       [class.disabled]="!isOnLabelView()"
+      data-metric="logoDashboard"
       (click)="onDashboard()"
       [title]="isOnLabelView() ? 'Go to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >
@@ -60,6 +63,7 @@
       class="top-bar-btn"
       [class.disabled]="!isOnLabelView()"
       [disabled]="!isOnLabelView()"
+      data-metric="dashboardButton"
       (click)="onDashboard()"
       [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >Dashboard</button>
@@ -88,6 +92,7 @@
         class="header-icon-btn"
         aria-label="Achievements"
         title="Achievements: usage milestones and tier progress"
+        data-metric="achievementsButton"
         (click)="onAchievements()"
         ><svg aria-hidden="true" [class.trophy-open]="showAchievements()" [class.trophy-close]="achievementsClosing"
         (animationend)="onTrophyAnimationEnd()"
@@ -109,6 +114,7 @@
     class="header-icon-btn"
     aria-label="Help"
     title="Help (?)"
+    data-metric="helpButton"
     (click)="onHelp()"
     ><svg aria-hidden="true" [class.help-open]="showKeyboardHelp" [class.help-close]="helpClosing"
     (animationend)="onHelpAnimationEnd()"
@@ -121,6 +127,7 @@
     class="header-icon-btn"
     aria-label="Settings"
     title="Settings"
+    data-metric="settingsButton"
     (click)="onSettings()"
     ><svg aria-hidden="true" [class.gear-open]="showSettings()" [class.gear-close]="gearClosing"
     (animationend)="onGearAnimationEnd()"

@@ -418,6 +418,15 @@ class ServerSettings(BaseModel):
     # soon as the previous push lands (after a 200 ms debounce).
     labelset_source_push_interval_seconds: Annotated[float, _clamp(0.0, 86400.0)] = 60.0
 
+    # Usage metrics (#5475). When True, the SPA's default metrics provider
+    # batches UI events (views opened, datasets imported, results exported,
+    # settings changed, tagged clicks) to ``POST /api/metrics``, which appends
+    # them to ``data/metrics/events-YYYY-MM.jsonl``; :mod:`vtsearch.metrics`
+    # owns the sink. False turns the sink off: the route records nothing, and
+    # the frontend stops sending once a response says so. Set by editing the
+    # settings file; surfaced read-only at ``GET /api/settings``.
+    enable_metrics: bool = True
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""

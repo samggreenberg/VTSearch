@@ -365,6 +365,7 @@ data/
 ├── local_uploads/                    # Files uploaded through the browser
 ├── staging/                          # Scratch space for in-flight imports
 ├── logs/                             # App logs written by the SLURM launcher (VTSEARCH_LOG_FILE)
+├── metrics/                          # Usage metrics, one events-YYYY-MM.jsonl per month (enable_metrics)
 ├── images/, video/, synthetic/       # Demo/synthetic media materialised by the downloaders
 └── ESC-50-master/, gtzan/, ...       # Extracted demo dataset sources
 ```
@@ -385,9 +386,49 @@ single-user default keeps `user_settings.json` directly in the data dir. See
 | `data/saved_datasets/`, `data/dataset_registry.json` | **Yes** | Every registered dataset (pickle + registry entry); losing them means re-importing |
 | `data/api_keys.json` | **Yes** (if used) | API keys for `--login api_key` |
 | `data/images/`, `video/`, `synthetic/` | Safe to delete | Demo/synthetic media; re-materialised on the next demo load |
+| `data/metrics/` | Optional | Usage metrics; losing them loses only the usage history |
 | `data/staging/` | Safe to delete | Scratch space for in-flight imports |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
+
+### Usage metrics
+
+The browser app reports which features people use, so whoever runs a server can see whether anyone opens Browse,
+which exporters they pick, and which display options and settings they ever change. Each event becomes one JSON line
+in `data/metrics/events-YYYY-MM.jsonl`, a new file each month:
+
+```json
+{"ts":"2026-10-30T16:31:24.420Z","user":"alice","session":"3f1c…","group":"resultsExported","attributes":{"exporter":"server_csv","payload":"find_results"},"client_ts":1793385084301}
+```
+
+`ts` is when the server received the event (UTC); `client_ts` is when the browser logged it (epoch milliseconds),
+since the browser sends events in batches. `user` is the logged-in user (`default` on a single-user server), and
+`session` is one page load, so a visit's events can be read together.
+
+| `group` | Logged when | `attributes` |
+|---------|-------------|--------------|
+| `view` | The user lands on a different view | `view`: `dashboard`, `train`, `tune` or `browse` |
+| `datasetImported` | A dataset import starts | `importer` (the importer plugin, or `demo`, `local_folder`, `local_files`, `pickle_file`), plus `media_type` or `demo` when known |
+| `datasetsCombined`, `datasetPromoted`, `datasetExported` | Combine, Tune's To Dataset, or a dataset download | — |
+| `resultsExported` | Results are exported | `exporter`, `payload` |
+| `labelsImported` | Labels are imported | `importer`, `into` (`new_detector` / `existing_detector`) |
+| `detectorCreated` | A detector is created | `source` (`new_detector_form` / `labelset`), `media_type`, `embedder_type`, or `importer` |
+| `detectorExported` | A portable detector bundle is exported | — |
+| `find` | The Dashboard's Find runs | — |
+| `settingsImported`, `settingsExported` | Settings are imported or exported | `importer` / `exporter` |
+| `settingChanged` | A user setting changes, including the display options that persist as settings (panel drag bars, thumbnail sizes, focus modes, the Browse panel widths) | `key`; `entry` (the media type) for a per-media-type setting; `value` when it is a plain string, number or boolean |
+| `click` | A control tagged for counting is clicked (the header buttons, the image viewer's zoom / rotate toolbar) | `target`: the control's name |
+
+The file answers questions with a line of `jq`. For example, how many times each exporter was used:
+
+```bash
+jq -r 'select(.group == "resultsExported") | .attributes.exporter' data/metrics/events-*.jsonl | sort | uniq -c
+```
+
+To stop recording, set `"enable_metrics": false` in `data/settings.json` and restart (see
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)). To send events somewhere other than this file, a deployment
+that builds its own frontend can replace the metrics provider; see
+[FRONTEND.md § Usage metrics](FRONTEND.md#usage-metrics).
 
 ---
 

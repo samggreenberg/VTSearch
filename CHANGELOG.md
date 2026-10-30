@@ -22,6 +22,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
+  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
+  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
+  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
+  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
+  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
+  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+
 - **An import alert can say what the import left out** (issue #5449). The event a server's
   `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
   items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by

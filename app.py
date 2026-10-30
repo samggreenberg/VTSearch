@@ -140,6 +140,7 @@ from vtsearch.routes import (  # noqa: E402
     exporters_bp,
     label_importers_bp,
     main_bp,
+    metrics_bp,
     projection_bp,
     sessions_bp,
     settings_bp,
@@ -270,6 +271,7 @@ api.register_blueprint(media_server_bp)
 api.register_blueprint(datasource_importers_bp)
 api.register_blueprint(seed_importers_bp)
 api.register_blueprint(main_bp)
+api.register_blueprint(metrics_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)
 api.register_blueprint(precision_check_bp)
