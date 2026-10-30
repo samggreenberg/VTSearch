@@ -56,6 +56,7 @@ def _server_key_values(tmp_path: Path) -> dict[str, Any]:
         "default_settings_source": source,
         "default_labelset_source": source,
         "labelset_source_push_interval_seconds": 99.0,
+        "enable_metrics": False,
     }
 
 
