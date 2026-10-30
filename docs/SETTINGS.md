@@ -196,7 +196,7 @@ An abridged example; the full field list is `UserSettings` in
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
-  "autopilot_goal_diversity": 40,
+  "autopilot_goal_diversity": 0,
   "autofind_detectors": [],
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
@@ -219,6 +219,14 @@ An abridged example; the full field list is `UserSettings` in
 }
 ```
 
+- `autopilot_goal_diversity`: how many Coverage Atlas regions Autopilot's
+  **Explore Diversity** step asks your votes to cover before Done. `0` (the
+  default since #5473) skips the step, so Done waits on the Smart and Stable
+  lights alone; any positive goal turns it back on (`40` was the default
+  before). Skipping it stopped sessions about 20 votes sooner with the same
+  F-beta on faces and slightly less on COCO
+  ([report](experiments/2026-10-30-skip-diversity-5473/REPORT.md)); what it is
+  worth depends on the embedder and the data. Clamped to ≥ 0.
 - `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
   `"dark"`, `"light"`, or `"highviz"`.
 - `autofind_detectors`: detector names to run on each web import, from a

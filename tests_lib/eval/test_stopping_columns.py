@@ -43,6 +43,7 @@ from vtscore.eval.autopilot_flow import (
     STABLE_FALLING_RATIO,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
+    SPAN_GREEN_ON,
     STOPPING_PHASE,
     AutopilotFlow,
     span_target,
@@ -259,7 +260,7 @@ class TestNotMeasuredIsNotNotGreen:
         """The rules refuse to fit below their per-class minimum and their
         history minimums, and the harness reports that refusal as NaN rather
         than as a margin of zero."""
-        flow = AutopilotFlow()
+        flow = AutopilotFlow(span_green=SPAN_GREEN_ON)  # the Diversity step on, so the target is the tree's
         flow.update(1, 1, remaining_unlabeled=50, span={"level": 0, "depth": 12})
         assert flow.smart == "red" and flow.stable == "red"
         assert np.isnan(flow.smart_slope) and np.isnan(flow.stable_confident_flip_rate)

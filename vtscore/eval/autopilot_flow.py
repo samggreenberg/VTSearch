@@ -143,9 +143,13 @@ __all__ = [
 ]
 
 # ``_compute_span_status``: yellow once this many atlas nodes carry evidence;
-# green at ``autopilot_goal_diversity`` (default 40), capped at the tree size.
+# green at ``autopilot_goal_diversity``, capped at the tree size.  The default
+# is 0 since #5473: Span reads green from the first vote and Autopilot skips its
+# Diversity (``new``) step.  ``SPAN_GREEN_ON`` is the goal with the step on, the
+# default before #5473.
 SPAN_YELLOW = 10
-SPAN_GREEN_DEFAULT = 40
+SPAN_GREEN_DEFAULT = 0
+SPAN_GREEN_ON = 40
 
 
 def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, Any]:
@@ -223,9 +227,10 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
     nodes and *depth* its total node count (i.e.
     :meth:`CoverageAtlas.span_info`'s ``level`` / ``depth``).  A degenerate tree
     (no nodes) reads green, matching the app — there is no diversity left to
-    chase.
+    chase.  So does a goal of 0, the Diversity step off (#5473), with or without a
+    tree.
     """
-    if depth <= 0:
+    if depth <= 0 or green_at <= 0:
         return "green"
     green = span_target(depth, green_at)
     yellow = min(SPAN_YELLOW, green)
@@ -819,7 +824,12 @@ class AutopilotFlow:
             self._reading_columns(good_count, bad_count) if self.record_readings else reading_columns_nan()
         )
         stable: Status = stable_d["status"]
-        sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
+        # No atlas reading is red, as in the app, unless the Diversity step is off (#5473).
+        sp: Status = (
+            span_status(int(span["level"]), int(span["depth"]), self.span_green)
+            if span is not None
+            else ("green" if self.span_green <= 0 else "red")
+        )
         self.smart, self.stable, self.span = smart, stable, sp
         self.span_level = int(span["level"]) if span is not None else -1
         self.span_depth = int(span["depth"]) if span is not None else -1

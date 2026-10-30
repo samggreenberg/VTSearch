@@ -22,6 +22,7 @@ import {
   cappedInOpening,
   STOP_CAP_VOTES,
 } from '../../../services/autopilot-state.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import { IconComponent } from '../../icon/icon.component';
 
 export type { AutopilotPhase, AutopilotState };
@@ -148,6 +149,7 @@ function doneSummary(st: AutopilotState): string {
 })
 export class AutopilotPanelComponent implements OnInit {
   autopilotState = inject(AutopilotStateService);
+  private settingsState = inject(SettingsStateService);
   /**
    * The run's state as a signal, so the steps repaint on a change no input
    * carries: a Spot Check starting or ending between votes. The effect below
@@ -329,11 +331,16 @@ export class AutopilotPanelComponent implements OnInit {
     // panel goes back to the step underneath when it ends, as it does from
     // Diversity to Boundary.
     const photoMore = this.state.moreToStart > this.state.goodToStart;
-    const phases: AutopilotStep[] = this.state.dryRunStop
+    // The Diversity step is off at a goal of 0, the default since #5473: the
+    // panel leaves it out, unless the run is in it (the goal changed mid-run).
+    const diversityOn = (this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 0) > 0
+      || this.state.phase === 'new';
+    const all: AutopilotStep[] = this.state.dryRunStop
       ? ['good', 'bad', 'more', 'done']
       : photoMore
         ? ['good', 'bad', 'more', 'hard', 'new', 'spot', 'done']
         : ['good', 'bad', 'hard', 'new', 'spot', 'done'];
+    const phases = all.filter((p) => diversityOn || p !== 'new');
     if (this.improving) phases.push('improve');
     const phaseIndex = phases.indexOf(this.improving ? 'improve' : this.state.phase);
 

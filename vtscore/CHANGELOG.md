@@ -12,6 +12,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Span light's default goal is 0** (issue #5473). `autopilot_flow.SPAN_GREEN_DEFAULT` is 0, the app's new
+  `autopilot_goal_diversity` default: `span_status` reads green at a goal of 0, and `AutopilotFlow` (and so
+  `simulate_voting_iterations`'s default arm) never enters `new`. The new `SPAN_GREEN_ON` (40) is the goal with the
+  Diversity step on, and `span_green=SPAN_GREEN_ON` restores the earlier default arm.
+
 - **The loose top-level modules moved into packages** (issue #5398). `vtscore.io` is now
   `vtscore.utils.io`, `vtscore.gpu_backends` is `vtscore.config.gpu_backends`, `vtscore.single_instance` is
   `vtscore.concurrency.single_instance`, and the two host-seam modules form the new `vtscore.host` package:

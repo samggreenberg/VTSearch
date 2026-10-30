@@ -29,6 +29,7 @@ from vtscore.eval.autopilot_flow import (
     MORE_TARGET,
     SMART_FLAT_THRESHOLD,
     SMART_SLOPE_T,
+    SPAN_GREEN_ON,
     SPAN_YELLOW,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
@@ -326,10 +327,14 @@ class TestStableStatus:
 
 class TestSpanStatus:
     def test_thresholds(self):
-        assert span_status(0, 100) == "red"
-        assert span_status(SPAN_YELLOW - 1, 100) == "red"
-        assert span_status(SPAN_YELLOW, 100) == "yellow"
-        assert span_status(40, 100) == "green"
+        assert span_status(0, 100, SPAN_GREEN_ON) == "red"
+        assert span_status(SPAN_YELLOW - 1, 100, SPAN_GREEN_ON) == "red"
+        assert span_status(SPAN_YELLOW, 100, SPAN_GREEN_ON) == "yellow"
+        assert span_status(40, 100, SPAN_GREEN_ON) == "green"
+
+    def test_the_default_goal_is_the_diversity_step_off(self):
+        """#5473: the app's goal is 0, so Span is green before any atlas node carries evidence."""
+        assert span_status(0, 100) == "green"
 
     def test_green_target_is_capped_at_the_tree_size(self):
         """A tree smaller than the goal must still be able to go green."""
@@ -443,7 +448,7 @@ class TestAutopilotFlow:
 
     def test_span_drives_the_new_to_spot_transition(self):
         """All green reaches the check before Done first: the app checks the line, then reports Done."""
-        flow = AutopilotFlow()
+        flow = AutopilotFlow(span_green=SPAN_GREEN_ON)
         flow.more_done = True
         flow.smart_windows = {"fbeta_best": [0.7] * 4}
         flow.stability = [_entry(0)] * 6
@@ -500,7 +505,7 @@ class TestStopRules:
     SHORT = {"level": 0, "depth": 100}
 
     def _flow(self, rule: str, *, smart_flat: bool = True) -> AutopilotFlow:
-        flow = AutopilotFlow(stop_rule=rule, done_check=False)
+        flow = AutopilotFlow(stop_rule=rule, done_check=False, span_green=SPAN_GREEN_ON)
         flow.more_done = True
         flow.smart_windows = {"fbeta_best": [0.7] * 4 if smart_flat else [0.2, 0.4, 0.6, 0.9]}
         flow.stability = [_entry(0)] * 6

@@ -409,7 +409,7 @@ Two refinements:
 
 Without scores, the pick is the node's most typical element (`ids[0]`), a representative of the unexplored region.
 
-The response's `coverage_level` — the number of consecutive covered nodes in breadth-first order — is the autopilot's **Span** indicator: it turns green at `autopilot_goal_diversity` (default 40) covered nodes, ending the diversity phase. `exhausted: true` means every node carries evidence.
+The response's `coverage_level` — the number of consecutive covered nodes in breadth-first order — is the autopilot's **Span** indicator: it turns green at `autopilot_goal_diversity` covered nodes, ending the diversity phase. The default is 0 since #5473, which reads Span green from the first vote, so Autopilot skips the phase; a positive goal (40 was the default) turns it back on ([report](experiments/2026-10-30-skip-diversity-5473/REPORT.md)). `exhausted: true` means every node carries evidence.
 
 ### Tutorial: how a diversity session works
 

@@ -144,6 +144,8 @@ ENVX="$ENVX CALIB_HEAD_COUNT_RECALL_EXPONENT=${CALIB_HEAD_COUNT_RECALL_EXPONENT:
 # declares it. CALIB_SPOT_CHECK likewise.
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-}"
+# The Span target (#5473): unset is the app's 40; 0 skips the Diversity step. Preflight declares it.
+ENVX="$ENVX CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -239,6 +241,7 @@ PYSHAPE
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
   DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
   DIVERGES="$DIVERGES${CALIB_SPOT_CHECK:+,spot_check}"
+  DIVERGES="$DIVERGES${CALIB_SPAN_GREEN:+,span_green}"
   DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_BADS:+,head_count_bads}"
   DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_RECALL_EXPONENT:+,head_count_recall_exponent}${CALIB_HEAD_COUNT_RECALL_Z:+,head_count_recall_z}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \

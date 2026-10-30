@@ -3,6 +3,7 @@
 import pytest
 
 from vtscore.config import get_setting
+from vtsearch import settings
 from vtsearch.state import (
     add_label_to_history,
     bad_votes,
@@ -345,6 +346,7 @@ class TestSpanLevelProgression:
 
     def test_labeling_status_reflects_span_progression(self, client):
         """The /api/labeling-status endpoint should reflect advancing span level."""
+        settings.set_autopilot_goal_diversity(40)  # the Diversity step on; 0, the default, is green outright (#5473)
         atlas = _build_atlas()
 
         # Before any labels, span should be red with level 0
@@ -511,6 +513,7 @@ class TestDiversityLevelOverTime:
         must be the very number the status is decided by: the diversity goal,
         capped at the atlas's node count.
         """
+        settings.set_autopilot_goal_diversity(40)  # the Diversity step on (#5473)
         atlas = _build_atlas()
         expected = min(get_setting("autopilot_goal_diversity"), atlas.total_nodes)
 
