@@ -65,6 +65,7 @@ def _shipped_spot_check(C: Any, T: Any) -> str:
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
     from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
+    from vtscore.eval.autopilot_flow import SPAN_GREEN_DEFAULT
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -279,6 +280,13 @@ def probe(C: Any) -> list[str]:
         refuse("new_walk", "CALIB_NEW_WALK", "must be one of %s" % ", ".join(NEW_WALKS))
     elif C.NEW_WALK != harness_default("new_walk"):
         rows.append(("new_walk", C.NEW_WALK, "<unset> = atlas, the app's Coverage Atlas walk"))
+    # #5473's Span target: the app's autopilot_goal_diversity at another value (0 = no Diversity step).
+    if C.SPAN_GREEN is not None:
+        if isinstance(C.SPAN_GREEN, int) and not isinstance(C.SPAN_GREEN, bool) and C.SPAN_GREEN >= 0:
+            if C.SPAN_GREEN != SPAN_GREEN_DEFAULT:
+                rows.append(("span_green", str(C.SPAN_GREEN), "<unset> = 40, the app's default Span target"))
+        else:
+            refuse("span_green", "CALIB_SPAN_GREEN", "must be an integer >= 0, the atlas nodes Span needs")
     # #4482's band picks: an arm the app does not take.
     if C.BAND_SHARE is not None:
         if isinstance(C.BAND_SHARE, int) and C.BAND_SHARE >= 1:

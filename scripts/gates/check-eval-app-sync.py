@@ -615,7 +615,8 @@ MIRRORS: list[Mirror] = [
             "#3560) - it is the app's own `green_at = min(SPAN_GREEN, tree_total)`, split out "
             "so that a study *reporting* how far short a run fell reads the same number the "
             "light was decided by. The degenerate-tree branch still short-circuits ahead of "
-            "it on both sides."
+            "it on both sides, and so does a goal of 0, the Diversity step off and the default "
+            "since #5473 (green with or without an atlas reading)."
         ),
         divergence=(
             "The app reads its green target from the `autopilot_goal_diversity` setting "

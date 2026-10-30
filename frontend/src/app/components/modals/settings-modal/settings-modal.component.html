@@ -324,8 +324,8 @@
             <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes in the good-examples phase before autopilot offers to update the sort example" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity:</label>
-            <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
+            <label class="form-label" for="setting-autopilot-diversity" title="How many distinct regions of the dataset autopilot's Diversity step asks your votes to cover before Done. 0 (the default) skips the step; 40 was the default before #5473. Whether it helps depends on the model and the data.">Goal diversity:</label>
+            <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="0" title="Regions autopilot's Diversity step covers before Done; 0 skips the step" />
           </div>
           <h4 class="subhead" title="Sorting by a description you type">Text sort</h4>
           <label class="checkbox-row" title="Average the text-sort query over the model's phrasing templates (e.g. &quot;a photo of …&quot;, &quot;the sound of …&quot;) instead of embedding it as typed. Only the models measured to benefit carry templates (CLAP General audio, X-CLIP video); on every other model this has no effect (issues #3127, #3341)">

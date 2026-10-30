@@ -57,6 +57,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   and the footer is **Close**, **Export** and **Export and Close**. The Media Type in its summary carries its
   icon, as on the Dashboard.
 
+- **Autopilot skips its Explore Diversity step by default** (issue #5473). The **Goal diversity** setting
+  (`autopilot_goal_diversity`) now defaults to 0, which skips the step: Done waits on the Smart and Stable lights
+  (or the expected F-beta level) alone, and the Autopilot panel leaves the step out. Measured on FHIBE faces and COCO
+  Better, sessions are told to stop about 20 votes sooner, with the same F-beta at the stop on faces and 0.004 to
+  0.012 less on COCO ([report](docs/experiments/2026-10-30-skip-diversity-5473/REPORT.md)). How much the step is
+  worth depends on the embedder and the data, so any positive goal turns it back on (40 was the old default).
+
 - **Server log lines carry the new module names** (issue #5398). The loose top-level modules of `vtsearch/` moved
   into `runtime/`, `cli/`, `openapi/` and `settings/`, and each logs under its module's name, so a filter or alert
   keyed on a logger name needs the new one: the slow-request and request-phase lines that came from `vtsearch.hooks`
