@@ -1563,7 +1563,7 @@ with three **payload kinds**. Implement a method per kind you support:
 
 | Kind | Method | Payload | Produced by |
 |------|--------|---------|-------------|
-| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}}` | `POST /api/auto-detect`, a background AutoFind (after an import, or a dataset's Run AutoFind), AutoFind auto-export, the Find Results dialog's **Export** (which moves the side it lists into `hits`), CLI `--autodetect` |
+| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}, "selected_columns"?: [...]}` | `POST /api/auto-detect`, a background AutoFind (after an import, or a dataset's Run AutoFind), AutoFind auto-export, the Find Results dialog's **Export** (which moves the side it lists into `hits`), CLI `--autodetect` |
 | `labelset` | `export_labelset()` | `{"labels": [LabeledElement], "selected_columns": [...]}` | the Export modal |
 | `detector_bundles` | `export_cli_detectors()` | the trained classifiers | CLI `--pipeline` / `--autodetect` |
 

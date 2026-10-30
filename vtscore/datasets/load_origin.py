@@ -195,9 +195,10 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
             _build_projection_stage(ctx, fin)
         except Exception:
             traceback.print_exc()
-    # Face only: the 1-D order the example picker lists the faces in, so the
-    # crops of one person sit together (#5465).  Not opt-in like the 2-D
-    # layout: the picker is a Face dataset's main way to start a detector.
+    # Face's 1-D similarity order, so the example picker's crops of one person
+    # sit together (#5465).  Not opt-in like the 2-D layout (which brings every
+    # type's order with it, #5464): the picker is a Face dataset's main way to
+    # start a detector.  A no-op when the projection stage just fit it.
     # Best-effort for the same reason as the projection.
     fin.begin("similarity_order")
     try:

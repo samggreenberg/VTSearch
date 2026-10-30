@@ -87,6 +87,7 @@ __all__ = [
     "ResultsExporter",
     "StreamResume",
     "UnsupportedPayloadError",
+    "hit_column_value",
     "iter_stream_batches",
     "resolve_stream_batch_size",
 ]
@@ -128,6 +129,32 @@ class UnsupportedPayloadError(ValueError):
     than a 500: asking a labelset-only exporter for a find-results export is a
     bad request, not a server fault.
     """
+
+
+#: Column keys a scored run's ``selected_columns`` can name that are not keys of
+#: the hit itself but of the detector result it belongs to.  See
+#: :func:`hit_column_value`.
+_RUN_LEVEL_COLUMNS = {"detector": "detector_name", "threshold": "threshold"}
+
+
+def hit_column_value(detector_result: dict[str, Any], hit: dict[str, Any], column: str) -> Any:
+    """One hit's value in a ``selected_columns`` *column* of a scored run, or ``None``.
+
+    How an exporter honours the Find Results dialog's column choice (see
+    :meth:`ResultsExporter.export_find_results`): ``detector`` and
+    ``threshold`` read the detector result the hit belongs to; any other
+    column is the hit's own key (``filename``, ``md5``, ``score``, ``label``,
+    ``origin``, ``origin_name``, clip bounds, ...), else a key of its
+    ``custom_metadata``.  The value comes back as the payload holds it (an
+    ``origin`` stays a dict), for the exporter to format; ``None`` when the
+    hit has nothing under that key.
+    """
+    run_key = _RUN_LEVEL_COLUMNS.get(column)
+    if run_key is not None:
+        return detector_result.get(run_key)
+    if column in hit:
+        return hit[column]
+    return (hit.get("custom_metadata") or {}).get(column)
 
 
 def resolve_stream_batch_size(value: Any, default: int = 500) -> int:
@@ -347,6 +374,7 @@ class ResultsExporter(PluginBase):
                              }
                            },
                            "missing_detectors": [...],
+                           "selected_columns": ["origin_name", "score", ...],
                          }
 
                      Each hit comes from
@@ -373,6 +401,15 @@ class ResultsExporter(PluginBase):
                      nobody asked for, while the dialog (which empties it)
                      would send none.  ``missing_detectors`` is likewise
                      informational.
+
+                     **``selected_columns``** (optional) is the user's column
+                     choice from the Find Results dialog, in order: a hit's
+                     own keys, keys of its ``custom_metadata``, and the
+                     detector result's ``detector`` / ``threshold``, which
+                     :func:`hit_column_value` resolves.  Honour it for tabular
+                     output; a delivery exporter that sends whole hits may
+                     ignore it.  It is absent on non-UI call paths (the CLI,
+                     a background AutoFind's auto-export).
 
                      **``balance``** says what the line at ``threshold``
                      keeps (:func:`vtscore.state.core.detector_balance_state`):

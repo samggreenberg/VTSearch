@@ -15,9 +15,11 @@ Browse open either throws it away and re-fits or serves an arrangement nobody
 configured. What is left in this module is the load-pipeline wiring: progress
 reporting through the loading tracker, and the best-effort contract.
 
-The 1-D similarity order a Face dataset's example picker lists its items in
-(#5465) is wired here too, by the same contract; its fit lives in
-:mod:`vtscore.projection.similarity_order`.
+The 1-D similarity order comes with the 2-D layout (the shared build fits it
+once the layout is saved, #5464).  A Face dataset gets its order whether or not
+the layout is pre-built, since its example picker lists its items in that order
+(#5465); that stage is wired here too, by the same contract, and its fit lives
+in :mod:`vtscore.projection.similarity_order`.
 """
 
 from __future__ import annotations
@@ -85,7 +87,7 @@ def _maybe_signpost_texts_stage(ctx: DatasetContext, fin, enabled: bool) -> None
 
 
 def _build_projection_stage(ctx: DatasetContext, tracker) -> None:
-    """Compute + persist the 2-D UMAP projection and its signposts at ingest.
+    """Compute + persist the 2-D UMAP projection, its signposts and its 1-D order at ingest.
 
     Runs inline as a load stage (after the dataset is registered) so the
     Browse canvas opens instantly instead of paying for the UMAP fit lazily
@@ -144,10 +146,11 @@ def _build_similarity_order_stage(ctx: DatasetContext, tracker) -> None:
 
     The order New Detector's *Pick from Dataset* grid lists the items in, so
     look-alikes sit together (:mod:`vtscore.projection.similarity_order`).  A
-    no-op for every type but the ones that module orders (Face).  Runs after
-    registration, so the container exists to persist into, and is best-effort
-    by the projection stage's contract: the caller wraps it, and the picker
-    fits the order itself if this did not.
+    no-op for every type but the ones that module orders on its own (Face),
+    and for one the projection stage just ordered.  Runs after registration, so
+    the container exists to persist into, and is best-effort by the projection
+    stage's contract: the caller wraps it, and the picker fits the order itself
+    if this did not.
     """
     from vtscore.projection import similarity_order  # noqa: PLC0415
 

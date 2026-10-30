@@ -5,7 +5,8 @@ Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 
 :data:`medias_bp` carries every ``/api/medias/...`` route.  This module
 registers the listing ones (the id listing, the example picker's listing,
-batch metadata, and a converter output's source item); the rest register on
+the similarity order, batch metadata, and a converter output's source item);
+the rest register on
 the same blueprint from sibling modules, which :mod:`vtsearch.routes.media`
 imports after this one:
 
@@ -37,6 +38,8 @@ from vtsearch.schemas.media import (
     MediaIdsListResponseSchema,
     MediaPickerListingSchema,
     MediaPickerQuerySchema,
+    MediaSimilarityOrderRequestSchema,
+    MediaSimilarityOrderSchema,
     MediaSourceBatchEntrySchema,
     MediaSourceBatchRequestSchema,
     MediaSourceResponseSchema,
@@ -147,6 +150,40 @@ def media_picker_listing(query: dict):
     if terms:
         ids = [i for i in ids if _name_matches(snap[i], terms)]
     return {"ids": ids, "total": len(snap), "order": "similarity" if order is not None else "dataset"}
+
+
+@medias_bp.route("/api/medias/similarity-order", methods=["POST"])
+@medias_bp.arguments(MediaSimilarityOrderRequestSchema)
+@medias_bp.response(200, MediaSimilarityOrderSchema)
+@medias_bp.alt_response(400, description=MISSING_DATASET_HEADER)
+@medias_bp.alt_response(409, description="The dataset has no embeddings to order.")
+@require_dataset_header
+def similarity_order(body: dict):
+    """Put *ids* in the dataset's similarity order: look-alikes side by side (#5464).
+
+    The Find Results list's *Similarity* sort.  The order is a 1-D UMAP of the
+    whole dataset, fit with its 2-D Browse layout and saved beside it, so a
+    dataset that has been browsed answers ``ready`` at once.  One that has not
+    is answered ``building`` while the fit runs (the Browse layout with it, when
+    it has none), and the caller asks again until it is ``ready``; see
+    :func:`~vtscore.projection.similarity_order.request_similarity_order`.
+    """
+    from vtscore.projection.similarity_order import ordered_ids, request_similarity_order  # noqa: PLC0415
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+
+    ctx = get_active_context()
+    try:
+        answer = request_similarity_order(ctx)
+    except ValueError as exc:
+        # Nothing to order, as the projection build words it (its
+        # ``NothingToProject`` is a ValueError, like the matrix builder's).
+        abort(409, message=str(exc))
+    if answer["status"] != "ready":
+        return answer
+    order = answer["order"]
+    present = ctx.medias
+    asked = [i for i in dict.fromkeys(body["ids"]) if i in present]
+    return {"status": "ready", "ids": ordered_ids(order, asked), "method": order.method}
 
 
 @medias_bp.route("/api/medias/batch", methods=["POST"])

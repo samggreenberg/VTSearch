@@ -504,6 +504,16 @@ class TestSettingsAPI:
 
         assert client.get("/api/settings").get_json()["grid_icon_size_picker"]["face"] == "XL"
 
+    def test_update_grid_icon_size_results_per_type(self, client):
+        """The Find Results list's own size buttons (#5464): no other grid moves."""
+        res = client.put("/api/settings", json={"grid_icon_size_results": {"image": "l"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_icon_size_results"] == {"image": "L"}
+        assert data["grid_icon_size_picker"].get("image") is None
+        assert client.get("/api/settings").get_json()["grid_icon_size_results"]["image"] == "L"
+        assert client.put("/api/settings", json={"grid_icon_size_results": {"image": "HUGE"}}).status_code == 400
+
     def test_update_grid_icon_size_picker_invalid(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_picker": {"face": "HUGE"}})
         assert res.status_code == 400

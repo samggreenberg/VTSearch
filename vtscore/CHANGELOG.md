@@ -1630,6 +1630,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A scored run can carry the user's column choice** (issue #5464). The Find Results dialog's
+  `find_results` payload now has an optional `selected_columns` list, as a `labelset` already did: a
+  hit's own keys, keys of its `custom_metadata`, and the detector result's `detector` / `threshold`.
+  The new `vtscore.exporters.base.hit_column_value(detector_result, hit, column)` resolves one cell.
+  `server_csv_file` writes exactly those columns when they are given and `server_json_file` cuts each hit
+  to them; both keep their fixed output when the key is absent (the CLI, AutoFind's auto-export).
+  Additive: an exporter that ignores the key keeps working. See `extending/results-exporters.md`.
+
+- **The 1-D similarity order comes with every dataset's Browse layout** (issue #5464).
+  `vtscore.projection.service.fit_and_install_layout` now fits the order on the same matrix once a
+  full-dataset layout is cached and saved (best-effort; a re-projection keeps an order already stored), so
+  any browsed dataset can list its items look-alikes together, not only a Face one.
+  `vtscore.projection.similarity_order` gains `ensure_similarity_order` (the stored order, else a fit of a
+  matrix the caller holds) and `request_similarity_order` (what a list asks: the order, or the progress of
+  the fit it started). `similarity_order_for` now answers any type's stored order and still fits on its own
+  only for `ORDERED_MEDIA_TYPES`.
+
 - **`DatasetImported` says how many items an import brought in and which it dropped** (issue #5449). Three new
   fields, all defaulted so a hook that ignores them is unchanged: `n_imported` (the items that reached the finalize
   stage: `n_media`, plus `n_dropped`, plus any merged away as duplicates), `n_dropped` (the items left out because
