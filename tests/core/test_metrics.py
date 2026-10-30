@@ -95,6 +95,7 @@ class TestAttributeCleaning:
     def test_long_strings_and_keys_are_cut(self):
         cleaned = metrics.clean_attributes({"k" * 100: "v" * 1000})
         ((key, value),) = cleaned.items()
+        assert isinstance(value, str)
         assert len(key) == metrics.MAX_KEY_LENGTH
         assert len(value) == metrics.MAX_STRING_LENGTH
 
