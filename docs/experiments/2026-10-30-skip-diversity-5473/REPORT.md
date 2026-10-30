@@ -1,6 +1,6 @@
 # Skip Autopilot's Diversity step? (#5473)
 
-**Status (2026-10-30): measured, waiting on the owner's call.** Without the Diversity step, Autopilot tells a session to stop about 20 clicks sooner, on faces and on COCO alike. On faces the detector it stops with is as good: F at the stop moves by less than 0.005 in every set, inside its standard error. On COCO it is slightly worse at the stop, by 0.004 to 0.012. The cause is the earlier stop, not the picks: at the same click count, no Diversity is ahead at every vote, by +0.009 to +0.034 at its own stop and by +0.017 to +0.021 at the app's.
+**Status (2026-10-30): shipped in this PR.** The owner chose to skip the step everywhere: `autopilot_goal_diversity` now defaults to 0, and any positive goal (40 was the default) turns it back on, since what it is worth depends on the embedder and the data. Without the Diversity step, Autopilot tells a session to stop about 20 clicks sooner, on faces and on COCO alike. On faces the detector it stops with is as good: F at the stop moves by less than 0.005 in every set, inside its standard error. On COCO it is slightly worse at the stop, by 0.004 to 0.012. The cause is the earlier stop, not the picks: at the same click count, no Diversity is ahead at every vote, by +0.009 to +0.034 at its own stop and by +0.017 to +0.021 at the app's.
 
 ## The question
 
@@ -10,7 +10,7 @@ Earlier arms kept the gate. #4671's `nowalk` swapped the atlas picks for Hard pi
 
 ## The arm
 
-The harness gets `span_green` (`vtscore/eval/voting_iterations.py`, env `CALIB_SPAN_GREEN`, declared by preflight). `None` keeps the app's 40. **`0` reads Span green from the first vote**, so Autopilot never enters New: once Smart and Stable are green it goes straight to the spot check, and Done follows as it does today. The app clamps its own setting to at least 1, which the first vote meets, so `autopilot_goal_diversity = 1` is this arm in the app.
+The harness gets `span_green` (`vtscore/eval/voting_iterations.py`, env `CALIB_SPAN_GREEN`, declared by preflight). `None` keeps the app's 40. **`0` reads Span green from the first vote**, so Autopilot never enters New: once Smart and Stable are green it goes straight to the spot check, and Done follows as it does today. The app clamped its own setting to at least 1 when this ran, which the first vote meets, so `autopilot_goal_diversity = 1` was this arm in the app; as shipped, 0 is allowed and is the default.
 
 Paired runs, the app (`ctl`) against no Diversity (`nodiv`), same cells and seeds, 150 votes, β ¼, 1 and 4:
 
@@ -116,6 +116,6 @@ Diversity does not cause this, and skipping it does not fix it. It is a separate
 
 - **Faces:** the owner's hunch holds. Diversity spends about 21 clicks and buys nothing measurable in the detector a session stops with.
 - **COCO (semantic search):** Diversity is a poor way to spend clicks, and Hard picks beat it at every vote. Its one use is that it delays Done by about 20 votes, which buys about 0.004 to 0.012 F at the stop. A fixed effort floor spent on Hard picks would buy more (+0.017 to +0.021 at the same stop). That rule is untested; this run only shows what no Diversity had at the app's stop vote.
-- **In the app**, skipping the step is `autopilot_goal_diversity` 40 → 1. Doing it only for faces needs the setting to depend on the space.
+- **Shipped:** `autopilot_goal_diversity` defaults to 0 (clamped ≥ 0), which reads Span green, so Done waits on Smart and Stable and the Autopilot panel leaves the step out. The harness follows (`SPAN_GREEN_DEFAULT` = 0, `SPAN_GREEN_ON` = 40). A positive goal turns the step back on, in the app's Settings or with `CALIB_SPAN_GREEN=40` in the harness.
 
 The data tables (`nodiv_5473_summary.csv`, `nodiv_5473_curves.csv`, `nodiv_5473_per_run.csv`) are on the `experiments-data` release (`archived-data.json`). Put them back with `python scripts/experiments/study_data.py fetch 2026-10-30-skip-diversity-5473`.
