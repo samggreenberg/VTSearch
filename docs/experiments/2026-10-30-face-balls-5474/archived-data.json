@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-30-face-balls-5474.0746fb8ea110.tar.gz",
+   "source_commit": "0746fb8ea110d7d2ea8093d8288978ca990c6b7d",
+   "files": {
+    "summary.csv": {
+     "bytes": 16146,
+     "oid": "e6dbba4b337174c6221c45afa7e44baf448bd87b"
+    },
+    "vs_session.csv": {
+     "bytes": 26093,
+     "oid": "243721742cea54c6d11c759e7f3e48451fa6f38c"
+    }
+   }
+  }
+ ]
+}
