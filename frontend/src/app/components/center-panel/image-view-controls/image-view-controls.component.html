@@ -2,6 +2,7 @@
   <button
     class="btn btn--toolbar ivc-btn ivc-btn-toggle"
     [class.active]="viewer().marqueeMode()"
+    data-metric="imageMarquee"
     (click)="viewer().toggleMarqueeMode()"
     [title]="marqueeTitle()"
     [attr.aria-label]="marqueeAriaLabel()"
@@ -14,6 +15,7 @@
   <button
     class="btn btn--toolbar ivc-btn ivc-btn-toggle"
     [class.active]="viewer().highlightMode()"
+    data-metric="imageHighlight"
     (click)="viewer().toggleHighlightMode()"
     title="Highlight: outline the region the detector matched best"
     aria-label="Highlight: outline best-matched region"
@@ -25,15 +27,16 @@
 @if (marquee() || highlight()) {
   <span class="ivc-sep" aria-hidden="true"></span>
 }
-<button class="btn btn--toolbar ivc-btn" (click)="viewer().rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left"><vt-icon type="rotate-ccw" [size]="16"></vt-icon></button>
-<button class="btn btn--toolbar ivc-btn" (click)="viewer().rotateRight()" title="Rotate right (])" aria-label="Rotate image right"><vt-icon type="rotate-cw" [size]="16"></vt-icon></button>
-<button class="btn btn--toolbar ivc-btn" (click)="viewer().zoomOut()" title="Zoom out (-)" aria-label="Zoom out"><vt-icon type="zoom-out" [size]="16"></vt-icon></button>
-<button class="btn btn--toolbar ivc-btn" (click)="viewer().zoomIn()" title="Zoom in (+, or double-click the image)" aria-label="Zoom in"><vt-icon type="zoom-in" [size]="16"></vt-icon></button>
+<button class="btn btn--toolbar ivc-btn" data-metric="imageRotateLeft" (click)="viewer().rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left"><vt-icon type="rotate-ccw" [size]="16"></vt-icon></button>
+<button class="btn btn--toolbar ivc-btn" data-metric="imageRotateRight" (click)="viewer().rotateRight()" title="Rotate right (])" aria-label="Rotate image right"><vt-icon type="rotate-cw" [size]="16"></vt-icon></button>
+<button class="btn btn--toolbar ivc-btn" data-metric="imageZoomOut" (click)="viewer().zoomOut()" title="Zoom out (-)" aria-label="Zoom out"><vt-icon type="zoom-out" [size]="16"></vt-icon></button>
+<button class="btn btn--toolbar ivc-btn" data-metric="imageZoomIn" (click)="viewer().zoomIn()" title="Zoom in (+, or double-click the image)" aria-label="Zoom in"><vt-icon type="zoom-in" [size]="16"></vt-icon></button>
 <label [for]="zoomSliderId" class="sr-only">Zoom</label>
 <input
   type="range"
   [id]="zoomSliderId"
   class="ivc-zoom-slider"
+  data-metric="imageZoomSlider"
   [min]="viewer().minZoom"
   [max]="viewer().maxZoom"
   [step]="viewer().zoomStep"
@@ -43,4 +46,4 @@
   aria-label="Zoom level"
 />
 <span class="ivc-zoom-label">{{ viewer().zoomLabel() }}</span>
-<button class="btn btn--toolbar ivc-btn" (click)="viewer().resetView()" title="Reset view" aria-label="Reset image view"><vt-icon type="zoom-fit" [size]="16"></vt-icon></button>
+<button class="btn btn--toolbar ivc-btn" data-metric="imageResetView" (click)="viewer().resetView()" title="Reset view" aria-label="Reset image view"><vt-icon type="zoom-fit" [size]="16"></vt-icon></button>

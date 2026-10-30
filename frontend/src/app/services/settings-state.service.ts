@@ -5,7 +5,62 @@ import { tap } from 'rxjs/operators';
 import type { AppSettings } from '../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../generated/api-client/models/settings-update';
 import { SettingsApiService } from './settings-api.service';
+import { MetricsAttributeValue, MetricsEvent, MetricsService } from './metrics.service';
 import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../utils/reduced-motion';
+
+/**
+ * Keys the app writes on the user's behalf rather than by their choice, so a
+ * change to one is not a setting the user touched: `used_features` records a
+ * feature's first use (it retires a hint), and `recent_sessions` follows the
+ * pairs the user opens.
+ */
+const UNTRACKED_SETTINGS: ReadonlySet<string> = new Set(['used_features', 'recent_sessions']);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** `{ value }` when `value` is a scalar worth recording, else nothing. */
+function scalar(value: unknown): { value?: MetricsAttributeValue } {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? { value } : {};
+}
+
+/**
+ * The `settingChanged` metrics events (#5475) for a settings write: one per
+ * key in `keys` whose value differs between `before` and `after`, carrying
+ * the new value when it is a scalar. A per-media-type dict (panel widths,
+ * thumbnail sizes, focus modes, …) yields one event per media type that
+ * changed, with the type as `entry`, so the Settings dialog's whole-object
+ * save counts only what actually moved.
+ */
+export function settingChangeEvents(
+  keys: readonly string[],
+  before: object,
+  after: object,
+): MetricsEvent[] {
+  const events: MetricsEvent[] = [];
+  for (const key of keys) {
+    if (UNTRACKED_SETTINGS.has(key)) continue;
+    const prev = (before as Record<string, unknown>)[key];
+    const next = (after as Record<string, unknown>)[key];
+    if (sameValue(prev, next)) continue;
+    if (isPlainObject(prev) || isPlainObject(next)) {
+      const prevDict = isPlainObject(prev) ? prev : {};
+      const nextDict = isPlainObject(next) ? next : {};
+      for (const entry of new Set([...Object.keys(prevDict), ...Object.keys(nextDict)])) {
+        if (sameValue(prevDict[entry], nextDict[entry])) continue;
+        events.push({ group: 'settingChanged', attributes: { key, entry, ...scalar(nextDict[entry]) } });
+      }
+    } else {
+      events.push({ group: 'settingChanged', attributes: { key, ...scalar(next) } });
+    }
+  }
+  return events;
+}
 
 /**
  * App-settings store, migrated onto Angular's reactive resource primitives
@@ -62,6 +117,7 @@ export interface PerMediaTypeOptions<T> {
 @Injectable({ providedIn: 'root' })
 export class SettingsStateService {
   private readonly settingsApi = inject(SettingsApiService);
+  private readonly metrics = inject(MetricsService);
 
   // A monotonic load counter doubles as the resource request. `0` means
   // "not requested yet" -> `params()` returns `undefined` -> the resource stays
@@ -133,10 +189,23 @@ export class SettingsStateService {
     this.loadCount.update((n) => n + 1);
   }
 
+  /**
+   * Write `changes` and adopt the server's answer. Each key whose value the
+   * write actually changed is logged as a `settingChanged` metrics event
+   * (#5475); with nothing loaded yet there is no "before" to compare, so
+   * nothing is logged.
+   */
   update(changes: SettingsUpdate): Observable<AppSettings> {
-    return this.settingsApi
-      .updateSettings(changes)
-      .pipe(tap((updated) => this.resource.set(updated)));
+    const before = this.settingsSignal();
+    return this.settingsApi.updateSettings(changes).pipe(
+      tap((updated) => {
+        this.resource.set(updated);
+        if (!before) return;
+        for (const event of settingChangeEvents(Object.keys(changes), before, updated)) {
+          this.metrics.logEvent(event);
+        }
+      }),
+    );
   }
 
   /**

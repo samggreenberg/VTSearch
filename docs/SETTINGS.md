@@ -63,7 +63,8 @@ through their CLI flag or environment variable.
   "browse_signpost_vocab": {},
   "default_settings_source": null,
   "default_labelset_source": null,
-  "labelset_source_push_interval_seconds": 60
+  "labelset_source_push_interval_seconds": 60,
+  "enable_metrics": true
 }
 ```
 
@@ -168,6 +169,14 @@ through their CLI flag or environment variable.
   slow target or a burst of votes costs one write per window; pending pushes
   are flushed on a normal shutdown. `0` pushes as soon as the previous push
   lands. Clamped to `[0, 86400]`.
+- `enable_metrics`: whether the server records usage metrics (default `true`):
+  the views people open, the datasets they import and results they export, the
+  settings they change and the tagged controls they click, appended to
+  `data/metrics/events-YYYY-MM.jsonl`. `false` records nothing, and the SPA
+  stops sending once the server says so. Settings-file only (there is no flag or
+  env var); surfaced read-only at `GET /api/settings` and on the Settings
+  dialog's Server tab. What a line holds is in
+  [DEPLOYMENT.md § Usage metrics](DEPLOYMENT.md#usage-metrics).
 
 ## Per-user tier — `user_settings.json`
 

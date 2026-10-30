@@ -49,7 +49,7 @@ Every blueprint under `vtsearch/routes/` registers full paths (none sets a
 | `/api/find`, `/api/find/*`, `/api/find-label`, `/api/auto-detect`, `/api/autofind/runs/*`, `/api/line-test*` | [find.md](api/find.md) |
 | `/api/browse` | [file-browser.md](api/file-browser.md) |
 | `/api/events` | [events.md](api/events.md) |
-| `/api/achievements*`, `/api/sessions/recent`, `/api/jobs/active` | [Other endpoints](#other-endpoints), below |
+| `/api/achievements*`, `/api/sessions/recent`, `/api/jobs/active`, `/api/metrics` | [Other endpoints](#other-endpoints), below |
 | `/api/openapi.json`, `/api/docs` | [Machine-readable schema](#machine-readable-schema), below |
 
 ### Other endpoints
@@ -68,6 +68,7 @@ work is in [achievements.md](achievements.md).
 | GET | `/api/sessions/recent` | The current user's recently used `(dataset, detector)` pairs, newest first: `{"sessions": [{dataset_id, detector_id, dataset_name, detector_name, last_activity}]}`. Pairs whose dataset or detector was deleted are dropped on read. |
 | POST | `/api/sessions/recent` | Body `{"dataset_id", "detector_id"}`. Records activity on a pair; returns the updated list. |
 | GET | `/api/jobs/active` | `{"busy_pairs": [{dataset_id, detector_id, job_types}]}` — every pair with a running or pending background job (learned sort, eval, …). Cheap and lock-free; safe to poll every few seconds. |
+| POST | `/api/metrics` | Body `{"events": [{"group", "attributes", "client_ts"}], "session"}` (at most 200 events). Appends each usage event the SPA logged to `data/metrics/events-YYYY-MM.jsonl` under the current user; attributes are flattened to scalars. → `{"recorded", "enabled"}`, where `enabled: false` (the server's `enable_metrics` setting is off) means nothing was written and the SPA stops sending. See [DEPLOYMENT.md § Usage metrics](DEPLOYMENT.md#usage-metrics). |
 
 Health probes and `GET /api/version` are in [auth.md](api/auth.md#health--version);
 the VTSBrowse projection endpoints are in [datasets.md](api/datasets.md#vtsbrowse-projection).

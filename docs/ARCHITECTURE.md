@@ -726,7 +726,8 @@ field lists — this document names the tiers and the shape, not every key.
   `autopilot_only`, `solo_media_type`, `projection_n_neighbors`,
   `projection_min_dist`,
   `browse_signpost_vocab`, `default_settings_source`,
-  `default_labelset_source`, `labelset_source_push_interval_seconds`.
+  `default_labelset_source`, `labelset_source_push_interval_seconds`,
+  `enable_metrics`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
   `beta`, `enrich_descriptions`, `calibrate_count`,
