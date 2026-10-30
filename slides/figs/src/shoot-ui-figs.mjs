@@ -1246,10 +1246,9 @@ async function shootBrowse(page) {
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   const dialog = page.locator('vt-modal').filter({ hasText: 'Find Results' });
   await dialog.locator('.results-table').waitFor({ timeout: 600000 });
-  // The dialog opens on the first exporter, Send by Email, whose two empty
-  // required addresses draw red and take the room the list needs. A user
-  // sending the list on picks somewhere and fills it in; this one picks a file.
-  await dialog.locator('.export-row select').selectOption({ label: BROWSE_EXPORT.exporter });
+  // The dialog opens on its Clipboard tab. A user sending the list on picks a
+  // destination's tab and fills it in (#5464); this one picks a file.
+  await dialog.locator('.export-tab', { hasText: BROWSE_EXPORT.exporter }).click();
   await dialog.locator(`#adr-${BROWSE_EXPORT.field}`).fill(BROWSE_EXPORT.value);
   await page.mouse.move(700, 20);
   await page.waitForTimeout(1500);
@@ -1272,7 +1271,8 @@ async function shootBrowse(page) {
   // Back to the dialog, closed, and on to the whole pile.
   await page.locator('.browse-back').click();
   await dialog.locator('.results-table').waitFor({ timeout: 60000 });
-  await dialog.locator('.form-actions .btn', { hasText: 'Close' }).click();
+  // Exactly Close: the footer's Export and Close holds the word too.
+  await dialog.locator('.form-actions .btn', { hasText: /^\s*Close\s*$/ }).click();
   await openDashboard(page);
   const row = page
     .locator('tr[vt-dataset-card]')

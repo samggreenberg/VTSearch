@@ -190,7 +190,14 @@
 }
 
 // The destination tabs are the shared `.tab-bar` / `.tab` strip
-// (`_picker-shared.scss`); this is the box the active tab opens into.
+// (`_picker-shared.scss`). A server with every exporter installed has more
+// tabs than one line holds, so the strip wraps rather than clipping the last.
+.export-tabs {
+  flex-wrap: wrap;
+  row-gap: var(--space-xs);
+}
+
+// The box the active tab opens into.
 .tab-content {
   border: 1px solid var(--border);
   border-top: none;

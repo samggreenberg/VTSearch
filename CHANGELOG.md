@@ -48,6 +48,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Find Results is laid out by what each control does** (issue #5464). What changes the list sits above it:
+  Good / Bad / Both, a new **Sort by** Score or **Similarity** (look-alikes side by side, by a 1-D UMAP of the whole
+  dataset that is now fit and saved with its Browse map), and the same **Columns** checkboxes the Export dialog has,
+  which decide what the list shows, what is copied and what is exported. The list can show a **Thumbnail** of each
+  item, sized by its own smaller / bigger buttons and loaded as you scroll. **Browse** sits under the list; the
+  destinations are tabs, **Clipboard** first and opening by default, in place of the unlabelled exporter pulldown;
+  and the footer is **Close**, **Export** and **Export and Close**. The Media Type in its summary carries its
+  icon, as on the Dashboard.
+
 - **Server log lines carry the new module names** (issue #5398). The loose top-level modules of `vtsearch/` moved
   into `runtime/`, `cli/`, `openapi/` and `settings/`, and each logs under its module's name, so a filter or alert
   keyed on a logger name needs the new one: the slow-request and request-phase lines that came from `vtsearch.hooks`
