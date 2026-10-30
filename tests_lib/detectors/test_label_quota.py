@@ -379,9 +379,7 @@ class TestTheBalanceCountsTheCentroidsLine:
         kept = sum(1 for s in self._unvoted_scores(ctx, snap) if s >= threshold)
         assert detector_balance_state(ctx, 1.0)["count"] == kept
 
-    @pytest.mark.parametrize(
-        ("media_type", "rule"), [("image", "count_gap_floor_skip25_b1"), ("face", "count_gap_floor_skip25_b1_z5.5")]
-    )
+    @pytest.mark.parametrize(("media_type", "rule"), [("image", "count_gap_floor_skip25_b1"), ("face", "face_ball")])
     def test_the_line_is_drawn_by_the_detectors_media_type(self, labels, media_type, rule):
         """#5325: a face detector's centroid line is drawn, and redrawn, by the face crops' rule."""
         snap, _make = labels

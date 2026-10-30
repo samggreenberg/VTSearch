@@ -38,6 +38,7 @@ they take the linear SVM.  :func:`is_centroid_head` tells the two apart.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Sequence
 
@@ -182,7 +183,80 @@ CENTROID_GATED = {
         for z in CENTROID_BAR_ZS
     },
 }
-CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED)
+#: #5478's face line (:func:`face_ball_cut`): the ball from beta 1 up once there are two Goods, else
+#: :data:`FACE_BALL_BELOW`.
+FACE_BALL_RULE = "face_ball"
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED, FACE_BALL_RULE)
+
+#: #5478's ball, a measurement rule written with its numbers rather than listed: ``ball<floor>`` keeps
+#: every cosine at or above ``<floor>`` whatever the corpus, and ``ball<floor>_s<slope>_c<centre>`` moves
+#: the floor by ``slope * (spread - centre)``, the spread being how close each Good sits to the centroid of
+#: the others (:func:`goods_spread`).  On FHIBE's buffalo_s faces the centroid of a person's four starting
+#: photos and one floor per balance scored level with the 150-vote session
+#: (``docs/experiments/2026-10-30-face-balls-5474``).  The balance takes no part: a ball priced at another
+#: beta is another floor.
+_BALL = re.compile(r"ball(?P<floor>-?\d+(?:\.\d+)?)(?:_s(?P<slope>-?\d+(?:\.\d+)?)_c(?P<centre>-?\d+(?:\.\d+)?))?")
+
+
+def ball_rule(rule: str) -> tuple[float, float, float] | None:
+    """``(floor, slope, centre)`` of a #5478 ball rule (slope 0 without a spread term), or ``None`` for any other."""
+    m = _BALL.fullmatch(rule)
+    if m is None:
+        return None
+    return float(m["floor"]), float(m["slope"] or 0.0), float(m["centre"] or 0.0)
+
+
+def is_centroid_line_rule(rule: str) -> bool:
+    """Whether *rule* draws a centroid line: one of :data:`CENTROID_LINE_RULES`, or a ball (:func:`ball_rule`)."""
+    return rule in CENTROID_LINE_RULES or ball_rule(rule) is not None
+
+
+def goods_spread(vectors: Sequence[np.ndarray]) -> float | None:
+    """The mean cosine of each Good to the unit centroid of the others, or ``None`` under two Goods (#5474)."""
+    if len(vectors) < 2:
+        return None
+    rows = np.stack([np.asarray(v, dtype=np.float64).ravel() for v in vectors])
+    rows /= np.maximum(np.linalg.norm(rows, axis=1, keepdims=True), 1e-12)
+    rest = (rows.sum(axis=0)[None, :] - rows) / (len(rows) - 1)
+    rest /= np.maximum(np.linalg.norm(rest, axis=1, keepdims=True), 1e-12)
+    return float(np.mean(np.sum(rows * rest, axis=1)))
+
+
+#: The face crops' ball (#5478): the Goods' centroid keeps every face whose cosine to it is at least a floor,
+#: moved by :data:`FACE_BALL_SLOPE` times how far the Goods' spread (:func:`goods_spread`) sits from
+#: :data:`FACE_BALL_CENTRE`: a person whose own photos are spread out gets a lower floor.  The floors are per
+#: balance (beta 1 and 4; between them, and past 4, read off a line in log beta, held at beta 1 below it), fitted
+#: on FHIBE's buffalo_s faces (#5474's ``adaptive`` rule over both crop sizes and two to every Good).  Replayed on
+#: the shipped sessions (6,743, the review's 562 people), Find's set from beta 1 up with two Goods or more
+#: gained +0.010 to +0.012 F-beta over votes 1-150 at beta 1 from four photos and +0.016 to +0.019 at beta 4,
+#: less for she/her people than for he/him at beta 1 (+0.005 against +0.015).  At beta 1/4 the ball lost 0.007 to
+#: 0.012, and from one photo it is a poor centre, so both keep :data:`FACE_BALL_BELOW`
+#: (``docs/experiments/2026-10-30-face-ball-line-5478``).  The floors are cosines in buffalo_s's space: another
+#: face pack needs its own.
+FACE_BALL_FLOORS: dict[float, float] = {1.0: 0.4425, 4.0: 0.385}
+FACE_BALL_SLOPE = 0.25
+FACE_BALL_CENTRE = 0.6371
+#: The face crops' line where the ball does not hold: #5325's count read above z 5.5.
+FACE_BALL_BELOW = "count_gap_floor_skip25_b1_z5.5"
+
+
+def face_ball_holds(beta: float | None, n_goods: int) -> bool:
+    """Whether the face crops' line is the ball (#5478): a balance of 1 or more, and two Goods or more."""
+    return beta is not None and beta >= 1.0 and n_goods >= 2
+
+
+def face_ball_floor(beta: float, spread: float) -> float:
+    """The ball's cosine floor at *beta* for Goods of *spread* (:data:`FACE_BALL_FLOORS`, moved by the spread)."""
+    lo, hi = min(FACE_BALL_FLOORS), max(FACE_BALL_FLOORS)
+    x = (np.log(max(beta, lo)) - np.log(lo)) / (np.log(hi) - np.log(lo))
+    floor = FACE_BALL_FLOORS[lo] + x * (FACE_BALL_FLOORS[hi] - FACE_BALL_FLOORS[lo])
+    return float(floor + FACE_BALL_SLOPE * (spread - FACE_BALL_CENTRE))
+
+
+def needs_spread(rule: str | None) -> bool:
+    """Whether *rule*'s line reads the Goods' spread: a ball, or the face crops' line."""
+    return rule is not None and (rule == FACE_BALL_RULE or ball_rule(rule) is not None)
+
 
 #: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759),
 #: and from beta 1 up at the drop below a standout first cosine (#4783).
@@ -193,7 +267,9 @@ CENTROID_LINE_RULE = "count_gap_floor_skip25_b1"
 #: beta 1: 6.4 faces kept for 3.8 at click 0, F 0.73; at z 5.5, 3.5 and 0.85).  Shared, the same bar cut
 #: COCO Better's click 0 by 0.06-0.15, so it is the face crops' alone
 #: (``docs/experiments/2026-10-27-face-lines-5325/REPORT.md``).
-CENTROID_LINE_RULE_BY_MEDIA_TYPE: dict[str, str] = {"face": "count_gap_floor_skip25_b1_z5.5"}
+#: From #5478 the face crops' line is the ball from beta 1 up once there are two Goods (:data:`FACE_BALL_RULE`),
+#: and that count below it.
+CENTROID_LINE_RULE_BY_MEDIA_TYPE: dict[str, str] = {"face": FACE_BALL_RULE}
 
 
 def centroid_line_rule(media_type: str | None) -> str:
@@ -254,13 +330,33 @@ def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
     return gap if rule == "gap" else max(gap, counted)
 
 
+def _ball_cut(rule: str, beta: float | None, spread: float | None) -> float | None:
+    """A ball's floor (#5478): :func:`ball_rule`'s, or the face crops' where it holds; ``None`` for a line drawn
+    over the cosines (every other rule, and the face crops' below beta 1 or with one Good)."""
+    if rule == FACE_BALL_RULE:
+        return face_ball_floor(float(beta), spread) if spread is not None and face_ball_holds(beta, 2) else None
+    ball = ball_rule(rule)
+    if ball is None:
+        return None
+    floor, slope, centre = ball
+    return floor + (slope * (spread - centre) if spread is not None else 0.0)
+
+
 def centroid_cut(
-    cosines: "Sequence[float] | np.ndarray", *, rule: str | None = None, beta: float | None = None
+    cosines: "Sequence[float] | np.ndarray",
+    *,
+    rule: str | None = None,
+    beta: float | None = None,
+    spread: float | None = None,
 ) -> float:
     """The line through the centroid's cosines, drawn by *rule* (default :data:`CENTROID_LINE_RULE`) at *beta*.
 
     *beta* is the balance (F-beta's beta); the ``midpoint`` and ``guarded`` rules
     ignore it, and ``text`` and the counts keep the guarded line without one.
+    A ball (:func:`ball_rule`) is its floor, moved by *spread* (:func:`goods_spread`)
+    when the rule has a slope; without a spread (one Good) it is the floor.  The face
+    crops' line (:data:`FACE_BALL_RULE`) is the ball (:func:`face_ball_floor`) from beta 1
+    up with a spread, else :data:`FACE_BALL_BELOW` over the cosines.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
         _count_keep_line,
@@ -270,6 +366,11 @@ def centroid_cut(
     )
 
     chosen = CENTROID_LINE_RULE if rule is None else rule
+    ball = _ball_cut(chosen, beta, spread)
+    if ball is not None:
+        return ball
+    if chosen == FACE_BALL_RULE:
+        chosen = FACE_BALL_BELOW
     if chosen not in CENTROID_LINE_RULES:
         raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")
     if chosen in CENTROID_GATED:
@@ -324,13 +425,16 @@ class CentroidLine:
     cut: float
     rule: str
     scale: float = CENTROID_LOGIT_SCALE
+    #: The Goods' spread a ball's floor moves by (:func:`goods_spread`); ``None`` for every other rule.
+    spread: float | None = None
 
     def _threshold_for(self, cut: float) -> float:
         return float(1.0 / (1.0 + np.exp(-self.scale * (cut - self.cut))))
 
     def threshold_at(self, beta: float | None) -> float:
         """The head's threshold for the line *rule* draws at *beta*, on the same corpus."""
-        return self._threshold_for(_gap_centre(self.cosines, centroid_cut(self.cosines, rule=self.rule, beta=beta)))
+        line = centroid_cut(self.cosines, rule=self.rule, beta=beta, spread=self.spread)
+        return self._threshold_for(_gap_centre(self.cosines, line))
 
     def acquisition_threshold(self) -> float:
         """The head's threshold at the cosines' midpoint: where Hard picks sample, whatever the line (#4136)."""
@@ -377,8 +481,9 @@ def fit_centroid(
         s = s[mask]
     s = s[(s > 0.0) & (s < 1.0)]
     cosines = np.log(s) - np.log1p(-s)
-    cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta))
-    return centroid_head(centroid, cut), CENTROID_THRESHOLD, CentroidLine(cosines, cut, chosen)
+    spread = goods_spread(goods) if needs_spread(chosen) else None
+    cut = _gap_centre(cosines, centroid_cut(cosines, rule=chosen, beta=beta, spread=spread))
+    return centroid_head(centroid, cut), CENTROID_THRESHOLD, CentroidLine(cosines, cut, chosen, spread=spread)
 
 
 def fit_centroid_head(

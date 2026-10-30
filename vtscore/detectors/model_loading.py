@@ -95,8 +95,15 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     :func:`~vtscore.detectors.query_head.typed_query_prior_applies`), a trained
     head is current only if it was fitted from that query: one the raw-vote path
     or an older query trained is refused.
+
+    On face crops the ball (#5478, :func:`~vtscore.detectors.labelset_heads.face_ball_tier`)
+    decides between the two at the detector's balance: from beta 1 up with two Goods a
+    trained head is refused (a Find there gives the Goods' centroid cut by the ball), and
+    below it a centroid past the quota is refused, so a balance change across 1 retrains
+    (on face crops alone, an unresolved label then retrains the centroid each pass).
     """
-    from vtscore.detectors.centroid_head import is_centroid_head
+    from vtscore.detectors.centroid_head import FACE_BALL_RULE, centroid_line_rule, is_centroid_head
+    from vtscore.detectors.labelset_heads import _centroid_beta, face_ball_tier
     from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds, query_missed
     from vtscore.detectors.query_head import is_query_head, query_head_text, typed_query_prior_applies
     from vtscore.detectors.training_calibration import _patch_space_for
@@ -105,11 +112,16 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
         return False
     quota = labelset_quota(labelset)
+    tier = face_ball_tier(quota.tier, det_ctx.media_type, _centroid_beta(det_ctx), quota.n_good)
     missed = query_missed(quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder))
     if is_query_head(det_ctx.model):
         return (text_query is None or query_head_text(det_ctx.model) == text_query) and not missed
     if is_centroid_head(det_ctx.model):
-        return not text_query or missed
+        # Below the face crops' ball a centroid past the quota is the other head (#5478); elsewhere the
+        # centroid is current with its signature, so an unresolved label does not retrain it every pass.
+        return (not text_query or missed) and not (
+            tier == TIER_TRAINED and centroid_line_rule(det_ctx.media_type) == FACE_BALL_RULE
+        )
     if text_query and query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder)):
         return False
     if (
@@ -119,7 +131,7 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
         and svm_prior.fitted_query_prior_text(det_ctx.model) != text_query
     ):
         return False
-    return quota.tier == TIER_TRAINED
+    return tier == TIER_TRAINED
 
 
 def resolve_or_train_detector(

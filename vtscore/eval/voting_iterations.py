@@ -84,7 +84,13 @@ from vtscore.eval.arms_set_overlap import SetOverlap, pick_overlap_blank
 from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
-from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
+from vtscore.detectors.centroid_head import (
+    CENTROID_LINE_RULES,
+    CENTROID_THRESHOLD,
+    FACE_BALL_RULE,
+    face_ball_holds,
+    is_centroid_line_rule,
+)
 from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
@@ -3037,7 +3043,7 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
             beta = float("nan")
         if (
             not sep
-            or not (rule in CENTROID_LINE_RULES or (rule == QUERY_LINE_VARIANT and not tilde))
+            or not (is_centroid_line_rule(rule) or (rule == QUERY_LINE_VARIANT and not tilde))
             or (tilde and corpus not in CENTROID_LINE_CORPORA)
             or not (math.isfinite(beta) and beta > 0)
         ):
@@ -5304,15 +5310,21 @@ def simulate_voting_iterations(  # noqa: C901
         details.pop("find_on_test", None)
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
-        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        quota_centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        # Past the quota too where the face crops' ball holds (#5478, the app's face_ball_tier):
+        # from beta 1 up with two Goods, Test gives the Goods' centroid cut by the ball.
+        centroid = quota_centroid or (
+            quota_on and centroid_line == FACE_BALL_RULE and face_ball_holds(beta, len(good_votes))
+        )
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
         # the quota too while the query holds on a single-vector space (#4736), but the
-        # centroid once the query has missed on a patch space (#4800).
+        # centroid once the query has missed on a patch space (#4800).  The query reads
+        # the quota's own tier, as the app's does.
         missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
-        query = centroid and query_on and not missed
+        query = quota_centroid and query_on and not missed
         held = (
             query_on
-            and not centroid
+            and not quota_centroid
             and query_holds(
                 len(good_votes),
                 len(bad_votes),
