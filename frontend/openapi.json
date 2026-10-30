@@ -309,6 +309,10 @@
           "enable_achievements": {
             "type": "boolean"
           },
+          "enable_metrics": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -6265,6 +6269,74 @@
           "click_time",
           "ok",
           "state"
+        ],
+        "type": "object"
+      },
+      "MetricsBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsEvent"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "session": {
+            "default": null,
+            "description": "Opaque id of the page load that logged the events.",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "type": "object"
+      },
+      "MetricsBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the server records metrics; the SPA stops sending once this is false.",
+            "type": "boolean"
+          },
+          "recorded": {
+            "description": "How many events were written.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "recorded"
+        ],
+        "type": "object"
+      },
+      "MetricsEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Flat event details. Scalar values are kept (strings cut to 200 characters); nested values are dropped.",
+            "type": "object"
+          },
+          "client_ts": {
+            "default": null,
+            "description": "When the browser logged the event, in epoch milliseconds.",
+            "nullable": true,
+            "type": "number"
+          },
+          "group": {
+            "description": "Event name, e.g. ``view``, ``resultsExported``, ``settingChanged``, ``click``.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group"
         ],
         "type": "object"
       },
@@ -14894,6 +14966,44 @@
         ]
       }
     },
+    "/api/metrics": {
+      "post": {
+        "description": "Records nothing when the server-tier ``enable_metrics`` setting is off,\nand says so in ``enabled`` so the SPA can stop sending.",
+        "operationId": "record_metrics",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricsBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsBatchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Append a batch of usage events for the current user.",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
     "/api/precision-check": {
       "get": {
         "operationId": "get_precision_check",
@@ -16649,6 +16759,10 @@
     {
       "description": "App version and SPA / static-file serving.",
       "name": "main"
+    },
+    {
+      "description": "Usage metrics posted by the SPA.",
+      "name": "metrics"
     },
     {
       "description": "List, fetch, stream, and vote on individual media items.",
