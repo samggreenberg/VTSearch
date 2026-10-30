@@ -334,7 +334,9 @@ def _ball_cut(rule: str, beta: float | None, spread: float | None) -> float | No
     """A ball's floor (#5478): :func:`ball_rule`'s, or the face crops' where it holds; ``None`` for a line drawn
     over the cosines (every other rule, and the face crops' below beta 1 or with one Good)."""
     if rule == FACE_BALL_RULE:
-        return face_ball_floor(float(beta), spread) if spread is not None and face_ball_holds(beta, 2) else None
+        if beta is None or spread is None or not face_ball_holds(beta, 2):
+            return None
+        return face_ball_floor(beta, spread)
     ball = ball_rule(rule)
     if ball is None:
         return None

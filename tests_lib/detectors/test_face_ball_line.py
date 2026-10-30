@@ -116,10 +116,10 @@ class TestTheFittedHead:
             import torch
 
             with torch.no_grad():
-                return torch.sigmoid(probe(torch.from_numpy(corpus.astype(np.float32)))).squeeze(1).numpy()
+                return torch.sigmoid(probe(torch.from_numpy(corpus.astype(np.float32)))).squeeze(1).tolist()
 
         head, _thr, line = fit_centroid(goods, score, rule=FACE_BALL_RULE, beta=1.0)
-        assert line.spread == pytest.approx(goods_spread(goods))
+        assert line.spread is not None and line.spread == pytest.approx(goods_spread(goods))
         floor = face_ball_floor(1.0, line.spread)
         cos = line.cosines
         assert set(np.flatnonzero(cos >= line.cut)) == set(np.flatnonzero(cos >= floor))
