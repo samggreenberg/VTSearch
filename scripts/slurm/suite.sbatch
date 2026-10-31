@@ -22,6 +22,10 @@
 # The residual risk is the dev checkout being mid-`git pull` at submit time,
 # the same risk every other script run from that checkout carries.
 #
+# Since #5484 the job also settles the policy at run time: whatever copy was
+# submitted, it fetches and runs origin/dev's (see below), so a stale dev
+# checkout, or a branch's own copy, no longer decides the gate.
+#
 # At the end it posts a GitHub commit status, context `suite-grid`, on the SHA it
 # tested: success or failure, with the pass count or the gate that blocked. The
 # status is informational, not a required check on dev (#4149): cloud sessions
@@ -35,6 +39,34 @@
 set -uo pipefail
 WT="$1"
 REF="$2"
+
+# Run origin/dev's copy of this script, whichever copy was submitted (#5484).
+#
+# WHY: "submit the dev checkout's copy" pins the gate only while that checkout
+# keeps up with dev, and nothing moves it but a hand-run fast-forward. It sat
+# 791 commits behind for 12 days, and its copy -- older than #5407's move of
+# gridenv.sh -- refused every current worktree in 0 s. So the copy that runs is
+# settled at run time instead: if the spooled script ($0) is not byte-for-byte
+# origin/dev's, run origin/dev's. A branch's own copy is caught the same way.
+# When origin/dev has no copy (a throwaway test origin), the submitted one runs.
+if [[ -n "${SUITE_SBATCH_FROM_DEV:-}" ]]; then
+    # This is the fetched copy, exec'd below; bash holds it open, so drop the file.
+    [[ "$0" == "$SUITE_SBATCH_FROM_DEV" ]] && rm -f "$0"
+elif git -C "$WT" rev-parse -q --git-dir >/dev/null 2>&1; then
+    _gitdir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)"
+    flock "$_gitdir" git -C "$WT" fetch -q origin || exit 2
+    _dev_copy="$(mktemp "${TMPDIR:-/tmp}/suite.sbatch.dev.XXXXXX")"
+    if git -C "$WT" show origin/dev:scripts/slurm/suite.sbatch >"$_dev_copy" 2>/dev/null; then
+        if ! cmp -s "$0" "$_dev_copy"; then
+            echo "=== suite.sbatch  the submitted copy differs from origin/dev's ($(git -C "$WT" rev-parse --short origin/dev)); running origin/dev's"
+            SUITE_SBATCH_FROM_DEV="$_dev_copy" exec bash "$_dev_copy" "$@"
+        fi
+        echo "=== suite.sbatch  origin/dev's copy"
+    else
+        echo "=== suite.sbatch  WARNING: origin/dev has no scripts/slurm/suite.sbatch; running the submitted copy"
+    fi
+    rm -f "$_dev_copy"
+fi
 
 # gridenv.sh lives in scripts/grid/. A ref cut before #5407 still has it at the
 # repo root, and this job tests whatever ref it is handed, so it takes either --

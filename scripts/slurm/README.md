@@ -300,7 +300,10 @@ sbatch --job-name=suite-<n> --output=<logdir>/tests-%j.out \
 
 `sbatch` copies the script into slurmd's spool at submit time, so the running
 job is not affected by the checkout it performs, or by a later `git pull` of
-the `dev` checkout. Give the suite a worktree of its own (`git worktree add
+the `dev` checkout. The job then fetches and, if the submitted copy is not
+byte-for-byte `origin/dev`'s, runs `origin/dev`'s instead (#5484: the `dev`
+checkout once sat 791 commits behind, and its copy refused every current
+worktree). The log's `=== suite.sbatch` line says which copy ran. Give the suite a worktree of its own (`git worktree add
 --detach`): it moves that worktree's HEAD for the length of the job. Read the
 log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
 The job runs on a fresh `VTSEARCH_DATA_DIR` under `$TMPDIR` and removes it at
