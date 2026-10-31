@@ -110,6 +110,7 @@ def grid(tmp_path: Path) -> dict:
 
 def _run(wt: Path, ref: str, **extra_env: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "SUITE_HF_HOME": str(wt.parent / "hf"), **extra_env}
+    env.pop("SUITE_SBATCH_FROM_DEV", None)  # set when this suite itself runs under the exec'd copy
     return subprocess.run([BASH, str(SCRIPT), str(wt), ref], env=env, capture_output=True, text=True, timeout=120)  # noqa: S603  # fixed argv, no shell
 
 

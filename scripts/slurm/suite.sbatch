@@ -51,7 +51,10 @@ REF="$2"
 # When origin/dev has no copy (a throwaway test origin), the submitted one runs.
 if [[ -n "${SUITE_SBATCH_FROM_DEV:-}" ]]; then
     # This is the fetched copy, exec'd below; bash holds it open, so drop the file.
+    # Unset it too, or ./run-tests.sh inherits it and the meta tests of this
+    # very block skip it (job 1153588).
     [[ "$0" == "$SUITE_SBATCH_FROM_DEV" ]] && rm -f "$0"
+    unset SUITE_SBATCH_FROM_DEV
 elif git -C "$WT" rev-parse -q --git-dir >/dev/null 2>&1; then
     _gitdir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)"
     flock "$_gitdir" git -C "$WT" fetch -q origin || exit 2
