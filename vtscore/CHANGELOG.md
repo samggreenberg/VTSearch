@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart and Stable can read fewer than 5 Goods after a dry run** (issue #5477). New in
+  `vtscore.detectors.stability`: `HARD_DRY_RUN` (16), `HardDryRun` (the run of votes past the opening with no
+  Good, latched) and `goods_minimum`. `stable_status_from_entries`, `rising_status_from_scores` and
+  `smart_status_from_costs` take a `min_good` keyword (default `MIN_PER_CLASS`), and `compute_labeling_status`
+  takes `vote_provenance`, from which `labeling_progress.hard_ran_dry` reads the run. `AutopilotFlow` takes
+  `min_good` and `hard_dry_run` (default `HARD_DRY_RUN`), and so does `simulate_voting_iterations`, where
+  `hard_dry_run=0` is the default arm before #5477.
+
 - **The Span light's default goal is 0** (issue #5473). `autopilot_flow.SPAN_GREEN_DEFAULT` is 0, the app's new
   `autopilot_goal_diversity` default: `span_status` reads green at a goal of 0, and `AutopilotFlow` (and so
   `simulate_voting_iterations`'s default arm) never enters `new`. The new `SPAN_GREEN_ON` (40) is the goal with the

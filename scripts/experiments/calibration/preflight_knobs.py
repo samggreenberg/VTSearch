@@ -65,7 +65,7 @@ def _shipped_spot_check(C: Any, T: Any) -> str:
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
     from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
-    from vtscore.eval.autopilot_flow import MIN_PER_CLASS, SPAN_GREEN_DEFAULT
+    from vtscore.eval.autopilot_flow import HARD_DRY_RUN, MIN_PER_CLASS, SPAN_GREEN_DEFAULT
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -295,10 +295,17 @@ def probe(C: Any) -> list[str]:
         else:
             refuse("min_good", "CALIB_MIN_GOOD", "must be an integer from 1 to 5, the Goods Smart and Stable need")
     if C.HARD_DRY_RUN is not None:
-        if isinstance(C.HARD_DRY_RUN, int) and C.HARD_DRY_RUN >= 1:
-            rows.append(("hard_dry_run", str(C.HARD_DRY_RUN), "<unset> = off, the app never waives the minimum"))
+        if isinstance(C.HARD_DRY_RUN, int) and C.HARD_DRY_RUN >= 0:
+            if C.HARD_DRY_RUN != HARD_DRY_RUN:
+                rows.append(
+                    ("hard_dry_run", str(C.HARD_DRY_RUN or "off"), f"<unset> = {HARD_DRY_RUN}, the app's HARD_DRY_RUN")
+                )
         else:
-            refuse("hard_dry_run", "CALIB_HARD_DRY_RUN", "must be an integer >= 1, a run of learned picks")
+            refuse(
+                "hard_dry_run",
+                "CALIB_HARD_DRY_RUN",
+                "must be an integer >= 0, a run of picks past the opening (0 = off)",
+            )
     # #4482's band picks: an arm the app does not take.
     if C.BAND_SHARE is not None:
         if isinstance(C.BAND_SHARE, int) and C.BAND_SHARE >= 1:

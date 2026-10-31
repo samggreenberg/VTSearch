@@ -2,9 +2,10 @@
 
 Both lights stay red until the labelset holds ``MIN_PER_CLASS`` (5) Goods, and a
 target with only 3 or 4 to find - most FHIBE people - never gets there, so
-Autopilot never says Done.  ``min_good`` lowers the Goods the lights need;
+Autopilot never said Done.  ``min_good`` lowers the Goods the lights need;
 ``hard_dry_run`` waives the minimum down to the Goods in hand once that many
-learned picks in a row held no Good.  Unset, both are the app.
+picks in a row past the opening held no Good.  The app ships the dry run at
+``HARD_DRY_RUN`` (16); ``hard_dry_run=0`` is the app before #5477.
 """
 
 from __future__ import annotations
@@ -13,7 +14,13 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.cost_trend import rising_status_from_scores, smart_status_from_costs
-from vtscore.detectors.stability import MIN_PER_CLASS, stable_status_from_entries
+from vtscore.detectors.stability import (
+    HARD_DRY_RUN,
+    MIN_PER_CLASS,
+    HardDryRun,
+    goods_minimum,
+    stable_status_from_entries,
+)
 from vtscore.eval.autopilot_flow import AutopilotFlow
 
 FLAT = [0.9] * 5
@@ -36,6 +43,40 @@ class TestTheRules:
         assert result["status"] == "red"
         assert result["reason"] == "Need at least 1 good and 5 bad. Currently 9g, 4b."
 
+    def test_the_minimum_drops_to_the_goods_in_hand_once_dry(self):
+        assert goods_minimum(3, False) == MIN_PER_CLASS
+        assert [goods_minimum(g, True) for g in (0, 1, 3, 5, 9)] == [1, 1, 3, 5, 5]
+
+
+class TestTheDryRun:
+    def test_it_latches_after_its_run_of_counted_bads(self):
+        run = HardDryRun(target=3)
+        for _ in range(2):
+            run.note("bad", True)
+        assert not run.dry
+        run.note("bad", True)
+        assert run.dry
+        run.note("good", True)
+        assert run.dry and run.misses == 3
+
+    def test_a_good_resets_it_and_an_uncounted_bad_is_ignored(self):
+        run = HardDryRun(target=3)
+        run.note("bad", True)
+        run.note("bad", True)
+        run.note("good", False)
+        run.note("bad", False)
+        run.note("unlabel", True)
+        assert run.misses == 0 and not run.dry
+
+    def test_no_target_never_runs_dry(self):
+        run = HardDryRun(target=None)
+        for _ in range(100):
+            run.note("bad", True)
+        assert not run.dry
+
+    def test_the_app_runs_it_at_sixteen(self):
+        assert HardDryRun().target == HARD_DRY_RUN == 16
+
 
 def _flow(**kwargs):
     return AutopilotFlow(**kwargs)
@@ -56,9 +97,14 @@ def _session(flow, goods=3, misses=0):
 
 
 class TestTheFlow:
-    def test_three_goods_never_leave_hard_in_the_app(self):
-        phases = _session(_flow(), misses=40)
+    def test_three_goods_never_leave_hard_without_the_dry_run(self):
+        phases = _session(_flow(hard_dry_run=None), misses=40)
         assert phases[-1] == "hard"
+
+    def test_the_app_waives_the_minimum_after_sixteen_misses(self):
+        flow = _flow()
+        assert _session(flow, misses=HARD_DRY_RUN - 1)[-1] == "hard"
+        assert _vote(flow, 3, 5 + HARD_DRY_RUN) == "spot"
 
     def test_a_minimum_of_three_reaches_the_check(self):
         assert _session(_flow(min_good=3), misses=10)[-1] == "spot"
@@ -74,14 +120,14 @@ class TestTheFlow:
         flow = _flow(hard_dry_run=6)
         _session(flow, misses=5)
         _vote(flow, 4, 9)
-        assert flow.hard_misses == 0
+        assert flow.dry_run.misses == 0
         assert [_vote(flow, 4, b) for b in range(10, 15)][-1] == "hard"
         assert _vote(flow, 4, 15) == "spot"
 
     def test_the_opening_does_not_count_toward_the_run(self):
         flow = _flow(hard_dry_run=2)
         _session(flow, misses=0)
-        assert flow.hard_misses <= 1 and not flow.hard_dry
+        assert flow.dry_run.misses <= 1 and not flow.hard_dry
 
     def test_the_waiver_never_raises_the_minimum(self):
         flow = _flow(min_good=2, hard_dry_run=1)
@@ -121,11 +167,12 @@ def _run(**kwargs):
 
 class TestTheHarness:
     def test_unset_is_the_app(self):
-        assert [r["phase"] for r in _run(min_good=MIN_PER_CLASS)] == [r["phase"] for r in _run()]
+        app = [r["phase"] for r in _run(min_good=MIN_PER_CLASS, hard_dry_run=HARD_DRY_RUN)]
+        assert app == [r["phase"] for r in _run()]
 
-    def test_a_scarce_target_is_told_done_only_under_an_arm(self):
-        assert "done" not in {r["phase"] for r in _run()}
-        assert "done" in {r["phase"] for r in _run(hard_dry_run=8)}
+    def test_a_scarce_target_is_told_done_only_with_the_dry_run(self):
+        assert "done" not in {r["phase"] for r in _run(hard_dry_run=0)}
+        assert "done" in {r["phase"] for r in _run()}
 
     @pytest.mark.parametrize("kwargs", [{"min_good": 0}, {"min_good": 1.5}, {"hard_dry_run": -1}])
     def test_a_bad_knob_is_refused(self, kwargs):

@@ -75,13 +75,16 @@ from vtscore.detectors.cost_trend import (
     smart_status_from_costs,
 )
 from vtscore.detectors.stability import (
+    HARD_DRY_RUN,
     MIN_PER_CLASS,
     STABLE_FALLING_RATIO,
     STABLE_MAX_THRESHOLD,
     STABLE_MIN_ENTRIES,
     STABLE_RATE_THRESHOLD,
     STABLE_WINDOW,
+    HardDryRun,
     ScoredSnapshot,
+    goods_minimum,
     stability_entry,
     stable_status_from_entries,
 )
@@ -129,6 +132,8 @@ MORE_DRY_RUN = 16
 # from ``vtscore.detectors.stability`` so a study naming a gate, or measuring
 # how far a run sat from one, has every threshold from one place.
 __all__ = [
+    "HARD_DRY_PHASES",
+    "HARD_DRY_RUN",
     "MIN_PER_CLASS",
     "SMART_FLAT_THRESHOLD",
     "SMART_MIN_POINTS",
@@ -426,6 +431,12 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
 #: the user is still on the text/example sort (see the module docstring).
 TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "spot", "done", "exhausted"})
 
+#: The phases whose Bads count toward #5477's dry run (:data:`HARD_DRY_RUN`):
+#: the ones where Autopilot is still picking off a learned sort.  Past Done the
+#: app records a vote as list review, not Autopilot's, so ``done`` and
+#: ``exhausted`` do not count.
+HARD_DRY_PHASES: frozenset[str] = frozenset({"hard", "new", "spot"})
+
 
 #: The phase in which the app has told the user it is done: all three quality
 #: indicators are green, and the panel reads "All quality indicators are green.
@@ -583,7 +594,7 @@ class AutopilotFlow:
         smart_signal: str = APP_SMART_SIGNAL,
         record_readings: bool = False,
         min_good: int = MIN_PER_CLASS,
-        hard_dry_run: int | None = None,
+        hard_dry_run: int | None = HARD_DRY_RUN,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -593,17 +604,16 @@ class AutopilotFlow:
         if isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS:
             raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS}, got {min_good!r}")
         self.min_good = min_good
-        #: #5477's dry run past the opening: once this many votes in a row on a
-        #: learned sort (:data:`TRAINED_PHASES`) held no Good, the Goods minimum
-        #: drops to the Goods in hand - the target has shown what it can supply.
-        #: Latched.  ``None`` (the app) never waives it.
+        #: #5477's dry run past the opening: once this many votes in a row in
+        #: :data:`HARD_DRY_PHASES` held no Good, the Goods minimum drops to the
+        #: Goods in hand - the target has shown what it can supply.  Latched.
+        #: The app's is :data:`HARD_DRY_RUN`; ``None`` never waives it.
         if hard_dry_run is not None and (
             isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 1
         ):
             raise ValueError(f"hard_dry_run must be an integer >= 1 or None, got {hard_dry_run!r}")
         self.hard_dry_run = hard_dry_run
-        self.hard_misses = 0
-        self.hard_dry = False
+        self.dry_run = HardDryRun(target=hard_dry_run)
         self.more_target = more_target
         self.more_dry_run = more_dry_run
         #: The Good walk's dry run (#4731, the app's ``moreDryRun``): the Good
@@ -900,11 +910,14 @@ class AutopilotFlow:
             return list(self.smart_windows.get(name, []))
         return list(self.smart_histories.get(name, []))
 
+    @property
+    def hard_dry(self) -> bool:
+        """#5477's dry run past the opening has run its course (latched)."""
+        return self.dry_run.dry
+
     def min_good_now(self, good_count: int) -> int:
         """The Goods Smart and Stable need at this vote (#5477): :attr:`min_good`, or those in hand once dry."""
-        if self.hard_dry:
-            return max(1, min(self.min_good, good_count))
-        return self.min_good
+        return min(self.min_good, goods_minimum(good_count, self.hard_dry))
 
     def _reading_columns(self, good: int, bad: int, min_good: int = MIN_PER_CLASS) -> dict[str, float]:
         """Every reading's trend, as :data:`SMART_READING_PARTS` (#5134); NaN where the rule would not fit one."""
@@ -973,15 +986,11 @@ class AutopilotFlow:
         Called before :meth:`_note_more_vote`, which moves the counts on.  The
         phase held here is the one the vote was cast in.
         """
-        if self.hard_dry_run is None or self.hard_dry or self.phase not in TRAINED_PHASES:
-            return
         prev_good, prev_bad = self._counts
         if good_count > prev_good:
-            self.hard_misses = 0
+            self.dry_run.note("good", True)
         elif bad_count > prev_bad:
-            self.hard_misses += 1
-            if self.hard_misses >= self.hard_dry_run:
-                self.hard_dry = True
+            self.dry_run.note("bad", self.phase in HARD_DRY_PHASES)
 
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.

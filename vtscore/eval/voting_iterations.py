@@ -58,6 +58,7 @@ from vtscore.eval.example_opening import (
 )
 from vtscore.eval.autopilot_flow import (
     APP_SMART_SIGNAL,
+    HARD_DRY_RUN,
     MIN_PER_CLASS,
     MORE_DRY_RUN,
     SMART_HISTORY_READINGS,
@@ -3652,9 +3653,10 @@ def simulate_voting_iterations(  # noqa: C901
             app's ``MIN_PER_CLASS`` (5).  The Bads' minimum is unchanged.  Needs
             the phase machine.
         hard_dry_run: Issue #5477's dry run past the opening: once this many
-            votes in a row on a learned sort held no Good, Smart and Stable need
-            only the Goods in hand.  ``None`` - the default, the app - never
-            waives the minimum.  Needs the phase machine.
+            votes in a row in Boundary, Diversity or a spot check held no Good,
+            Smart and Stable need only the Goods in hand.  ``None`` - the
+            default - is the app's ``HARD_DRY_RUN`` (16); ``0`` never waives the
+            minimum (the app before #5477).  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -4070,9 +4072,9 @@ def simulate_voting_iterations(  # noqa: C901
     ):
         raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS} or None; got {min_good!r}")
     if hard_dry_run is not None and (
-        isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 1
+        isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 0
     ):
-        raise ValueError(f"hard_dry_run must be an integer >= 1 or None; got {hard_dry_run!r}")
+        raise ValueError(f"hard_dry_run must be an integer >= 0 or None; got {hard_dry_run!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
@@ -4485,7 +4487,7 @@ def simulate_voting_iterations(  # noqa: C901
             record_readings=smart_readings,
             span_green=span_green,
             min_good=MIN_PER_CLASS if min_good is None else min_good,
-            hard_dry_run=hard_dry_run,
+            hard_dry_run=HARD_DRY_RUN if hard_dry_run is None else (hard_dry_run or None),
         )
     elif more_walk != "seed":
         raise ValueError(

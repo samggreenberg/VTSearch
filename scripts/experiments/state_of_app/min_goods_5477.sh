@@ -3,10 +3,11 @@
 # find - most FHIBE people - is never told Done. Two ways to let it stop, priced against the app on COCO too, where
 # Goods are plentiful and the minimum should change nothing. Paired sessions:
 #
-#   ctl      the app as shipped
+#   ctl      the app before #5477 (CALIB_HARD_DRY_RUN=0: the lights always need 5 Goods)
 #   min3     CALIB_MIN_GOOD=3: the lights need 3 Goods (Autopilot's Good target), not 5
-#   dry8     CALIB_HARD_DRY_RUN=8: once 8 learned picks in a row held no Good, the lights need only the Goods in hand
-#   dry16    CALIB_HARD_DRY_RUN=16: the same after 16 (the Good walk's own dry run, MORE_DRY_RUN)
+#   dry8     CALIB_HARD_DRY_RUN=8: once 8 picks in a row past the opening held no Good, the lights need only the
+#            Goods in hand
+#   dry16    the same after 16 (the Good walk's own dry run, MORE_DRY_RUN): the app since #5477, so no knob
 #
 # COCO Better's Binary path (siglip), the grid #4711 prepared after #5191 (2026-10-23-regstyles4711-grid), 144 cells
 # x 5 seeds, seed-major. 150 clicks and the closing check, trajectory pass (no ceiling), cells gzipped. The face side
@@ -28,8 +29,9 @@ D="${MINGOOD5477_DATE:-2026-10-30}"
 STEPS="${MINGOOD5477_STEPS:-150}"
 ARMS=(ctl min3 dry8 dry16)
 BETAS=(0.25 1 4)
-declare -A KNOBS=([ctl]="" [min3]="CALIB_MIN_GOOD=3" [dry8]="CALIB_HARD_DRY_RUN=8" [dry16]="CALIB_HARD_DRY_RUN=16")
-declare -A DIVERGE=([ctl]="" [min3]="min_good" [dry8]="hard_dry_run" [dry16]="hard_dry_run")
+declare -A KNOBS=([ctl]="CALIB_HARD_DRY_RUN=0" [min3]="CALIB_MIN_GOOD=3 CALIB_HARD_DRY_RUN=0" [dry8]="CALIB_HARD_DRY_RUN=8"
+  [dry16]="")
+declare -A DIVERGE=([ctl]="hard_dry_run" [min3]="min_good,hard_dry_run" [dry8]="hard_dry_run" [dry16]="")
 SEEDS="${MINGOOD5477_SEEDS:-5}"
 GRID_SRC="${MINGOOD5477_GRID:-$S/2026-10-23-regstyles4711-grid/results}"
 

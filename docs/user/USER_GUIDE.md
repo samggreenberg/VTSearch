@@ -860,7 +860,11 @@ The phase panel labels them, in order:
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
-   and "stable" indicators in the status bar both turn green). If you
+   and "stable" indicators in the status bar both turn green). The two
+   indicators need 5 goods and 5 bads before they judge anything, but a
+   target with fewer than 5 to find (one person's face, often) does not
+   wait forever: once **16 borderline picks in a row were not good**,
+   they judge the detector on the goods you have. If you
    started from a typed description on photos, the ranking behind the
    item stays the description's until your 30th vote: the detector asks
    the questions, but its matches only beat the description's from about
