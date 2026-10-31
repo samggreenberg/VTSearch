@@ -168,7 +168,9 @@ def _main_rows(cell: Path):
         keep_default_na=False,
     )
     m = m[(m["gmm_variant"] == "") & (m["schedule"] == "")]
-    return m.assign(**{c: m[c].astype(float) for c in ("fbeta", "precision", "recall")}, t=m["t"].astype(int))
+    # A ball that keeps no face leaves precision blank (undefined); its F is still written.
+    num = {c: pd.to_numeric(m[c].replace("", np.nan)) for c in ("fbeta", "precision", "recall")}
+    return m.assign(**num, t=m["t"].astype(int))
 
 
 def replay(runs: Path, set_: str, constants: Path, out: Path, only: str = "", limit: int = 0) -> None:

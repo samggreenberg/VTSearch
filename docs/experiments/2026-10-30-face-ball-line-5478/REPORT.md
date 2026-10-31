@@ -26,7 +26,7 @@ when it *is* the line: centred on the Goods voted so far, at every click, on the
 The owner chose a shadow arm. The β line does not decide what Autopilot asks: it asks where the head's class model
 puts P at 0.5 (`ACQUISITION_TARGET_PRECISION`), which does not read the line. So a ball line leaves every vote as it
 is. No session was rerun for the measurement. Each cell of the dev review (#5473's `2026-10-30-5473nodiv-ik`,
-which is dev today: 562 people × 2 sizes × K 1/4 × β ¼/1/4, 6,743 sessions) holds its picks. The review's split
+which is dev today: 562 people × 2 sizes × K 1/4 × β ¼/1/4, 6,723 sessions) holds its picks. The review's split
 (`stratified_split` at the cell's seed) gives the withheld half. At every click, the ball is the unit centroid of the
 Goods voted so far, the starting photos included. It keeps the withheld faces whose cosine to it is at least its
 floor.
@@ -38,9 +38,9 @@ floor.
   `adaptive`, fitted over both sizes and two Goods or more. Each person is scored by floors fitted on the other half
   of the people (the cross-fitted numbers below). The pooled fit is what ships: β 1 0.4425, β 4 0.385, slope 0.25,
   centre 0.6371. It is in-sample by three numbers per β, and reads within 0.002 of the cross-fitted fit.
-- **The shipped code** (`2fb3b04d3`, frozen tree) ran 48 of the sessions end to end: 4 people × 2 sizes × K 1/4 ×
-  β ¼/1/4. Its picks are dev's in 48 of 48 sessions, and its F is the replay's at every one of the 7,088 clicks. A
-  full review of the shipped code is queued, packs `1151361`-`1151364`, set `2026-10-30-5478ship-ik`.
+- **The shipped code** (`2fb3b04d3`, frozen tree) ran every session end to end (set `2026-10-30-5478ship-ik`).
+  Its picks are dev's in 6,723 of 6,723 sessions, and its F is the replay's at every one of the 1,020,024 clicks
+  (`face_ball_line_5478.py ship`). Where the ball keeps no face, the cell writes F with precision blank.
 
 ## A and B, against Find's line
 
