@@ -6,8 +6,10 @@ the images it finds a bus in. The prompts, the shard format and ``prompts.json``
 it grades SAM3's.
 
 An image's score for a prompt is its best detection: max over GroundingDINO's object queries of the sigmoid logit,
-maxed over the prompt's own tokens (the phrase, not [CLS], [SEP] or the closing period; the original repo's
-positive map).
+averaged over the prompt's own tokens (the phrase, not [CLS], [SEP] or the closing period). That is the original
+repo's COCO evaluation (``prob @ positive_map.T`` with each row of the map normalised to sum 1). The max over the
+phrase's tokens is kept too (``top1max``), but it is not a usable score: "a" is a token of every typed prompt, it
+matches any object, and under the max it outranks the noun (typed AP 0.19 against 0.64 for the noun alone, #5395).
 
 Prompts are packed into period-separated captions of up to ``--chunk-tokens`` tokens, GroundingDINO's own COCO
 protocol: its text self-attention is masked to each phrase (``generate_masks_with_special_tokens``), so a phrase's
@@ -197,6 +199,7 @@ def main() -> int:
 
     top1 = np.zeros((len(items), len(prompts)), np.float16)
     top2 = np.zeros_like(top1)
+    top1max = np.zeros_like(top1)
     n35 = np.zeros((len(items), len(prompts)), np.uint8)
 
     loader = torch.utils.data.DataLoader(
@@ -223,9 +226,11 @@ def main() -> int:
                 o = model(pixel_values=px, pixel_mask=pmask, **{n: v.expand(b, -1) for n, v in enc.items()})
                 probs = o.logits.float().sigmoid()
                 for j, q in pos.items():
-                    s = probs[:, :, q].amax(-1)  # (b, queries)
+                    tok = probs[:, :, q]  # (b, queries, phrase tokens)
+                    s = tok.mean(-1)
                     top = s.topk(2, dim=1).values.cpu().numpy()
                     top1[k, j], top2[k, j] = top[:, 0], top[:, 1]
+                    top1max[k, j] = tok.amax(-1).amax(-1).cpu().numpy()
                     n35[k, j] = np.minimum((s > 0.35).sum(1).cpu().numpy(), 255)
             torch.cuda.synchronize()
             t_dec += time.time() - a
@@ -244,6 +249,7 @@ def main() -> int:
         prompts=np.asarray(prompts),
         top1=top1,
         top2=top2,
+        top1max=top1max,
         n35=n35,
         timing=np.asarray([el, t_vis, t_dec, len(items), len(prompts)]),
         meta=np.asarray(
