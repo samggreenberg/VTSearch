@@ -3,8 +3,9 @@
 # SAM3. The same two halves and the same prompts, so a GroundingDINO row reads against a SAM3 and a SigLIP row cell
 # for cell:
 #
-#   gdino_5395.sh smoke GPU [N]          time N images (default 200) of shard 0 for every model on one GPU type, plus
-#                                        the checks: fp32 vs bf16, and the backbone cache vs none (50 images)
+#   gdino_5395.sh smoke GPU [N]          time N images (default 200) of shard 0 for every model on one GPU type, packed
+#                                        captions (250 and 64 tokens) against one prompt per pass, and the backbone
+#                                        cache against none; at the low dtype (fp16 on v100, else bf16)
 #   gdino_5395.sh score MODEL [NSHARDS]  every image of the grid's pool, as an array of NSHARDS (default 12) shards
 #   gdino_5395.sh baseline MODEL         text_baseline.py --sam3 on its scores, both prompt sets -> <root>/gdino_MODEL_*.csv
 #   gdino_5395.sh overlap MODEL          #5240's split: both sets graded on in-VG / not-in-VG images -> <root>/overlap
@@ -12,7 +13,7 @@
 # MODEL is a tag: tiny (IDEA-Research/grounding-dino-tiny, the original), mmt (MM-GDINO-T o365v1_goldg_v3det), mml
 # (MM-GDINO-L o365v2_oiv6_goldg). All three train without COCO; the pool is COCO train2017.
 # Env: GDINO_ROOT (default /expscratch/$USER/gdino-5395), GDINO_GRID (#4711's grid), GDINO_GPU (score: l40s),
-# GDINO_DTYPE (fp32; v100 has no bf16 -> fp16).
+# GDINO_DTYPE (fp32; v100 has no bf16 -> fp16), GDINO_SBATCH (extra sbatch flags, e.g. --exclude=NODE).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
@@ -53,15 +54,18 @@ smoke)
   {
     echo '#!/bin/bash'
     echo 'set -euo pipefail'
+    echo 'nvidia-smi --query-gpu=index,name,memory.used,compute_mode --format=csv; nvidia-smi --query-compute-apps=pid,used_memory --format=csv'
     env_lines
     for m in tiny mmt mml; do
-      score_cmd "$m" "$ROOT/smoke-$gpu/$m-fp32" 0 1 fp32 "$n"
-      score_cmd "$m" "$ROOT/smoke-$gpu/$m-$lo" 0 1 "$lo" "$n"
+      score_cmd "$m" "$ROOT/smoke-$gpu/$m-$lo-c250" 0 1 "$lo" "$n"
+      score_cmd "$m" "$ROOT/smoke-$gpu/$m-$lo-c64" 0 1 "$lo" "$n" "--chunk-tokens 64"
+      # The reference: one prompt per pass (a user's single query), on fewer images, since it costs ~50x.
+      score_cmd "$m" "$ROOT/smoke-$gpu/$m-$lo-single" 0 1 "$lo" 50 "--chunk-tokens 0"
     done
-    # The cache check: the backbone on every prompt, which must give the cached run's scores.
-    score_cmd tiny "$ROOT/smoke-$gpu/tiny-fp32-nocache" 0 1 fp32 50 --no-cache
+    # The cache check: the backbone on every caption, which must give the cached run's scores.
+    score_cmd tiny "$ROOT/smoke-$gpu/tiny-$lo-c250-nocache" 0 1 "$lo" 50 --no-cache
   } >"$ROOT/smoke-$gpu.sh"
-  sbatch --parsable -p gpu --gres="gpu:$gpu:1" -c 8 --mem 48G -t 4:00:00 -J "gdino-smoke-$gpu" \
+  sbatch --parsable ${GDINO_SBATCH:-} -p gpu --gres="gpu:$gpu:1" -c 8 --mem 48G -t 4:00:00 -J "gdino-smoke-$gpu" \
     -o "$ROOT/logs/smoke-$gpu-%j.out" "$ROOT/smoke-$gpu.sh"
   ;;
 score)
@@ -72,7 +76,7 @@ score)
     env_lines
     score_cmd "$m" "$ROOT/scores-$m" '$SLURM_ARRAY_TASK_ID' "$ns" "$dt"
   } >"$ROOT/score-$m.sh"
-  sbatch --parsable -p gpu --gres="gpu:$gpu:1" -c 8 --mem 48G -t "${GDINO_TIME:-12:00:00}" -J "gdino-score-$m" \
+  sbatch --parsable ${GDINO_SBATCH:-} -p gpu --gres="gpu:$gpu:1" -c 8 --mem 48G -t "${GDINO_TIME:-12:00:00}" -J "gdino-score-$m" \
     --array="0-$((ns - 1))%4" -o "$ROOT/logs/score-$m-%A_%a.out" "$ROOT/score-$m.sh"
   ;;
 baseline)

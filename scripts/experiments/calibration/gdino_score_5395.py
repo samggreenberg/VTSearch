@@ -7,11 +7,16 @@ it grades SAM3's.
 
 An image's score for a prompt is its best detection: max over GroundingDINO's object queries of the sigmoid logit,
 maxed over the prompt's own tokens (the phrase, not [CLS], [SEP] or the closing period; the original repo's
-positive map). One prompt per forward pass, never a caption of every class: the user types one query, and in a
-concatenated caption the classes compete for the same queries.
+positive map).
 
-The Swin backbone runs once per image batch and is reused for every prompt (``model.model.backbone.forward`` is
-replaced by a cache); the BERT text tower, the fusion encoder and the decoder run per prompt, which is the cost.
+Prompts are packed into period-separated captions of up to ``--chunk-tokens`` tokens, GroundingDINO's own COCO
+protocol: its text self-attention is masked to each phrase (``generate_masks_with_special_tokens``), so a phrase's
+features do not see its neighbours, and the phrases share only the 900 object queries. ``--chunk-tokens 0`` runs
+one prompt per forward pass instead, which a user typing one query would get; it costs ~150 ms per image per prompt
+on a V100 at fp32 (~100 GPU-h for this pool), so it is the smoke's reference, not the full run.
+
+The Swin backbone runs once per image batch and is reused for every caption (``model.model.backbone.forward`` is
+replaced by a cache); the BERT text tower, the fusion encoder and the decoder run per caption, which is the cost.
 
 Run on a GPU node with HF_HOME on node scratch. Checkpoints (transformers ports):
 
@@ -46,13 +51,38 @@ def caption(prompt: str) -> str:
     return p if p.endswith(".") else p + "."
 
 
-def phrase_tokens(tokenizer, prompt: str) -> tuple[dict, list[int]]:
-    """The tokenized caption and the positions of the phrase's own tokens."""
-    cap = caption(prompt)
-    enc = tokenizer(cap, return_tensors="pt", return_offsets_mapping=True)
-    n = len(cap) - 1  # the closing period
-    pos = [k for k, (a, b) in enumerate(enc.pop("offset_mapping")[0].tolist()) if b > a and a < n]
-    return enc, pos
+def pack(tokenizer, prompts: list[str], budget: int, sets=None) -> list[tuple[dict, dict[int, list[int]]]]:
+    """Captions of at most *budget* tokens (0: one per prompt), each with every prompt's phrase-token positions.
+
+    *sets* (lists of prompt indices) are packed apart, so one caption never holds a class's typed and noun prompts.
+    """
+    groups = []
+    for members in sets or [range(len(prompts))]:
+        cur, used = [], 0
+        for j in members:
+            n = len(tokenizer(caption(prompts[j]), add_special_tokens=False).input_ids)
+            if cur and (budget == 0 or used + n > budget):
+                groups.append(cur)
+                cur, used = [], 0
+            cur.append(j)
+            used += n
+        if cur:
+            groups.append(cur)
+    out = []
+    for g in groups:
+        caps, spans, at = [], {}, 0
+        for j in g:
+            c = caption(prompts[j])
+            spans[j] = (at, at + len(c) - 1)  # the phrase, without its closing period
+            caps.append(c)
+            at += len(c) + 1
+        enc = tokenizer(" ".join(caps), return_tensors="pt", return_offsets_mapping=True)
+        offs = enc.pop("offset_mapping")[0].tolist()
+        if enc.input_ids.shape[1] > 256:
+            raise SystemExit(f"caption of {enc.input_ids.shape[1]} tokens: GroundingDINO reads 256")
+        pos = {j: [k for k, (a, b) in enumerate(offs) if b > a and lo <= a < hi] for j, (lo, hi) in spans.items()}
+        out.append((enc, pos))
+    return out
 
 
 def _collate(batch):
@@ -114,6 +144,9 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--dtype", default="fp32", choices=["bf16", "fp16", "fp32"])
     ap.add_argument(
+        "--chunk-tokens", type=int, default=250, help="tokens per packed caption; 0 = one prompt per forward pass"
+    )
+    ap.add_argument(
         "--no-cache", action="store_true", help="run the backbone on every prompt (the check that the cache is exact)"
     )
     args = ap.parse_args()
@@ -149,13 +182,16 @@ def main() -> int:
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[args.dtype]
     dev = torch.device("cuda")
     processor = AutoProcessor.from_pretrained(args.model)
-    model = AutoModelForZeroShotObjectDetection.from_pretrained(args.model, torch_dtype=dtype).to(dev).eval()
+    model = AutoModelForZeroShotObjectDetection.from_pretrained(args.model, dtype=dtype).to(dev).eval()
     fill = None if args.no_cache else cache_backbone(model)
 
-    texts = {}
-    for p in prompts:
-        enc, pos = phrase_tokens(processor.tokenizer, p)
-        texts[p] = ({k: v.to(dev) for k, v in enc.items()}, torch.tensor(pos, device=dev))
+    typed = {p for v in table.values() for p in v["typed"]}
+    sets = [[j for j, p in enumerate(prompts) if p in typed], [j for j, p in enumerate(prompts) if p not in typed]]
+    captions = [
+        ({k: v.to(dev) for k, v in enc.items()}, {j: torch.tensor(q, device=dev) for j, q in pos.items()})
+        for enc, pos in pack(processor.tokenizer, prompts, args.chunk_tokens, sets)
+    ]
+    common.log(f"{len(prompts)} prompts in {len(captions)} captions (chunk {args.chunk_tokens} tokens)")
 
     top1 = np.zeros((len(items), len(prompts)), np.float16)
     top2 = np.zeros_like(top1)
@@ -181,13 +217,14 @@ def main() -> int:
             t_vis += time.time() - a
             a = time.time()
             k = ks.numpy()
-            for j, p in enumerate(prompts):
-                enc, pos = texts[p]
+            for enc, pos in captions:
                 o = model(pixel_values=px, pixel_mask=pmask, **{n: v.expand(b, -1) for n, v in enc.items()})
-                s = o.logits.float()[:, :, pos].sigmoid().amax(-1)  # (b, queries)
-                top = s.topk(2, dim=1).values.cpu().numpy()
-                top1[k, j], top2[k, j] = top[:, 0], top[:, 1]
-                n35[k, j] = np.minimum((s > 0.35).sum(1).cpu().numpy(), 255)
+                probs = o.logits.float().sigmoid()
+                for j, q in pos.items():
+                    s = probs[:, :, q].amax(-1)  # (b, queries)
+                    top = s.topk(2, dim=1).values.cpu().numpy()
+                    top1[k, j], top2[k, j] = top[:, 0], top[:, 1]
+                    n35[k, j] = np.minimum((s > 0.35).sum(1).cpu().numpy(), 255)
             torch.cuda.synchronize()
             t_dec += time.time() - a
             done += b
@@ -195,7 +232,7 @@ def main() -> int:
                 el = time.time() - t0
                 common.log(
                     f"{done}/{len(items)}  {done / el:.2f} img/s  vision {t_vis / done * 1e3:.0f} ms/img  "
-                    f"decode {t_dec / done / len(prompts) * 1e3:.1f} ms/img/prompt"
+                    f"decode {t_dec / done / len(captions) * 1e3:.1f} ms/img/caption"
                 )
 
     el = time.time() - t0
@@ -216,6 +253,8 @@ def main() -> int:
                         "gpu": torch.cuda.get_device_name(0),
                         "batch": args.batch,
                         "cache": not args.no_cache,
+                        "chunk_tokens": args.chunk_tokens,
+                        "captions": len(captions),
                         "host": os.uname().nodename,
                     }
                 )
