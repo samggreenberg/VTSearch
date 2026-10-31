@@ -44,6 +44,7 @@ import { BuildSkewService } from './services/build-skew.service';
 import { TrainingDomainAlertService } from './services/training-domain-alert.service';
 import { AutoFindService } from './services/autofind.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
+import { MetricsService } from './services/metrics.service';
 import { ToastyHintComponent } from './components/toasty-hint/toasty-hint.component';
 import { AboveDialogsDirective } from './directives/above-dialogs.directive';
 import {
@@ -95,6 +96,10 @@ export class AppComponent {
   private newThingFlows = inject(NewThingFlowsService);
   private hfAuth = inject(HuggingFaceAuthService);
   private toast = inject(ToastService);
+  // Constructed here so its `data-metric` click listener is live from startup.
+  private metrics = inject(MetricsService);
+  /** The view the last `view` metrics event named (#5475). */
+  private lastLoggedView = '';
   // Constructed here so it watches for finished AutoFind runs from app start,
   // whichever view the user is on; the template mounts its results dialog.
   autofind = inject(AutoFindService);
@@ -198,6 +203,7 @@ export class AppComponent {
             e.urlAfterRedirects.startsWith('/tune') ||
             onBrowse,
         );
+        this.logView(e.urlAfterRedirects);
       });
 
     this.newThingFlows.importer$.subscribe((state) => {
@@ -206,6 +212,21 @@ export class AppComponent {
     this.newThingFlows.newDetector$.subscribe((state) => {
       this.newDetectorFlow.set(state);
     });
+  }
+
+  /**
+   * Log a `view` metrics event when the user lands on a different view
+   * (`dashboard`, `train`, `tune`, `browse`; #5475). Keyed on the route's
+   * first segment, so a pair switch or a query-param update inside one view
+   * is not a new visit. The Train view's route is still `/label`, so it is
+   * renamed to what the user sees.
+   */
+  private logView(url: string): void {
+    const segment = url.split(/[/?#]/)[1] || 'dashboard';
+    const view = segment === 'label' ? 'train' : segment;
+    if (view === this.lastLoggedView) return;
+    this.lastLoggedView = view;
+    this.metrics.logEvent({ group: 'view', attributes: { view } });
   }
 
   /**

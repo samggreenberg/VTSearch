@@ -126,6 +126,14 @@ def _dataset_is_tiled() -> bool:
     return tiled
 
 
+def _vote_provenance() -> dict:
+    """A copy of the active detector's vote provenance, which Smart and Stable read #5477's dry run from."""
+    from vtscore.state.core import _state_lock
+
+    with _state_lock:
+        return dict(get_active_detector_context().vote_provenance)
+
+
 def _schedule_status_refresh(span_info) -> None:
     """Kick (or coalesce into) a single background labeling-status cache build.
 
@@ -145,6 +153,7 @@ def _schedule_status_refresh(span_info) -> None:
     bad_snap = dict(bad_votes)
     # The balance Smart reads its F-beta at (#5134), read here: the worker has no request context.
     beta = line_knobs()["beta"]
+    provenance = _vote_provenance()
 
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
@@ -156,7 +165,9 @@ def _schedule_status_refresh(span_info) -> None:
         # ``_progress_lock`` and refreshes ``_status_snapshot``; the return
         # value is unused - the next poll reads the snapshot.  The lock is
         # taken only inside the worker, never across the HTTP response.
-        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info, beta=beta)
+        compute_labeling_status(
+            clips, history, good_snap, bad_snap, span_info=span_info, beta=beta, vote_provenance=provenance
+        )
 
     labeling_status_jobs.start(
         signature,
@@ -209,7 +220,13 @@ def labeling_status_indicator():
 
         if is_status_cache_fresh(label_history):
             status = compute_labeling_status(
-                snapshot_medias(), label_history, good_votes, bad_votes, span_info=span, beta=line_knobs()["beta"]
+                snapshot_medias(),
+                label_history,
+                good_votes,
+                bad_votes,
+                span_info=span,
+                beta=line_knobs()["beta"],
+                vote_provenance=_vote_provenance(),
             )
             status["stale"] = False
             status["stop_rule"] = "lights"

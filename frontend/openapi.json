@@ -309,6 +309,10 @@
           "enable_achievements": {
             "type": "boolean"
           },
+          "enable_metrics": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -337,6 +341,12 @@
             "type": "object"
           },
           "grid_icon_size_popup": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "grid_icon_size_results": {
             "additionalProperties": {
               "type": "string"
             },
@@ -6013,6 +6023,105 @@
         ],
         "type": "object"
       },
+      "MediaSimilarityOrder": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "eta_seconds": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "ids": {
+            "default": null,
+            "description": "When ``ready``: the asked ids, look-alikes side by side (a 1-D UMAP).",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "description": "When ``ready``: how the order was fit (``umap``, ``pca`` or ``trivial``).",
+            "nullable": true,
+            "type": "string"
+          },
+          "overall": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "overall_step_end": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "status": {
+            "description": "``ready``: ``ids`` holds the asked ids in order. ``building``: the dataset's order is being fit (with its Browse layout, when it has none); ask again. ``error``: that fit failed.",
+            "enum": [
+              "ready",
+              "building",
+              "error"
+            ],
+            "type": "string"
+          },
+          "step": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total_steps": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "MediaSimilarityOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "The items to put in similarity order; ids the dataset lacks are dropped.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
       "MediaSourceBatchEntry": {
         "additionalProperties": false,
         "properties": {
@@ -6265,6 +6374,74 @@
           "click_time",
           "ok",
           "state"
+        ],
+        "type": "object"
+      },
+      "MetricsBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsEvent"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "session": {
+            "default": null,
+            "description": "Opaque id of the page load that logged the events.",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "type": "object"
+      },
+      "MetricsBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the server records metrics; the SPA stops sending once this is false.",
+            "type": "boolean"
+          },
+          "recorded": {
+            "description": "How many events were written.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "recorded"
+        ],
+        "type": "object"
+      },
+      "MetricsEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Flat event details. Scalar values are kept (strings cut to 200 characters); nested values are dropped.",
+            "type": "object"
+          },
+          "client_ts": {
+            "default": null,
+            "description": "When the browser logged the event, in epoch milliseconds.",
+            "nullable": true,
+            "type": "number"
+          },
+          "group": {
+            "description": "Event name, e.g. ``view``, ``resultsExported``, ``settingChanged``, ``click``.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group"
         ],
         "type": "object"
       },
@@ -7204,6 +7381,7 @@
           "grid_icon_size_left": {},
           "grid_icon_size_picker": {},
           "grid_icon_size_popup": {},
+          "grid_icon_size_results": {},
           "grid_icon_size_right": {},
           "hidden_hints": {
             "items": {
@@ -14323,6 +14501,50 @@
         ]
       }
     },
+    "/api/medias/similarity-order": {
+      "post": {
+        "description": "The Find Results list's *Similarity* sort.  The order is a 1-D UMAP of the\nwhole dataset, fit with its 2-D Browse layout and saved beside it, so a\ndataset that has been browsed answers ``ready`` at once.  One that has not\nis answered ``building`` while the fit runs (the Browse layout with it, when\nit has none), and the caller asks again until it is ``ready``; see\n:func:`~vtscore.projection.similarity_order.request_similarity_order`.",
+        "operationId": "similarity_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaSimilarityOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSimilarityOrder"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no embeddings to order."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Put *ids* in the dataset's similarity order: look-alikes side by side (#5464).",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/source-batch": {
       "post": {
         "description": "Returns one entry per id that resolved, in request order; ids that do not\n(unknown, not a converter output, no source dataset, no matching item) are\nomitted, as ``POST /api/medias/batch`` omits unknown ids.  If any id needs\na source dataset that is not loaded the whole request is a 409 naming it:\nload it and ask again.",
@@ -14891,6 +15113,44 @@
         "summary": "Set a single media's vote to an **absolute target state**.",
         "tags": [
           "medias"
+        ]
+      }
+    },
+    "/api/metrics": {
+      "post": {
+        "description": "Records nothing when the server-tier ``enable_metrics`` setting is off,\nand says so in ``enabled`` so the SPA can stop sending.",
+        "operationId": "record_metrics",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricsBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsBatchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Append a batch of usage events for the current user.",
+        "tags": [
+          "metrics"
         ]
       }
     },
@@ -16649,6 +16909,10 @@
     {
       "description": "App version and SPA / static-file serving.",
       "name": "main"
+    },
+    {
+      "description": "Usage metrics posted by the SPA.",
+      "name": "metrics"
     },
     {
       "description": "List, fetch, stream, and vote on individual media items.",

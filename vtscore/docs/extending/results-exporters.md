@@ -110,12 +110,22 @@ deliver an empty export.
         # ... one entry per detector run
     },
     "missing_detectors": [...],
+    "selected_columns": ["origin_name", "score", "detector"],  # Find Results dialog only
 }
 ```
 
 Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
+
+`selected_columns` is the user's column choice from the Find Results
+dialog, in order. It names a hit's own keys, keys of its
+`custom_metadata`, and the detector result's `detector` / `threshold`;
+`vtscore.exporters.base.hit_column_value(detector_result, hit, column)`
+resolves each one, so a tabular exporter honours it with one call per
+cell. A delivery exporter that sends whole hits may ignore it. It is
+absent on every other path (the CLI, a background AutoFind's
+auto-export), where a fixed column set is the right answer.
 
 **Label exports** (from the label-export modal with `enrich=true`):
 

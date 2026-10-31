@@ -10,10 +10,22 @@ import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
 import { ContextSwitchService } from '../../../services/context-switch.service';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
+import { DATASET_OVERRIDE } from '../../../interceptors/active-context.interceptor';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
 import { makeSettingsStateStub } from '../../../testing/mocks';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
+
+/** The media-type registry, answered without a request: audio and image have
+ *  thumbnails, and each type's icon is its own name. */
+function mediaTypeCapsStub(): Partial<MediaTypeCapabilityService> {
+  return {
+    ensureLoaded: vi.fn(),
+    usesThumbnails: (type: string) => type === 'audio' || type === 'image',
+    iconFor: (type: string) => type,
+  };
+}
 
 describe('AutoDetectResultsModalComponent', () => {
   let component: AutoDetectResultsModalComponent;
@@ -46,6 +58,7 @@ describe('AutoDetectResultsModalComponent', () => {
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
+        { provide: MediaTypeCapabilityService, useFactory: mediaTypeCapsStub },
         { provide: ToastService, useFactory: () => (toast = { success: vi.fn() }) },
         { provide: SettingsStateService, useValue: settingsState.stub },
       ],
@@ -93,7 +106,13 @@ describe('AutoDetectResultsModalComponent', () => {
 
     it('names the run\'s media type on a server open to every type', async () => {
       await flushInit();
-      expect(summary()).toContain('Media Type: audio');
+      expect(summary().replace(/\s+/g, ' ')).toContain('Media Type: Audio');
+    });
+
+    it('shows the type with its icon, as the Dashboard does (#5464)', async () => {
+      await flushInit();
+      const icon = fixture.nativeElement.querySelector('.results-summary .type-cell vt-icon');
+      expect(icon).toBeTruthy();
     });
 
     it('leaves it out on a server locked to that type, where it could be nothing else', async () => {
@@ -106,20 +125,20 @@ describe('AutoDetectResultsModalComponent', () => {
     it('still names a type the lock does not account for', async () => {
       settings.set({ solo_media_type: 'image' } as AppSettings);
       await flushInit();
-      expect(summary()).toContain('Media Type: audio');
+      expect(summary().replace(/\s+/g, ' ')).toContain('Media Type: Audio');
     });
   });
 
   it('should display good hits by default', async () => {
     await flushInit();
-    component.exportSides = 'good';
-    expect(component.displayHits.length).toBe(2);
+    component.sides.set('good');
+    expect(component.displayHits().length).toBe(2);
   });
 
   it('should display bad hits when selected', async () => {
     await flushInit();
-    component.exportSides = 'bad';
-    expect(component.displayHits.length).toBe(1);
+    component.sides.set('bad');
+    expect(component.displayHits().length).toBe(1);
   });
 
   it("names the detectors that ran as the Goods' centroid, with what they owe (#4643)", async () => {
@@ -216,8 +235,8 @@ describe('AutoDetectResultsModalComponent', () => {
 
   it('should display all hits when both selected', async () => {
     await flushInit();
-    component.exportSides = 'both';
-    expect(component.displayHits.length).toBe(3);
+    component.sides.set('both');
+    expect(component.displayHits().length).toBe(3);
   });
 
   it('should format origin with params', async () => {
@@ -235,23 +254,29 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(component.formatOrigin({ md5: 'x' })).toBe('');
   });
 
-  // Zoneless canary: exporters/selectedExporter are written from the
-  // getExporters() subscribe (not a CD trigger) — as signals they repaint the
-  // dropdown.
-  it('should load exporters on init and render the dropdown options', async () => {
+  // Zoneless canary: exporters are written from the getExporters() subscribe
+  // (not a CD trigger) — as a signal they repaint the tabs.
+  it('lists Clipboard and then each exporter as tabs, opening on Clipboard (#5464)', async () => {
     await flushInit();
     expect(component.exporters().length).toBe(2);
-    expect(component.selectedExporter()).toBe('json');
-    const options = fixture.nativeElement.querySelectorAll('.export-row select option');
-    expect(options.length).toBe(2);
-    expect(options[0].getAttribute('value')).toBe('json');
+    expect(component.activeTab()).toBe('clipboard');
+    const tabs = Array.from(fixture.nativeElement.querySelectorAll('.export-tabs .tab')) as HTMLElement[];
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['Clipboard', 'json', 'csv']);
+    expect(tabs[0].classList).toContain('active');
+    expect(fixture.nativeElement.querySelector('.tab-content vt-clipboard-copy')).toBeTruthy();
   });
 
-  it('should update exporter fields when exporter changes', async () => {
+  it("opens an exporter's tab with its fields", async () => {
     await flushInit();
-    component.selectedExporter.set('csv');
-    component.onExporterChange();
+    const csvTab = Array.from(fixture.nativeElement.querySelectorAll('.export-tabs .tab')).find(
+      (t) => (t as HTMLElement).textContent?.trim() === 'csv',
+    ) as HTMLButtonElement;
+    csvTab.click();
+    await settleZoneless(fixture);
+    expect(component.activeTab()).toBe('csv');
     expect(component.exporterFields().length).toBe(1);
+    expect(fixture.nativeElement.querySelector('#adr-path')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.tab-content vt-clipboard-copy')).toBeNull();
   });
 
   it('should emit closed on close', async () => {
@@ -264,7 +289,7 @@ describe('AutoDetectResultsModalComponent', () => {
   it('should render results table', async () => {
     await flushInit();
     const el = fixture.nativeElement as HTMLElement;
-    const rows = el.querySelectorAll('.results-table tbody tr');
+    const rows = el.querySelectorAll('.results-table .results-row');
     expect(rows.length).toBe(2); // good hits by default
   });
 
@@ -354,34 +379,44 @@ describe('AutoDetectResultsModalComponent', () => {
     });
   });
 
-  // The dialog used to render an exporter picker with no button to run it.
+  // The dialog used to render an exporter picker with no button to run it;
+  // now the footer carries Close / Export / Export and Close (#5464).
   describe('Export', () => {
-    it('renders an Export button for the chosen exporter', async () => {
+    const footer = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.form-actions button')) as HTMLButtonElement[];
+
+    it('ends with Close, Export and Export and Close', async () => {
       await flushInit();
-      const btn = Array.from(fixture.nativeElement.querySelectorAll('.form-actions button')).find(
-        (b) => (b as HTMLElement).textContent?.trim() === 'Export',
-      ) as HTMLButtonElement | undefined;
-      expect(btn).toBeTruthy();
-      expect(btn!.disabled).toBe(false);
+      expect(footer().map((b) => b.textContent?.trim())).toEqual(['Close', 'Export', 'Export and Close']);
+      expect(footer()[1].disabled).toBe(false);
+      expect(footer()[2].disabled).toBe(false);
     });
 
     it('exports exactly the listed rows: the chosen side moves into hits', async () => {
       await flushInit();
-      component.exportSides = 'bad';
+      component.sides.set('bad');
       const bad = component.exportPayload().results['detector1'];
       expect(bad.hits.map((h) => h.md5)).toEqual(['ghi789']);
       expect(bad.negative_hits).toEqual([]);
       expect(bad.total_hits).toBe(1);
 
-      component.exportSides = 'both';
+      component.sides.set('both');
       const both = component.exportPayload().results['detector1'];
       expect(both.hits.map((h) => h.label)).toEqual(['good', 'good', 'bad']);
     });
 
+    it('sends the ticked columns, in order, and never the thumbnail', async () => {
+      fixture.componentRef.setInput('data', { ...mockData, dataset_id: 'ds1' } as any);
+      await flushInit();
+      expect(component.columns()[0].key).toBe('thumbnail');
+      expect(component.exportPayload().selected_columns).toEqual(['origin_name', 'score', 'filename', 'origin', 'md5']);
+      component.setColumnEnabled('md5', false);
+      expect(component.exportPayload().selected_columns).toEqual(['origin_name', 'score', 'filename', 'origin']);
+    });
+
     it('sends the run to the chosen exporter as find_results and confirms', async () => {
       await flushInit();
-      component.selectedExporter.set('csv');
-      component.onExporterChange();
+      component.selectTab('csv');
       component.exportFieldValues['path'] = '/tmp/out.csv';
       component.exportResults();
 
@@ -395,6 +430,170 @@ describe('AutoDetectResultsModalComponent', () => {
 
       expect(component.exporting()).toBe(false);
       expect(toast.success).toHaveBeenCalledWith(expect.objectContaining({ message: 'Exported 2 results to csv' }));
+    });
+
+    it('closes after the export with Export and Close, and not without', async () => {
+      await flushInit();
+      const closed = vi.fn();
+      component.closed.subscribe(closed);
+      component.selectTab('json');
+
+      component.exportResults();
+      httpMock.expectOne('/api/exporters/export').flush({ success: true });
+      expect(closed).not.toHaveBeenCalled();
+
+      component.exportResults(true);
+      httpMock.expectOne('/api/exporters/export').flush({ success: true });
+      expect(closed).toHaveBeenCalledTimes(1);
+    });
+
+    it('copies the listed rows from the Clipboard tab, in the ticked columns', async () => {
+      await flushInit();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      component.setColumnEnabled('origin', false);
+      component.setColumnEnabled('md5', false);
+      await settleZoneless(fixture);
+
+      await component.exportResults();
+      expect(writeText).toHaveBeenCalledWith('Name,Score,Filename\nSong 1,,song.wav\nTrack 2,,track.wav');
+      expect(toast.success).toHaveBeenCalledWith(expect.objectContaining({ message: 'Copied 2 results to the clipboard' }));
+      httpMock.expectNone('/api/exporters/export');
+    });
+
+    it('cannot export with every column cleared', async () => {
+      await flushInit();
+      component.toggleAllColumns();
+      await settleZoneless(fixture);
+      expect(component.exportBlocker).toBe('Tick a column to export');
+      expect(footer()[1].disabled).toBe(true);
+    });
+  });
+
+  // The controls that change the list sit above it (#5464).
+  describe('what the list shows', () => {
+    const scored = {
+      media_type: 'image',
+      dataset_id: 'ds1',
+      detectors_run: 2,
+      results: {
+        cats: {
+          detector_name: 'Cats',
+          hits: [
+            { id: 1, md5: 'a', filename: 'a.jpg', score: 0.7, custom_metadata: { width: 64 } },
+            { id: 2, md5: 'b', filename: 'b.jpg', score: 0.95 },
+          ],
+          negative_hits: [{ id: 3, md5: 'c', filename: 'c.jpg', score: 0.2 }],
+        },
+        dogs: { detector_name: 'Dogs', hits: [{ id: 4, md5: 'd', filename: 'd.jpg', score: 0.8 }], negative_hits: [] },
+      },
+    };
+    const keys = () => component.columns().map((c) => c.key);
+
+    beforeEach(() => fixture.componentRef.setInput('data', scored as any));
+
+    it('orders the rows by score across every detector', async () => {
+      await flushInit();
+      expect(component.displayHits().map((h) => h.id)).toEqual([2, 4, 1]);
+    });
+
+    it('offers Label only for both sides, Detector only for several detectors, metadata unticked', async () => {
+      await flushInit();
+      expect(keys()).toEqual(['thumbnail', 'origin_name', 'score', 'detector', 'filename', 'origin', 'md5', 'width']);
+      expect(component.columns().find((c) => c.key === 'width')!.enabled).toBe(false);
+      component.sides.set('both');
+      expect(keys()).toContain('label');
+      fixture.componentRef.setInput('data', { ...scored, results: { cats: scored.results.cats } } as any);
+      expect(keys()).not.toContain('detector');
+    });
+
+    it('lists only the ticked columns, header and rows alike', async () => {
+      await flushInit();
+      component.setColumnEnabled('thumbnail', false);
+      component.setColumnEnabled('origin', false);
+      await settleZoneless(fixture);
+      const head = Array.from(fixture.nativeElement.querySelectorAll('.results-head .results-cell')) as HTMLElement[];
+      expect(head.map((c) => c.textContent?.trim())).toEqual(['Name', 'Score', 'Detector', 'Filename', 'MD5']);
+      const firstRow = fixture.nativeElement.querySelector('.results-row') as HTMLElement;
+      expect(firstRow.querySelectorAll('.results-cell').length).toBe(5);
+    });
+
+    it('offers no thumbnail for results that name no dataset, or a type without them', async () => {
+      fixture.componentRef.setInput('data', { ...scored, dataset_id: undefined } as any);
+      await flushInit();
+      expect(keys()).not.toContain('thumbnail');
+      fixture.componentRef.setInput('data', { ...scored, media_type: 'text' } as any);
+      expect(keys()).not.toContain('thumbnail');
+    });
+
+    it('sizes a row to its thumbnail, and to a line of text without one', async () => {
+      await flushInit();
+      expect(component.rowHeight()).toBe(component.thumbPx() + 4);
+      component.setColumnEnabled('thumbnail', false);
+      expect(component.rowHeight()).toBe(30);
+    });
+
+    describe('Similarity sort', () => {
+      const URL = '/api/medias/similarity-order';
+
+      it('asks the run dataset for its order, once, and lists the rows in it', async () => {
+        await flushInit();
+        component.setSort('similarity');
+        const req = httpMock.expectOne(URL);
+        // Asked of the run's dataset by id, whichever pair is active.
+        expect(req.request.context.get(DATASET_OVERRIDE)).toBe('ds1');
+        expect(req.request.body.ids).toEqual([1, 2, 3, 4]);
+        req.flush({ status: 'ready', ids: [4, 1, 3, 2], method: 'umap' });
+        expect(component.displayHits().map((h) => h.id)).toEqual([4, 1, 2]);
+
+        component.setSort('score');
+        component.setSort('similarity');
+        httpMock.expectNone(URL);
+        expect(component.displayHits().map((h) => h.id)).toEqual([4, 1, 2]);
+      });
+
+      it('waits on the fit, asking again, and keeps the score order meanwhile', async () => {
+        await flushInit();
+        vi.useFakeTimers();
+        try {
+          component.setSort('similarity');
+          httpMock.expectOne(URL).flush({ status: 'building', job_id: 'j', overall: 0.4 });
+          expect(component.similarity().status).toBe('building');
+          expect(component.similarityFraction(component.similarity())).toBe(0.4);
+          expect(component.displayHits().map((h) => h.id)).toEqual([2, 4, 1]);
+          await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.SIMILARITY_POLL_MS);
+          httpMock.expectOne(URL).flush({ status: 'ready', ids: [1, 2, 3, 4], method: 'umap' });
+          expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 4]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('Cancel goes back to the score order and stops asking', async () => {
+        await flushInit();
+        vi.useFakeTimers();
+        try {
+          component.setSort('similarity');
+          httpMock.expectOne(URL).flush({ status: 'building', job_id: 'j' });
+          component.cancelSimilarity();
+          expect(component.sortMode()).toBe('score');
+          await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.SIMILARITY_POLL_MS * 2);
+          httpMock.expectNone(URL);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("shows why there is no order, and asks again on the next click", async () => {
+        await flushInit();
+        component.setSort('similarity');
+        httpMock.expectOne(URL).flush({ message: 'Dataset ds1 is not loaded.' }, { status: 409, statusText: 'Conflict' });
+        await settleZoneless(fixture);
+        expect(component.similarityError()).toBe('Dataset ds1 is not loaded.');
+        expect(fixture.nativeElement.querySelector('.similarity-error')?.textContent).toContain('not loaded');
+        component.setSort('similarity');
+        httpMock.expectOne(URL).flush({ status: 'ready', ids: [], method: 'umap' });
+      });
     });
   });
 });
@@ -443,9 +642,11 @@ describe('AutoDetectResultsModalComponent Browse', () => {
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
+        { provide: MediaTypeCapabilityService, useFactory: mediaTypeCapsStub },
         { provide: ToastService, useValue: { success: vi.fn() } },
         { provide: ContextSwitchService, useValue: contextSwitch },
         { provide: BrowseSubsetPrepService, useValue: browsePrep },
+        { provide: SettingsStateService, useValue: makeSettingsStateStub().stub },
       ],
     }).compileComponents();
 
@@ -456,9 +657,9 @@ describe('AutoDetectResultsModalComponent Browse', () => {
 
   it('browses the listed rows, once each, following the Good / Bad / Both filter', () => {
     expect(component.browseIds).toEqual([1, 2]);
-    component.exportSides = 'bad';
+    component.sides.set('bad');
     expect(component.browseIds).toEqual([3]);
-    component.exportSides = 'both';
+    component.sides.set('both');
     expect(component.browseIds).toEqual([1, 2, 3]);
   });
 
@@ -489,7 +690,7 @@ describe('AutoDetectResultsModalComponent Browse', () => {
   // The browse URL names the picked rows, so a link opened without the
   // in-memory handoff rebuilds the same map from the run (#5129).
   it('names the picked rows in the browse origin', () => {
-    component.exportSides = 'bad';
+    component.sides.set('bad');
     component.browse();
     switched.next();
     expect(browsePrep.start).toHaveBeenCalledWith(
@@ -520,8 +721,9 @@ describe('AutoDetectResultsModalComponent Browse', () => {
     expect(browsePrep.cancel).toHaveBeenCalled();
   });
 
-  // #5102: the way in to the results, not one small button among the footer's.
-  it('leads with a large Browse over the list, not in the footer', async () => {
+  // #5102: the way in to the results, not one small button among the footer's;
+  // #5464: under the list, since it acts on the rows rather than changing them.
+  it('sits large under the list, not in the footer', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
     const el: HTMLElement = fixture.nativeElement;
@@ -529,6 +731,8 @@ describe('AutoDetectResultsModalComponent Browse', () => {
     expect(lead.textContent?.trim()).toBe('Browse');
     expect(lead.classList).toContain('btn--lg');
     expect(lead.disabled).toBe(false);
+    const list = el.querySelector('.results-table') as HTMLElement;
+    expect(list.compareDocumentPosition(lead) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const footer = Array.from(el.querySelectorAll('.form-actions button')).map((b) => b.textContent?.trim());
     expect(footer).not.toContain('Browse');
 
@@ -567,9 +771,11 @@ describe('AutoDetectResultsModalComponent Browse warm-up', () => {
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
+        { provide: MediaTypeCapabilityService, useFactory: mediaTypeCapsStub },
         { provide: ToastService, useValue: toast },
         { provide: ContextSwitchService, useValue: { applyActivePair: vi.fn(() => new Subject<void>()) } },
         { provide: BrowseSubsetPrepService, useValue: { preparing: signal(false), start: vi.fn(), cancel: vi.fn() } },
+        { provide: SettingsStateService, useValue: makeSettingsStateStub().stub },
       ],
     }).compileComponents();
 

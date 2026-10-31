@@ -1255,6 +1255,21 @@ SPAN_GREEN: "int | str | None" = (
     int(_SPAN_GREEN_RAW) if _SPAN_GREEN_RAW.lstrip("-").isdigit() else (_SPAN_GREEN_RAW or None)
 )
 
+#: Issue #5477's Goods minimum: how many Goods Smart and Stable need before either
+#: leaves red (the app's ``MIN_PER_CLASS``, 5).  Unset is the app's.  Not an int
+#: from 1 to 5 is refused by preflight.
+_MIN_GOOD_RAW = os.environ.get("CALIB_MIN_GOOD", "").strip()
+MIN_GOOD: "int | str | None" = int(_MIN_GOOD_RAW) if _MIN_GOOD_RAW.isdigit() else (_MIN_GOOD_RAW or None)
+
+#: Issue #5477's dry run past the opening: once this many votes in a row in
+#: Boundary, Diversity or a spot check held no Good, Smart and Stable need only
+#: the Goods in hand.  Unset is the app's (``HARD_DRY_RUN``, 16); ``0`` never
+#: waives the minimum (the app before #5477).  Not an int >= 0 is refused by preflight.
+_HARD_DRY_RUN_RAW = os.environ.get("CALIB_HARD_DRY_RUN", "").strip()
+HARD_DRY_RUN: "int | str | None" = (
+    int(_HARD_DRY_RUN_RAW) if _HARD_DRY_RUN_RAW.isdigit() else (_HARD_DRY_RUN_RAW or None)
+)
+
 #: Issue #4699's **example opening**: each cell starts from this many photos of
 #: its target, drawn from the voting half, voted Good as the run's first votes,
 #: and ranked against as the app's example sort ranks (cosine to their

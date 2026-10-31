@@ -6,6 +6,7 @@ import { routes } from './app.routes';
 import { activeContextInterceptor } from './interceptors/active-context.interceptor';
 import { achievementsRefreshInterceptor } from './interceptors/achievements-refresh.interceptor';
 import { errorInterceptor } from './interceptors/error.interceptor';
+import { metricsInterceptor } from './interceptors/metrics.interceptor';
 import { timezoneInterceptor } from './interceptors/timezone.interceptor';
 
 export const appConfig: ApplicationConfig = {
@@ -17,6 +18,7 @@ export const appConfig: ApplicationConfig = {
         timezoneInterceptor,
         activeContextInterceptor,
         achievementsRefreshInterceptor,
+        metricsInterceptor,
         errorInterceptor,
       ]),
     ),

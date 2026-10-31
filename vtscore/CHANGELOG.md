@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart and Stable can read fewer than 5 Goods after a dry run** (issue #5477). New in
+  `vtscore.detectors.stability`: `HARD_DRY_RUN` (16), `HardDryRun` (the run of votes past the opening with no
+  Good, latched) and `goods_minimum`. `stable_status_from_entries`, `rising_status_from_scores` and
+  `smart_status_from_costs` take a `min_good` keyword (default `MIN_PER_CLASS`), and `compute_labeling_status`
+  takes `vote_provenance`, from which `labeling_progress.hard_ran_dry` reads the run. `AutopilotFlow` takes
+  `min_good` and `hard_dry_run` (default `HARD_DRY_RUN`), and so does `simulate_voting_iterations`, where
+  `hard_dry_run=0` is the default arm before #5477.
+
 - **The Span light's default goal is 0** (issue #5473). `autopilot_flow.SPAN_GREEN_DEFAULT` is 0, the app's new
   `autopilot_goal_diversity` default: `span_status` reads green at a goal of 0, and `AutopilotFlow` (and so
   `simulate_voting_iterations`'s default arm) never enters `new`. The new `SPAN_GREEN_ON` (40) is the goal with the
@@ -1634,6 +1642,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **A scored run can carry the user's column choice** (issue #5464). The Find Results dialog's
+  `find_results` payload now has an optional `selected_columns` list, as a `labelset` already did: a
+  hit's own keys, keys of its `custom_metadata`, and the detector result's `detector` / `threshold`.
+  The new `vtscore.exporters.base.hit_column_value(detector_result, hit, column)` resolves one cell.
+  `server_csv_file` writes exactly those columns when they are given and `server_json_file` cuts each hit
+  to them; both keep their fixed output when the key is absent (the CLI, AutoFind's auto-export).
+  Additive: an exporter that ignores the key keeps working. See `extending/results-exporters.md`.
+
+- **The 1-D similarity order comes with every dataset's Browse layout** (issue #5464).
+  `vtscore.projection.service.fit_and_install_layout` now fits the order on the same matrix once a
+  full-dataset layout is cached and saved (best-effort; a re-projection keeps an order already stored), so
+  any browsed dataset can list its items look-alikes together, not only a Face one.
+  `vtscore.projection.similarity_order` gains `ensure_similarity_order` (the stored order, else a fit of a
+  matrix the caller holds) and `request_similarity_order` (what a list asks: the order, or the progress of
+  the fit it started). `similarity_order_for` now answers any type's stored order and still fits on its own
+  only for `ORDERED_MEDIA_TYPES`.
 
 - **`DatasetImported` says how many items an import brought in and which it dropped** (issue #5449). Three new
   fields, all defaulted so a hook that ignores them is unchanged: `n_imported` (the items that reached the finalize

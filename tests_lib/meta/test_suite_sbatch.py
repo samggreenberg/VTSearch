@@ -22,6 +22,10 @@ throwaway origin + clone + worktree:
   removes it when it ends.
 * **old layout** -- a ref cut before #5407 keeps ``gridenv.sh`` at the repo
   root rather than in ``scripts/grid/``, and the suite still sources it.
+* **dev's copy runs** -- a submitted copy that is not byte-for-byte
+  ``origin/dev``'s (a stale shared checkout, or a branch's own) runs dev's
+  instead, once, and leaves no fetched copy behind (#5484); an identical copy
+  runs as submitted.
 
 ``run-tests.sh`` and ``gridenv.sh`` are stubs here: what is under test is the
 launcher's ref handling, not the suite it launches.
@@ -106,6 +110,7 @@ def grid(tmp_path: Path) -> dict:
 
 def _run(wt: Path, ref: str, **extra_env: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "SUITE_HF_HOME": str(wt.parent / "hf"), **extra_env}
+    env.pop("SUITE_SBATCH_FROM_DEV", None)  # set when this suite itself runs under the exec'd copy
     return subprocess.run([BASH, str(SCRIPT), str(wt), ref], env=env, capture_output=True, text=True, timeout=120)  # noqa: S603  # fixed argv, no shell
 
 
@@ -218,6 +223,41 @@ def test_a_ref_from_before_the_move_still_finds_gridenv(grid: dict) -> None:
     r = _run(grid["wt"], "old-layout")
     assert r.returncode == 0, r.stdout + r.stderr
     assert f"SUITE RAN at {old}" in r.stdout
+    assert _restored(grid)
+
+
+def _put_on_dev(grid: dict, text: str) -> None:
+    seed = grid["seed"]
+    _git(seed, "checkout", "-q", "dev")
+    (seed / "scripts" / "slurm").mkdir(parents=True, exist_ok=True)
+    (seed / "scripts" / "slurm" / "suite.sbatch").write_text(text)
+    _git(seed, "add", "scripts/slurm/suite.sbatch")
+    _git(seed, "commit", "-q", "-m", "suite.sbatch on dev")
+    _git(seed, "push", "-q", "origin", "dev")
+
+
+def test_submitted_copy_runs_when_it_is_devs(grid: dict) -> None:
+    _put_on_dev(grid, SCRIPT.read_text())
+    r = _run(grid["wt"], BRANCH)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "=== suite.sbatch  origin/dev's copy" in r.stdout
+    assert f"SUITE RAN at {grid['base']}" in r.stdout
+
+
+def test_a_stale_copy_runs_devs_instead(grid: dict, tmp_path: Path) -> None:
+    """#5484: the shared checkout's copy sat 791 commits behind dev and refused every worktree."""
+    marker = 'REF="$2"\n'
+    text = SCRIPT.read_text()
+    assert marker in text
+    _put_on_dev(grid, text.replace(marker, marker + 'echo "DEV COPY RAN"\n', 1))
+    scratch = tmp_path / "job-tmp"
+    scratch.mkdir()
+    r = _run(grid["wt"], BRANCH, TMPDIR=str(scratch))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.count("running origin/dev's") == 1, r.stdout
+    assert "DEV COPY RAN" in r.stdout
+    assert f"SUITE RAN at {grid['base']}" in r.stdout
+    assert not list(scratch.glob("suite.sbatch.dev.*")), "the fetched copy outlived the job"
     assert _restored(grid)
 
 

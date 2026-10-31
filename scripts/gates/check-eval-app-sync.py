@@ -473,7 +473,13 @@ MIRRORS: list[Mirror] = [
             "through `score_sim_set_with_model` on the arm's style - rather than on whole-image "
             "vectors a patch head was never fitted on. Those live in the scorers, not in the rule "
             "pinned here, so a change to either scorer trips the `progress.eval_geometry` mirror "
-            "below instead."
+            "below instead. The Goods minimum both pass the rule (#5477) is `min_good`, and each "
+            "side reads it from where its votes are: the app off the label history and each "
+            "vote's provenance (`labeling_progress.hard_ran_dry`: Autopilot's Boundary and "
+            "Diversity picks and spot-check votes count), the harness off its phase machine "
+            "(`AutopilotFlow.min_good_now`, `HARD_DRY_PHASES`). Both fold the votes through the "
+            "shared `stability.HardDryRun` and `stability.goods_minimum`, so the run cannot be "
+            "counted two ways; the harness also keeps `min_good` below 5 as an arm."
         ),
     ),
     Mirror(
@@ -562,7 +568,8 @@ MIRRORS: list[Mirror] = [
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
             "in rather than read from a `_ProgressCache`'s `steps`. That plumbing is "
-            "progress.step_stability's."
+            "progress.step_stability's. The Goods minimum (#5477) arrives as "
+            "progress.smart_status's does."
         ),
     ),
     Mirror(
@@ -936,6 +943,11 @@ MIRRORS: list[Mirror] = [
             "False is the arm before) and writes the centroid's row untagged there. "
             "The trained head it then fits starts from the typed query too (#4859): mirrored by "
             "training.typed_query_prior. "
+            "Past the quota a face detector from beta 1 with two Goods keeps the Goods' centroid, "
+            "cut by the face ball (#5478, labelset_heads.face_ball_tier on "
+            "centroid_head.face_ball_holds, read by cached_head_is_current too); the harness calls "
+            "the same face_ball_holds on its Good votes where its centroid line is FACE_BALL_RULE "
+            "and writes the centroid's row untagged there. "
             "If the app's tiers move - a new tier, a quota read from somewhere "
             "other than the counts, a tier that needs a Bad - the harness's rows have to move "
             "with them, and so do the notes that describe them (curves.py, viewer.py and its "

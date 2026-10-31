@@ -664,9 +664,18 @@ The run shows on the new dataset's Dashboard row while it works, and its
 calibrates and scores, and counts the labels and then the items it has
 scored, so it moves even when there is only one detector. When it finishes, a notice tells you how many hits
 it found; its **View Results** button opens the **Find Results**
-dialog, which lists every item each detector called Good (switch to
-**Bad** or **Both** to see the rest), copies the list to the clipboard,
-and **Export**s the listed rows to any exporter. A detector with too few
+dialog, which lists every item each detector called Good. The controls above
+the list change what it shows: **Good**, **Bad** or **Both**; **Sort by**
+**Score** (highest first, across every detector) or **Similarity**
+(look-alikes side by side, by a one-dimensional map of the whole dataset
+that VTSearch builds along with its Browse map, so a dataset you have not
+browsed yet takes a moment the first time); and **Columns**, a checkbox per
+column, including a **Thumbnail** of each item, whose size the two picture
+buttons set. Below the list, the tabs say where the listed rows go:
+**Clipboard** first, then each exporter, with whatever it needs filled in
+under its tab. **Export** sends the rows, in the ticked columns, to the open
+tab's destination, and **Export and Close** does the same and closes the
+dialog. A detector with too few
 labels for a trained one runs as its typed description, or as the Goods'
 centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
@@ -698,7 +707,7 @@ each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
 dialog is open announce themselves with a **View Results** notice
-instead, so none of them is lost. The dialog's **Browse** button opens
+instead, so none of them is lost. The **Browse** button under the list opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
 **&larr; Back to Find Results** there brings you back to the Dashboard with
@@ -860,7 +869,11 @@ The phase panel labels them, in order:
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
-   and "stable" indicators in the status bar both turn green). If you
+   and "stable" indicators in the status bar both turn green). The two
+   indicators need 5 goods and 5 bads before they judge anything, but a
+   target with fewer than 5 to find (one person's face, often) does not
+   wait forever: once **16 borderline picks in a row were not good**,
+   they judge the detector on the goods you have. If you
    started from a typed description on photos, the ranking behind the
    item stays the description's until your 30th vote: the detector asks
    the questions, but its matches only beat the description's from about

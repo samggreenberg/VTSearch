@@ -418,6 +418,15 @@ class ServerSettings(BaseModel):
     # soon as the previous push lands (after a 200 ms debounce).
     labelset_source_push_interval_seconds: Annotated[float, _clamp(0.0, 86400.0)] = 60.0
 
+    # Usage metrics (#5475). When True, the SPA's default metrics provider
+    # batches UI events (views opened, datasets imported, results exported,
+    # settings changed, tagged clicks) to ``POST /api/metrics``, which appends
+    # them to ``data/metrics/events-YYYY-MM.jsonl``; :mod:`vtsearch.metrics`
+    # owns the sink. False turns the sink off: the route records nothing, and
+    # the frontend stops sending once a response says so. Set by editing the
+    # settings file; surfaced read-only at ``GET /api/settings``.
+    enable_metrics: bool = True
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""
@@ -648,6 +657,10 @@ class UserSettings(BaseModel):
     # leaves the panels and the bin popup alone. Same plain per-media-type dict
     # as ``grid_icon_size_popup``; empty entries fall back on the frontend to ``M``.
     grid_icon_size_picker: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
+    # The Find Results list's thumbnail size, per media type (#5464): the
+    # thumbnail column's own size buttons, so sizing the results leaves every
+    # other grid alone. Same plain per-media-type dict; empty falls back to ``M``.
+    grid_icon_size_results: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     # VTSBrowse bin-popup detail-canvas size, per media type (CSS px). The popup
     # opens its hovered/representative item in a large square preview pane beside
     # the member grid; this is the user's chosen side for that pane, driven by the

@@ -1,9 +1,12 @@
-"""The 1-D similarity order the example picker lists a Face dataset in (#5465).
+"""The 1-D similarity order a list of a dataset's items sorts look-alikes together by.
 
 ``vtscore.projection.similarity_order``: the fit (UMAP-1, PCA-1 below the
 neighbour-graph floor, as-given below three points), the merge of an order
 with the live ids, the container entry, and the per-dataset lifecycle (memory,
-then container, then a fit that is cached and persisted).
+then container, then a fit that is cached and persisted).  A Face dataset's is
+fit on its own, for the example picker (#5465); every dataset's comes with its
+full Browse layout, and a list asking for one starts the fit that makes it
+(#5464).
 """
 
 from __future__ import annotations
@@ -14,10 +17,13 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.datasets.container import append_similarity_order, read_similarity_order
+from vtscore.projection import Projection, build_pyramid
+from vtscore.projection import service as svc
 from vtscore.projection import similarity_order as so
 from vtscore.projection.similarity_order import SimilarityOrder, fit_similarity_order, ordered_ids
-from vtscore.state.core import DatasetContext
+from vtscore.state.core import DatasetContext, register_context
 
 # One test below runs a real umap-learn fit, whose first call per process
 # numba-JIT-compiles UMAP's kernels; share the worker that already pays that
@@ -138,10 +144,18 @@ class TestLifecycle:
             assert so.similarity_order_for(fresh) == order
         assert fits == [6]
 
-    def test_other_media_types_keep_dataset_order(self, container):
+    def test_other_media_types_are_not_fit_on_their_own(self, container):
         ctx = _ctx(media_type="image")
         assert so.similarity_order_for(ctx) is None
         assert read_similarity_order(container) is None
+
+    def test_other_media_types_serve_a_stored_order(self, container):
+        """One their Browse layout brought with it (#5464)."""
+        append_similarity_order(container, [6, 5, 4, 3, 2, 1], "umap")
+        with patch.object(so, "fit_similarity_order") as fit:
+            order = so.similarity_order_for(_ctx(media_type="image"))
+        fit.assert_not_called()
+        assert order == SimilarityOrder([6, 5, 4, 3, 2, 1], "umap")
 
     def test_fit_false_reads_but_never_fits(self, container):
         ctx = _ctx()
@@ -228,3 +242,166 @@ class TestLoadStage:
         _build_similarity_order_stage(_ctx(media_type="image"), tracker)
         assert tracker.messages == []
         assert read_similarity_order(container) is None
+
+
+def _fake_layout_fit(matrix, ids, **kwargs):
+    """Cheap stand-in for the 2-D UMAP fit: a seeded random layout."""
+    coords = np.random.default_rng(len(ids)).standard_normal((len(ids), 2)).astype(np.float32)
+    return Projection("pid", list(ids), coords, "fake")
+
+
+def _reversed(matrix, ids, **kwargs):
+    return SimilarityOrder(list(reversed(ids)), "umap")
+
+
+def _no_signs():
+    """Signposting is best-effort decoration the order does not touch."""
+    return patch("vtscore.projection.service.prep_signposts_best_effort")
+
+
+def _install_layout(ctx: DatasetContext) -> None:
+    ids = sorted(ctx.medias)
+    proj = Projection("pid", ids, np.zeros((len(ids), 2), dtype=np.float32), "fake")
+    svc.install_layout(ctx, proj, build_pyramid(proj, bin_shape=svc.shape_for(ctx), n_levels=2))
+
+
+def _await_jobs() -> None:
+    """Block until the projection runner has nothing running or parked."""
+    for _ in range(600):
+        active = projection_jobs.active_jobs()
+        if not active:
+            return
+        active[0].done_event.wait(timeout=0.05)
+    raise TimeoutError("projection job did not finish")
+
+
+class TestWithTheLayout:
+    """Every full-dataset layout fit brings the order with it (#5464)."""
+
+    def _fit_layout(self, ctx: DatasetContext, *, subset: bool = False) -> None:
+        found = so._matrix_for(ctx)
+        assert found is not None
+        ids, matrix = found
+        with patch("vtscore.projection.fit_projection", side_effect=_fake_layout_fit), _no_signs():
+            svc.fit_and_install_layout(ctx, ids, matrix, svc.shape_for(ctx), subset=subset)
+
+    def test_a_full_layout_fit_fits_and_persists_the_order(self, container):
+        ctx = _ctx(media_type="image")
+        with patch.object(so, "fit_similarity_order", side_effect=_reversed):
+            self._fit_layout(ctx)
+        assert ctx._projection is not None
+        assert ctx._similarity_order == SimilarityOrder([6, 5, 4, 3, 2, 1], "umap")
+        assert read_similarity_order(container) == ([6, 5, 4, 3, 2, 1], "umap")
+
+    def test_a_subset_fit_leaves_the_order_alone(self, container):
+        ctx = _ctx(media_type="image")
+        with patch.object(so, "fit_similarity_order") as fit:
+            self._fit_layout(ctx, subset=True)
+        fit.assert_not_called()
+        assert ctx._similarity_order is None
+
+    def test_a_stored_order_is_kept_rather_than_refit(self, container):
+        append_similarity_order(container, [2, 4, 6, 1, 3, 5], "umap")
+        ctx = _ctx(media_type="image")
+        with patch.object(so, "fit_similarity_order") as fit:
+            self._fit_layout(ctx)
+        fit.assert_not_called()
+        assert ctx._similarity_order == SimilarityOrder([2, 4, 6, 1, 3, 5], "umap")
+
+    def test_a_failed_order_fit_leaves_the_layout_standing(self, container):
+        ctx = _ctx(media_type="image")
+        with patch.object(so, "fit_similarity_order", side_effect=RuntimeError("umap exploded")):
+            self._fit_layout(ctx)
+        assert ctx._pyramids
+        assert ctx._similarity_order is None
+
+
+class TestRequest:
+    """What a list sorting by similarity is told (#5464)."""
+
+    def _loaded(self, media_type: str = "image", n: int = 6) -> DatasetContext:
+        # Registered: a projection job whose dataset is not loaded fails unrun.
+        ctx = _ctx(n=n, media_type=media_type)
+        register_context(ctx)
+        return ctx
+
+    def test_a_stored_order_is_ready(self, container):
+        append_similarity_order(container, [6, 5, 4, 3, 2, 1], "umap")
+        answer = so.request_similarity_order(self._loaded())
+        assert answer == {"status": "ready", "order": SimilarityOrder([6, 5, 4, 3, 2, 1], "umap")}
+        assert projection_jobs.active_jobs() == []
+
+    def test_a_face_dataset_is_fit_on_the_spot(self, container):
+        with patch.object(so, "fit_similarity_order", side_effect=_reversed):
+            answer = so.request_similarity_order(self._loaded("face"))
+        assert answer["status"] == "ready"
+        assert answer["order"].ids == [6, 5, 4, 3, 2, 1]
+
+    def test_a_dataset_without_a_layout_builds_one_with_its_order(self, container):
+        ctx = self._loaded()
+        with (
+            patch("vtscore.projection.fit_projection", side_effect=_fake_layout_fit) as layout_fit,
+            patch.object(so, "fit_similarity_order", side_effect=_reversed),
+            _no_signs(),
+        ):
+            first = so.request_similarity_order(ctx)
+            assert first["status"] == "building"
+            assert first["job_id"] == ctx._full_job_id == ctx._order_job_id
+            _await_jobs()
+            ready = so.request_similarity_order(ctx)
+        assert layout_fit.call_count == 1
+        assert ctx._projection is not None
+        assert ready["status"] == "ready" and ready["order"].ids == [6, 5, 4, 3, 2, 1]
+
+    def test_a_layout_without_an_order_fits_the_order_alone(self, container):
+        ctx = self._loaded()
+        _install_layout(ctx)
+        with (
+            patch("vtscore.projection.fit_projection") as layout_fit,
+            patch.object(so, "fit_similarity_order", side_effect=_reversed),
+        ):
+            first = so.request_similarity_order(ctx)
+            assert first["status"] == "building"
+            job = projection_jobs.get(first["job_id"])
+            assert job is not None and job.signature[1] == "similarity_order"
+            _await_jobs()
+            ready = so.request_similarity_order(ctx)
+        layout_fit.assert_not_called()
+        assert ready["status"] == "ready" and ready["order"].ids == [6, 5, 4, 3, 2, 1]
+
+    def test_an_ask_while_the_fit_runs_reports_it_rather_than_starting_another(self, container):
+        ctx = self._loaded()
+        _install_layout(ctx)
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_fit(matrix, ids, **kwargs):
+            started.set()
+            release.wait(timeout=10)
+            return _reversed(matrix, ids)
+
+        with patch.object(so, "fit_similarity_order", side_effect=slow_fit):
+            first = so.request_similarity_order(ctx)
+            assert started.wait(timeout=10)
+            again = so.request_similarity_order(ctx)
+            release.set()
+            _await_jobs()
+        assert again["status"] == "building" and again["job_id"] == first["job_id"]
+
+    def test_a_failed_fit_is_reported_once_and_the_next_ask_starts_over(self, container):
+        ctx = self._loaded()
+        _install_layout(ctx)
+        with patch.object(so, "fit_similarity_order", side_effect=RuntimeError("umap exploded")):
+            first = so.request_similarity_order(ctx)
+            _await_jobs()
+            failed = so.request_similarity_order(ctx)
+            retried = so.request_similarity_order(ctx)
+            _await_jobs()
+        assert failed == {"status": "error", "error": "umap exploded"}
+        assert retried["status"] == "building" and retried["job_id"] != first["job_id"]
+
+    def test_a_dataset_without_vectors_has_nothing_to_order(self, container):
+        ctx = self._loaded()
+        ctx.medias[2]["embeddings"] = {}
+        with pytest.raises(svc.NothingToProject):
+            so.request_similarity_order(ctx)

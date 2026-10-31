@@ -211,6 +211,9 @@ class DatasetContext:
         # the container or fit.  Ids only, no vectors; checked against the live
         # id set on every read (vtscore.projection.similarity_order).
         "_similarity_order",
+        # The in-flight fit a Find Results list's Similarity sort is waiting
+        # on (#5464): the full layout build, or an order-only fit.
+        "_order_job_id",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/ARCHITECTURE.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -297,8 +300,9 @@ class DatasetContext:
             }
         ),
         # The 1-D similarity order; persisted beside the dataset, so dropping
-        # it costs a container read, not a re-fit.
-        "order": frozenset({"_similarity_order"}),
+        # it costs a container read, not a re-fit.  With it, the id of the fit
+        # a Similarity sort is waiting on, which would otherwise outlive it.
+        "order": frozenset({"_similarity_order", "_order_job_id"}),
     }
 
     #: Slots that are state, not cache - never touched by
@@ -371,6 +375,7 @@ class DatasetContext:
         # is otherwise cached ``immutable``).  Reset to 0 on a fresh subset fit.
         self._subset_content_version: int = 0
         self._similarity_order: Any = None  # SimilarityOrder | None (#5465)
+        self._order_job_id: str | None = None  # fit a Similarity sort waits on (#5464)
         # Role-typed embedder binding (see __slots__ comment).  ``None``
         # until either explicitly bound or derived from the medias.
         self._text_embedder: str | None = None
@@ -490,6 +495,7 @@ class DatasetContext:
                 self._subset_region_labels = None
             if order:
                 self._similarity_order = None
+                self._order_job_id = None
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding
