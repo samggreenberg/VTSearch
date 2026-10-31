@@ -528,7 +528,7 @@ class TestTheFaceRule:
     def test_each_media_type_gets_its_rule(self):
         from vtscore.detectors.centroid_head import centroid_line_rule
 
-        assert centroid_line_rule("face") == "count_gap_floor_skip25_b1_z5.5"
+        assert centroid_line_rule("face") == "face_ball"
         assert centroid_line_rule("face") in CENTROID_LINE_RULES
         for other in ("image", "video", "", None):
             assert centroid_line_rule(other) == CENTROID_LINE_RULE
@@ -539,7 +539,7 @@ class TestTheFaceRule:
         from vtscore.eval.voting_iterations import production_centroid_line, simulate_voting_iterations
 
         assert inspect.signature(simulate_voting_iterations).parameters["centroid_line"].default is None
-        assert production_centroid_line({1: {"media_type": "face"}}) == "count_gap_floor_skip25_b1_z5.5"
+        assert production_centroid_line({1: {"media_type": "face"}}) == "face_ball"
         assert production_centroid_line({1: {"media_type": "image"}}) == CENTROID_LINE_RULE
         assert production_centroid_line({1: {}}) == CENTROID_LINE_RULE
         assert production_centroid_line({}) == CENTROID_LINE_RULE

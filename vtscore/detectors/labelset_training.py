@@ -47,6 +47,7 @@ from vtscore.detectors.labelset_heads import (
     Haystack,
     _centroid_beta,
     _query_tier,
+    face_ball_tier,
     _unvoted_mask,
     install_centroid_head,
     install_query_head,
@@ -78,6 +79,11 @@ __all__ = [
     "populate_label_local_features",
     "train_from_labelset",
 ]
+
+
+def _n_goods(y_list: list[float]) -> int:
+    """The Goods among the resolved labels (#5478's ball needs two)."""
+    return sum(1 for y in y_list if y == 1.0)
 
 
 def train_from_labelset(
@@ -132,7 +138,9 @@ def train_from_labelset(
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
     from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, quota_from_groups
 
-    tier = quota_from_groups(groups).tier
+    quota_tier = quota_from_groups(groups).tier
+    # The face crops' ball holds past the quota from beta 1 up (#5478); a typed query reads the quota's own tier.
+    tier = face_ball_tier(quota_tier, media_type or det_ctx.media_type, _centroid_beta(det_ctx), _n_goods(y_list))
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
@@ -143,7 +151,7 @@ def train_from_labelset(
     if haystack is not None:
         labels = {hid: labels[src] for hid, src in haystack.to_source.items() if src in labels}
     labelled = set(labels)
-    if text_query and _query_tier(tier, labelset, det_ctx.embedder):
+    if text_query and _query_tier(quota_tier, labelset, det_ctx.embedder):
         if (
             install_query_head(
                 det_ctx, text_query, hay, labelset, media_type=media_type, beta=_centroid_beta(det_ctx), voted=labelled
@@ -277,9 +285,10 @@ def labelset_train_and_score(
         from vtscore.detectors.label_quota import TIER_CENTROID, TIER_NONE, quota_from_groups
         from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
 
-        tier = quota_from_groups(groups).tier
+        quota_tier = quota_from_groups(groups).tier
+        tier = face_ball_tier(quota_tier, media_type or det_ctx.media_type, beta, _n_goods(y_list))
         labelled = set(labeled_media_labels(labelset, clips_dict))
-        if text_query and _query_tier(tier, labelset, det_ctx.embedder):
+        if text_query and _query_tier(quota_tier, labelset, det_ctx.embedder):
             installed = install_query_head(
                 det_ctx, text_query, clips_dict, labelset, media_type=media_type, beta=beta, voted=labelled
             )

@@ -46,6 +46,24 @@ def _centroid_beta(det_ctx) -> float | None:
     return detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
 
 
+def face_ball_tier(tier: str, media_type: str | None, beta: float | None, n_goods: int) -> str:
+    """*tier*, or the Goods' centroid where the face crops' ball holds past the quota (#5478).
+
+    On face crops, from a balance of 1 up and with two Goods or more, Find and
+    Test give the Goods' centroid cut by the ball
+    (:data:`~vtscore.detectors.centroid_head.FACE_BALL_RULE`) in place of the
+    trained head: on FHIBE it gained +0.010 to +0.019 F-beta over a session.
+    The Train view's learned sort, and so what Autopilot asks, is still the
+    trained head.  Every other tier, media type and balance is *tier*.
+    """
+    from vtscore.detectors.centroid_head import FACE_BALL_RULE, centroid_line_rule, face_ball_holds
+    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED
+
+    if tier == TIER_TRAINED and centroid_line_rule(media_type) == FACE_BALL_RULE and face_ball_holds(beta, n_goods):
+        return TIER_CENTROID
+    return tier
+
+
 def _unvoted_mask(rows: Any, labelled: set[int]) -> list[bool] | None:
     """One flag per scored media in *rows*: whether it is not among the *labelled* (#4779)."""
     if rows is None:
