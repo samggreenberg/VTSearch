@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
@@ -7,8 +8,12 @@ import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
 import { SettingsPanelService } from './services/settings-panel.service';
+import { MetricsService } from './services/metrics.service';
 import { provideZoneless } from './testing/zoneless-testbed';
 import { provideHttpTesting } from './testing/test-providers';
+
+@Component({ template: '' })
+class BlankRouteComponent {}
 
 describe('AppComponent', () => {
   beforeEach(async () => {
@@ -175,6 +180,18 @@ describe('AppComponent', () => {
     fixture.componentInstance.onDashboard();
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
     expect(fixture.componentInstance.menuOpen).toBe(false);
+  });
+
+  it('logs a view metrics event per distinct view, naming the /label route "train"', async () => {
+    TestBed.createComponent(AppComponent);
+    const logEvent = vi.spyOn(TestBed.inject(MetricsService), 'logEvent').mockImplementation(() => {});
+    const router = TestBed.inject(Router);
+    router.resetConfig([{ path: '**', component: BlankRouteComponent }]);
+    for (const url of ['/browse/ds1', '/browse/ds2?zoom=2', '/label/ds1/det1', '/tune/ds1/det1', '/dashboard']) {
+      await router.navigateByUrl(url);
+    }
+    const views = logEvent.mock.calls.map(([e]) => e).filter((e) => e.group === 'view');
+    expect(views.map((e) => e.attributes?.['view'])).toEqual(['browse', 'train', 'tune', 'dashboard']);
   });
 
   it('should close menu on Escape keydown', () => {

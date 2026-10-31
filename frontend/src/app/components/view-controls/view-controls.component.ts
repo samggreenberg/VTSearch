@@ -26,7 +26,7 @@ function coerceIconSize(raw: unknown): IconSize | undefined {
 export class ViewControlsComponent implements OnInit, OnChanges {
   private settingsState = inject(SettingsStateService);
 
-  readonly side = input<'left' | 'right' | 'popup' | 'picker'>('left');
+  readonly side = input<'left' | 'right' | 'popup' | 'picker' | 'results'>('left');
   readonly currentMediaType = input('');
   /**
    * Whether to show the click/hover focus toggle. The VTSBrowse selection

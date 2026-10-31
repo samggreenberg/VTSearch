@@ -123,7 +123,7 @@ Eight emojis mark what the user scans a message for. Each goes **in front of** t
 | 🟢 | a test verdict | the last `./run-tests.sh` on this tree printed a `RUN PASSED` banner other than `RUN PASSED, EXCEPT …` |
 | 🟡 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN PASSED, EXCEPT …` |
 | 🔴 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN FAILED` or `TESTS BLOCKED` |
-| 🔀 | the news that a PR merged into `dev` | GitHub reports it merged |
+| 🔀 | the news that you merged a PR into `dev` | this session merged it, and GitHub reports the merge |
 
 ```markdown
 🔧 [#4215](https://github.com/samggreenberg/VTSearch/issues/4215) fixes 🎫 [#4210](https://github.com/samggreenberg/VTSearch/issues/4210). 🟢 Full run passed. ⏱️ ~5 min until the eval finishes.
@@ -131,7 +131,7 @@ Eight emojis mark what the user scans a message for. Each goes **in front of** t
 
 - **🎫 and 🔧: mark only what you already know.** The type is known when this session opened the item, read it, or ran a lookup that returned it. Otherwise leave the emoji off; never make a GitHub call just to pick one. An unmarked link only means its type wasn't checked. The emoji sits outside the link, so the link text stays `#N`.
 - **⚪ opens a run; 🟢, 🟡 or 🔴 closes it, read off the verdict banner rather than judged.** 🟢 means a complete gate passed: the full run, or a `slides`, `docs`, markdown-only or frontend-only run, each complete for its scope. 🟡 is a group run's `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN`: everything that ran passed, but it is not the full gate. A bare pytest or Vitest invocation is not a `./run-tests.sh` run and gets none of the four. An edit after the run voids its emoji until you run again.
-- **🔀 means merged, not opened.** An open PR is 🔧; 🔀 goes on only once GitHub shows the merge, whether you merged it or found it merged.
+- **🔀 means you merged it.** It marks one thing: this session merging a PR into `dev`, once GitHub shows the merge. Someone else's merge never gets it, even when it is news to the user, and neither does a merge you only found (in `dev`'s history, say, or while explaining where a change came from); those PRs keep their 🔧. An open PR is 🔧 too.
 - **⏱️ is for the future only.** "The run took 8 min" gets none.
 - **Reserved.** Never use these eight for anything else (no decorative 🟢 in a table, no 🔧 meaning "fix"), or scanning for them stops working.
 

@@ -22,6 +22,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
+  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
+  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
+  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
+  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
+  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
+  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+
 - **An import alert can say what the import left out** (issue #5449). The event a server's
   `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
   items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
@@ -56,6 +64,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   42-54 instead of ~130, with the same F-beta at Done (within 0.003); on COCO photos Done comes about 3 votes
   sooner at 0.001-0.004 lower F-beta
   ([report](docs/experiments/2026-10-30-min-goods-5477/REPORT.md)).
+
+- **Find Results is laid out by what each control does** (issue #5464). What changes the list sits above it:
+  Good / Bad / Both, a new **Sort by** Score or **Similarity** (look-alikes side by side, by a 1-D UMAP of the whole
+  dataset that is now fit and saved with its Browse map), and the same **Columns** checkboxes the Export dialog has,
+  which decide what the list shows, what is copied and what is exported. The list can show a **Thumbnail** of each
+  item, sized by its own smaller / bigger buttons and loaded as you scroll. **Browse** sits under the list; the
+  destinations are tabs, **Clipboard** first and opening by default, in place of the unlabelled exporter pulldown;
+  and the footer is **Close**, **Export** and **Export and Close**. The Media Type in its summary carries its
+  icon, as on the Dashboard.
 
 - **Autopilot skips its Explore Diversity step by default** (issue #5473). The **Goal diversity** setting
   (`autopilot_goal_diversity`) now defaults to 0, which skips the step: Done waits on the Smart and Stable lights
