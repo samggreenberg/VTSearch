@@ -151,6 +151,7 @@ def main() -> int:
         ov.to_csv(out / "gdino_5395_overlap.csv", index=False)
 
     _figure(s0, ["siglip", *detectors, "region_mp@150", "region_hac@150"], out)
+    _scatter(pc, out)
     (out / "gdino_5395_counts.json").write_text(
         json.dumps(
             {
@@ -179,18 +180,19 @@ def _figure(s0, arms, out: Path) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    cmap = plt.get_cmap("tab20")
+    colors = _colors(arms)
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.2))
     for ax, metric in zip(axes, ("AP", "F_native")):
-        shown = [a for a in arms if len(s0[(s0["arm"] == a) & s0[metric].notna()])] if metric in s0 else []
-        w = 0.85 / max(len(shown), 1)
-        for i, arm in enumerate(shown):
+        w = 0.85 / len(arms)
+        for i, arm in enumerate(arms):
+            if not s0.loc[s0["arm"] == arm, metric].notna().any():
+                continue  # no native cut (SigLIP, Region): its slot stays empty, so the panels line up
             ys, es = [], []
             for band in BANDS:
                 row = s0[(s0["group"] == band) & (s0["arm"] == arm)]
                 ys.append(float(row[metric].iloc[0]) if len(row) else np.nan)
                 es.append(2 * float(row[f"{metric}_se"].iloc[0]) if len(row) else 0)
-            ax.bar(np.arange(len(BANDS)) + i * w, ys, w, yerr=es, color=cmap(i), label=arm, capsize=2)
+            ax.bar(np.arange(len(BANDS)) + i * w, ys, w, yerr=es, color=colors[arm], label=arm, capsize=2)
         ax.set_xticks(np.arange(len(BANDS)) + 0.425 - w / 2, BANDS)
         ax.set_title({"AP": "AP on the withheld half", "F_native": "F1 at the detector's own cut"}[metric])
         ax.set_ylim(0, 1)
@@ -201,6 +203,52 @@ def _figure(s0, arms, out: Path) -> None:
     )
     fig.tight_layout(rect=(0, 0.12, 1, 1))
     fig.savefig(out / "gdino_5395_bands.png", dpi=130)
+    plt.close(fig)
+
+
+def _colors(arms) -> dict:
+    """One hue per model, dark for the noun prompt and light for the typed one (tab20's pairs)."""
+    import matplotlib.pyplot as plt
+
+    cmap = plt.get_cmap("tab20")
+    hue = {"siglip": 14, "sam3": 0, "gdino_tiny": 2, "gdino_mmt": 4, "gdino_mml": 6, "region_mp": 10, "region_hac": 11}
+    out = {}
+    for arm in arms:
+        base = arm.split("@")[0]
+        if base.endswith(("_typed", "_noun")):
+            stem, _, kind = base.rpartition("_")
+            out[arm] = cmap(hue[stem] + (kind == "typed"))
+        else:
+            out[arm] = cmap(hue[base])
+    return out
+
+
+def _scatter(pc, out: Path) -> None:
+    """Per class: each GroundingDINO checkpoint's noun-prompt AP against SAM3's."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    arms = [a for a in ("gdino_tiny_noun", "gdino_mmt_noun", "gdino_mml_noun") if a in pc]
+    if "sam3_noun" not in pc or not arms:
+        return
+    fig, axes = plt.subplots(1, len(arms), figsize=(4.2 * len(arms), 4.2), sharey=True)
+    for ax, arm in zip(np.atleast_1d(axes), arms):
+        x, y = pc["sam3_noun"], pc[arm]
+        ax.plot([0, 1], [0, 1], color="0.7", lw=1)
+        ax.scatter(x, y, s=14, color=_colors([arm])[arm])
+        d = (y - x).sort_values()
+        for c in [*d.index[:3], *d.index[-2:]]:
+            ax.annotate(c, (x[c], y[c]), fontsize=7, xytext=(3, -3), textcoords="offset points")
+        ax.set_title(f"{arm}: {d.mean():+.2f} mean, ahead in {(d > 0).sum()} of {len(d)}", fontsize=9)
+        ax.set_xlabel("SAM3 noun AP")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+    np.atleast_1d(axes)[0].set_ylabel("GroundingDINO noun AP")
+    fig.suptitle("Per class, mean over the class's cells and 3 seeds", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out / "gdino_5395_per_class.png", dpi=130)
     plt.close(fig)
 
 

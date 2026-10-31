@@ -1,0 +1,63 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-31-gdino-5395.5b41ed882c21.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/gdino_5395_counts.json": {
+     "bytes": 229,
+     "oid": "a8e8ba99f3f4e9091f3d136fb073ebf41fc504d5"
+    },
+    "tables/gdino_5395_crossover.csv": {
+     "bytes": 1690,
+     "oid": "71ef8af5ca81dfb23a8e27ccc6f288abc8c77861"
+    },
+    "tables/gdino_5395_mml_precision_ap.csv": {
+     "bytes": 21109,
+     "oid": "a9d95dd285735e41513837c2561d620ed1e66c1b"
+    },
+    "tables/gdino_5395_mode_ap.csv": {
+     "bytes": 32185,
+     "oid": "3c76dab4b7f7ba2e9cd2f7269b8dd33d8e924939"
+    },
+    "tables/gdino_5395_noart_ap.csv": {
+     "bytes": 18284,
+     "oid": "feaf3b2ba442b553e999c44cdc0f0676eef6959a"
+    },
+    "tables/gdino_5395_overlap.csv": {
+     "bytes": 1185,
+     "oid": "42dbc760b59f25fafa1d57a9dfe5d00224e5c6c3"
+    },
+    "tables/gdino_5395_paired.csv": {
+     "bytes": 6417,
+     "oid": "f6dce961f22c5a19c44b15c59362763f97064d21"
+    },
+    "tables/gdino_5395_per_cell.csv": {
+     "bytes": 562353,
+     "oid": "89bfc431ead14f698d7f4649086d794f29829535"
+    },
+    "tables/gdino_5395_per_class_AP.csv": {
+     "bytes": 8741,
+     "oid": "ea732c258523f342265c8d5d2e3930ee84f8e361"
+    },
+    "tables/gdino_5395_small_probe.csv": {
+     "bytes": 33376,
+     "oid": "e7e9b5572e63d4573620458be14d69cc3901f527"
+    },
+    "tables/gdino_5395_summary.csv": {
+     "bytes": 11640,
+     "oid": "1117c71d7f7976690b158b641be9176134f05fca"
+    },
+    "tables/gdino_5395_summary_seed0.csv": {
+     "bytes": 11579,
+     "oid": "f30d7b1d03510ef077057206defae09ff12024e6"
+    },
+    "tables/gdino_5395_tokenmean_ap.csv": {
+     "bytes": 22011,
+     "oid": "2047c63bab4a45cdfc38059101ab0819a004c83b"
+    }
+   }
+  }
+ ]
+}

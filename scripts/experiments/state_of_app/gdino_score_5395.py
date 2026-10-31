@@ -8,8 +8,9 @@ it grades SAM3's.
 An image's score for a prompt is its best detection: max over GroundingDINO's object queries of the sigmoid logit,
 averaged over the prompt's own tokens (the phrase, not [CLS], [SEP] or the closing period). That is the original
 repo's COCO evaluation (``prob @ positive_map.T`` with each row of the map normalised to sum 1). The max over the
-phrase's tokens is kept too (``top1max``), but it is not a usable score: "a" is a token of every typed prompt, it
-matches any object, and under the max it outranks the noun (typed AP 0.19 against 0.64 for the noun alone, #5395).
+phrase's tokens is kept too (``top1max``); on #5395's labelled subset the two rank alike (AP within 0.015), and
+leaving "a"/"an"/"the" out of the mean changes AP by under 0.003. GroundingDINO's collapse on the typed prompts
+("a frisbee" AP 0.07 against "frisbee" 0.92) is the article in the caption, not the scoring.
 
 Prompts are packed into period-separated captions of up to ``--chunk-tokens`` tokens, GroundingDINO's own COCO
 protocol: its text self-attention is masked to each phrase (``generate_masks_with_special_tokens``), so a phrase's
@@ -24,7 +25,7 @@ Run on a GPU node with HF_HOME on node scratch. Checkpoints (transformers ports)
 
 - ``IDEA-Research/grounding-dino-tiny``: Swin-T on O365 + GoldG + Cap4M, no COCO (48.4 zero-shot COCO AP);
 - ``openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det``: MM-GDINO-T, no COCO (50.4);
-- ``openmmlab-community/mm_grounding_dino_large_o365v2_oiv6_goldg``: MM-GDINO-L, no COCO.
+- ``openmmlab-community/mm_grounding_dino_large_o365v2_oiv6_goldg``: MM-GDINO-L, no COCO (53.0).
 
 ``IDEA-Research/grounding-dino-base`` and the ``*_all`` MM checkpoints trained on COCO, whose train2017 is this pool.
 """

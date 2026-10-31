@@ -9,6 +9,8 @@
 #   gdino_5395.sh score MODEL [NSHARDS]  every image of the grid's pool, as an array of NSHARDS (default 12) shards
 #   gdino_5395.sh baseline MODEL         text_baseline.py --sam3 on its scores, both prompt sets -> <root>/gdino_MODEL_*.csv
 #   gdino_5395.sh overlap MODEL          #5240's split: both sets graded on in-VG / not-in-VG images -> <root>/overlap
+#   gdino_5395.sh probe                  small airplanes and kites through transformers' own one-prompt path, every
+#                                        model, shortest edge 800 and 1200 -> <root>/small_probe.csv (one V100, ~8 min)
 #
 # MODEL is a tag: tiny (IDEA-Research/grounding-dino-tiny, the original), mmt (MM-GDINO-T o365v1_goldg_v3det), mml
 # (MM-GDINO-L o365v2_oiv6_goldg). All three train without COCO; the pool is COCO train2017.
@@ -44,7 +46,7 @@ EOF
 }
 
 score_cmd() {  # MODEL OUT SHARD NSHARDS DTYPE [LIMIT [EXTRA]]
-  echo "python gdino_score_5395.py --results $GRID/results --out $2 --model $(model_of "$1") --shard $3 --nshards $4 --dtype $5${6:+ --limit $6}${7:+ $7}"
+  echo "python $HERE/gdino_score_5395.py --results $GRID/results --out $2 --model $(model_of "$1") --shard $3 --nshards $4 --dtype $5${6:+ --limit $6}${7:+ $7}"
 }
 
 case "${1:-}" in
@@ -107,8 +109,18 @@ overlap)
   sbatch --parsable -p cpu -c 4 --mem 32G -t 3:00:00 -J "gdino-overlap-$m" -o "$ROOT/logs/overlap-$m-%j.out" \
     "$ROOT/overlap-$m.sh"
   ;;
+probe)
+  {
+    echo '#!/bin/bash'
+    echo 'set -euo pipefail'
+    env_lines
+    echo "python $HERE/gdino_small_probe_5395.py --out $ROOT/small_probe.csv"
+  } >"$ROOT/probe.sh"
+  sbatch --parsable ${GDINO_SBATCH:-} -p gpu --gres=gpu:v100:1 -c 8 --mem 48G -t 1:00:00 -J gdino-probe \
+    -o "$ROOT/logs/probe-%j.out" "$ROOT/probe.sh"
+  ;;
 *)
-  sed -n '2,17p' "$0"
+  sed -n '2,19p' "$0"
   exit 2
   ;;
 esac
