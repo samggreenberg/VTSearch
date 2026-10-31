@@ -473,7 +473,13 @@ MIRRORS: list[Mirror] = [
             "through `score_sim_set_with_model` on the arm's style - rather than on whole-image "
             "vectors a patch head was never fitted on. Those live in the scorers, not in the rule "
             "pinned here, so a change to either scorer trips the `progress.eval_geometry` mirror "
-            "below instead."
+            "below instead. The Goods minimum both pass the rule (#5477) is `min_good`, and each "
+            "side reads it from where its votes are: the app off the label history and each "
+            "vote's provenance (`labeling_progress.hard_ran_dry`: Autopilot's Boundary and "
+            "Diversity picks and spot-check votes count), the harness off its phase machine "
+            "(`AutopilotFlow.min_good_now`, `HARD_DRY_PHASES`). Both fold the votes through the "
+            "shared `stability.HardDryRun` and `stability.goods_minimum`, so the run cannot be "
+            "counted two ways; the harness also keeps `min_good` below 5 as an arm."
         ),
     ),
     Mirror(
@@ -562,7 +568,8 @@ MIRRORS: list[Mirror] = [
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
             "in rather than read from a `_ProgressCache`'s `steps`. That plumbing is "
-            "progress.step_stability's."
+            "progress.step_stability's. The Goods minimum (#5477) arrives as "
+            "progress.smart_status's does."
         ),
     ),
     Mirror(

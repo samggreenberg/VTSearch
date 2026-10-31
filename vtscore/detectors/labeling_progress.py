@@ -73,6 +73,7 @@ import threading
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -86,7 +87,13 @@ from vtscore.detectors.cost_trend import (
     rising_status_from_scores,
     smart_beta,
 )
-from vtscore.detectors.stability import ScoredSnapshot, stability_entry, stable_status_from_entries
+from vtscore.detectors.stability import (
+    HardDryRun,
+    ScoredSnapshot,
+    goods_minimum,
+    stability_entry,
+    stable_status_from_entries,
+)
 from vtscore.embedding.media_vectors import media_embedding
 
 if TYPE_CHECKING:
@@ -1055,7 +1062,12 @@ def calculate_prediction_stability_over_time(
 
 
 def _smart_memo_key(
-    cache: _ProgressCache, model_steps: list[int], good: int, bad: int, beta: Optional[float] = None
+    cache: _ProgressCache,
+    model_steps: list[int],
+    good: int,
+    bad: int,
+    beta: Optional[float] = None,
+    min_good: int = MIN_PER_CLASS,
 ) -> Any:
     """Everything :func:`_compute_smart_status` reads, as a comparable key.
 
@@ -1066,7 +1078,7 @@ def _smart_memo_key(
     memo too.  The balance is in it (#5134): every point is an F-beta at the
     session's beta, so moving the balance re-reads the window.
     """
-    return (len(cache.steps), tuple(model_steps[-_SMART_WINDOW_MODELS:]), good, bad, smart_beta(beta))
+    return (len(cache.steps), tuple(model_steps[-_SMART_WINDOW_MODELS:]), good, bad, smart_beta(beta), min_good)
 
 
 def _smart_status_memoized(
@@ -1074,6 +1086,7 @@ def _smart_status_memoized(
     good: int,
     bad: int,
     beta: Optional[float] = None,
+    min_good: int = MIN_PER_CLASS,
 ) -> Optional[dict[str, Any]]:
     """The memoised Smart status when it still describes *cache*, else ``None``.
 
@@ -1086,7 +1099,7 @@ def _smart_status_memoized(
     """
     if cache.smart_memo is None:
         return None
-    key = _smart_memo_key(cache, _model_step_indices(cache), good, bad, beta)
+    key = _smart_memo_key(cache, _model_step_indices(cache), good, bad, beta, min_good)
     if cache.smart_memo[0] != key:
         return None
     return dict(cache.smart_memo[1])
@@ -1098,6 +1111,7 @@ def _compute_smart_status(
     good: int,
     bad: int,
     beta: Optional[float] = None,
+    min_good: int = MIN_PER_CLASS,
 ) -> dict[str, Any]:
     """Compute Smart (has F-beta stopped rising?) red/yellow/green status, at the session's *beta*.
 
@@ -1110,11 +1124,11 @@ def _compute_smart_status(
     the answer cannot have changed.
     """
     model_steps = _model_step_indices(cache)
-    memo_key = _smart_memo_key(cache, model_steps, good, bad, beta)
+    memo_key = _smart_memo_key(cache, model_steps, good, bad, beta, min_good)
     if cache.smart_memo is not None and cache.smart_memo[0] == memo_key:
         return dict(cache.smart_memo[1])
 
-    status = _smart_status_uncached(cache, model_steps, eval_set, good, bad, beta)
+    status = _smart_status_uncached(cache, model_steps, eval_set, good, bad, beta, min_good)
     cache.smart_memo = (memo_key, dict(status))
     return status
 
@@ -1126,6 +1140,7 @@ def _smart_status_uncached(
     good: int,
     bad: int,
     beta: Optional[float] = None,
+    min_good: int = MIN_PER_CLASS,
 ) -> dict[str, Any]:
     """The body of :func:`_compute_smart_status`, before memoisation.
 
@@ -1134,8 +1149,8 @@ def _smart_status_uncached(
     :func:`vtscore.detectors.cost_trend.rising_status_from_scores`, which the
     eval harness calls too, so the pair cannot drift (issues #3832, #5134).
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return rising_status_from_scores([], good, bad)
+    if good < min_good or bad < MIN_PER_CLASS:
+        return rising_status_from_scores([], good, bad, min_good=min_good)
 
     if len(model_steps) < SMART_MIN_POINTS:
         return {
@@ -1144,7 +1159,46 @@ def _smart_status_uncached(
         }
 
     recent_entries = _eval_cached_models(cache, eval_set, model_steps[-_SMART_WINDOW_MODELS:], beta)
-    return rising_status_from_scores([e["fbeta"] for e in recent_entries], good, bad)
+    return rising_status_from_scores([e["fbeta"] for e in recent_entries], good, bad, min_good=min_good)
+
+
+#: The votes past the opening that count toward #5477's dry run: Autopilot's
+#: Boundary and Diversity picks (the phases the eval harness calls
+#: ``HARD_DRY_PHASES``) and a spot check's.  A vote cast by hand, in the opening,
+#: or past Done (recorded as list review) is no evidence the learned sort has
+#: run out of Goods.
+_HARD_DRY_AUTOPILOT_PHASES = frozenset({"hard", "new"})
+
+
+def _past_opening(provenance: Optional[Mapping[str, Any]]) -> bool:
+    """Whether a vote with this surfacing *provenance* counts toward the dry run (#5477)."""
+    if not provenance:
+        return False
+    flow = provenance.get("flow")
+    return flow == "check" or (flow == "autopilot" and provenance.get("phase") in _HARD_DRY_AUTOPILOT_PHASES)
+
+
+def hard_ran_dry(
+    label_history: Sequence[tuple[int, str, float]],
+    vote_provenance: Optional[Mapping[int, Mapping[str, Any]]],
+) -> bool:
+    """Whether #5477's dry run has run its course in this *label_history*.
+
+    Walks the history in order through :class:`~vtscore.detectors.stability.HardDryRun`,
+    the rule the eval harness's phase machine feeds too: any Good resets the
+    run, and a Bad counts when its vote (by *vote_provenance*, each media's
+    latest) was past the opening.  :data:`~vtscore.detectors.stability.HARD_DRY_RUN`
+    in a row latches it.  Without provenance nothing counts.
+    """
+    if not vote_provenance:
+        return False
+    run = HardDryRun()
+    for event in label_history:
+        media_id, label = event[0], event[1]
+        run.note(label, _past_opening(vote_provenance.get(media_id)))
+        if run.dry:
+            return True
+    return False
 
 
 def _compute_stable_status(
@@ -1152,6 +1206,7 @@ def _compute_stable_status(
     good: int,
     bad: int,
     total: int,
+    min_good: int = MIN_PER_CLASS,
 ) -> dict[str, Any]:
     """Compute Stable (prediction-flip) red/yellow/green status.
 
@@ -1161,7 +1216,7 @@ def _compute_stable_status(
     test) so the eval harness cannot drift from it.
     """
     stability = [step["stability"] for step in cache.steps if step["stability"] is not None]
-    return stable_status_from_entries(stability, good, bad)
+    return stable_status_from_entries(stability, good, bad, min_good=min_good)
 
 
 def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -1237,6 +1292,7 @@ def compute_labeling_status(
     inclusion_value: Optional[int] = None,
     span_info: Optional[dict[str, Any]] = None,
     beta: Optional[float] = None,
+    vote_provenance: Optional[Mapping[int, Mapping[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Compute per-metric red/yellow/green labeling statuses.
 
@@ -1252,11 +1308,19 @@ def compute_labeling_status(
     calls this to advance the cache off the request thread (issue #2397).
     *beta* is the session's balance, the F-beta Smart reads (#5134; F1 with
     none).  *inclusion_value* is deprecated and ignored (#4361).
+
+    *vote_provenance* (each voted media's surfacing record) lets Smart and
+    Stable read #5477's dry run: once :data:`~vtscore.detectors.stability.HARD_DRY_RUN`
+    votes in a row past the opening held no Good (:func:`hard_ran_dry`), they
+    need only the Goods in hand rather than
+    :data:`~vtscore.detectors.stability.MIN_PER_CLASS`.  Without it they always
+    need :data:`MIN_PER_CLASS`.
     """
     _ignored_inclusion("compute_labeling_status", inclusion_value)
     good = len(current_good_votes)
     bad = len(current_bad_votes)
     total = good + bad
+    min_good = goods_minimum(good, hard_ran_dry(label_history, vote_provenance))
 
     cache = _advance_cache(clips_dict, label_history)
 
@@ -1267,13 +1331,13 @@ def compute_labeling_status(
     # order of magnitude - nor below the 5g/5b quorum, where the status is red
     # without looking at a model.
     with _progress_lock:
-        memo = _smart_status_memoized(cache, good, bad, beta)
-    needs_eval = memo is None and good >= 5 and bad >= 5
+        memo = _smart_status_memoized(cache, good, bad, beta, min_good)
+    needs_eval = memo is None and good >= min_good and bad >= MIN_PER_CLASS
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes) if needs_eval else None
 
     with _progress_lock:
-        smart = memo if memo is not None else _compute_smart_status(cache, eval_set, good, bad, beta)
-        stable = _compute_stable_status(cache, good, bad, total)
+        smart = memo if memo is not None else _compute_smart_status(cache, eval_set, good, bad, beta, min_good)
+        stable = _compute_stable_status(cache, good, bad, total, min_good)
 
     # Span status from coverage atlas info (passed in from the route).
     span = _compute_span_status(span_info)

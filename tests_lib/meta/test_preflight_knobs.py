@@ -102,6 +102,8 @@ _DIVERGENT = [
     ({"CALIB_MORE_WALK": "detector"}, "more_walk"),
     ({"CALIB_NEW_WALK": "hard"}, "new_walk"),
     ({"CALIB_SPAN_GREEN": "40"}, "span_green"),
+    ({"CALIB_MIN_GOOD": "3"}, "min_good"),
+    ({"CALIB_HARD_DRY_RUN": "0"}, "hard_dry_run"),
     ({"CALIB_BAND_SHARE": "8"}, "band_share"),
     ({"CALIB_EARLY_CHECK": "50"}, "early_check"),
     ({"CALIB_SIGMA_FLOOR": "absolute"}, "sigma_floor"),
@@ -162,6 +164,8 @@ def test_pins_at_the_shipped_values_pass(check):
         CALIB_WALK_TOL="0",
         CALIB_WALK_FINE="0",
         CALIB_SPLIT_ROUNDING="nearest",
+        CALIB_MIN_GOOD="5",
+        CALIB_HARD_DRY_RUN="16",
     )
     assert "MATCHES" in out, out
 
@@ -198,6 +202,9 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_NEW_WALK": "boundary"}, "new_walk"),
         ({"CALIB_SPAN_GREEN": "-1"}, "span_green"),
         ({"CALIB_SPAN_GREEN": "none"}, "span_green"),
+        ({"CALIB_MIN_GOOD": "6"}, "min_good"),
+        ({"CALIB_MIN_GOOD": "0"}, "min_good"),
+        ({"CALIB_HARD_DRY_RUN": "-1"}, "hard_dry_run"),
         ({"CALIB_BAND_SHARE": "0"}, "band_share"),
         ({"CALIB_BAND_SHARE": "one"}, "band_share"),
         ({"CALIB_EARLY_CHECK": "0"}, "early_check"),

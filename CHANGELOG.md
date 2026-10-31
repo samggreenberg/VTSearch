@@ -56,6 +56,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
+  stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
+  dataset are, was never told Done: 81-87% of FHIBE sessions ran to the end without it. Now, once 16 picks in a row
+  past the opening (Refine Boundary, Explore Diversity or a spot check) were not Good, the two lights judge the
+  detector on the Goods it has. Measured on FHIBE faces, 13-19% of sessions told Done becomes ~100%, at about vote
+  42-54 instead of ~130, with the same F-beta at Done (within 0.003); on COCO photos Done comes about 3 votes
+  sooner at 0.001-0.004 lower F-beta
+  ([report](docs/experiments/2026-10-30-min-goods-5477/REPORT.md)).
+
 - **Find Results is laid out by what each control does** (issue #5464). What changes the list sits above it:
   Good / Bad / Both, a new **Sort by** Score or **Similarity** (look-alikes side by side, by a 1-D UMAP of the whole
   dataset that is now fit and saved with its Browse map), and the same **Columns** checkboxes the Export dialog has,

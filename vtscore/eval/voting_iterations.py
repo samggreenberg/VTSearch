@@ -58,6 +58,8 @@ from vtscore.eval.example_opening import (
 )
 from vtscore.eval.autopilot_flow import (
     APP_SMART_SIGNAL,
+    HARD_DRY_RUN,
+    MIN_PER_CLASS,
     MORE_DRY_RUN,
     SMART_HISTORY_READINGS,
     SMART_WINDOW,
@@ -3210,6 +3212,8 @@ def simulate_voting_iterations(  # noqa: C901
     more_walk: str = "seed",
     new_walk: str = "atlas",
     span_green: Optional[int] = None,
+    min_good: Optional[int] = None,
+    hard_dry_run: Optional[int] = None,
     band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
@@ -3644,6 +3648,15 @@ def simulate_voting_iterations(  # noqa: C901
             says Done once Smart and Stable are green.  A positive goal turns
             the step back on (40, ``SPAN_GREEN_ON``, was the default before
             #5473).  Needs the phase machine.
+        min_good: The Goods Smart and Stable need before either leaves red
+            (issue #5477), 1 to ``MIN_PER_CLASS``.  ``None`` - the default - is the
+            app's ``MIN_PER_CLASS`` (5).  The Bads' minimum is unchanged.  Needs
+            the phase machine.
+        hard_dry_run: Issue #5477's dry run past the opening: once this many
+            votes in a row in Boundary, Diversity or a spot check held no Good,
+            Smart and Stable need only the Goods in hand.  ``None`` - the
+            default - is the app's ``HARD_DRY_RUN`` (16); ``0`` never waives the
+            minimum (the app before #5477).  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -4054,6 +4067,14 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
     if span_green is not None and (isinstance(span_green, bool) or not isinstance(span_green, int) or span_green < 0):
         raise ValueError(f"span_green must be an integer >= 0 or None; got {span_green!r}")
+    if min_good is not None and (
+        isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS
+    ):
+        raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS} or None; got {min_good!r}")
+    if hard_dry_run is not None and (
+        isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 0
+    ):
+        raise ValueError(f"hard_dry_run must be an integer >= 0 or None; got {hard_dry_run!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
@@ -4465,6 +4486,8 @@ def simulate_voting_iterations(  # noqa: C901
             smart_signal=smart_signal,
             record_readings=smart_readings,
             span_green=span_green,
+            min_good=MIN_PER_CLASS if min_good is None else min_good,
+            hard_dry_run=HARD_DRY_RUN if hard_dry_run is None else (hard_dry_run or None),
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4476,6 +4499,10 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     elif span_green is not None:
         raise ValueError("span_green needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif min_good is not None or hard_dry_run is not None:
+        raise ValueError(
+            "min_good and hard_dry_run need Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
+        )
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
     if smart_signal != APP_SMART_SIGNAL and flow is None:
