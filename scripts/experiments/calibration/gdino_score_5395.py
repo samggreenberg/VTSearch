@@ -140,7 +140,9 @@ def main() -> int:
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0, help="first N images of the shard only (a smoke / timing run)")
-    ap.add_argument("--batch", type=int, default=4)
+    # Batch 1: a padded batch shifts an image's scores by up to 0.1 with its batch-mates' sizes (#5395 smoke), and the
+    # pool's AP is the same either way (+-0.01), so one image per pass keeps every score independent of the shards.
+    ap.add_argument("--batch", type=int, default=1)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--dtype", default="fp32", choices=["bf16", "fp16", "fp32"])
     ap.add_argument(
