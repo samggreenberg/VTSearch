@@ -15,7 +15,8 @@ first draw.
 detection for the class's prompts (``sam3_score_5213.py`` writes them), and everything else -- the pool,
 the split, the app's line, the columns -- is unchanged, so a SAM3 row reads against a SigLIP row cell for
 cell. The ``embedder`` column names the prompt set (``sam3_typed``, ``sam3_noun``), and ``text_native_*``
-adds SAM3's own cut (a detection over 0.5).
+adds SAM3's own cut (a detection over 0.5). Any detector's shards in that format grade the same way:
+``--zs-name gdino_tiny --native-cut 0.35`` is GroundingDINO (#5395, ``gdino_score_5395.py``).
 
 ``--keep-ids FILE`` grades only those medias of each test half (#5240): the pool, the split and the cuts are
 the whole cell's, so the rows of two complementary files partition the plain run's test halves item for item.
@@ -75,6 +76,10 @@ def main() -> int:
     )
     ap.add_argument("--sam3", default=None, help="sam3_score_5213.py output dir: score with SAM3, not the text tower")
     ap.add_argument("--sam3-prompts", default="typed", choices=["typed", "noun", "both"])
+    ap.add_argument("--zs-name", default="sam3", help="--sam3 rows' embedder is <name>_<prompt set> (#5395)")
+    ap.add_argument(
+        "--native-cut", type=float, default=SAM3_NATIVE_CUT, help="the detector's own cut, for text_native_*"
+    )
     ap.add_argument("--keep-ids", default=None, help="file of media ids, one per line: grade only these (#5240)")
     args = ap.parse_args()
 
@@ -133,7 +138,7 @@ def main() -> int:
             text_emb = cfg.text_embedder(emb)
             pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
             if sam3 is not None:
-                emb = f"sam3_{args.sam3_prompts}"
+                emb = f"{args.zs_name}_{args.sam3_prompts}"
             if not pkl.exists():
                 common.log(f"SKIP {ds} x {emb}: no text pickle {pkl.name}")
                 continue
@@ -300,11 +305,11 @@ def main() -> int:
                         line_cols[f"text_oracle_recall_{tag}"] = round(1.0 - o_fnr, 6)
                         line_cols[f"text_oracle_fpr_{tag}"] = round(o_fpr, 6)
                     if sam3 is not None:
-                        nat = detection_metrics(s, y, SAM3_NATIVE_CUT)
+                        nat = detection_metrics(s, y, args.native_cut)
                         line_cols["text_native_precision"] = round(nat["precision"], 6)
                         line_cols["text_native_recall"] = round(nat["recall"], 6)
                         line_cols["text_native_f1"] = round(nat["f1"], 6)
-                        line_cols["text_native_k"] = int((s > SAM3_NATIVE_CUT).sum())
+                        line_cols["text_native_k"] = int((s > args.native_cut).sum())
                     rows.append(
                         {
                             "dataset": ds,
