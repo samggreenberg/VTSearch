@@ -119,6 +119,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **The Synthetic World Map demos import under any embedder** (issue #5508). Both demos (image and audio) ship
+  synthetic vectors at a fixed width: 768 for image, SigLIP's, and 512 for audio, CLAP's. Picking any embedder of
+  another width, such as `sift_vlad` or `clip` for image or `ast` for audio, made the import fail once it was
+  running, with a "vector is 768-dimensional but 8192 was expected" error. The vectors are now made at the picked
+  embedder's width. They are still synthetic, so a text query against them means nothing, whichever embedder is picked.
+
 - **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
   Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
   server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
