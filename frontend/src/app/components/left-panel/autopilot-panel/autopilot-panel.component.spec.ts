@@ -516,6 +516,7 @@ describe('AutopilotPanelComponent', () => {
       expect(step.light!.title).toContain('More votes are optional');
       expect(step.detailTitle).toContain('near the cutoff');
       expect(step.intent).not.toContain('All quality indicators');
+      expect(step.intent.match(/votes are optional/gi)).toHaveLength(1);
       const el: HTMLElement = fixture.nativeElement;
       expect(el.querySelectorAll('.ap-step').length).toBe(6);
       expect(el.querySelectorAll('.ap-light').length).toBe(0);

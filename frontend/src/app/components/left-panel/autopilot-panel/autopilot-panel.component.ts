@@ -145,7 +145,7 @@ function keptNote(st: AutopilotState): string {
     : st.spotCheck === 'weak'
       ? 'Autopilot is spot checking the line because your Good and Bad labels overlap.'
       : 'Autopilot is spot checking the line.';
-  return `The detector is trained, and Done stays done. ${why} More votes are optional.`;
+  return `The detector is trained, and Done stays done. ${why}`;
 }
 
 /** The Done step's short detail: what said Done. */
@@ -571,7 +571,7 @@ export class AutopilotPanelComponent implements OnInit {
             : 'Checking the line before Done. The step ends when the check finds where the balance peaks.',
         );
       case 'done':
-        if (this.doneKept) return light('green', keptNote(st));
+        if (this.doneKept) return light('green', `${keptNote(st)} More votes are optional.`);
         if (st.dryRunStop) return light('green', dryRunNote(st.moreDryRun));
         if (doneByLevel(st)) return light('green', levelNote(st));
         return light('green', doneByCap(st) ? CAP_NOTE : 'All quality indicators are green.');
@@ -697,11 +697,11 @@ export class AutopilotPanelComponent implements OnInit {
         if (!this.doneKept) return '';
         // What Autopilot offers if the user votes on: the phase underneath decides it.
         const offer = this.state.phase === 'hard'
-          ? ' If you vote on, Autopilot offers items near the cutoff.'
+          ? '; if you vote on, Autopilot offers items near the cutoff'
           : this.state.phase === 'new'
-            ? ' If you vote on, Autopilot offers items from parts of your collection your votes do not cover yet.'
+            ? '; if you vote on, Autopilot offers items from parts of your collection your votes do not cover yet'
             : '';
-        return `${keptNote(this.state)}${offer}`;
+        return `${keptNote(this.state)} More votes are optional${offer}.`;
       }
       default:
         return '';
