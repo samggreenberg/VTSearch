@@ -144,7 +144,7 @@ class TestTheRounds:
         assert test.record({cid: False for cid in picks[2:]}) is True
         assert test.rounds == 1 and test.pending == () and test.band is None
 
-    def test_the_down_key_takes_back_a_label_of_the_current_round(self):
+    def test_unrecord_takes_back_a_label_of_the_current_round(self):
         ids, positives, post = _planted()
         test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42)
         picks = test.draw()
@@ -153,6 +153,46 @@ class TestTheRounds:
         assert picks[0] not in test.labels and picks[0] in test.pending
         with pytest.raises(ValueError, match="not a label of this round"):
             test.unrecord(picks[1])
+
+    def test_relabel_corrects_a_pick_of_a_finished_round_and_leaves_the_rounds_dealt(self):
+        """#5502: the last pick of a round is not sealed by the round it finished."""
+        ids, positives, post = _planted()
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42)
+        picks = test.draw()
+        test.record({cid: True for cid in picks})
+        nxt = test.draw()
+        before = test.estimates().precision
+        assert test.band_counts(3)[2] == 5
+
+        assert test.relabel(picks[-1], False) is True
+        assert test.labels[picks[-1]] is False and test.pick_band[picks[-1]] == 3
+        assert test.band_counts(3)[2] == 4 and test.estimates().precision.point < before.point
+        assert test.pending == nxt and test.rounds == 1, "the round already dealt stays dealt"
+        assert test.relabel(picks[-1], False) is False, "the same label again changes nothing"
+        with pytest.raises(ValueError, match="not a labelled pick"):
+            test.relabel(nxt[0], True)
+
+    def test_relabel_drops_the_round_dealt_ahead(self):
+        ids, positives, post = _planted()
+        test, last = _to_last_pick(ids, 64, positives, 2, posteriors=post)
+        ahead = test.deal_ahead()
+        assert ahead is not None
+        voted = next(iter(test.labels))
+        test.relabel(voted, not test.labels[voted])
+        assert test.ahead is None
+        test.relabel(voted, not test.labels[voted])
+        assert test.deal_ahead() == ahead, "the same labels and generator state deal the same round"
+
+    def test_relabel_reopens_a_test_a_dry_run_ended(self):
+        ids, positives, _ = _planted()
+        # A width target too tight to stop the walk, so only the dry run ends it.
+        budgets = LineBudgets(misses_width=0.001)
+        test = _run(LineTest.start(ids, 64, 1.0, seed=42, budgets=budgets), set(range(1, 65)))
+        assert test.phase().phase == PHASE_DONE and test.phase().misses_stop == STOP_DRY_RUN
+        below = [cid for cid in test.labels if cid > 64]
+        test.relabel(below[-1], True)
+        assert test.phase().phase == PHASE_MISSES
+        assert test.draw() and all(cid > 64 for cid in test.pending)
 
     def test_a_band_no_larger_than_a_round_is_censused_and_never_drawn_twice(self):
         ids, positives, post = _planted(n=40, line=5)
@@ -685,7 +725,7 @@ class TestDealingAhead:
         test.record({last: ends})
         assert test.draw() == () and test.phase().phase == PHASE_DONE
 
-    def test_the_down_key_drops_the_round_dealt_ahead_and_the_next_deal_is_the_same(self):
+    def test_unrecord_drops_the_round_dealt_ahead_and_the_next_deal_is_the_same(self):
         ids, positives, post = _planted()
         test, last = _to_last_pick(ids, 64, positives, 2, posteriors=post)
         ahead = test.deal_ahead()
@@ -740,6 +780,7 @@ class TestTheWireShape:
         assert test.as_dict()["ahead"] == {"id": picks[-1], "good": list(ahead.good), "bad": list(ahead.bad)}
         test.unrecord(picks[0])
         d = test.as_dict()
+        assert d["votes"] == [{"id": cid, "label": "good"} for cid in picks[1:-1]]
         assert d["band"] == {"index": 3, "side": ABOVE, "lo": 33, "hi": 64}
         assert d["line_count"] == 64 and d["size"] == 600 and d["beta"] == 1.0
         assert len(d["bands"]) == 12 and d["bands"][0]["range"] is None

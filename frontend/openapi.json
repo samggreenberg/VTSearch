@@ -5725,6 +5725,12 @@
           },
           "size": {
             "type": "integer"
+          },
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/PrecisionCheckVote"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -5743,19 +5749,8 @@
           "picks_per_round",
           "report",
           "round",
-          "size"
-        ],
-        "type": "object"
-      },
-      "LineTestUnvoteRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id"
+          "size",
+          "votes"
         ],
         "type": "object"
       },
@@ -14248,52 +14243,9 @@
         ]
       }
     },
-    "/api/line-test/unvote": {
-      "post": {
-        "operationId": "unvote_line_test",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LineTestUnvoteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LineTestResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Not a vote of the current round."
-          },
-          "409": {
-            "description": "No test is running."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Take back one vote of the current round (the \u2193 key): the pick goes back to pending, and its session vote is lifted.",
-        "tags": [
-          "line_test"
-        ]
-      }
-    },
     "/api/line-test/votes": {
       "post": {
-        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.",
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.\n\nA vote on a pick already voted corrects it (#5502), from any round, the\ntest running or done: \u2193 walks back to it and the user votes again, as on\nevery other vote in the app, so a slip on the last pick of a round is not\nsealed by the round it finished.  The rounds already dealt stay dealt\n(``LineTest.relabel``).  A correction to a finished test keeps its verdict\nagain, or, when it reopens the test, deals the next round and forgets the\nverdict until the test is done again.",
         "operationId": "vote_line_test",
         "requestBody": {
           "content": {
@@ -14317,10 +14269,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "A vote on an item that is not one of this round's picks."
+            "description": "A vote on an item that is neither one of this round's picks nor a pick already voted."
           },
           "409": {
-            "description": "No test is running."
+            "description": "No test, or a vote on a fresh pick when the test is done."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14329,7 +14281,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Record votes on the running test's picks.",
+        "summary": "Record votes on the test's picks: this round's, or corrections to picks already voted.",
         "tags": [
           "line_test"
         ]

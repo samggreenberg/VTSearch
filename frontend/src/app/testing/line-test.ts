@@ -44,6 +44,7 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
     picks,
     ahead: null as unknown as LineTestState['ahead'],
     labelled: 0,
+    votes: [],
     bands: [
       { index: 0, side: 'above', lo: 1, hi: 8, labelled: 0, right: 0, range: null },
       { index: 1, side: 'above', lo: 9, hi: 16, labelled: 0, right: 0, range: null },
@@ -86,6 +87,11 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
     class_model: true,
     ...overrides,
   } as LineTestState;
+}
+
+/** The wire's `votes`, in the order first voted, from `[id, label]` pairs. */
+export function wireVotes(...pairs: [number, 'good' | 'bad'][]): LineTestState['votes'] {
+  return pairs.map(([id, label]) => ({ id, label }));
 }
 
 /** A finished test: Done, nothing pending, 65 picks behind the ranges (the walk below the line ran to its budget). */

@@ -1643,6 +1643,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`LineTest.relabel(id, match)` corrects a pick already recorded** (issue #5502), from any round, the test
+  running or done: every round stays dealt, the ranges re-read on the corrected labels and the phase is
+  re-derived, so a correction can end a running test or reopen a finished one. It returns whether the label
+  changed. `LineTest.as_dict()` also carries `votes`, every label in the order first recorded. See
+  `packages/training.md`.
+
 - **A scored run can carry the user's column choice** (issue #5464). The Find Results dialog's
   `find_results` payload now has an optional `selected_columns` list, as a `labelset` already did: a
   hit's own keys, keys of its `custom_metadata`, and the detector result's `detector` / `threshold`.

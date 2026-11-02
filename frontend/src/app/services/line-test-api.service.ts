@@ -9,13 +9,12 @@ import type { PrecisionCheckVote } from '../generated/api-client/models/precisio
 import { cancelLineTest } from '../generated/api-client/fn/line-test/cancel-line-test';
 import { getLineTest } from '../generated/api-client/fn/line-test/get-line-test';
 import { startLineTest } from '../generated/api-client/fn/line-test/start-line-test';
-import { unvoteLineTest } from '../generated/api-client/fn/line-test/unvote-line-test';
 import { voteLineTest } from '../generated/api-client/fn/line-test/vote-line-test';
 
 /**
  * Tune mode's test of the line (`/api/line-test`, #4524): start it over the
- * Find pass's frozen scores, record a pick's vote, take one back, cancel, and
- * read its state. Every verb answers with the same body: the balance's state,
+ * Find pass's frozen scores, record a pick's vote (or correct one, #5502),
+ * cancel, and read its state. Every verb answers with the same body: the balance's state,
  * the test (running, else the last finished one), whether the result is stale
  * or the line has moved, and the line each balance preset would ship.
  */
@@ -34,14 +33,13 @@ export class LineTestApiService {
     return startLineTest(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Record votes on the round's picks: session votes with provenance `test`, never training labels. */
+  /**
+   * Record votes on the round's picks: session votes with provenance `test`,
+   * never training labels. A vote on a pick already voted, from any round,
+   * corrects it (#5502).
+   */
   vote(votes: PrecisionCheckVote[]): Observable<LineTestResponse> {
     return voteLineTest(this.http, this.config.rootUrl, { body: { votes } }).pipe(map((r) => r.body));
-  }
-
-  /** Take one vote of the current round back (the ↓ key). */
-  unvote(id: number): Observable<LineTestResponse> {
-    return unvoteLineTest(this.http, this.config.rootUrl, { body: { id } }).pipe(map((r) => r.body));
   }
 
   /** Drop a running test; its votes stay session votes. A finished test is kept. */

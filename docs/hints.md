@@ -132,7 +132,7 @@ the other one.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
+| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is in the centre panel and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
 | `test-done` | happy | The test is done. Click **Move to AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
 | `review` | happy | Every item is here, best match first. Click one to check it with **Good** or **Bad**, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 

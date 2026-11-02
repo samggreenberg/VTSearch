@@ -19,11 +19,27 @@ import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { BALANCE_STATES, lineBalance, wireBalance } from '../../testing/line-balance';
-import { wireLineTest, wireTest } from '../../testing/line-test';
+import { wireLineTest, wireTest, wireVotes } from '../../testing/line-test';
 
 /** Both side panels open: the layout these specs were written against. The
  *  folds, and their hidden default, have their own specs (#4673). */
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
+
+/**
+ * Settle a view whose Autopilot tab holds a centre panel (#5502): the panel
+ * starts a tick after it is made, and its `init` loads (settings, media types,
+ * embedders) keep the view unstable until they are answered.
+ */
+async function settleWithPanel(fixture: ComponentFixture<unknown>, httpMock: HttpTestingController): Promise<void> {
+  for (let i = 0; i < 2; i++) {
+    await settleResource();
+    httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
+    httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+    httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    httpMock.match('/api/medias/batch').forEach((req) => req.flush([]));
+  }
+  await settleZoneless(fixture);
+}
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -661,8 +677,8 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
   });
 
-  // #5099: the Tune autopilot's stage shows the round's picks one at a time,
-  // and used to fetch each only once it was on screen.
+  // #5099: the Tune autopilot shows the round's picks one at a time, and used
+  // to fetch each only once it was on screen.
   it("warms the test's next two unvoted picks on the Autopilot tab, and moves on with a vote", () => {
     const lineTest = fixture.componentInstance.lineTest;
     lineTest.start();
@@ -673,7 +689,9 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     lineTest.vote('good');
     TestBed.tick();
     expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
-    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1 })));
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1, votes: wireVotes([3, 'good']) })));
   });
 
   // #5116: the round's last vote used to deal the next round, so its first
@@ -684,7 +702,9 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
     lineTest.vote('good');
     const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
-    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead, votes: wireVotes([3, 'good']) })));
     TestBed.tick();
     expect(lastCall()).toEqual([[url(2), url(4)], [url(1)]]);
 
@@ -693,7 +713,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
     httpMock
       .expectOne('/api/line-test/votes')
-      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2 })));
+      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2, votes: wireVotes([3, 'good'], [1, 'bad']) })));
     TestBed.tick();
     expect(lineTest.currentId()).toBe(4);
     expect(lastCall()).toEqual([[url(2)], [url(4)]]);
@@ -714,15 +734,17 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
       lineTest.vote('good');
       const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
-      httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
-      await settleZoneless(fixture);
+      httpMock
+        .expectOne('/api/line-test/votes')
+        .flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead, votes: wireVotes([3, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
       await settle();
 
       lineTest.vote('good');
       httpMock
         .expectOne('/api/line-test/votes')
-        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2 })));
-      await settleZoneless(fixture);
+        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2, votes: wireVotes([3, 'good'], [1, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
       expect(lineTest.currentId()).toBe(2);
       const shown = resolve.mock.calls.findIndex(([src]) => src === url(2));
       expect(shown).toBeGreaterThanOrEqual(0);
@@ -1106,7 +1128,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(row.querySelector('.balance-check-btn')).toBeNull();
     });
 
-    it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
+    it('shows the phase panel, the ordinary centre panel and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
       fixture.componentInstance.onFindTabChange('autopilot');
       // Entering Autopilot with a line drawn and no test starts one.
@@ -1114,7 +1136,10 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await settleZoneless(fixture);
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('vt-line-test-panel')).not.toBeNull();
-      expect(el.querySelector('vt-line-test-stage')).not.toBeNull();
+      // The picks are voted as every other vote is (#5502): no stage, no prompt, no dots.
+      expect(el.querySelector('vt-center-panel')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-stage')).toBeNull();
+      expect(el.querySelector('.panel-center')!.textContent).not.toMatch(/Checking the|drawn at random/);
       expect(el.querySelector('vt-line-test-result')).not.toBeNull();
       expect(el.querySelector('vt-media-list')).toBeNull();
       expect(el.querySelector('vt-right-panel')).toBeNull();
@@ -1134,21 +1159,21 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
       fixture.componentInstance.onFindTabChange('autopilot');
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       const el = fixture.nativeElement as HTMLElement;
-      const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
-      expect(hint()?.getAttribute('hintId')).toBe('test-vote');
+      const hint = () => el.querySelector('.panel-center vt-toasty-hint');
+      expect(el.querySelector('vt-center-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('test-vote');
       expect(hint()?.textContent).toContain('line with picks from both sides of it');
 
       // The first pick voted: the explanation has done its job.
       fixture.componentInstance.lineTest.response.set(
         wireLineTest(wireTest({ picks: [1, 2], labelled: 1 })),
       );
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       expect(hint()).toBeNull();
 
       fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       expect(hint()?.getAttribute('hintId')).toBe('test-done');
       expect(hint()?.textContent).toContain('Click Move to AutoFind');
       // The verdict and its exits are the stage's now (#5100), not the result pane's.
@@ -1175,9 +1200,10 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
-    // #4555: Tune opens on Autopilot, which has no centre panel, so the one
-    // Review makes is not the one the view opened with; each must be started
-    // (its settings, the shortcuts), or Review's keys do nothing.
+    // #4555: Tune opens on Autopilot, whose centre panel comes and goes with
+    // the test (#5502), so the one Review makes is not the one the view opened
+    // with; each must be started (its settings, the shortcuts), or Review's
+    // keys do nothing.
     it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {
       const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
@@ -1192,6 +1218,40 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await new Promise((resolve) => setTimeout(resolve));
       await flushInit(ranking.map(({ id }) => id));
       expect(start).toHaveBeenCalledTimes(1);
+    });
+
+    // #5502: a vote in the Autopilot tab's centre panel is the test's: it goes
+    // to /api/line-test, never through the vote state, and the panel then
+    // shows the next pick. Undo is off there; ↓ walks back instead.
+    it("votes the test's pick in the ordinary centre panel, to the test, not the vote state", async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleWithPanel(fixture, httpMock);
+      const view = fixture.componentInstance;
+      const panel = view.centerPanel()!;
+      expect(panel.media()?.id).toBe(1);
+      const submit = vi.spyOn(view.voteState, 'submitToggleVoteAndRecord');
+      const undo = vi.spyOn(view.voteState, 'undo');
+
+      panel.castVote('good');
+      // The swipe runs before the vote is handed over.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const req = httpMock.expectOne('/api/line-test/votes');
+      expect(req.request.body).toEqual({ votes: [{ id: 1, label: 'good' }] });
+      req.flush(wireLineTest(wireTest({ picks: [2], labelled: 1, votes: wireVotes([1, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
+      expect(submit).not.toHaveBeenCalled();
+      expect(view.centerPanel()!.media()?.id).toBe(2);
+      expect(view.centerPanel()!.isGood).toBe(false);
+
+      // ↓ walks back to the pick just voted, lit with its vote.
+      view.centerPanel()!.navigateRequested.emit('back');
+      await settleWithPanel(fixture, httpMock);
+      expect(view.centerPanel()!.media()?.id).toBe(1);
+      expect(view.centerPanel()!.isGood).toBe(true);
+      TestBed.inject(KeyboardService).action$.next({ type: 'undo' });
+      expect(undo).not.toHaveBeenCalled();
     });
 
     // A view left within that tick used to start its last panel anyway: the
