@@ -183,7 +183,11 @@ class TestOneRound:
         _plant_big_corpus()
         picks = _start(client)["test"]["picks"]
         client.post("/api/line-test/votes", json=_votes(picks, True))
-        stray = next(cid for cid in range(1, 201) if cid not in picks and cid not in get_active_detector_context().line_test.pending)
+        stray = next(
+            cid
+            for cid in range(1, 201)
+            if cid not in picks and cid not in get_active_detector_context().line_test.pending
+        )
         assert client.post("/api/line-test/votes", json=_votes([stray], True)).status_code == 400
 
     def test_cancel_drops_a_running_test_and_keeps_the_votes_cast(self, client):
@@ -271,7 +275,9 @@ class TestToDone:
         assert est["precision"]["lo"] > 0.5 and est["precision"]["hi"] <= 1.0
         assert est["found"] and est["at_edges"]
         # Done: a vote on an item never dealt is refused, cancel keeps the result, and start returns it as it is.
-        never = next(cid for cid in range(1, 201) if cid not in ctx.line_test.labels and cid not in ctx.line_test.pending)
+        never = next(
+            cid for cid in range(1, 201) if cid not in ctx.line_test.labels and cid not in ctx.line_test.pending
+        )
         assert client.post("/api/line-test/votes", json=_votes([never], True)).status_code == 400
         assert client.post("/api/line-test/cancel", json={}).get_json()["test"]["phase"] == PHASE_DONE
         again = _start(client)["test"]

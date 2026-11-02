@@ -252,7 +252,9 @@ def start_line_test():
 @require_detector_header
 @line_test_bp.arguments(LineTestVotesRequestSchema)
 @line_test_bp.response(200, LineTestResponseSchema)
-@line_test_bp.alt_response(400, description="A vote on an item that is neither one of this round's picks nor a pick already voted.")
+@line_test_bp.alt_response(
+    400, description="A vote on an item that is neither one of this round's picks nor a pick already voted."
+)
 @line_test_bp.alt_response(409, description="No test, or a vote on a fresh pick when the test is done.")
 @_one_at_a_time
 def vote_line_test(body: dict):
