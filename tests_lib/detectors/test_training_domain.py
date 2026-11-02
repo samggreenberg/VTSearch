@@ -10,7 +10,14 @@ name alone.
 from __future__ import annotations
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
-from vtscore.detectors.training_domain import count_labels_held, infer_training_dataset, labels_held_by_dataset
+from vtscore.detectors.training_domain import (
+    TRAINING_DATASET_KEY,
+    count_labels_held,
+    infer_training_dataset,
+    labels_held_by_dataset,
+    recorded_training_dataset,
+    training_dataset_record,
+)
 from vtscore.state.core import DatasetContext
 
 _ORIGIN = {"importer": "folder", "params": {"path": "/photos"}}
@@ -77,3 +84,25 @@ class TestInferTrainingDataset:
     def test_nothing_held_is_no_answer(self):
         assert infer_training_dataset({"photos": 0, "screens": 0}, prefer="screens") == ""
         assert infer_training_dataset({}) == ""
+
+
+class TestRecordedTrainingDataset:
+    """#5501: the pointer a detector carries to its training dataset, for when that dataset is not loaded."""
+
+    def test_round_trips(self):
+        record = training_dataset_record("ds-1", "Photos", 39)
+        assert recorded_training_dataset({TRAINING_DATASET_KEY: record}) == {
+            "dataset_id": "ds-1",
+            "dataset_name": "Photos",
+            "labels_held": 39,
+        }
+
+    def test_absent_or_malformed_reads_nothing(self):
+        assert recorded_training_dataset(None) is None
+        assert recorded_training_dataset({}) is None
+        assert recorded_training_dataset({TRAINING_DATASET_KEY: "ds-1"}) is None
+        assert recorded_training_dataset({TRAINING_DATASET_KEY: {"dataset_name": "Photos", "labels_held": 3}}) is None
+        assert recorded_training_dataset({TRAINING_DATASET_KEY: {"dataset_id": "ds-1", "labels_held": "many"}}) is None
+
+    def test_a_dataset_holding_no_label_reads_nothing(self):
+        assert recorded_training_dataset({TRAINING_DATASET_KEY: training_dataset_record("ds-1", "Photos", 0)}) is None

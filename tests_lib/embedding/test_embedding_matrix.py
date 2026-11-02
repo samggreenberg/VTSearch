@@ -19,6 +19,7 @@ from vtscore.embedding.matrix import (
     get_embedding_matrix,
     get_embedding_matrix_for_snap,
     get_embedding_submatrix,
+    stored_primary_vectors,
     invalidate_embedding_matrix,
     media_score_rows,
 )
@@ -930,3 +931,61 @@ class TestMixedSpaceDropIsLogged:
         with caplog.at_level("WARNING", logger="vtscore.embedding.matrix"):
             scoreable_snapshot(snap, "vid")
         assert [r for r in caplog.records if r.levelname == "WARNING"] == []
+
+
+class TestStoredPrimaryVectors:
+    """#5501: an unloaded dataset's vectors, read from its saved file for the overlap check."""
+
+    @staticmethod
+    def _medias() -> dict:
+        return {
+            cid: {"id": cid, "embedder": "e5", "embeddings": {"e5": np.full(4, float(cid), dtype=np.float32)}}
+            for cid in (3, 1, 2)
+        }
+
+    @staticmethod
+    def _container(tmp_path, medias: dict) -> str:
+        import pickle
+
+        from vtscore.datasets.container import write_container
+
+        path = tmp_path / "ds_stored.pkl"
+        write_container(path, pickle.dumps({"medias": medias}, protocol=5), {})
+        return str(path)
+
+    def test_reads_the_container_in_id_order(self, tmp_path):
+        pkl_path = self._container(tmp_path, self._medias())
+        vectors = stored_primary_vectors(pkl_path)
+        assert vectors is not None
+        assert vectors[:, 0].tolist() == [1.0, 2.0, 3.0]
+
+    def test_media_without_a_vector_are_left_out(self, tmp_path):
+        medias = self._medias()
+        medias[2]["embeddings"] = {}
+        vectors = stored_primary_vectors(self._container(tmp_path, medias))
+        assert vectors is not None
+        assert vectors[:, 0].tolist() == [1.0, 3.0]
+
+    def test_prefers_the_sidecar(self, tmp_path):
+        """The sidecar holds the same rows a load builds, so it is read without unpickling the media."""
+        pkl_path = self._container(tmp_path, self._medias())
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(pkl_path)
+        np.save(ids_path, np.array([1, 2, 3], dtype=np.int64))
+        np.save(mat_path, np.full((3, 4), 9.0, dtype=np.float32))
+        vectors = stored_primary_vectors(pkl_path)
+        assert vectors is not None
+        assert vectors.shape == (3, 4) and float(vectors[0, 0]) == 9.0
+
+    def test_a_torn_sidecar_falls_back_to_the_container(self, tmp_path):
+        pkl_path = self._container(tmp_path, self._medias())
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(pkl_path)
+        np.save(ids_path, np.array([1, 2], dtype=np.int64))
+        np.save(mat_path, np.full((3, 4), 9.0, dtype=np.float32))
+        vectors = stored_primary_vectors(pkl_path)
+        assert vectors is not None
+        assert vectors[:, 0].tolist() == [1.0, 2.0, 3.0]
+
+    def test_an_unreadable_file_reads_nothing(self, tmp_path):
+        bogus = tmp_path / "ds_bogus.pkl"
+        bogus.write_bytes(b"not a zip")
+        assert stored_primary_vectors(str(bogus)) is None
