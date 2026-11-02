@@ -22,6 +22,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **The domain warning reaches Find and AutoFind** (issue #5501). Tune's warning that a dataset looks unlike the one a
+  detector was trained on ("68% of this dataset looks atypical vs photos: likely domain shift") now runs for every
+  detector of a Find or AutoFind: the Find Results dialog shows it under its summary, an AutoFind's finished notice
+  turns to a warning naming the detector, and the exported results carry the figure, which the email exporter prints
+  under each detector and flags in its subject. The training dataset no longer has to be loaded: a detector remembers
+  the dataset it was trained or tuned on, and the check reads that dataset from disk, so a run after a restart or an
+  AutoFind on a fresh import still warns. See [Trust a detector](docs/user/howto/trust-a-detector.md).
+
 - **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
   whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
   change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)

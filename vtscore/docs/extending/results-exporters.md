@@ -106,6 +106,7 @@ deliver an empty export.
                 ...,
             ],
             "negative_hits": [...],
+            "training_domain": {...},  # app runs only; may be absent or None
         },
         # ... one entry per detector run
     },
@@ -117,6 +118,15 @@ deliver an empty export.
 Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
+
+`training_domain` is the check behind the app's domain warning: how much of
+the scored dataset looks unlike the dataset the detector was trained on. Its
+`domain_shift` holds `frac_atypical` (the share, 0-1) and `shifted` (the
+verdict), or is `None` when there was nothing to compare, with `reason`
+saying why. A message or report can print the figure, as the email exporter
+does ("68% of this dataset looks atypical vs photos: likely domain shift");
+a tabular exporter can ignore it. The app sets it on every Find and AutoFind
+run; the CLI does not.
 
 `selected_columns` is the user's column choice from the Find Results
 dialog, in order. It names a hit's own keys, keys of its

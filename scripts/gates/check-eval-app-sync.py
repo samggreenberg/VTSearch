@@ -1095,7 +1095,10 @@ MIRRORS: list[Mirror] = [
             "another vector width or patch grids on one side) and by the runner reading the Find corpus out "
             "of the cell's own embedder's pickle. The route's same-dataset refusal has no harness case: a "
             "Find corpus never holds the sim pool, and a share-0 corpus (the withheld half) is read on "
-            "purpose, as the no-shift baseline."
+            "purpose, as the no-shift baseline. A training dataset that is not loaded (allow_unloaded, "
+            "#5501) is read from its saved file, the sidecar or the container, as the same primary "
+            "media_embedding vectors a load stacks; the harness's pool is always in memory, so it has no "
+            "such case, and the per-run vector cache changes no report."
         ),
     ),
     Mirror(

@@ -713,7 +713,11 @@ skipped as for the AutoFind list. The task reports on the
 dataset's row, and carries an `autofind` block: `{run_id, owner, trigger,
 dataset_id, dataset_name}` (`trigger` is `"manual"` without `detector_ids` and
 `"find"` with them), plus `detectors_run`, `total_hits`,
-`missing_detectors` and `auto_export` once it finishes. The results go to the
+`missing_detectors`, `auto_export` and `domain_shifts` once it finishes.
+`domain_shifts` lists the detectors whose
+[training-domain check](find.md#training-domain-overlap) reads *likely domain
+shift* on this dataset, each as `{detector_name, reference_dataset_name,
+frac_atypical}`, for the run's notice (#5501). The results go to the
 caller's AutoFind exporter when one is set, and are served by
 [`GET /api/autofind/runs/{run_id}`](find.md#autofind-results). Cancel with
 `POST /api/dataset/cancel/{task_id}`.

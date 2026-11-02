@@ -164,6 +164,35 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).toContain("Goods' centroid");
   });
 
+  it("warns, in Tune's words, for each detector this dataset looks unlike the training dataset of (#5501)", async () => {
+    const check = (frac: number, shifted: boolean) => ({
+      reference_dataset_id: 'ref',
+      reference_dataset_name: 'Caltech-101 (S)',
+      labels_total: 39,
+      labels_in_reference: 39,
+      labels_in_active: 0,
+      domain_shift: { frac_atypical: frac, shifted },
+      reason: '',
+    });
+    fixture.componentRef.setInput('data', {
+      ...mockData,
+      dataset_name: 'Caltech-256 (S)',
+      results: {
+        mammal: { detector_name: 'Mammal', hits: [], training_domain: check(0.68, true) },
+        bird: { detector_name: 'Bird', hits: [], training_domain: check(0.04, false) },
+        typed: { detector_name: 'Typed', hits: [], training_domain: null },
+      },
+    } as any);
+    await flushInit();
+    const notes = fixture.nativeElement.querySelectorAll('.domain-note');
+    expect(notes.length).toBe(1);
+    expect(notes[0].textContent).toContain('68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift');
+    expect(notes[0].textContent).toContain(
+      'Mammal learned from Caltech-101 (S) (39 of its 39 labelled examples are there). ' +
+        'Check its calls on Caltech-256 (S) by hand before relying on them.',
+    );
+  });
+
   it('names the detectors that ran as their typed query apart from the centroid ones (#4758)', async () => {
     const quota = (tier: string, nGood: number, nBad: number) => ({
       tier,

@@ -57,6 +57,29 @@ def _label_td(hit: dict[str, Any]) -> str:
     return f"<td>{escape(str(hit.get('label') or ''))}</td>"
 
 
+def _training_domain_line(det_result: dict[str, Any]) -> tuple[str, bool]:
+    """One detector's training-domain check (#5501) as ``(line, shifted)``; ``("", False)`` when it carries none.
+
+    The line is the app's own wording of the check, the share of the scored
+    dataset atypical of the detector's training dataset and the verdict, so an
+    unattended run's email says what Tune's warning would have.
+    """
+    check = det_result.get("training_domain") or {}
+    shift = check.get("domain_shift") or {}
+    if "frac_atypical" not in shift:
+        return "", False
+    reference = check.get("reference_dataset_name") or check.get("reference_dataset_id") or "its training dataset"
+    # Half up, as the browser rounds the same figure.
+    pct = int(float(shift["frac_atypical"]) * 100 + 0.5)
+    shifted = bool(shift.get("shifted"))
+    verdict = "likely domain shift" if shifted else "largely in-domain"
+    return f"{pct}% of this dataset looks atypical vs {reference}: {verdict}", shifted
+
+
+def _any_domain_shift(results: dict[str, Any]) -> bool:
+    return any(_training_domain_line(r)[1] for r in results.get("results", {}).values())
+
+
 def _build_plain_text(results: dict[str, Any]) -> str:
     """Render results as a human-readable plain-text summary."""
     labelled = _has_labels(results)
@@ -70,6 +93,9 @@ def _build_plain_text(results: dict[str, Any]) -> str:
     for det_result in results.get("results", {}).values():
         lines.append(f"--- {det_result['detector_name']} ---")
         lines.append(f"Threshold: {det_result['threshold']}  |  Total Hits: {det_result['total_hits']}")
+        domain, shifted = _training_domain_line(det_result)
+        if domain:
+            lines.append(f"{'Domain warning' if shifted else 'Domain check'}: {domain}")
         if det_result["hits"]:
             for hit in det_result["hits"]:
                 tag = _label_tag(hit) if labelled else ""
@@ -99,10 +125,16 @@ def _build_html(results: dict[str, Any]) -> str:
             )
         if not hits_html:
             hits_html = f'<tr><td colspan="{4 if labelled else 3}"><em>No hits.</em></td></tr>'
+        domain, shifted = _training_domain_line(det_result)
+        domain_html = ""
+        if domain:
+            label = "&#9888; Domain warning" if shifted else "Domain check"
+            domain_html = f"<p><strong>{label}:</strong> {escape(domain)}</p>"
         rows += (
             f"<h3>{escape(str(det_result['detector_name']))}</h3>"
             f"<p>Threshold: {det_result['threshold']} &mdash; "
             f"Total Hits: {det_result['total_hits']}</p>"
+            f"{domain_html}"
             f"<table border='1' cellpadding='4' cellspacing='0'>"
             f"<tr>{label_th}<th>Clip</th><th>Filename</th><th>Score</th></tr>"
             f"{hits_html}</table>"
@@ -121,7 +153,9 @@ def _default_subject(results: dict[str, Any]) -> str:
     """Auto-generated subject used when the user leaves the field blank."""
     media_type = results.get("media_type", "unknown")
     total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
-    return f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset"
+    # The inbox is where an unattended run is first read, so the subject says so (#5501).
+    warning = " (domain warning)" if _any_domain_shift(results) else ""
+    return f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset{warning}"
 
 
 def _labelset_counts(labels: list[dict[str, Any]]) -> tuple[int, int]:

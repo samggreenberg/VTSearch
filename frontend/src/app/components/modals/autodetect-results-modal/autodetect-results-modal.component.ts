@@ -60,6 +60,7 @@ import { visibleFields } from '../../../utils/plugin-fields';
 import { labelsOwed } from '../../../utils/label-quota';
 import { coerceNonEmptyString } from '../../../utils/settings-coerce';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
+import { DomainShiftWarning, domainShiftWarning } from '../../../utils/training-domain';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
@@ -622,6 +623,22 @@ export class AutoDetectResultsModalComponent implements OnInit {
   get heldDetectors(): string[] {
     return this.detectorsServedAs('query', true);
   }
+
+  /**
+   * Tune's training-domain warning, for each detector whose check says this
+   * dataset looks unlike the one it was trained on (#5501): the same line and
+   * advice, so the warning reaches the results the user acts on, not only the
+   * view where they check calls by hand.
+   */
+  readonly domainWarnings = computed(() => {
+    const dataset = this.data().dataset_name || 'this dataset';
+    const warnings: DomainShiftWarning[] = [];
+    for (const [name, result] of Object.entries(this.data().results || {})) {
+      const warning = domainShiftWarning(result.training_domain, result.detector_name || name, dataset);
+      if (warning) warnings.push(warning);
+    }
+    return warnings;
+  });
 
   /** The labels the typed query's hold lasts until, from the first held detector's quota. */
   get holdLabels(): number {
