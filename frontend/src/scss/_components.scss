@@ -248,7 +248,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   &:hover:not(:disabled):not(.segmented-toggle__btn--active) {
     color: var(--text-primary);
     background: var(--bg-hover);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
   &:disabled {
@@ -261,7 +261,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     color: var(--toggle-active-text);
     border-color: var(--accent);
     box-shadow: inset 0 1px 3px var(--shadow-dropdown);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 }
 
