@@ -127,7 +127,7 @@
                       >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
                     </td>
                     <td class="num">{{ row.estimate!.count | number }}</td>
-                    <td class="num">{{ row.estimate!.precision.lo * 100 | number: '1.0-0' }}–{{ row.estimate!.precision.hi * 100 | number: '1.0-0' }}%</td>
+                    <td class="num">{{ percent(row.estimate!.precision) }}</td>
                     <td>{{ row.estimate!.found }}</td>
                   </tr>
                 }

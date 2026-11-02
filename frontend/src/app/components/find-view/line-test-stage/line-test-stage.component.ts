@@ -168,7 +168,10 @@ export class LineTestStageComponent {
     }).filter((row) => row.estimate !== null);
   });
 
-  presetTitle(row: { hint: string; estimate: { count: number; precision: { lo: number; hi: number }; recall: { lo: number; hi: number } } | null }): string {
+  /** A likely range as the page reads every one: "96 ± 5%" (#5503). */
+  readonly percent = estimatePercent;
+
+  presetTitle(row:{ hint: string; estimate: { count: number; precision: { lo: number; hi: number }; recall: { lo: number; hi: number } } | null }): string {
     const e = row.estimate;
     if (!e) return row.hint;
     return `${row.hint}. The line would keep the top ${e.count.toLocaleString()}: likely ${estimatePercent(e.precision)} right, ${estimatePercent(e.recall)} of all the matches found.`;

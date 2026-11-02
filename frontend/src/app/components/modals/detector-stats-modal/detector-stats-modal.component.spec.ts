@@ -91,7 +91,7 @@ describe('DetectorStatsModalComponent', () => {
 
     const rows = Array.from(fixture.nativeElement.querySelectorAll('.verdict')) as HTMLElement[];
     expect(rows.length).toBe(2);
-    expect(rows[0].textContent).toContain('drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+    expect(rows[0].textContent).toContain('drawings-new: likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)');
     expect(rows[0].querySelector('.stale-mark')).toBeFalsy();
     expect(rows[1].classList).toContain('verdict--stale');
     expect(rows[1].textContent).toContain('(1 pick, 2026-10-05)');

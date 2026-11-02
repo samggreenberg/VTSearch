@@ -3,6 +3,7 @@ import type { LineTestResponse } from '../generated/api-client/models/line-test-
 import type { LineTestState } from '../generated/api-client/models/line-test-state';
 import type { LineTestVerdict } from '../generated/api-client/models/line-test-verdict';
 import { formatTimestamp } from './format-date';
+import { midHalfWidth, rangePercent } from './line-balance';
 
 /**
  * Tune mode's test of the line (#4524; the design is in `vtscore/docs/packages/training.md`,
@@ -38,14 +39,15 @@ export function widthLight(width: number | null | undefined, target: number): Li
   return width <= 2 * target + 1e-9 ? 'yellow' : 'red';
 }
 
-/** "70–85%" for an estimate's range: what the picks measured stays a number. */
+/** "78 ± 8%" for an estimate's range (70–85%): what the picks measured stays a number, as its centre ± half-width (#5503). */
 export function estimatePercent(estimate: Pick<LineTestEstimate, 'lo' | 'hi'>): string {
-  return `${Math.round(estimate.lo * 100)}–${Math.round(estimate.hi * 100)}%`;
+  return rangePercent(estimate);
 }
 
-/** "0.62 (0.45–0.79)": the F-beta headline as a point and its range. */
+/** "0.62 ± 0.17": the F-beta headline's range (0.45–0.79) as its centre ± half-width, as every likely range reads (#5503). */
 export function fbetaHeadline(estimate: LineTestEstimate): string {
-  return `${estimate.point.toFixed(2)} (${estimate.lo.toFixed(2)}–${estimate.hi.toFixed(2)})`;
+  const [mid, delta] = midHalfWidth(estimate, 100);
+  return `${(mid / 100).toFixed(2)} ± ${(delta / 100).toFixed(2)}`;
 }
 
 /** The dot and text the balance control shows under its spectrum in Tune. */

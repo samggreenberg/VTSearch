@@ -145,8 +145,8 @@ describe('LineTestStageComponent (#4524)', () => {
     // A form, not a sentence (#5503): each measured value on its own labelled row.
     expect(verdictForm()).toEqual([
       ['Line Keeps', '64'],
-      ['Fraction Correct', '55–95%'],
-      ['Fraction Found', '30–70%'],
+      ['Fraction Correct', '75 ± 20%'],
+      ['Fraction Found', '50 ± 20%'],
     ]);
     expect(card.querySelector('.verdict-note')!.textContent).toContain('what AutoFind would ship');
     const exits = Array.from(card.querySelectorAll('.exit-btn')).map((b) => b.textContent!.trim());
@@ -157,7 +157,7 @@ describe('LineTestStageComponent (#4524)', () => {
     expect(rows[1].classList.contains('current')).toBe(true);
     expect((rows[1].querySelector('.preset-btn') as HTMLButtonElement).disabled).toBe(true);
     expect(rows[0].textContent).toContain('128');
-    expect(rows[0].textContent).toContain('35–65%');
+    expect(rows[0].textContent).toContain('50 ± 15%');
 
     const said: string[] = [];
     fixture.componentInstance.lean.subscribe((b) => said.push(`lean ${b}`));
@@ -173,7 +173,7 @@ describe('LineTestStageComponent (#4524)', () => {
     await done(wireLineTest(wireDone({ class_model: false })));
     expect(verdictForm()).toEqual([
       ['Line Keeps', '64'],
-      ['Fraction Correct', '55–95%'],
+      ['Fraction Correct', '75 ± 20%'],
       ['Fraction Found', 'About half of them found'],
     ]);
   });

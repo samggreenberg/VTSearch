@@ -61,7 +61,7 @@ choose **Stats**. The **Stats: Yellow Smileys** window shows:
 
 Between the counts and **Creation**, **Tested on** lists what a test measured
 the detector to ship, one line per dataset it was tested on: *drawings-new:
-likely 70–85% right, about half of them found (34 picks, 2026-10-05)*. A line
+likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)*. A line
 marked *out of date* is from before the detector was last retrained; *Untested*
 means no test has finished yet (see
 [Decide how far to trust a detector](trust-a-detector.md)).
