@@ -8,6 +8,7 @@
 #   unknown_class_5490.sh score MODEL [NSHARDS] zero-shot scores of every level's prompt over the pool: sam3 (#5213's
 #                                               scorer) or gdino (#5395's, GroundingDINO-tiny), as a GPU array
 #   unknown_class_5490.sh zeroshot              grade them, with SigLIP's text sort, at every level -> <root>/zeroshot
+#   unknown_class_5490.sh votes                 the vote arms' F1, AP and Goods by click -> <root>/votes (one CPU job)
 #   unknown_class_5490.sh dirs [ARM]            run dirs <sota>/<date>-uc5490-<arm>-b1 on the grid
 #   unknown_class_5490.sh preflight ARM [IDX]   the preflight a launch of the same cells would pass
 #   unknown_class_5490.sh launch ARM [IDX]      one arm as a cpu array (default: seed 0's 92 cells, Binary + Region)
@@ -112,6 +113,15 @@ zeroshot)
   } >"$ROOT/zeroshot.sh"
   sbatch --parsable -p cpu -c 4 --mem 32G -t 2:00:00 -J uc5490-zeroshot -o "$ROOT/logs/zeroshot-%j.out" "$ROOT/zeroshot.sh"
   ;;
+votes)
+  {
+    echo '#!/bin/bash'
+    echo 'set -euo pipefail'
+    env_lines
+    echo "python $HERE/unknown_class_5490.py votes --root $S --date $D --out $ROOT/votes --procs 8"
+  } >"$ROOT/votes.sh"
+  sbatch --parsable -p cpu -c 8 --mem 32G -t 2:00:00 -J uc5490-votes -o "$ROOT/logs/votes-%j.out" "$ROOT/votes.sh"
+  ;;
 dirs)
   [[ -s "$GRID/results/prepare_info.json" ]] || { echo "no prepared grid at $GRID" >&2; exit 2; }
   for arm in "${ARMS[@]}"; do
@@ -156,7 +166,7 @@ launch)
   exec bash "$HERE/launch.sh" redo "${3:-0-91}"
   ;;
 *)
-  sed -n '2,25p' "$0"
+  sed -n '2,26p' "$0"
   exit 2
   ;;
 esac
