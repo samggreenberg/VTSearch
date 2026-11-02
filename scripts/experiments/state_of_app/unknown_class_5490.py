@@ -305,7 +305,9 @@ def votes(a) -> int:
     for emb, path in PATHS.items():
         base = shown[("sig-family", "shown")]
         keys = sorted(k for k in base if k[1] == emb)
-        keys = [k for k in keys if all(k in v for v in shown.values())]
+        # Every arm on this path (ex4 has no Region half) must hold the same cells, so pairs are cell for cell.
+        here = [ar for ar, v in shown.items() if any(k[1] == emb for k in v)]
+        keys = [k for k in keys if all(k in shown[ar] for ar in here)]
         cats = [k[0] for k in keys]
         fam = pd.Series([fa.family_of(c) for c in cats])
         info[path] = {"cells": len(keys), "families": int(fam.nunique())}
@@ -314,7 +316,7 @@ def votes(a) -> int:
             return np.vstack([shown[arm_rule][k][j] for k in keys])
 
         base_f = mat(("sig-family", "shown"), 0)
-        for arm_rule in shown:
+        for arm_rule in here:
             f, ap_ = mat(arm_rule, 0), mat(arm_rule, 1)
             row = {"path": path, "arm": arm_rule[0], "rule": arm_rule[1], "cells": len(keys)}
             for lo, hi in AREAS:

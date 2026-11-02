@@ -17,7 +17,9 @@
 # opening: SAM3's set at its 0.5 cut held through the session, the head trained and scored all the same as
 # hold:head rows). LEVEL is what the user types (CALIB_FGVC_LEVEL): family ("Boeing 737", the general class),
 # variant (the real name, an upper bound), fake (an invented model name, "Boeing Veltra"). ex4 opens on 4 photos of
-# the target, the "supply examples" route. Beta 1, 150 clicks, trajectory pass.
+# the target, the "supply examples" route, Binary only: the app's example opening ranks whole-image vectors
+# (example_sort refuses a patch dataset) and run_cells refuses the Region pair any opening but text, so ex4's 46
+# Region tasks fail by design (launch ex4 0-45). Beta 1, 150 clicks, trajectory pass.
 #
 # Launch from a FROZEN worktree (VTS_REPO is this script's tree), every arm with the same SBATCH_CONSTRAINT (#4481).
 # Env: U5490_ROOT (/expscratch/$USER/fgvc-5490), U5490_DATE (2026-11-02), U5490_STEPS (150), SOTA_ROOT, U5490_GPU.
