@@ -104,6 +104,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
+  Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
+  server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
+  Opened from the top bar on the Label view, where the Dashboard isn't open, the import was lost outright. Like
+  every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
+  the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
+
 - **Export labels from a Dashboard row fills in that row's detector** (issue #5494). An exporter field that uses
   `{detector_name}` or `{detector_id}` (a file path, a URL, an email subject) took the detector the top bar had
   active, not the row whose ⋯ menu you opened: it came out blank for a detector you had just imported and not yet
