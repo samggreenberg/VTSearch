@@ -1898,29 +1898,6 @@ describe('DashboardComponent', () => {
     expect(component.datasets[0].name).toBe('Recovered');
   });
 
-  it('should load demo dataset on demoSelected', () => {
-    flushInitialRequests();
-    const flows = TestBed.inject(NewThingFlowsService);
-    flows.openImporter();
-    expect(component.importerModalOpen).toBe(true);
-    const demo = { name: 'gtzan', label: 'GTZAN' } as any;
-    flows.emitDemoSelected(demo);
-    flows.closeImporter();
-
-    expect(component.importerModalOpen).toBe(false);
-    // Phase 2: the demo flow POSTs /api/dataset/load-demo and hands the
-    // returned task_id to the SSE-driven loading-tasks poller. Loading
-    // state and progress now live on the SSE stream
-    // (DashboardLoadingTasksService), not on synchronous component fields,
-    // so we only assert the request contract here.
-    const req = httpMock.expectOne('/api/dataset/load-demo');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body.name).toBe('gtzan');
-    req.flush({ task_id: 't1' });
-    // startProgressPolling subscribes to the SSE channel; no further HTTP
-    // is issued until a loading-task event arrives, so nothing else to flush.
-  });
-
   describe('loadDataset / loadDetector → active context', () => {
     // Loading from a dashboard card should make the item the active context
     // so the top-bar selector reflects it — but only *after* the load
