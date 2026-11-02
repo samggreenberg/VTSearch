@@ -21,8 +21,10 @@ two kinds of caller:
 The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
-Either way a run ends the same: the results go to the user's AutoFind exporter
-when one is configured and not paused (:func:`run_autofind_export`).  A
+Either way a run ends the same: each detector's result gets the training-domain
+overlap check Tune warns with (:func:`_check_training_domains`, #5501), and the
+results go to the user's AutoFind exporter when one is configured and not
+paused (:func:`run_autofind_export`).  A
 background run's results are also held in memory for the user who started it
 (:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
@@ -623,6 +625,8 @@ def score_autofind(
             raise
 
     if results:
+        _check_training_domains(plan, results, check_cancelled)
+
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
         # Each detector scored the medias in its own embedder's stack, so count
@@ -635,6 +639,52 @@ def score_autofind(
         "results": results,
         "missing_detectors": plan.missing,
     }
+
+
+def _check_training_domains(plan: AutoFindPlan, results: dict[str, dict], check_cancelled: Callable[[], None]) -> None:
+    """Give each scored detector's result its training-domain overlap check (#5501).
+
+    The same check Tune's warning runs (:func:`vtsearch.domain_overlap.training_domain_for`),
+    against the dataset the detector was trained on: the loaded one holding most
+    of its labels, or the one recorded on it, read from disk when it is not
+    loaded.  It goes under ``training_domain``, so the Find Results dialog, the
+    run's notice and the exported results can all warn when the dataset looks
+    unlike that one.  The checks share one :class:`~vtsearch.domain_overlap.OverlapCache`,
+    so detectors trained on the same dataset read its vectors once.  Must run
+    where the scored dataset is the active one, as :func:`score_autofind` does.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+    from vtsearch.domain_overlap import OverlapCache, detector_training_domain  # noqa: PLC0415
+
+    active_ctx = get_active_context()
+    cache = OverlapCache()
+    for name, data, _entry in plan.detectors:
+        if name not in results:
+            continue
+        check_cancelled()
+        results[name]["training_domain"] = detector_training_domain(data, active_ctx, cache=cache)
+
+
+def domain_shifts(response: dict) -> list[dict[str, Any]]:
+    """The detectors of an auto-detect *response* whose training-domain check says *likely domain shift*.
+
+    One ``{detector_name, reference_dataset_name, frac_atypical}`` each, in
+    result order: what a background run's notice names (#5501).
+    """
+    shifts: list[dict[str, Any]] = []
+    for name, result in (response.get("results") or {}).items():
+        check = result.get("training_domain") or {}
+        shift = check.get("domain_shift") or {}
+        if shift.get("shifted"):
+            shifts.append(
+                {
+                    "detector_name": result.get("detector_name") or name,
+                    "reference_dataset_name": check.get("reference_dataset_name")
+                    or check.get("reference_dataset_id", ""),
+                    "frac_atypical": float(shift.get("frac_atypical", 0.0)),
+                }
+            )
+    return shifts
 
 
 def run_autofind_export(response: dict) -> dict | None:
@@ -925,6 +975,8 @@ def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list
                 "total_hits": total_hits,
                 "missing_detectors": response["missing_detectors"],
                 "auto_export": auto_export,
+                # The notice names them: AutoFind opens nothing on its own (#5501).
+                "domain_shifts": domain_shifts(response),
             }
             tracker.update(
                 "idle",
