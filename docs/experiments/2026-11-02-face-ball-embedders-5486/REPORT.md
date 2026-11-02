@@ -1,6 +1,10 @@
 # Face ball on other embedders: does a cosine floor travel? (#5486)
 
-**Status (2026-11-02): measured; the owner makes the call.** #5478's face ball (the Goods' centroid cut at a cosine
+**Status (2026-11-02): measured. Owner's call: refit per embedder**, as practice for the proprietary face embedders a
+server may bring (`ext`). A compat tag without a fitted entry keeps the pre-ball line, with a visible warning. That
+work is #5497; this report changes no app code.
+
+#5478's face ball (the Goods' centroid cut at a cosine
 floor, from β 1 up with two Goods) was fitted on FHIBE's buffalo_s crops. Here it is priced the same way on two
 **hypothetical** face embedders, chosen to bracket buffalo_s. They are not proposals for the app (the owner's framing:
 "examining balls in a variety of situations, not considering those situations for VTSearch"):
