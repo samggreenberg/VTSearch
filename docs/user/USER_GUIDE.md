@@ -918,8 +918,9 @@ yellow until the check ends. Hover the light for the details.
 
 When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
-trained: keep voting and it keeps improving (your next vote sends Toasty
-away), or click **Dashboard** to export it or run it over another dataset.
+trained: click **Dashboard** to export it or run it over another dataset.
+You can keep voting (your next vote sends Toasty away), but you don't need
+to.
 Nothing happens on its own, and the hint only appears for the run that
 trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
@@ -929,15 +930,13 @@ buttons: asking for your first vote, then, through the run that trains the
 detector, saying what the current phase is after and how many Goods or Bads
 it still needs. See [Toasty's hints](#toastys-hints).
 
-Once **Done!** is reached it stays checked, and a seventh step, **Keep
-Improving.**, takes over for as long as you keep labeling. It is
-optional. Its light shows whichever of the smart, stable and span
-indicators is furthest behind, and its line says what Autopilot is
-offering now. A new vote can knock an indicator off green for a while
-as the detector takes it in; Autopilot then goes back to borderline
-items (**Showing boundary items**) or a broad mix (**Showing diverse
-items**) until it recovers, but the panel does not drop back to Refine
-Boundary.
+Once **Done!** is reached it stays the current step, checked, for as
+long as you keep labeling: no step follows it. A new vote can knock an
+indicator off green for a while as the detector takes it in. If you vote
+on, Autopilot then offers borderline items or a broad mix until it
+recovers, but the panel does not drop back to Refine Boundary: the line
+under **Done!** reads **Detector trained**, where it otherwise says what
+reached Done.
 
 ### Document collections stop on a dry run
 
