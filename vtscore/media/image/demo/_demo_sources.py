@@ -1330,16 +1330,17 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
     layer straight from those paths.  See :mod:`vtscore.media._toponymy_demo`.
     """
 
-    from vtscore.media._toponymy_demo import generate_items  # noqa: PLC0415
+    from vtscore.media._toponymy_demo import baked_dim, generate_items  # noqa: PLC0415
     from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
-    # SigLIP's image/text space is 768-D; match it so the baked vectors slot into
-    # the primary embedder's slot and text queries don't dimension-clash.
-    items = generate_items(dim=768)
+    # Bake at the load's embedder's declared width, so the vectors fit the slot
+    # they are filed under whichever embedder was picked (#5508).  768 is
+    # SigLIP's width, for an embedder that declares none.
+    emb_name = embedder.name if embedder is not None else "siglip"
+    items = generate_items(dim=baked_dim(emb_name, fallback=768))
     total = len(items)
     on_progress("loading", f"Generating {total} synthetic tiles…", 0, total)
 
-    emb_name = embedder.name if embedder is not None else "siglip"
     clip_id = 1
     for i, item in enumerate(items):
         png_bytes = _synthetic_tile_png(item)
