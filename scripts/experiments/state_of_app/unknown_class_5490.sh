@@ -75,7 +75,7 @@ common_env() {  # ARM: today's app at beta 1, trajectory pass, on fgvc_aircraft,
   ex4)
     # FHIBE's example opening (#4699): the first 4 votes are photos of the target, its centroid sorts the pool.
     export CALIB_SEED_EXAMPLES=4 CALIB_STRATIFY_TARGET=1 SOTA_OPENING=example
-    export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}seed_examples"
+    export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}seed_examples,stratify_target"
     ;;
   esac
 }
