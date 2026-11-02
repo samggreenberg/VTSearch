@@ -186,7 +186,7 @@
 .guide > .back-btn {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-base);
   margin-bottom: var(--space-sm);
 }
 

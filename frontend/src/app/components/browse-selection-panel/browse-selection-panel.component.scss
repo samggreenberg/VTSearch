@@ -173,7 +173,7 @@
   // grid, and ``z-index`` lifts the growing thumb above its neighbours.
   &:hover {
     position: relative;
-    z-index: 1;
+    z-index: var(--z-base);
     color: var(--text-primary);
     background: var(--bg-hover);
     transform: scale(1.35);

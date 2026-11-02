@@ -8,3 +8,4 @@ instead of the muted grey that sat on its accent fill.
 - `step-find-results` — the same toolbar, in the left panel's header
 - `slides:browse` — the Find Results frame: the selected Good and Score buttons
 - `slides:steps` — any frame showing the label view's view toolbar
+- `autofind-settings` — the Results Exporter heading's `(?)` is now the shared hint icon, as on Settings' other subheads

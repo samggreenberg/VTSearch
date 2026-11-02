@@ -73,10 +73,10 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- **Residual token violations accumulate because the style audit is not gated** — `frontend/src/app/components/modals/settings-modal/auto-find/auto-find-settings.component.scss` (medium impact)
+- **Residual token violations accumulate because the style audit is not gated** — `.claude/scripts/style-check.py` (medium impact)
 
-  The repo's own `.claude/scripts/style-check.py` still reports un-annotated raw px/rem spacing/font hits, raw z-indexes, raw decorative-dim opacities and a heading restyle — i.e. the guide is drifting despite the tooling existing. Concrete examples verified by reading the code: this file's `gap: 0.35rem` (the token `--space-sm` is 0.375rem) and `opacity: 0.7` on `.help-icon` at rest (the exact "dimmed icon" case §1.10 created `--opacity-dim` for; center-panel.component.scss and autopilot-panel.component.scss have the same raw 0.7); `gap: 2px` in browse-legend.component.scss and label-list.component.scss (`--space-2xs`); and label-list.component.scss restyling `h3` to `--font-sm`/regular weight — anti-pattern 7, where the element is really a small section label, not an h3. Unlike ruff/codespell, this checker runs only when someone remembers `/style-check`, so violations land silently in PRs whose authors never open the guide.
+  The curated hits were swept in #5500 except four raw z-indexes in the global `_components.scss` and `_data-table.scss`, held back because the initial bundle sat 20 bytes under its budget. The remaining raw `opacity: 0.7` hits are the documented exceptions (hover-brighten rest states, done/future step dims). Unlike ruff/codespell, this checker runs only when someone remembers `/style-check`, so violations land silently in PRs whose authors never open the guide.
 
-  *Direction:* Sweep the current curated hits (most are one-line token swaps; the intentional off-scale ones already carry `// kept exact` annotations the script honors), then wire `style-check.py` into run-tests.sh as a gate the way the screenshots wiring-check already is, with an annotation/whitelist mechanism for the deliberate exceptions.
+  *Direction:* Wire `style-check.py` into run-tests.sh as a gate the way the screenshots wiring-check already is, with an annotation/whitelist mechanism for the deliberate exceptions (the `// kept exact` off-scale spacings, the opacity exceptions above, the scanner's broad §5.14 column-flex hits).
 
 <!-- item-sep -->
