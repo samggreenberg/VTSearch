@@ -238,7 +238,7 @@ LEVELS_ORDER = ("variant", "family", "manufacturer", "generic", "fake_number", "
 #: held through the session and its ``hold:head`` row the head the same session trains, so a hand-over rule is a
 #: choice, per click, between two rows of one session (#5241). ``g20`` is #5312's planned route: the head from the
 #: 20th Good.
-ARMS = ("sig-family", "sam3-family", "sig-variant", "sam3-variant", "sig-fake", "sam3-fake", "ex4", "ex4r")
+ARMS = ("sig-family", "sam3-family", "sig-variant", "sam3-variant", "sig-fake", "sam3-fake", "ex4")
 HAND_OVER = 20
 AREAS = ((1, 50), (1, 150))
 AT = (10, 25, 50, 100, 150)
@@ -277,23 +277,13 @@ def votes(a) -> int:
     # shown[(arm, rule)][(cell, emb)] = (F1 curve, AP curve); goods[arm][(cell, emb)] = Goods by click.
     shown: dict[tuple[str, str], dict] = {}
     goods: dict[str, dict] = {}
-    shown_rows: dict[str, pd.DataFrame] = {}
     for arm in ARMS:
         cells = Path(a.root) / f"{a.date}-uc5490-{arm}-b1" / "results" / "cells"
         if not any(cells.glob("task_*.csv*")):
             print(f"SKIP {arm}: no cells in {cells}")
             continue
         rows = load(cells, a.procs)
-        g = _goods(cells, T)
-        if arm == "ex4r":
-            # ex4's Region half: dinov3_patch alone (no text for the pair to take), read as the Region path.
-            rows = rows[rows["embedder"] == "dinov3_patch"].assign(embedder="siglip+dinov3_patch")
-            g = {(c, "siglip+dinov3_patch"): v for (c, e), v in g.items() if e == "dinov3_patch"}
-            arm = "ex4"
-            rows = pd.concat([shown_rows.pop("ex4"), rows], ignore_index=True) if "ex4" in shown_rows else rows
-        else:
-            shown_rows[arm] = rows
-        goods.setdefault(arm, {}).update(g)
+        goods[arm] = _goods(cells, T)
         if arm.startswith("sam3-"):
             hold, head = curves(rows, ""), curves(rows, HOLD_TAG)
             shown[(arm, "hold")] = hold
