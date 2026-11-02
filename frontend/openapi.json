@@ -8078,6 +8078,10 @@
           },
           "total_hits": {
             "type": "integer"
+          },
+          "training_domain": {
+            "$ref": "#/components/schemas/FindTrainingDomainResponse",
+            "nullable": true
           }
         },
         "required": [

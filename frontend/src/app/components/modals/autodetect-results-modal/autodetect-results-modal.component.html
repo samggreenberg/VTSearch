@@ -21,6 +21,15 @@
     <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
   </div>
 
+  <!-- Tune's training-domain warning, for each detector this dataset looks
+       unlike the training dataset of (#5501). -->
+  @for (warning of domainWarnings(); track $index) {
+    <p class="domain-note" role="note">
+      <strong>&#9888; {{ warning.message }}</strong>
+      <span class="domain-note-detail">{{ warning.detail }}</span>
+    </p>
+  }
+
   <!-- Detectors under the label quota ran as their typed query (#4758), or with
        no typed query as the Goods' centroid (#4643). Past the quota, a typed-query
        detector is held on its query until the hold's labels (#4736, #4889). -->

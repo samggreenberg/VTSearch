@@ -716,6 +716,14 @@ the map of the Good results whenever it has nothing else to do, so Browse often
 opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
 
+Every Find and AutoFind also checks each detector against the dataset it was
+trained on. When the dataset it ran on looks unlike that one, the Find Results
+dialog says so under its summary ("68% of this dataset looks atypical vs
+**photos**: likely domain shift"), an AutoFind's notice turns to a warning
+naming the detector, and the exported results carry the figure. See
+[Decide how far to trust a detector](howto/trust-a-detector.md) for what to do
+about it.
+
 ### Pre-computed embeddings (.npz)
 
 If you have already embedded your media offline - for example with

@@ -9,6 +9,7 @@ import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
 import { ToastService } from './toast.service';
+import { domainShiftWarning } from '../utils/training-domain';
 
 /** The active pair a check was run for. */
 interface Pair {
@@ -70,20 +71,16 @@ export class TrainingDomainAlertService {
     if (!shift) return;
     const key = pairKey(pair);
     this.answered.add(key);
-    if (!shift.shifted) return;
 
-    const reference = report.reference_dataset_name || report.reference_dataset_id;
     const detector = this.datasetState.detectorById().get(pair.modelId)?.name ?? 'This detector';
     const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name ?? 'this dataset';
-    const pct = Math.round(shift.frac_atypical * 100);
+    // The Tune result's own line, word for word, as Find Results and a run's
+    // notice word it too (#5501).
+    const warning = domainShiftWarning(report, detector, dataset);
+    if (!warning) return;
     const onTune = this.router.url.split('?')[0].startsWith('/tune/');
     this.toast.warning({
-      // The Tune result's own line, word for word: the verdict and nothing stronger.
-      message: `${pct}% of this dataset looks atypical vs ${reference}: likely domain shift`,
-      detail:
-        `${detector} learned from ${reference} (${report.labels_in_reference} of its ` +
-        `${report.labels_total} labelled examples are there). Check its calls on ${dataset} ` +
-        `by hand before relying on them.`,
+      ...warning,
       action: onTune
         ? undefined
         : {

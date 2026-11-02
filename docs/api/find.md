@@ -181,7 +181,10 @@ demand, and returns one result column per detector.
 
 → `{media_type, detectors_run, results, missing_detectors}`; `results` is keyed
 by detector name, each with its `detector_name`, `threshold`, `balance`,
-`label_quota`, `total_hits`, `hits` and `negative_hits` (rows carrying `score`).
+`label_quota`, `total_hits`, `hits` and `negative_hits` (rows carrying `score`),
+and `training_domain`: the [training-domain overlap](#training-domain-overlap)
+report for that detector on the scored dataset (#5501), or `null` when the
+check itself failed.
 
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
 under the label quota runs as its typed query's own set (`query`, #4758), or
@@ -478,13 +481,19 @@ GET /api/find/training-domain
 
 The [domain-shift report](datasets.md#domain-shift-report) of the active
 dataset against the dataset the active detector was **trained on**, with that
-reference worked out rather than picked: the loaded dataset, among those the
-caller can read, holding the most of the detector's Good / Bad examples
-(matched by origin or MD5, never by file name alone). The active dataset wins a
+reference worked out rather than picked: the dataset, among those the caller
+can read, holding the most of the detector's Good / Bad examples (matched by
+origin or MD5, never by file name alone). The candidates are the loaded
+datasets, counted live, and the training dataset recorded on the detector
+(its `training_dataset`, written with the Evidence baseline whenever one is
+drawn there, #5501) at its recorded count. That one need not be loaded: its
+vectors are read from its saved file. The active dataset wins a
 tie, so a detector used on the dataset it was trained on has nothing to
 compare. It needs no scored Find run: the SPA calls it whenever a
 (dataset, detector) pair becomes active, and raises a warning when the verdict
-is *likely domain shift*. Pure read.
+is *likely domain shift*. Every Find and AutoFind result carries the same
+report per detector, as `training_domain` (see [auto-detect](#auto-detect)).
+Pure read.
 
 →
 ```json
@@ -502,9 +511,10 @@ is *likely domain shift*. Pure read.
 
 `domain_shift` is `null`, and `reason` says why, rather than a 4xx whenever
 there is nothing to compare: no active detector or dataset, a detector with no
-labelled examples, none of them in a loaded dataset, the examples coming from
+labelled examples, none of them in a dataset to compare with, the examples coming from
 the active dataset itself, or any refusal of the domain-shift report (embedder
-mismatch, a reference under 40 embeddings). The counts are filled in as far as the
+mismatch, a reference under 40 embeddings, an unloaded reference whose saved
+file is gone). The counts are filled in as far as the
 check got, so a caller can say what the reference rests on.
 
 ### Fold corrections into the detector

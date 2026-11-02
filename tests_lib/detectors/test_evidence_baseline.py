@@ -35,6 +35,7 @@ from vtscore.detectors.evidence_baseline import (
 from vtscore.detectors.evidence_coverage import reference_cutoffs
 from vtscore.detectors.labelset_elements import stable_element_id
 from vtscore.detectors.store import _read_detector, _write_detector
+from vtscore.detectors.training_domain import TRAINING_DATASET_KEY, training_dataset_record
 from vtscore.state.core import DatasetContext, DetectorContext
 
 
@@ -115,6 +116,21 @@ class TestRecordingIt:
     def test_no_detector_file_writes_nothing(self, tmp_path):
         assert record_baseline(tmp_path / "gone.json", {"cut_pos": 0.1}) is False
         assert not (tmp_path / "gone.json").exists()
+
+    def test_the_training_dataset_rides_in_the_same_write(self, tmp_path):
+        """#5501: a baseline is drawn on the training dataset, so it records the pointer the overlap check follows."""
+        path = tmp_path / "birds.json"
+        _write_detector(path, {"name": "birds"})
+        baseline = _baseline(_stamp(_labels("good", "bad")))
+        training = training_dataset_record("ds", "Photos", 2)
+        assert record_baseline(path, baseline, training_dataset=training) is True
+        data = _read_detector(path)
+        assert data is not None
+        assert data[EVIDENCE_BASELINE_KEY] == baseline
+        assert data[TRAINING_DATASET_KEY] == {"dataset_id": "ds", "dataset_name": "Photos", "labels_held": 2}
+        assert record_baseline(path, baseline, training_dataset=training) is False
+        # A new count alone is a change worth writing.
+        assert record_baseline(path, baseline, training_dataset=training_dataset_record("ds", "Photos", 3)) is True
 
 
 _EMBEDDER = "emb"
@@ -241,6 +257,19 @@ class TestDeferringIt:
         assert _recorded(pending) == pending.draw()
         assert flush_baseline_draw("det-a") is False
         assert wait_for_baseline_draws(timeout=0)
+
+    def test_a_landed_draw_records_its_training_dataset(self, tmp_path):
+        pending = dataclasses.replace(_world(tmp_path), labels_held=4)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        data = _read_detector(pending.path) or {}
+        assert data[TRAINING_DATASET_KEY] == {"dataset_id": "ds-a", "dataset_name": "A", "labels_held": 4}
+
+    def test_a_draw_holding_no_labels_records_no_pointer(self, tmp_path):
+        pending = _world(tmp_path)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        assert TRAINING_DATASET_KEY not in (_read_detector(pending.path) or {})
 
     def test_a_newer_sort_replaces_the_waiting_draw(self, tmp_path):
         older = _world(tmp_path)

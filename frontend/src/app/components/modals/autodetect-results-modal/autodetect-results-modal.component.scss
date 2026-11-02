@@ -225,6 +225,23 @@
   margin: var(--space-sm) 0;
 }
 
+// Tune's training-domain warning, one per shifted detector (#5501).
+.domain-note {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
+  background: var(--warning-bg);
+  color: var(--text-warning);
+}
+
+.domain-note-detail {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
 .auto-export-status {
   margin: var(--space-sm) 0;
   padding: var(--space-sm) var(--space-md);

@@ -172,3 +172,16 @@ def domain_shift_report(reference: np.ndarray, matrix: np.ndarray, alpha: float 
         "median_pvalue": float(np.median(pvals)),
         "shifted": bool(z > 3.0 and frac >= 2.0 * alpha),
     }
+
+
+def domain_shift_line(frac_atypical: float, reference: str, *, shifted: bool) -> str:
+    """A :func:`domain_shift_report`'s one line, as the app words it everywhere it warns (#5501).
+
+    The share of the dataset atypical of *reference*, rounded half up as the
+    browser rounds it, and the verdict: ``"68% of this dataset looks atypical
+    vs photos: likely domain shift"``.  For an exporter's message or a notice
+    that should read as Tune's warning does.
+    """
+    pct = int(float(frac_atypical) * 100 + 0.5)
+    verdict = "likely domain shift" if shifted else "largely in-domain"
+    return f"{pct}% of this dataset looks atypical vs {reference}: {verdict}"
