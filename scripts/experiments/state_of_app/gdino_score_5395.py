@@ -173,7 +173,7 @@ def main() -> int:
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     info = next(iter(prepare["datasets"][args.dataset].values()))
     table = prompt_table(args.dataset, info["selected_categories"])
-    prompts = sorted({p for v in table.values() for kind in ("typed", "noun") for p in v[kind]})
+    prompts = sorted({p for v in table.values() for kind in v.values() for p in kind})
     (out / "prompts.json").write_text(json.dumps({"classes": table, "prompts": prompts}, indent=1))
 
     medias = load_medias(EMBEDDINGS_DIR / f"{args.dataset}__{args.pickle_embedder}.pkl")
