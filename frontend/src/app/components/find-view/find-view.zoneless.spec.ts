@@ -19,11 +19,27 @@ import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { BALANCE_STATES, lineBalance, wireBalance } from '../../testing/line-balance';
-import { wireLineTest, wireTest } from '../../testing/line-test';
+import { wireLineTest, wireTest, wireVotes } from '../../testing/line-test';
 
 /** Both side panels open: the layout these specs were written against. The
  *  folds, and their hidden default, have their own specs (#4673). */
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
+
+/**
+ * Settle a view whose Autopilot tab holds a centre panel (#5502): the panel
+ * starts a tick after it is made, and its `init` loads (settings, media types,
+ * embedders) keep the view unstable until they are answered.
+ */
+async function settleWithPanel(fixture: ComponentFixture<unknown>, httpMock: HttpTestingController): Promise<void> {
+  for (let i = 0; i < 2; i++) {
+    await settleResource();
+    httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
+    httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+    httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    httpMock.match('/api/medias/batch').forEach((req) => req.flush([]));
+  }
+  await settleZoneless(fixture);
+}
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -673,7 +689,9 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     lineTest.vote('good');
     TestBed.tick();
     expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
-    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1 })));
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1, votes: wireVotes([3, 'good']) })));
   });
 
   // #5116: the round's last vote used to deal the next round, so its first
@@ -684,7 +702,9 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
     lineTest.vote('good');
     const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
-    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead, votes: wireVotes([3, 'good']) })));
     TestBed.tick();
     expect(lastCall()).toEqual([[url(2), url(4)], [url(1)]]);
 
@@ -693,7 +713,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
     httpMock
       .expectOne('/api/line-test/votes')
-      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2 })));
+      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2, votes: wireVotes([3, 'good'], [1, 'bad']) })));
     TestBed.tick();
     expect(lineTest.currentId()).toBe(4);
     expect(lastCall()).toEqual([[url(2)], [url(4)]]);
@@ -714,15 +734,17 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
       lineTest.vote('good');
       const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
-      httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
-      await settleZoneless(fixture);
+      httpMock
+        .expectOne('/api/line-test/votes')
+        .flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead, votes: wireVotes([3, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
       await settle();
 
       lineTest.vote('good');
       httpMock
         .expectOne('/api/line-test/votes')
-        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2 })));
-      await settleZoneless(fixture);
+        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2, votes: wireVotes([3, 'good'], [1, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
       expect(lineTest.currentId()).toBe(2);
       const shown = resolve.mock.calls.findIndex(([src]) => src === url(2));
       expect(shown).toBeGreaterThanOrEqual(0);
@@ -1137,7 +1159,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
       fixture.componentInstance.onFindTabChange('autopilot');
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       const el = fixture.nativeElement as HTMLElement;
       const hint = () => el.querySelector('.panel-center vt-toasty-hint');
       expect(el.querySelector('vt-center-panel vt-toasty-hint')?.getAttribute('hintId')).toBe('test-vote');
@@ -1147,11 +1169,11 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       fixture.componentInstance.lineTest.response.set(
         wireLineTest(wireTest({ picks: [1, 2], labelled: 1 })),
       );
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       expect(hint()).toBeNull();
 
       fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       expect(hint()?.getAttribute('hintId')).toBe('test-done');
       expect(hint()?.textContent).toContain('Click Move to AutoFind');
       // The verdict and its exits are the stage's now (#5100), not the result pane's.
@@ -1205,7 +1227,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
       fixture.componentInstance.onFindTabChange('autopilot');
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       const view = fixture.componentInstance;
       const panel = view.centerPanel()!;
       expect(panel.media()?.id).toBe(1);
@@ -1217,15 +1239,15 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await new Promise((resolve) => setTimeout(resolve, 250));
       const req = httpMock.expectOne('/api/line-test/votes');
       expect(req.request.body).toEqual({ votes: [{ id: 1, label: 'good' }] });
-      req.flush(wireLineTest(wireTest({ picks: [2], labelled: 1, votes: [{ id: 1, label: 'good' }] })));
-      await settleZoneless(fixture);
+      req.flush(wireLineTest(wireTest({ picks: [2], labelled: 1, votes: wireVotes([1, 'good']) })));
+      await settleWithPanel(fixture, httpMock);
       expect(submit).not.toHaveBeenCalled();
       expect(view.centerPanel()!.media()?.id).toBe(2);
       expect(view.centerPanel()!.isGood).toBe(false);
 
       // ↓ walks back to the pick just voted, lit with its vote.
       view.centerPanel()!.navigateRequested.emit('back');
-      await settleZoneless(fixture);
+      await settleWithPanel(fixture, httpMock);
       expect(view.centerPanel()!.media()?.id).toBe(1);
       expect(view.centerPanel()!.isGood).toBe(true);
       TestBed.inject(KeyboardService).action$.next({ type: 'undo' });

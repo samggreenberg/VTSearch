@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
+  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
+  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
+  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
+  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
+  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
+
 - **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
   whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
   change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)

@@ -261,9 +261,16 @@ server owns the sample and derives the phase on every read (`line_phase`;
 statistics in `vtscore/training/thresholds/line_test.py`, routes in
 `vtsearch/routes/line_test.py`), so nothing in the frontend accumulates it.
 Its panes are `vt-line-test-panel` (left, projected as `[findAutopilot]`),
-`vt-line-test-stage` (centre, and the verdict with its three exits at Done)
-and `vt-line-test-result` (right). The ranked list is not shown while a test
-runs: a pick is drawn from a band, and the list would show its rank (#4267).
+the centre and `vt-line-test-result` (right). The centre is the ordinary
+`vt-center-panel` while there is a pick to vote (#5502), so the test's picks
+are voted as every other vote is; its `hostVotes` input hands each vote to
+`LineTestSessionService` (`/api/line-test`) rather than `VoteStateService`,
+lights the buttons from the session's vote, and keeps undo off. Otherwise the
+centre is `vt-line-test-stage`: the verdict with its three exits at Done, or a
+word on what it waits for. ↓ walks back along the test's votes (the wire's
+`test.votes`), from any round and from the verdict, and a vote on a pick
+walked back to corrects it. The ranked list is not shown while a test runs: a
+pick is drawn from a band, and the list would show its rank (#4267).
 
 **Component-provided services:** `PairScopeService` and
 `LineTestSessionService` (the last `/api/line-test` response plus the round as
