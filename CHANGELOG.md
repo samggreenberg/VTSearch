@@ -111,6 +111,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
   the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
 
+- **Find Results' selected buttons are readable** (issue #5500). The selected Good / Bad / Both and Sort
+  by buttons drew grey text on their blue (or, in High Visibility, yellow) fill, too faint to read in any theme; the
+  selected click / hover focus button in the view toolbar had the same grey icon. They now use the same dark or light
+  text as every other selected toggle.
+
 - **Export labels from a Dashboard row fills in that row's detector** (issue #5494). An exporter field that uses
   `{detector_name}` or `{detector_id}` (a file path, a URL, an email subject) took the detector the top bar had
   active, not the row whose ⋯ menu you opened: it came out blank for a detector you had just imported and not yet

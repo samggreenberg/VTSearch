@@ -58,6 +58,9 @@ describe('LabelListComponent', () => {
     expect(heading?.textContent).toContain('Goods');
     expect(heading?.textContent).toContain('(2)');
     expect(heading?.classList.contains('good')).toBe(true);
+    // The [class] binding adds the label without dropping the static class
+    // that draws the heading (#5500).
+    expect(heading?.classList.contains('vote-section-title')).toBe(true);
   });
 
   it('should display bad label heading', async () => {

@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
 
+import { FieldHintIconComponent } from '../../../field-hint-icon/field-hint-icon.component';
 import { IconComponent } from '../../../icon/icon.component';
 import { ImporterField } from '../../../../models/api.models';
 import { visibleFields } from '../../../../utils/plugin-fields';
@@ -38,9 +39,8 @@ export interface AutoFindExporterChange {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [FormsModule, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
+  imports: [FormsModule, FieldHintIconComponent, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './auto-find-settings.component.html',
-  styleUrl: './auto-find-settings.component.scss',
 })
 export class AutoFindSettingsComponent implements OnInit {
   private exportersApi = inject(ExportersApiService);

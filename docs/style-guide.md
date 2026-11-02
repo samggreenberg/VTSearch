@@ -452,7 +452,9 @@ A connected row of buttons acting as one single-select control (the View/Focus p
 </div>
 ```
 
-Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense and icon-sized with a border-highlight hover instead of a fill (toolbars). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense, with a muted resting colour and a border-highlight hover instead of a fill (toolbars, and short labelled rows such as Find Results' Good/Bad/Both). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+
+A variant recolours its resting buttons by setting `--seg-ink`, never `color`. `.segmented-toggle--compact .segmented-toggle__btn` is two classes against `--active`'s one, so a `color` set there wins over `--toggle-active-text` and puts the variant's ink on the accent fill. The compact variant's muted grey did exactly that, at 1.2:1 in every theme (#5500).
 
 ### 2.11 Entity cards and card actions
 

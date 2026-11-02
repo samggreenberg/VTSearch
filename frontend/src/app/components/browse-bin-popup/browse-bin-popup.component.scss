@@ -82,7 +82,7 @@
   &:hover:not(:disabled) {
     color: var(--text-primary);
     border-color: var(--text-primary);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
   &:disabled {
@@ -394,7 +394,7 @@
 
 // Docked, non-thumbnail media (text): a large placeholder glyph in the pane.
 .bin-popup-preview-glyph {
-  font-size: 48px;
+  font-size: calc(var(--font-3xl) * 2);
   color: var(--text-muted);
 }
 
