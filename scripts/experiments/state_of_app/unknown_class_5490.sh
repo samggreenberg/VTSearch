@@ -4,7 +4,8 @@
 # (`fgvc_aircraft`: 46 variants in 16 families, plus 5,400 other aircraft and 10,000 airplane-free COCO images) are
 # the stand-in. Does SAM3 suffer more there than SigLIP?
 #
-#   unknown_class_5490.sh prepare               select the 46 cells and cache crops, into the grid dir (one CPU job)
+#   unknown_class_5490.sh prepare [ex4r]        select the 46 cells and cache crops, into the grid dir (one CPU job);
+#                                               ex4r prepares its own run dir on dinov3_patch alone
 #   unknown_class_5490.sh score MODEL [NSHARDS] zero-shot scores of every level's prompt over the pool: sam3 (#5213's
 #                                               scorer) or gdino (#5395's, GroundingDINO-tiny), as a GPU array
 #   unknown_class_5490.sh zeroshot              grade them, with SigLIP's text sort, at every level -> <root>/zeroshot
@@ -17,7 +18,9 @@
 # opening: SAM3's set at its 0.5 cut held through the session, the head trained and scored all the same as
 # hold:head rows). LEVEL is what the user types (CALIB_FGVC_LEVEL): family ("Boeing 737", the general class),
 # variant (the real name, an upper bound), fake (an invented model name, "Boeing Veltra"). ex4 opens on 4 photos of
-# the target, the "supply examples" route. Beta 1, 150 clicks, trajectory pass.
+# the target, the "supply examples" route, on Binary; ex4r is its Region half. The Region pair (siglip+dinov3_patch) exists for
+# the text sort and run_cells refuses it any other opening, so with no text Region voting is dinov3_patch alone,
+# opened on the examples' patch centroid (launch ex4r 0-45). Beta 1, 150 clicks, trajectory pass.
 #
 # Launch from a FROZEN worktree (VTS_REPO is this script's tree), every arm with the same SBATCH_CONSTRAINT (#4481).
 # Env: U5490_ROOT (/expscratch/$USER/fgvc-5490), U5490_DATE (2026-11-02), U5490_STEPS (150), SOTA_ROOT, U5490_GPU.
@@ -30,7 +33,7 @@ S="${SOTA_ROOT:-/expscratch/$USER/state-of-the-app}"
 D="${U5490_DATE:-2026-11-02}"
 STEPS="${U5490_STEPS:-150}"
 GRID="$S/$D-uc5490-grid"
-ARMS=(sig-family sam3-family sig-variant sam3-variant sig-fake sam3-fake ex4)
+ARMS=(sig-family sam3-family sig-variant sam3-variant sig-fake sam3-fake ex4 ex4r)
 mkdir -p "$ROOT/logs"
 run_of() { echo "uc5490-$1-b1"; }
 
@@ -73,7 +76,8 @@ common_env() {  # ARM: today's app at beta 1, trajectory pass, on fgvc_aircraft,
     export CALIB_QUERY_HOLD=100000 CALIB_QUERY_HOLD_PATCH=1 CALIB_QUERY_MISS=0
     export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}seed_sam3,query_line,query_hold_patch"
     ;;
-  ex4)
+  ex4 | ex4r)
+    [[ $arm == ex4r ]] && export SOTA_EMBEDDERS=dinov3_patch
     # FHIBE's example opening (#4699): the first 4 votes are photos of the target, its centroid sorts the pool.
     export CALIB_SEED_EXAMPLES=4 CALIB_STRATIFY_TARGET=1 SOTA_OPENING=example
     export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}seed_examples,stratify_target"
@@ -85,6 +89,7 @@ check_arm() { [[ " ${ARMS[*]} " == *" $1 "* ]] || { echo "arm must be one of ${A
 case "${1:-}" in
 prepare)
   export SOTA_DATASET=fgvc_aircraft SOTA_DATE="$D-uc5490-grid" SOTA_PASS=trajectory SOTA_SEEDS=1
+  if [[ "${2:-}" == ex4r ]]; then export SOTA_DATE="$D-$(run_of ex4r)" SOTA_EMBEDDERS=dinov3_patch; fi
   exec bash "$HERE/launch.sh" prepare
   ;;
 score)
@@ -125,6 +130,7 @@ votes)
 dirs)
   [[ -s "$GRID/results/prepare_info.json" ]] || { echo "no prepared grid at $GRID" >&2; exit 2; }
   for arm in "${ARMS[@]}"; do
+    [[ $arm == ex4r ]] && continue  # its own prepare
     [[ -z "${2:-}" || "$2" == "$arm" ]] || continue
     r="$S/$D-$(run_of "$arm")/results"
     mkdir -p "$r/cells"
@@ -153,7 +159,7 @@ preflight)
     [[ "${SOTA_OPENING:-}" == example ]] && seed=""
     bash "$VTS_REPO/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod --job-name "$name" \
       --mem "$mem" --conc "${arr##*%}" --array-tasks "$n" --patch $seed \
-      --require-region-voting "fgvc_aircraft:siglip+dinov3_patch" >&2 && echo 0
+      --require-region-voting "fgvc_aircraft:${SOTA_EMBEDDERS:-siglip+dinov3_patch}" >&2 && echo 0
   }
   export -f sbatch
   exec bash "$0" launch "${@:2}"
