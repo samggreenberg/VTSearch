@@ -435,6 +435,23 @@ class TestFinalizeProgress:
         # whole bar to 100% — later sub-stages still have room to advance.
         assert after_dedup < 1.0
 
+    def test_substage_counts_reach_the_tracker(self):
+        # #5492: the slotted fraction used to be reported as current out of a
+        # synthetic 1000, so the registry save read "937/1000 Saving to
+        # registry…". The sub-stage's own counts must reach the UI; the slot
+        # position travels as ``within``.
+        from vtscore.datasets.stages._common import _LOAD_STEP_WEIGHTS, FinalizeProgress
+
+        t = self._finalize_tracker()
+        fin = FinalizeProgress(t)
+        fin.begin("registry")
+        fin.update("loading", "Saving to registry…", current=2, total=3)
+        snap = t.get()
+        assert (snap["current"], snap["total"]) == (2, 3)
+        base, span = fin._ranges["registry"]
+        w = _LOAD_STEP_WEIGHTS
+        assert snap["overall"] == pytest.approx((sum(w[:3]) + w[3] * (base + span * 2 / 3)) / sum(w))
+
     def test_check_cancelled_forwards_to_real_tracker(self):
         from vtscore.concurrency.progress import CancelledError
         from vtscore.datasets.stages._common import FinalizeProgress
@@ -521,6 +538,22 @@ class TestEmbedLoopProgress:
         t.update("embedding", "done", current=1, total=1, step=3, total_steps=_TOTAL_LOAD_STEPS)
         full_embed = t.get()["overall"]
         assert mid_first < full_embed
+
+    def test_multi_embedder_counts_are_the_embedders_own(self):
+        # #5492: the loop used to report its cumulative fraction as current out
+        # of a synthetic 1000, so a 50-image trio import read "467/1000 DINOv3…".
+        # Each embedder's own counts must reach the tracker; the cumulative
+        # position travels as ``within``, which still drives the bar.
+        from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+        t = self._embed_tracker()
+        prog = EmbedLoopProgress(t, 3)
+        prog.begin(1)
+        prog("embedding", "Embedding DINOv3...", 20, 50)
+        snap = t.get()
+        assert (snap["current"], snap["total"]) == (20, 50)
+        w = self._weights()
+        assert snap["overall"] == pytest.approx((sum(w[:2]) + w[2] * (1 + 20 / 50) / 3) / sum(w))
 
     def test_later_embedder_model_load_does_not_rewind(self):
         # A 2nd/3rd embedder loads its own model mid-loop. Folding that "loading"

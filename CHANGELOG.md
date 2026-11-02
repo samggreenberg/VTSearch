@@ -104,6 +104,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **An import's progress counts its items, not out of 1000** (issue #5492). While an import ran more than one
+  embedder (Step 3 of 4, Analyzing files), and through the whole of Step 4, the count beside the progress bar was out
+  of a fixed 1000 that meant nothing: twenty images into a 50-image dataset it read `133/1000 SigLIP...`. It now
+  counts what that pass is working through, the images embedded so far out of the images being embedded
+  (`20/50 SigLIP...`), starting again for each embedder, and in Step 4 whatever each step there counts. The bar still
+  fills once across the whole import.
+
 - **Find Results lists its hits on a laptop screen again.** The dialog's list took whatever height the rest of the
   dialog left over, and on a laptop screen a crowded dialog (a note about the run, an auto-export line, an exporter
   with several fields) left none: the summary said there were hundreds of Good results while the list under it was
