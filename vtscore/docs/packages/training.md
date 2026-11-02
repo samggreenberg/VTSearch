@@ -829,8 +829,13 @@ question for the eval, priced by #4523
   when they were taken). `draw()` deals a round (`budgets.picks_per_round`,
   5) from the band `next_band()` names, uniformly without replacement (a
   census of a band no larger than a round); `record({id: match})` takes the
-  labels; `unrecord(id)` takes one back; `pick_band` records which band each
-  pick came from.
+  labels; `unrecord(id)` takes one of the current round back;
+  `relabel(id, match)` corrects a pick already recorded, from any round
+  (#5502), leaving every round dealt where it is, so the ranges re-read on the
+  corrected labels and the phase is re-derived (a correction can end a running
+  test or reopen a finished one, which `draw()` then deals on); `pick_band`
+  records which band each pick came from. `as_dict()` lists every label in
+  the order first recorded as `votes`.
 - `deal_ahead()` (#5116) draws the next round before the vote that deals it:
   once a round has one pick pending, for each way that pick can be voted, a
   copy of the test records it and `draw()`s, from a copy of the generator at

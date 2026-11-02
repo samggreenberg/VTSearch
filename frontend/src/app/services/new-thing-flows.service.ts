@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
-import { DemoDatasetEntry } from '../generated/api-client/models/demo-dataset-entry';
 
 export interface ImporterFlowState {
   open: boolean;
@@ -43,10 +42,6 @@ export interface ThingCreatedEvent {
   id: string;
 }
 
-export interface DemoSelectedEvent {
-  demo: DemoDatasetEntry;
-}
-
 /**
  * Singleton openers for the "add new dataset" and "add new detector"
  * flows. Decouples the modal invocations from the Dashboard component so
@@ -73,7 +68,6 @@ export class NewThingFlowsService {
     seedCropParams: undefined,
   });
   private readonly createdSubject = new Subject<ThingCreatedEvent>();
-  private readonly demoSelectedSubject = new Subject<DemoSelectedEvent>();
   private readonly importStartedSubject = new Subject<void>();
 
   readonly importer$ = this.importerSubject.asObservable();
@@ -83,7 +77,6 @@ export class NewThingFlowsService {
    *  `id` empty because the new dataset's id isn't known until the
    *  background load registers it. */
   readonly created$ = this.createdSubject.asObservable();
-  readonly demoSelected$ = this.demoSelectedSubject.asObservable();
   /** Fires when the dataset importer kicks off an import (background
    *  load started, but new id not yet known). Consumers refresh the
    *  registry and/or start polling for the new dataset. */
@@ -141,10 +134,6 @@ export class NewThingFlowsService {
 
   emitImportStarted(): void {
     this.importStartedSubject.next();
-  }
-
-  emitDemoSelected(demo: DemoDatasetEntry): void {
-    this.demoSelectedSubject.next({ demo });
   }
 
   emitDetectorCreated(id: string): void {

@@ -18,11 +18,12 @@ export interface KeyboardAction {
 }
 
 /**
- * A claim on the vote keys, held by a step that votes on items of its own
- * while it is open: Tune's test of the line. While a claim
- * is held, ←/→ vote and ↓/↑ navigate for its holder, even from inside a modal,
+ * A claim on the vote keys, held by a pane that has no centre panel to start
+ * the shortcuts but still answers ↓/↑: the Tune autopilot's stage at Done,
+ * whose ↓ walks back to the picks already voted (#5502). While a claim is
+ * held, ←/→ vote and ↓/↑ navigate for its holder, even from inside a modal,
  * and nothing reaches {@link KeyboardService.action$} - the ranked list behind
- * the step never sees them.
+ * it never sees them.
  */
 export interface KeyCapture {
   vote(direction: VoteDirection): void;

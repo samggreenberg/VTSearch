@@ -122,7 +122,7 @@ an item the user picked, so it shows on any run.
 | `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
 | `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
 | `resort-prompt` | happy | This example isn't finding many Goods. Try a different one or keep clicking. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
-| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it, and so does leaving the Train view (#5354). |
+| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work. You can keep voting, but you don't need to. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it, and so does leaving the Train view (#5354). |
 | `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item, before it finishes or as it reaches Done (#5151): with nothing left to label, this one takes over from `autopilot-done`. The next vote ends it, and so does leaving the Train view. |
 
 In `revote`, `{label}` is the item's label ("Good" or "Bad") and `{other}`
@@ -132,7 +132,7 @@ the other one.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
+| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is in the centre panel and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
 | `test-done` | happy | The test is done. Click **Move to AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
 | `review` | happy | Every item is here, best match first. Click one to check it with **Good** or **Bad**, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 

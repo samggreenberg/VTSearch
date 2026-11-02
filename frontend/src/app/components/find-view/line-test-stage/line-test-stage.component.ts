@@ -1,19 +1,10 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, output } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 
-import { AudioPlayerComponent } from '../../center-panel/audio-player/audio-player.component';
-import { DocumentViewerComponent } from '../../center-panel/document-viewer/document-viewer.component';
-import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
-import { TextViewerComponent } from '../../center-panel/text-viewer/text-viewer.component';
-import { VideoPlayerComponent } from '../../center-panel/video-player/video-player.component';
-import { VoteHintId, VotingOverlayComponent } from '../../center-panel/voting-overlay/voting-overlay.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { KeyboardService } from '../../../services/keyboard.service';
 import { LineTestSessionService } from '../../../services/line-test-session.service';
-import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
-import { MediaStateService } from '../../../services/media-state.service';
-import type { Media } from '../../../models/api.models';
 import { BALANCE_PRESETS } from '../../../utils/line-balance';
 import { estimatePercent } from '../../../utils/line-test';
 
@@ -26,10 +17,9 @@ export interface VerdictField {
 }
 
 /**
- * The Tune autopilot's centre pane (#4524): the current pick with Good and
- * Bad, the round's dots, the phase's one-line prompt, and ↓ to go back one
- * pick, as the view rather than a modal over a list. Before a test exists it
- * says what the pane is waiting on.
+ * The Tune autopilot's centre pane when there is no pick to vote (#4524):
+ * before a test exists it says what the pane is waiting on, and with nothing
+ * to test it says so.
  *
  * - **At Done it is the verdict** (#5100): the ranges as a form, one labelled
  *   value per row (#5503: a measured value reads as a field, never as words in
@@ -39,40 +29,24 @@ export interface VerdictField {
  *   voted, rather than under the numbers in the right pane, which keeps the
  *   result's detail and can be folded away.
  *
- * - **The picks are a sample, not the ranking** (#4267). They show one at a
- *   time in the order they were drawn, which is random, with no rank and no
- *   score: the dots say only how many are left.
- * - **The usual keys.** → Good, ← Bad, ↓ back a pick (and its vote is taken
- *   back), ↑ on to the next unvoted one, through a
- *   `KeyboardService.captureVoteKeys` claim held while the stage is on screen.
- *   The Review tab's centre panel is not rendered then, so nothing else hears
- *   them.
- * - **A vote goes out as it is cast.** The ranges on the right move per vote;
- *   the session service (`LineTestSessionService`) owns the round and the
- *   requests, and this pane only shows and asks.
+ * - **The picks are not voted here** (#5502). While a round is on the table
+ *   the Find view shows the ordinary centre panel instead, as Train's
+ *   Autopilot does: the picks are voted as every other vote is.
+ * - **↓ walks back from the verdict.** The pane holds the vote keys through a
+ *   `KeyboardService.captureVoteKeys` claim, since no centre panel is up to
+ *   start them: ↓ brings the last pick voted back into the centre panel, lit
+ *   with its vote, to be corrected, and ↑ returns here. ←/→ do nothing.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-line-test-stage',
   standalone: true,
-  imports: [
-    DecimalPipe,
-    AudioPlayerComponent,
-    DocumentViewerComponent,
-    ImageViewerComponent,
-    TextViewerComponent,
-    VideoPlayerComponent,
-    VotingOverlayComponent,
-    IconComponent,
-    ToastyHintComponent,
-  ],
+  imports: [DecimalPipe, IconComponent, ToastyHintComponent],
   templateUrl: './line-test-stage.component.html',
   styleUrl: './line-test-stage.component.scss',
 })
 export class LineTestStageComponent {
   readonly session = inject(LineTestSessionService);
-  private readonly mediaState = inject(MediaStateService);
-  private readonly metadataCache = inject(MediaMetadataCacheService);
   private readonly keyboard = inject(KeyboardService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -84,41 +58,6 @@ export class LineTestStageComponent {
   readonly addCorrections = output<void>();
   /** Test the line as it stands now (after it moved). */
   readonly testAgain = output<void>();
-
-  readonly currentMedia = computed<Media | null>(() => {
-    const id = this.session.currentId();
-    if (id === null) return null;
-    // Read the cache's version so a batch arriving repaints the viewer.
-    this.metadataCache.version();
-    return this.mediaState.getMedia(id);
-  });
-  readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
-
-  /** Toasty's hint over Good / Bad (#4807): the test's first pick, before any vote. */
-  readonly voteHint = computed<VoteHintId | null>(() =>
-    this.session.running() && (this.session.test()?.labelled ?? 0) === 0 && this.session.roundVotes().size === 0
-      ? 'test-vote'
-      : null,
-  );
-
-  /** The phase's one-line prompt over the pick. */
-  readonly prompt = computed(() => {
-    const test = this.session.test();
-    const phase = this.session.phase();
-    const n = this.session.roundPicks().length;
-    const band = test?.band ?? null;
-    const where = band
-      ? band.side === 'above'
-        ? band.lo === 1
-          ? `the top ${band.hi.toLocaleString()}`
-          : `items ${band.lo.toLocaleString()}–${band.hi.toLocaleString()} of the list`
-        : `items ${band.lo.toLocaleString()}–${band.hi.toLocaleString()}, below the line`
-      : '';
-    const picks = `${n} ${n === 1 ? 'pick' : 'picks'} drawn at random${where ? ` from ${where}` : ''}`;
-    if (phase === 'matches') return `Checking the matches: ${picks}. Is each one a match?`;
-    if (phase === 'misses') return `Checking the misses: ${picks}. Is each one a match the line missed?`;
-    return '';
-  });
 
   // --- The verdict, at Done ---
   readonly moved = computed(() => this.session.response()?.moved ?? false);
@@ -179,7 +118,8 @@ export class LineTestStageComponent {
 
   constructor() {
     const release = this.keyboard.captureVoteKeys({
-      vote: (direction) => this.session.vote(direction),
+      // Nothing is on screen to vote.
+      vote: () => undefined,
       navigate: (direction) => this.session.navigate(direction),
     });
     this.destroyRef.onDestroy(release);

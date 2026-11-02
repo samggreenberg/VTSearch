@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
+  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
+  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
+  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
+  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
+  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
+
 - **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
   whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
   change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
@@ -62,6 +69,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   **Line Keeps** 76, **Fraction Correct** 96 ± 5%, **Fraction Found** 88 ± 6%. Every likely range in the app (the
   Tune result pane, the balance control's check line, the Dashboard's kept verdicts, and F-beta) now reads the same
   way, as its centre ± how far it reaches either way, in whole percents, rather than as its two ends.
+
+- **Autopilot's last step is Done** (issue #5499). Labeling on after **Done!** used to move the panel to a seventh
+  step, **Keep Improving.**, whose light showed the lowest of the Smart, Stable and Span lights. After a Done that the
+  expected F-beta or the 200-vote cap said, with a light short of green, it could stay red for the rest of the
+  session, as if something were still owed. Now **Done!** stays the current step, with its green check, however long
+  you label on; when a later vote moves a light off green, its line reads **Detector trained**. Toasty's hand-off no
+  longer says to "keep clicking to sharpen it", which never said when to stop: it says you can keep voting, but you
+  don't need to.
 
 - **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
   stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
@@ -110,6 +125,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
 
 ### Fixed
+
+- **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
+  Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
+  server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
+  Opened from the top bar on the Label view, where the Dashboard isn't open, the import was lost outright. Like
+  every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
+  the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
 
 - **Find Results' selected buttons are readable** (issue #5500). The selected Good / Bad / Both and Sort
   by buttons drew grey text on their blue (or, in High Visibility, yellow) fill, too faint to read in any theme; the
