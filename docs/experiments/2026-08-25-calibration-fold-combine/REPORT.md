@@ -647,7 +647,7 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
 
 *Written 2026-08-26 alongside array 541929 and recorded here on 2026-11-02;
 see the correction box under* Results. *Not pre-registered.* From the same
-cells via `scripts/experiments/calibration/drill_folds_3115.py`, which walks a
+cells via `scripts/experiments/folds_3115/drill_folds_3115.py`, which walks a
 contrast down env → category → run → step.
 
 Every arm sits **below** the oracle cut on 70–92 % of deep steps — the trained
@@ -750,7 +750,7 @@ Analysis code, all in-tree: `scripts/experiments/calibration/folds_combine_3115.
 (the contrast), `scripts/experiments/calibration/analyze_folds_2897.py` (the
 driver and the fold-count axis),
 `scripts/experiments/calibration/make_folds_3115_figs.py` (figures),
-`scripts/experiments/calibration/drill_folds_3115.py` (the post-hoc drill-down
+`scripts/experiments/folds_3115/drill_folds_3115.py` (the post-hoc drill-down
 behind *Second run, post hoc*), and
 `scripts/experiments/calibration/selftest_analyze_folds_2897.py`, which plants a
 known answer — including the two acceptance identities — and checks the analyzer

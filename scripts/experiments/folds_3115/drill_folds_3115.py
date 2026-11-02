@@ -17,7 +17,8 @@ it is to find the situations that produce the loss, so the losing rule can be
 improved rather than merely avoided.
 
 Reads the same per-step cells the tables come from, so a drill-down and a
-headline cannot disagree.
+headline cannot disagree. Lives outside ``calibration/`` because that directory
+takes no new study files (#5406).
 
 Usage::
 
@@ -34,7 +35,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent))
+# The #3115 study's analyzers live in the shared calibration directory, which
+# takes no new study files (#5406), so this follow-up reaches them from here.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
 
 import folds_combine_3115 as fc  # noqa: E402
 from analyze_folds_2897 import fold_frame, load_cells  # noqa: E402
