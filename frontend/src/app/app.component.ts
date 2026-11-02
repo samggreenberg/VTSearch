@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   HostListener,
   inject,
@@ -170,9 +171,11 @@ export class AppComponent {
     // on a request anyway, and the service (with the words it shares with
     // Find Results, #5501) need not ride the eager bundle.
     const injector = inject(Injector);
-    void import('./services/training-domain-alert.service').then((m) =>
-      injector.get(m.TrainingDomainAlertService).start(),
-    );
+    let destroyed = false;
+    inject(DestroyRef).onDestroy(() => (destroyed = true));
+    void import('./services/training-domain-alert.service').then((m) => {
+      if (!destroyed) injector.get(m.TrainingDomainAlertService).start();
+    });
     this.auth.checkStatus();
     this.hfAuth.refresh();
     this.handleHuggingFaceRedirect();
