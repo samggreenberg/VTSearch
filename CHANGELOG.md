@@ -56,6 +56,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Autopilot's last step is Done** (issue #5499). Labeling on after **Done!** used to move the panel to a seventh
+  step, **Keep Improving.**, whose light showed the lowest of the Smart, Stable and Span lights. After a Done that the
+  expected F-beta or the 200-vote cap said, with a light short of green, it could stay red for the rest of the
+  session, as if something were still owed. Now **Done!** stays the current step, with its green check, however long
+  you label on; when a later vote moves a light off green, its line reads **Detector trained**. Toasty's hand-off no
+  longer says to "keep clicking to sharpen it", which never said when to stop: it says you can keep voting, but you
+  don't need to.
+
 - **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
   stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
   dataset are, was never told Done: 81-87% of FHIBE sessions ran to the end without it. Now, once 16 picks in a row

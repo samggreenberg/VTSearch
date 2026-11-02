@@ -151,6 +151,10 @@ describe('AppComponent', () => {
     expect(text).toContain('Your detector is trained! Click Dashboard to put it to work');
     // What to do next, not why it's done: no scores or counts (#5143).
     expect(text).not.toMatch(/\d|F-beta|light/);
+    // Voting on is allowed, but it is not the ask: "keep clicking to sharpen
+    // it" named no point at which to stop (#5499).
+    expect(text).toContain("You can keep voting, but you don't need to.");
+    expect(text).not.toMatch(/sharpen|keep clicking/i);
 
     autopilot.handoff.set({ kind: 'all-labeled', votes: 40 });
     TestBed.tick();
