@@ -115,7 +115,9 @@
       bottom: 0;
       width: 10px;
       cursor: col-resize;
-      z-index: 2;
+      // Above the cell's own text: each sticky <th> is its own stacking
+      // context, so nothing outside the cell competes with this.
+      z-index: var(--z-base);
 
       &::after {
         content: '';

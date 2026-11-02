@@ -16,10 +16,6 @@
   flex-direction: column;
 }
 
-// The "Good votes" / "Bad votes" panel headers use `<h3>` semantically
-// but are styled as compact uppercase chips, not as full section
-// headings. See the load-sort-modal comment about promoting a shared
-// `.subhead` class; same pattern, same eventual fix.
 // Header row: the "Goods (#)" / "Bads (#)" chip on the left, with an
 // optional projected action cluster (Browse / To Dataset / Export in the
 // Find right panel) pushed to the right.
@@ -37,7 +33,7 @@
 .vote-section-heading {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2xs);
   min-width: 0;
 }
 
@@ -47,7 +43,10 @@
   letter-spacing: 0.03em;
 }
 
-h3 {
+// The "Goods (N)" / "Bads (N)" heading: an `<h3>` by structure, drawn as a
+// compact label through this class rather than by restyling the tag, the way
+// the global `.subhead` draws an `<h4>`.
+.vote-section-title {
   font-size: var(--font-sm);
   letter-spacing: var(--tracking-wide);
   margin: 0;
