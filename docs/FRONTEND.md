@@ -174,6 +174,10 @@ the component —
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
 by `AppComponent` inside `@defer` blocks, so any surface can start those flows.
+For the same reason, each of the Add-Dataset dialog's pickers sends its own
+import request and closes the dialog only once the server has accepted it.
+Never hand the request to the Dashboard to send: that view is not mounted
+when the dialog is opened from Label, and the request would be lost (#5498).
 
 ### Label view (`components/label-view/`)
 

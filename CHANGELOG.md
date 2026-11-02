@@ -104,6 +104,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
+  Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
+  server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
+  Opened from the top bar on the Label view, where the Dashboard isn't open, the import was lost outright. Like
+  every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
+  the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
+
 - **Find Results' selected buttons are readable** (issue #5500). The selected Good / Bad / Both and Sort
   by buttons drew grey text on their blue (or, in High Visibility, yellow) fill, too faint to read in any theme; the
   selected click / hover focus button in the view toolbar had the same grey icon. They now use the same dark or light
