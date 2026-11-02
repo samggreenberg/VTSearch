@@ -70,6 +70,10 @@
 // Verify Good / Bad are a symmetric pair: identical shape, distinguished only
 // by color (green = good, red = bad). Both are filled so neither reads as the
 // "primary" action over the other.
+// The hover shades each fill toward --text-primary, which is the opposite of
+// the --btn-filled-text ink in every theme, so hovering raises the label's
+// contrast. Shading toward --bg-body moved the fill toward the ink instead
+// (down to 3.95:1 on highviz Bad).
 .bsp-verify-good,
 .bsp-verify-bad {
   flex: 1;
@@ -84,8 +88,8 @@
   border-color: var(--color-good);
 
   &:hover {
-    background: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
-    border-color: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-good) 85%, var(--text-primary));
+    border-color: color-mix(in srgb, var(--color-good) 85%, var(--text-primary));
   }
 }
 
@@ -94,8 +98,8 @@
   border-color: var(--color-bad);
 
   &:hover {
-    background: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
-    border-color: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-bad) 85%, var(--text-primary));
+    border-color: color-mix(in srgb, var(--color-bad) 85%, var(--text-primary));
   }
 }
 

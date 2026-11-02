@@ -72,9 +72,12 @@ vt-icon.icon-spinning {
     color: var(--btn-filled-text);
   }
 
+  // Shade toward --text-primary, the opposite of the --btn-filled-text ink in
+  // every theme, so hover raises the label's contrast rather than lowering it
+  // (shading toward --bg-body fell to 3.95:1 on highviz Bad).
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-good) 85%, var(--text-primary));
   }
 }
 
@@ -92,8 +95,9 @@ vt-icon.icon-spinning {
     color: var(--btn-filled-text);
   }
 
+  // Same direction as .btn-good's hover above.
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-bad) 85%, var(--text-primary));
   }
 }

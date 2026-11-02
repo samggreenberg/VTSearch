@@ -182,9 +182,11 @@
   border-radius: var(--radius-sm);
 }
 
-// Dark text on these saturated fills reads far better than white
-// (--btn-filled-text): white-on-#e0a020/#4caf50 measured well under WCAG AA.
-.badge-ready { background: var(--color-good); color: var(--badge-text-dark); }
+// A Good-green badge takes the same ink as a filled Good button, which flips
+// per theme (dark on the dark theme's bright green, white on the light theme's
+// deep one). The amber embedding fill is bright in every theme, so it keeps
+// one dark ink: white on it measured well under WCAG AA.
+.badge-ready { background: var(--color-good); color: var(--btn-filled-text); }
 .badge-embedding { background: var(--badge-embedding); color: var(--badge-text-dark); }
 // Neutral "needs action" pill. Uses --bg-secondary-btn (a step lighter than
 // --border) + --text-secondary so the text holds readable contrast in dark
