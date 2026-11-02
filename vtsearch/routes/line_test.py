@@ -15,9 +15,9 @@ lifecycle for the active detector's Find session:
   ``find_mode`` keeps them out of the labelset), and deals the next round when
   the round is whole; once one pick is left it deals that round ahead, both
   ways the pick can go (``test.ahead``, #5116), so the client can fetch the
-  next round's images before the last vote;
-* ``POST /api/line-test/unvote`` takes one vote of the current round back (the
-  ↓ key);
+  next round's images before the last vote.  A vote on a pick already voted,
+  from any round and after Done too, corrects it (#5502): the user walks back
+  with ↓ and votes again, as everywhere else;
 * ``POST /api/line-test/cancel`` abandons a running test (the votes cast stay
   session votes);
 * ``POST /api/line-test/forget`` forgets the verdict the detector keeps for
@@ -51,7 +51,7 @@ import numpy as np
 from flask_smorest import Blueprint, abort
 
 from vtsearch.routes._context import MISSING_DETECTOR_HEADER, require_detector_header
-from vtsearch.schemas.line_test import LineTestResponseSchema, LineTestUnvoteRequestSchema, LineTestVotesRequestSchema
+from vtsearch.schemas.line_test import LineTestResponseSchema, LineTestVotesRequestSchema
 
 log = logging.getLogger(__name__)
 
@@ -128,6 +128,17 @@ def _keep(det_ctx, test) -> None:
         keep_verdict(det_ctx, test, dataset_id=dataset_id, dataset_name=dataset_name)
     except (OSError, DetectorWriteError):
         log.warning("could not keep the test verdict of detector %s", det_ctx.detector_id, exc_info=True)
+
+
+def _forget(det_ctx) -> None:
+    """Forget the verdict a correction just reopened.  A failed write is logged: the correction stands."""
+    from vtscore.detectors.line_verdicts import forget_verdict  # noqa: PLC0415
+    from vtscore.detectors.store import DetectorWriteError  # noqa: PLC0415
+
+    try:
+        forget_verdict(det_ctx, _tested_dataset(det_ctx)[0])
+    except (OSError, DetectorWriteError):
+        log.warning("could not forget the test verdict of detector %s", det_ctx.detector_id, exc_info=True)
 
 
 def _payload() -> dict[str, Any]:
@@ -241,11 +252,11 @@ def start_line_test():
 @require_detector_header
 @line_test_bp.arguments(LineTestVotesRequestSchema)
 @line_test_bp.response(200, LineTestResponseSchema)
-@line_test_bp.alt_response(400, description="A vote on an item that is not one of this round's picks.")
-@line_test_bp.alt_response(409, description="No test is running.")
+@line_test_bp.alt_response(400, description="A vote on an item that is neither one of this round's picks nor a pick already voted.")
+@line_test_bp.alt_response(409, description="No test, or a vote on a fresh pick when the test is done.")
 @_one_at_a_time
 def vote_line_test(body: dict):
-    """Record votes on the running test's picks.
+    """Record votes on the test's picks: this round's, or corrections to picks already voted.
 
     Each vote is a session vote on the item (provenance ``test``): verified in
     Find mode, so it lands in the Review tab's piles, and kept out of the
@@ -255,6 +266,14 @@ def vote_line_test(body: dict):
     that finishes it keeps its verdict on the detector (#4526).  The vote
     that leaves one pick deals the next round ahead, both ways that pick can
     go (``test.ahead``, #5116); the last vote installs the one it names.
+
+    A vote on a pick already voted corrects it (#5502), from any round, the
+    test running or done: ↓ walks back to it and the user votes again, as on
+    every other vote in the app, so a slip on the last pick of a round is not
+    sealed by the round it finished.  The rounds already dealt stay dealt
+    (``LineTest.relabel``).  A correction to a finished test keeps its verdict
+    again, or, when it reopens the test, deals the next round and forgets the
+    verdict until the test is done again.
     """
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
@@ -263,50 +282,39 @@ def vote_line_test(body: dict):
 
     det_ctx = get_active_detector_context()
     test = det_ctx.line_test
-    if test is None or test.phase().done or not test.pending:
+    if test is None or test.nothing_to_test:
         abort(409, message="No test is running.")
     votes = {int(v["id"]): v["label"] == "good" for v in body["votes"]}
-    stray = [cid for cid in votes if cid not in test.pending]
+    fresh = {cid: right for cid, right in votes.items() if cid in test.pending}
+    corrections = {cid: right for cid, right in votes.items() if cid not in test.pending and cid in test.labels}
+    stray = [cid for cid in votes if cid not in fresh and cid not in corrections]
     if stray:
-        abort(400, message=f"Not this round's picks: {stray}")
+        abort(400, message=f"Not a pick of this test: {stray}")
+    was_done = test.phase().done
+    if fresh and was_done:
+        abort(409, message="No test is running.")
     for cid, right in votes.items():
         set_vote(cid, "good" if right else "bad", provenance=dict(TEST_PROVENANCE))
         # An idempotent re-vote keeps its original provenance; the pick was
         # dealt all the same, so the test's tag goes on regardless.
         record_vote_provenance(cid, dict(TEST_PROVENANCE))
-    if test.record(votes):
+    changed = False
+    for cid, right in corrections.items():
+        changed = test.relabel(cid, right) or changed
+    round_whole = test.record(fresh) if fresh else False
+    if round_whole or (changed and not test.phase().done):
+        # A whole round deals the next; so does a correction that reopened a
+        # finished test (``draw`` keeps a round still pending).
         test.draw()
     # The stop rule reads the ranges as they stand, so a test can finish part
     # way through a round; either way this is the vote that finished it.
     if test.phase().phase == PHASE_DONE:
-        _keep(det_ctx, test)
+        if fresh or changed:
+            _keep(det_ctx, test)
     else:
+        if was_done:
+            _forget(det_ctx)
         test.deal_ahead()
-    return _payload()
-
-
-@line_test_bp.route("/api/line-test/unvote", methods=["POST"])
-@require_detector_header
-@line_test_bp.arguments(LineTestUnvoteRequestSchema)
-@line_test_bp.response(200, LineTestResponseSchema)
-@line_test_bp.alt_response(400, description="Not a vote of the current round.")
-@line_test_bp.alt_response(409, description="No test is running.")
-@_one_at_a_time
-def unvote_line_test(body: dict):
-    """Take back one vote of the current round (the ↓ key): the pick goes back to pending, and its session vote is lifted."""
-    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
-    from vtsearch.state import set_vote  # noqa: PLC0415
-
-    det_ctx = get_active_detector_context()
-    test = det_ctx.line_test
-    if test is None or test.phase().done or not test.pending:
-        abort(409, message="No test is running.")
-    cid = int(body["id"])
-    try:
-        test.unrecord(cid)
-    except ValueError as exc:
-        abort(400, message=str(exc))
-    set_vote(cid, "none")
     return _payload()
 
 

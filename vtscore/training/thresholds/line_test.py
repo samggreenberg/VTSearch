@@ -807,7 +807,7 @@ class LineTest:
         return True
 
     def unrecord(self, media_id: int) -> None:
-        """Take back one label of the current round (the ↓ key): the pick goes back to pending."""
+        """Take back one label of the current round: the pick goes back to pending."""
         cid = int(media_id)
         if cid not in self.labels or self.band is None or self.pick_band.get(cid) != self.band:
             raise ValueError(f"not a label of this round: {media_id}")
@@ -815,6 +815,30 @@ class LineTest:
         self._invalidate()
         self._ahead.clear()
         self.pending = tuple(i for i in self.band_ids(self.band) if i in self.pick_band and i not in self.labels)
+
+    def relabel(self, media_id: int, right: bool) -> bool:
+        """Correct the label on a pick already recorded, from any round (#5502); ``True`` when it changed.
+
+        The user walks back to a pick and votes it again, as they would any
+        vote, so a slip on the last pick of a round is not sealed by the round
+        it finished.  The pick stays in the band it was drawn from and every
+        round stays dealt: each is still a uniform draw from its band, so the
+        ranges re-read on the corrected labels and remain what they claim.
+        Only the allocation already made read the slip, and allocation never
+        biases a band's estimate.  The phase is re-derived, so a correction
+        can end a running test or reopen a finished one, which :meth:`draw`
+        then deals on.  A label not recorded is refused; the same label again
+        changes nothing.
+        """
+        cid = int(media_id)
+        if cid not in self.labels:
+            raise ValueError(f"not a labelled pick: {media_id}")
+        if self.labels[cid] == bool(right):
+            return False
+        self.labels[cid] = bool(right)
+        self._invalidate()
+        self._ahead.clear()
+        return True
 
     # ---- dealing ahead
 
@@ -929,6 +953,9 @@ class LineTest:
             "picks": list(self.pending),
             "ahead": None if ahead is None else ahead.as_dict(),
             "labelled": len(self.labels),
+            # Every pick voted so far, in the order first voted: the trail a
+            # client walks back along to correct one (#5502).
+            "votes": [{"id": cid, "label": "good" if right else "bad"} for cid, right in self.labels.items()],
             "bands": bands,
             "estimates": None if self.nothing_to_test else self.estimates().as_dict(),
             "budgets": self.budgets.as_dict(),

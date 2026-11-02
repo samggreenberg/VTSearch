@@ -3,7 +3,8 @@
 Start freezes the ranking off the Find pass's scores and the line at its
 threshold and deals round one; votes land as session votes (provenance
 ``test``, verified in Find mode, never in the labelset) and move the ranges;
-the ↓ key takes one back; a whole round deals the next, until the phase
+a vote on a pick already voted corrects it, from any round and after Done
+(#5502); a whole round deals the next, until the phase
 machine says done, and the vote that leaves one pick deals it ahead, both
 ways that pick can go; cancel drops a running test and keeps a finished one; the
 result reads ``stale`` once corrections are folded in and ``moved`` once the
@@ -85,10 +86,9 @@ class TestBeforeAnyTest:
         assert resp.status_code == 409
         assert "score the dataset" in resp.get_json()["message"]
 
-    def test_votes_and_unvote_need_a_running_test(self, client):
+    def test_votes_need_a_test(self, client):
         _run_find(client)
         assert client.post("/api/line-test/votes", json=_votes([1], True)).status_code == 409
-        assert client.post("/api/line-test/unvote", json={"id": 1}).status_code == 409
         # Nothing running: cancel is a no-op.
         assert client.post("/api/line-test/cancel", json={}).get_json()["test"] is None
 
@@ -140,7 +140,15 @@ class TestOneRound:
         assert all(ctx.vote_provenance[cid]["flow"] == "test" for cid in picks)
         assert ctx.threshold == pytest.approx(1.0 - 64 / 201)
 
-    def test_the_down_key_takes_a_vote_back(self, client):
+    def test_the_votes_so_far_are_on_the_wire_in_the_order_cast(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        picks = _start(client)["test"]["picks"]
+        client.post("/api/line-test/votes", json=_votes(picks[1:2], False))
+        test = client.post("/api/line-test/votes", json=_votes(picks[:1], True)).get_json()["test"]
+        assert test["votes"] == [{"id": picks[1], "label": "bad"}, {"id": picks[0], "label": "good"}]
+
+    def test_a_vote_on_a_pick_already_voted_corrects_it(self, client):
         _run_find(client)
         _plant_big_corpus()
         ctx = get_active_detector_context()
@@ -148,11 +156,35 @@ class TestOneRound:
         client.post("/api/line-test/votes", json=_votes(picks[:1], False))
         assert picks[0] in ctx.bad_votes and picks[0] in ctx.verified_ids
 
-        data = client.post("/api/line-test/unvote", json={"id": picks[0]}).get_json()
-        assert data["test"]["labelled"] == 0 and set(data["test"]["picks"]) == set(picks)
-        assert picks[0] not in ctx.bad_votes and picks[0] not in ctx.verified_ids
-        # Only a vote of this round can be taken back.
-        assert client.post("/api/line-test/unvote", json={"id": picks[1]}).status_code == 400
+        test = client.post("/api/line-test/votes", json=_votes(picks[:1], True)).get_json()["test"]
+        assert test["labelled"] == 1 and test["picks"] == picks[1:] and test["round"] == 1
+        assert test["bands"][3]["right"] == 1 and test["votes"] == [{"id": picks[0], "label": "good"}]
+        assert picks[0] in ctx.good_votes and picks[0] not in ctx.bad_votes
+        assert ctx.vote_provenance[picks[0]]["flow"] == "test"
+
+    def test_the_last_pick_of_a_round_is_corrected_after_the_next_round_is_dealt(self, client):
+        """#5502: the round a slip finished does not seal it."""
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        picks = _start(client)["test"]["picks"]
+        client.post("/api/line-test/votes", json=_votes(picks[:4], True))
+        dealt = client.post("/api/line-test/votes", json=_votes(picks[4:], False)).get_json()["test"]
+        assert dealt["round"] == 2 and dealt["bands"][3]["right"] == 4
+
+        test = client.post("/api/line-test/votes", json=_votes(picks[4:], True)).get_json()["test"]
+        # The round already dealt stays dealt; only the label moves, and the ranges with it.
+        assert test["round"] == 2 and test["picks"] == dealt["picks"]
+        assert test["bands"][3]["right"] == 5 and test["labelled"] == 5
+        assert picks[4] in ctx.good_votes and picks[4] not in ctx.bad_votes
+
+    def test_a_vote_on_an_item_never_dealt_is_refused(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        picks = _start(client)["test"]["picks"]
+        client.post("/api/line-test/votes", json=_votes(picks, True))
+        stray = next(cid for cid in range(1, 201) if cid not in picks and cid not in get_active_detector_context().line_test.pending)
+        assert client.post("/api/line-test/votes", json=_votes([stray], True)).status_code == 400
 
     def test_cancel_drops_a_running_test_and_keeps_the_votes_cast(self, client):
         _run_find(client)
@@ -200,14 +232,15 @@ class TestDealingAhead:
         plain.record({**{cid: True for cid in picks[:4]}, picks[4]: False})
         assert list(plain.draw()) == test["picks"]
 
-    def test_the_down_key_drops_the_round_dealt_ahead(self, client):
+    def test_a_correction_deals_ahead_again_for_the_labels_as_they_stand(self, client):
         _run_find(client)
         _plant_big_corpus()
         picks = _start(client)["test"]["picks"]
         ahead = client.post("/api/line-test/votes", json=_votes(picks[:4], True)).get_json()["test"]["ahead"]
         assert ahead["id"] == picks[4]
 
-        assert client.post("/api/line-test/unvote", json={"id": picks[0]}).get_json()["test"]["ahead"] is None
+        corrected = client.post("/api/line-test/votes", json=_votes(picks[:1], False)).get_json()["test"]["ahead"]
+        assert corrected is not None and corrected["id"] == picks[4]
         again = client.post("/api/line-test/votes", json=_votes(picks[:1], True)).get_json()["test"]["ahead"]
         assert again == ahead, "the same labels and the same generator state deal the same round"
         test = client.post("/api/line-test/votes", json=_votes(picks[4:], True)).get_json()["test"]
@@ -237,8 +270,9 @@ class TestToDone:
         est = test["estimates"]
         assert est["precision"]["lo"] > 0.5 and est["precision"]["hi"] <= 1.0
         assert est["found"] and est["at_edges"]
-        # Done: a vote is refused, cancel keeps the result, and start returns it as it is.
-        assert client.post("/api/line-test/votes", json=_votes([1], True)).status_code == 409
+        # Done: a vote on an item never dealt is refused, cancel keeps the result, and start returns it as it is.
+        never = next(cid for cid in range(1, 201) if cid not in ctx.line_test.labels and cid not in ctx.line_test.pending)
+        assert client.post("/api/line-test/votes", json=_votes([never], True)).status_code == 400
         assert client.post("/api/line-test/cancel", json={}).get_json()["test"]["phase"] == PHASE_DONE
         again = _start(client)["test"]
         assert again["labelled"] == test["labelled"] and ctx.line_test is not None
@@ -516,3 +550,58 @@ class TestResumingFromTheKeptPicks:
         picks = _start(client)["test"]["picks"]
         data = client.post("/api/line-test/forget", json={}).get_json()
         assert data["test"]["picks"] == picks and ctx.line_test is not None
+
+
+class TestCorrectionsAfterDone:
+    """#5502: ↓ walks back from the verdict too, so a slip on the vote that finished the test can be put right."""
+
+    def test_a_correction_that_leaves_the_test_done_keeps_the_verdict_again(self, client, monkeypatch):
+        import vtscore.config  # noqa: PLC0415
+
+        monkeypatch.setattr(vtscore.config, "SPOT_CHECK_SEED", 7)
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        done = _vote_until_done(client, _start(client), _clean_line)["test"]
+        (before,) = _kept()
+        # The last pick voted above the line: a match, voted a miss.
+        last_above = [v["id"] for v in done["votes"] if v["id"] <= 64][-1]
+
+        test = client.post("/api/line-test/votes", json=_votes([last_above], False)).get_json()["test"]
+        assert test["labelled"] == done["labelled"] and last_above in ctx.bad_votes
+        assert {"id": last_above, "label": "bad"} in test["votes"]
+        assert test["phase"] == PHASE_DONE and test["picks"] == []
+        (after,) = _kept()
+        assert after.precision.as_dict() == test["estimates"]["precision"]
+        assert after.precision.point < before.precision.point
+
+    def test_a_correction_that_reopens_the_test_deals_on_and_forgets_the_verdict(self, client):
+        from vtscore.training.thresholds import LineBudgets  # noqa: PLC0415
+
+        _run_find(client)
+        _plant_big_corpus()
+        started = _start(client)
+        # A width target too tight to stop the walk below the line, so only its dry run ends it.
+        get_active_detector_context().line_test.budgets = LineBudgets(misses_width=0.001)
+        done = _vote_until_done(client, started, _clean_line)["test"]
+        # No class model: the walk below the line stopped at a band with no match in its picks.
+        assert done["report"]["misses_stop"] == "dry_run"
+        assert _kept()
+        below = [v["id"] for v in done["votes"] if v["id"] > 64]
+        assert below
+
+        test = client.post("/api/line-test/votes", json=_votes(below[-1:], True)).get_json()["test"]
+        assert test["phase"] == PHASE_MISSES and test["picks"]
+        assert test["band"]["side"] == "below" and all(cid > 64 for cid in test["picks"])
+        assert _kept() == [], "a reopened test has no verdict until it is done again"
+
+        data = _vote_until_done(client, {"test": test}, _clean_line)
+        assert data["test"]["phase"] == PHASE_DONE and _kept()
+
+    def test_a_fresh_pick_cannot_be_voted_once_done(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        _vote_until_done(client, _start(client), _clean_line)
+        ctx.line_test.pending = (200,)
+        assert client.post("/api/line-test/votes", json=_votes([200], True)).status_code == 409
