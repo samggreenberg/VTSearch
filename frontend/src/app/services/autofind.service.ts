@@ -4,7 +4,6 @@ import { Injectable, inject, signal } from '@angular/core';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { AutoDetectResultsData, AutoFindTaskInfo, LoadingTask } from '../models/api.models';
 import { autoExportFailure } from '../utils/auto-export-status';
-import { domainShiftLine } from '../utils/training-domain';
 import { AuthService } from './auth.service';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
@@ -166,9 +165,7 @@ export class AutoFindService {
     // Tune's training-domain warning, for each detector this dataset looks
     // unlike the training dataset of (#5501): an AutoFind opens nothing on
     // its own, so this notice is where the user first hears of it.
-    const shifts = (info.domain_shifts ?? []).map(
-      (s) => `\u26A0 ${s.detector_name}: ${domainShiftLine(s.frac_atypical, s.reference_dataset_name)}.`,
-    );
+    const shifts = (info.domain_shifts ?? []).map((s) => `\u26A0 ${s.detector_name}: ${s.message}.`);
     const detail = [outcome, ...shifts].join(' ');
     const warn = exportFailed || shifts.length > 0;
     const show = warn ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);

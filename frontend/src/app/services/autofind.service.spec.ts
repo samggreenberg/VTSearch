@@ -171,7 +171,14 @@ describe('AutoFindService', () => {
       finished(
         {},
         info({
-          domain_shifts: [{ detector_name: 'Mammal', reference_dataset_name: 'Caltech-101 (S)', frac_atypical: 0.68 }],
+          domain_shifts: [
+            {
+              detector_name: 'Mammal',
+              reference_dataset_name: 'Caltech-101 (S)',
+              frac_atypical: 0.68,
+              message: '68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift',
+            },
+          ],
         }),
       ),
     ]);

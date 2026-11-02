@@ -5,6 +5,7 @@ import {
   effect,
   HostListener,
   inject,
+  Injector,
   signal,
 } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
@@ -41,7 +42,6 @@ import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import { BuildSkewService } from './services/build-skew.service';
-import { TrainingDomainAlertService } from './services/training-domain-alert.service';
 import { AutoFindService } from './services/autofind.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
 import { MetricsService } from './services/metrics.service';
@@ -166,8 +166,13 @@ export class AppComponent {
     // downstream of it, and nothing else in the app can tell them (#2898).
     inject(BuildSkewService).check();
     // Warn when a detector meets a dataset unlike the one it was trained on,
-    // before the user runs it there (#4961).
-    inject(TrainingDomainAlertService).start();
+    // before the user runs it there (#4961). Loaded lazily: the warning waits
+    // on a request anyway, and the service (with the words it shares with
+    // Find Results, #5501) need not ride the eager bundle.
+    const injector = inject(Injector);
+    void import('./services/training-domain-alert.service').then((m) =>
+      injector.get(m.TrainingDomainAlertService).start(),
+    );
     this.auth.checkStatus();
     this.hfAuth.refresh();
     this.handleHuggingFaceRedirect();

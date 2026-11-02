@@ -153,6 +153,10 @@ class TestFindAndAutoFindCarryTheCheck:
                 "detector_name": "mammal",
                 "reference_dataset_name": "photos",
                 "frac_atypical": check["domain_shift"]["frac_atypical"],
+                "message": (
+                    f"{int(check['domain_shift']['frac_atypical'] * 100 + 0.5)}% of this dataset "
+                    "looks atypical vs photos: likely domain shift"
+                ),
             }
         ]
 

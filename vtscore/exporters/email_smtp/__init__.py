@@ -68,12 +68,11 @@ def _training_domain_line(det_result: dict[str, Any]) -> tuple[str, bool]:
     shift = check.get("domain_shift") or {}
     if "frac_atypical" not in shift:
         return "", False
+    from vtscore.coverage.domain_shift import domain_shift_line  # noqa: PLC0415
+
     reference = check.get("reference_dataset_name") or check.get("reference_dataset_id") or "its training dataset"
-    # Half up, as the browser rounds the same figure.
-    pct = int(float(shift["frac_atypical"]) * 100 + 0.5)
     shifted = bool(shift.get("shifted"))
-    verdict = "likely domain shift" if shifted else "largely in-domain"
-    return f"{pct}% of this dataset looks atypical vs {reference}: {verdict}", shifted
+    return domain_shift_line(shift["frac_atypical"], reference, shifted=shifted), shifted
 
 
 def _any_domain_shift(results: dict[str, Any]) -> bool:

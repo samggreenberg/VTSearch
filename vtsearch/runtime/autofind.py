@@ -668,22 +668,29 @@ def _check_training_domains(plan: AutoFindPlan, results: dict[str, dict], check_
 def domain_shifts(response: dict) -> list[dict[str, Any]]:
     """The detectors of an auto-detect *response* whose training-domain check says *likely domain shift*.
 
-    One ``{detector_name, reference_dataset_name, frac_atypical}`` each, in
-    result order: what a background run's notice names (#5501).
+    One ``{detector_name, reference_dataset_name, frac_atypical, message}``
+    each, in result order: what a background run's notice names (#5501).
+    ``message`` is the warning's line, worded as Tune words it, so the
+    browser's notice need not carry the wording itself.
     """
+    from vtscore.coverage.domain_shift import domain_shift_line  # noqa: PLC0415
+
     shifts: list[dict[str, Any]] = []
     for name, result in (response.get("results") or {}).items():
         check = result.get("training_domain") or {}
         shift = check.get("domain_shift") or {}
-        if shift.get("shifted"):
-            shifts.append(
-                {
-                    "detector_name": result.get("detector_name") or name,
-                    "reference_dataset_name": check.get("reference_dataset_name")
-                    or check.get("reference_dataset_id", ""),
-                    "frac_atypical": float(shift.get("frac_atypical", 0.0)),
-                }
-            )
+        if not shift.get("shifted"):
+            continue
+        reference = check.get("reference_dataset_name") or check.get("reference_dataset_id", "")
+        frac = float(shift.get("frac_atypical", 0.0))
+        shifts.append(
+            {
+                "detector_name": result.get("detector_name") or name,
+                "reference_dataset_name": reference,
+                "frac_atypical": frac,
+                "message": domain_shift_line(frac, reference, shifted=True),
+            }
+        )
     return shifts
 
 

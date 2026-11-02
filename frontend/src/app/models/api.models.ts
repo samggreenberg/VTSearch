@@ -332,4 +332,6 @@ export interface AutoFindDomainShift {
   reference_dataset_name: string;
   /** The share of the scored dataset atypical of the training dataset, 0-1. */
   frac_atypical: number;
+  /** The warning's line, worded by the server as Tune words it. */
+  message: string;
 }

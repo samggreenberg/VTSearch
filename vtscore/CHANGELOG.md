@@ -1647,8 +1647,8 @@ instead, since every commit on `dev` is effectively a new app release.)
   result of a `find_results` payload may now carry `training_domain`: the overlap check's report (the reference
   dataset, the label counts it rests on, and `domain_shift`, `vtscore.coverage.domain_shift_report`'s dict or
   `None`). The email exporter prints its figure and verdict under each detector and adds "(domain warning)" to its
-  default subject on a likely shift. Additive: an exporter that ignores the key keeps working. See
-  `extending/results-exporters.md`. To let the check run when that dataset is not loaded, a detector now records
+  default subject on a likely shift, worded by the new `vtscore.coverage.domain_shift_line`. Additive: an exporter
+  that ignores the key keeps working. See `extending/results-exporters.md`. To let the check run when that dataset is not loaded, a detector now records
   it: `vtscore.detectors.training_domain` gains `TRAINING_DATASET_KEY`, `training_dataset_record` and
   `recorded_training_dataset`, and `vtscore.detectors.evidence_baseline.record_baseline` takes a
   `training_dataset` keyword that writes it with the baseline (`PendingDraw` gains `labels_held`). A pointer and a

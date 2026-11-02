@@ -717,7 +717,8 @@ dataset_id, dataset_name}` (`trigger` is `"manual"` without `detector_ids` and
 `domain_shifts` lists the detectors whose
 [training-domain check](find.md#training-domain-overlap) reads *likely domain
 shift* on this dataset, each as `{detector_name, reference_dataset_name,
-frac_atypical}`, for the run's notice (#5501). The results go to the
+frac_atypical, message}` (`message` being the warning's line, as Tune words
+it), for the run's notice (#5501). The results go to the
 caller's AutoFind exporter when one is set, and are served by
 [`GET /api/autofind/runs/{run_id}`](find.md#autofind-results). Cancel with
 `POST /api/dataset/cancel/{task_id}`.

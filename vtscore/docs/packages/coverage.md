@@ -18,7 +18,7 @@ it on a context is separate, in `vtscore/state/coverage.py`; see
 | Module | Concern |
 |--------|---------|
 | `vtscore/coverage/atlas.py` | `CoverageAtlas`, `auto_max_depth` — the partition, its evidence channels and moments |
-| `vtscore/coverage/domain_shift.py` | `domain_shift_report`, `typicality_pvalues` — split-conformal kNN against a reference dataset's vectors (#3348) |
+| `vtscore/coverage/domain_shift.py` | `domain_shift_report`, `typicality_pvalues` — split-conformal kNN against a reference dataset's vectors (#3348); `domain_shift_line`, the report's one line as the app words it (#5501) |
 
 ## What the structure keeps
 
@@ -46,6 +46,7 @@ Three properties matter to callers:
 | `CoverageAtlas(vectors, k=3, max_depth=10, min_node_size=20, on_progress=None)` | The partition itself, built by recursive k-means over `{id: vector}` (`k` must be 2-9). See the method groups below |
 | `auto_max_depth(n, k=3, min_node_size=20)` | Depth to build to for *n* items: `COVERAGE_ATLAS_MAX_DEPTH` unless `n / min_node_size` exceeds the 4 000-leaf budget, then clamped so `k**depth` stays under it. At least 1 |
 | `domain_shift_report(reference, matrix, alpha=0.05)` | Dataset-level shift report: how much of *matrix* looks atypical against the *reference* vectors. Split-conformal kNN (k = 5), so a reference item's p-value is uniform; scores at most 4 000 rows of *matrix*; raises `ReferenceTooSmall` under 40 reference vectors |
+| `domain_shift_line(frac_atypical, reference, *, shifted)` | The report's one line, as the app's warnings and the email exporter word it: `"68% of this dataset looks atypical vs photos: likely domain shift"` (or *largely in-domain*), the share rounded half up |
 | `typicality_pvalues(reference, matrix, k=5)` | The per-row p-values behind the report, every row scored |
 | `COVERAGE_ATLAS_DEFAULT_K` / `COVERAGE_ATLAS_MAX_DEPTH` / `COVERAGE_ATLAS_MIN_NODE_SIZE` | Partition-shape defaults: `3` / `10` / `20` |
 
