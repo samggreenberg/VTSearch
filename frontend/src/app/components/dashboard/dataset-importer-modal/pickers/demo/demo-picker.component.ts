@@ -4,9 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
 import { ImportAdvancedComponent } from '../../import-advanced/import-advanced.component';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
+import { DatasetsCrudApiService, DemoLoadParams } from '../../../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { CleanerInfo, CleanerSelection, ClipperInfo, EmbedderInfo, ImporterInfo, MediaTypeInfo } from '../../../../../models/api.models';
 import { DemoDatasetEntry } from '../../../../../generated/api-client/models/demo-dataset-entry';
+import { apiErrorMessage } from '../../../../../utils/api-error';
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { composeEmbedders, getTabLabel, mediaTypeIconsById, mediaTypeLabels } from '../shared/media-type.util';
@@ -17,8 +19,8 @@ import { demoSortValue } from '../shared/demo-sort';
 /** Demo-dataset picker view: media-type tab bar + sortable table of
  *  pre-configured, optionally pre-downloaded demo datasets.  Row clicks
  *  record a selection (via the parent's shared `<vt-source-picker>`,
- *  which renders the table itself); the Import footer button commits
- *  it via :meth:`submit`.
+ *  which renders the table itself); the Import footer button starts
+ *  its import via :meth:`submit`.
  *
  *  Sits behind the shared ``<vt-source-picker>`` chrome; this component
  *  owns the media-type dropdown + Advanced block around the table (the
@@ -33,6 +35,7 @@ import { demoSortValue } from '../shared/demo-sort';
   styleUrl: './demo-picker.component.scss',
 })
 export class DemoPickerComponent {
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
 
@@ -56,10 +59,16 @@ export class DemoPickerComponent {
    *  remembered ``autofind_on_import`` setting decides server-side. */
   readonly autofind = input<boolean | null>(null);
 
-  /** Fired when the user commits the current row selection via the
-   *  Import footer button; the parent forwards the payload to its own
-   *  ``demoSelected`` output and closes the modal. */
-  readonly demoDatasetSelected = output<DemoDatasetEntry & Record<string, unknown>>();
+  /** Fired once the server has accepted the import (its task exists, so its
+   *  Dashboard row is on the way); the parent closes the modal. */
+  readonly importStarted = output<void>();
+  /** True from the Import click until the server answers.  The footer button
+   *  reads "Importing…" and stays disabled meanwhile, as every other
+   *  picker's does. */
+  readonly submitting = signal(false);
+  /** Why the last Import click failed, shown under the form; ``''`` when it
+   *  didn't. */
+  readonly submitError = signal('');
   /** Fired with the dataset type whose Import Defaults the picker has just
    *  applied, so the modal, which owns the two toggles above, can apply that
    *  type's saved ones. */
@@ -226,6 +235,8 @@ export class DemoPickerComponent {
     this.selectedDemo.set(null);
     this.multiDataset.set(false);
     this.outputDrafts.set([]);
+    this.submitting.set(false);
+    this.submitError.set('');
 
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -533,42 +544,66 @@ export class DemoPickerComponent {
     }
   }
 
-  /** Commit the currently-selected demo.  Bound to the Import footer
-   *  button in the parent's template; disabled there until a row is
-   *  selected. */
+  /** Start the selected demo's import.  Bound to the Import footer button in
+   *  the parent's template, which is disabled until a row is selected and
+   *  while the request is out.
+   *
+   *  The modal closes only once the server has answered (:attr:`importStarted`),
+   *  as it does for every other picker.  It used to close at the click and
+   *  leave the request to the Dashboard, so the wait for the answer showed
+   *  nothing at all: a slow answer read as an import that had not happened,
+   *  and invited a second one (#5498).  It also dropped the import outright
+   *  when the dialog was opened away from the Dashboard (the top bar's Add
+   *  new, on Label or Tune), where nothing was listening for it. */
   submit(): void {
     const demo = this.selectedDemo();
-    if (!demo) return;
-    this.offerSaveImportDefaults();
+    if (!demo || this.submitting()) return;
+    this.submitting.set(true);
+    this.submitError.set('');
+    this.datasetsCrudApi.loadDemo(demo.name, this.loadParams()).subscribe({
+      next: () => {
+        this.submitting.set(false);
+        this.offerSaveImportDefaults();
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.submitError.set(apiErrorMessage(err, 'Import failed'));
+      },
+    });
+  }
+
+  /** The ``load-demo`` body for the current choices, less the demo's name. */
+  private loadParams(): DemoLoadParams {
+    const params: DemoLoadParams = {};
     const userName = this.demoDatasetName().trim();
+    if (userName) params.dataset_name = userName;
+    if (this.buildProjection()) params.build_projection = 'true';
+    if (this.mergeNearDuplicates()) params.merge_near_duplicates = 'true';
+    const autofind = this.autofind();
+    if (autofind !== null) params.autofind = autofind ? 'true' : 'false';
     if (this.multiDataset()) {
       // One dataset per ticked row, each with its own settings; the
       // single-dataset embedder / clipper / cleanup / Convert to stay home.
-      this.demoDatasetSelected.emit({
-        ...demo,
-        outputs: outputsFromDrafts(this.outputDrafts()),
-        dataset_name: userName,
-        build_projection: this.buildProjection(),
-        merge_near_duplicates: this.mergeNearDuplicates(),
-        ...(this.autofind() !== null ? { autofind: this.autofind() } : {}),
-      } as any);
-      return;
+      params.outputs = outputsFromDrafts(this.outputDrafts());
+      return params;
     }
-    const embedders = composeEmbedders(this.selectedDemoEmbedder(), this.selectedDemoPatchEmbedder(), this.selectedDemoStructuralEmbedder());
-    const effClipper = this.effectiveDemoClipper();
+    const embedder = this.selectedDemoEmbedder();
+    if (embedder) params.embedder = embedder;
+    const embedders = composeEmbedders(embedder, this.selectedDemoPatchEmbedder(), this.selectedDemoStructuralEmbedder());
+    if (embedders) params.embedders = embedders;
+    const clipper = this.effectiveDemoClipper();
+    if (clipper) {
+      params.clipper = clipper;
+      const clipperParams = this.demoClipperParamValues();
+      if (Object.keys(clipperParams).length > 0) params.clipper_params = { ...clipperParams };
+    }
+    if (this.selectedCleaners().length > 0) params.cleaners = this.selectedCleaners();
+    // Convert-on-load step (e.g. document2image for the Document tab): the
+    // resulting dataset has the converter's target type.
     const converter = this.selectedDemoConverter();
-    this.demoDatasetSelected.emit({
-      ...demo,
-      embedder: this.selectedDemoEmbedder(),
-      ...(embedders ? { embedders } : {}),
-      ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
-      ...(this.selectedCleaners().length > 0 ? { cleaners: this.selectedCleaners() } : {}),
-      ...(converter ? { converter } : {}),
-      dataset_name: userName,
-      build_projection: this.buildProjection(),
-      merge_near_duplicates: this.mergeNearDuplicates(),
-      ...(this.autofind() !== null ? { autofind: this.autofind() } : {}),
-    } as any);
+    if (converter) params.converter = converter;
+    return params;
   }
 
   /** Offer this import's settings as the default.  A Multi-Dataset import is

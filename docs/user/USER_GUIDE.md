@@ -926,8 +926,9 @@ yellow until the check ends. Hover the light for the details.
 
 When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
-trained: keep voting and it keeps improving (your next vote sends Toasty
-away), or click **Dashboard** to export it or run it over another dataset.
+trained: click **Dashboard** to export it or run it over another dataset.
+You can keep voting (your next vote sends Toasty away), but you don't need
+to.
 Nothing happens on its own, and the hint only appears for the run that
 trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
@@ -937,15 +938,13 @@ buttons: asking for your first vote, then, through the run that trains the
 detector, saying what the current phase is after and how many Goods or Bads
 it still needs. See [Toasty's hints](#toastys-hints).
 
-Once **Done!** is reached it stays checked, and a seventh step, **Keep
-Improving.**, takes over for as long as you keep labeling. It is
-optional. Its light shows whichever of the smart, stable and span
-indicators is furthest behind, and its line says what Autopilot is
-offering now. A new vote can knock an indicator off green for a while
-as the detector takes it in; Autopilot then goes back to borderline
-items (**Showing boundary items**) or a broad mix (**Showing diverse
-items**) until it recovers, but the panel does not drop back to Refine
-Boundary.
+Once **Done!** is reached it stays the current step, checked, for as
+long as you keep labeling: no step follows it. A new vote can knock an
+indicator off green for a while as the detector takes it in. If you vote
+on, Autopilot then offers borderline items or a broad mix until it
+recovers, but the panel does not drop back to Refine Boundary: the line
+under **Done!** reads **Detector trained**, where it otherwise says what
+reached Done.
 
 ### Document collections stop on a dry run
 
@@ -1481,9 +1480,14 @@ unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
 top of the list or the detector's own guess: the ranked list is cut into
 bands on either side of the line, and each round deals five pictures drawn at
-random from one band. A pick carries no rank and no score (that would be the
-ranking talking, not the sample), and the dots above it count only how many
-of the round are left. Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`); `↓` goes back a pick and takes its vote back.
+random from one band. The picks come one at a time in the centre, as in
+Train's Autopilot, with nothing over them to say they are a test: a pick
+carries no rank and no score (that would be the ranking talking, not the
+sample). Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`). To put a
+slip right, `↓` walks back through the picks you have voted, from any round
+and from the verdict at **Done!** too, each with its vote lit; vote it again
+to correct it, and `↑` takes you back to where you were. A correction moves
+the ranges at once; the rounds already dealt stay as they were.
 
 The phases, each with a light that climbs red, yellow, green as it nears its
 end, as Train's do:

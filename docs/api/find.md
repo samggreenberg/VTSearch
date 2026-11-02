@@ -256,7 +256,6 @@ as for [AutoFind results](#autofind-results).
 GET  /api/line-test
 POST /api/line-test/start
 POST /api/line-test/votes
-POST /api/line-test/unvote
 POST /api/line-test/cancel
 POST /api/line-test/forget
 ```
@@ -278,7 +277,9 @@ band design valid.
 Every verb returns the same body: `{balance, threshold, line_count, test,
 stale, moved, presets}`. `test` (`null` before a test) holds the `phase` and
 its `report`, the round (`round`, `picks_per_round`, the `band` being dealt
-and its `picks`), the next round dealt ahead (`ahead`, below), every band's
+and its `picks`), the next round dealt ahead (`ahead`, below), every pick
+voted so far with its label in the order first voted (`votes`, the trail the
+app's ↓ walks back along), every band's
 tallies in `bands`, the joint `estimates`
 (precision, recall and F-beta as `{point, lo, hi}` ranges, the plain-language
 `found`, the positives either side of the line, and `at_edges`), the `budgets`
@@ -300,8 +301,17 @@ the phases run to, `kept_at` and `class_model`.
   the labelset like every Find vote, never a training label. The test records
   it against the pick's band and the ranges move; a partial round waits for
   the rest, and a whole round deals the next. The vote that finishes the test
-  keeps its verdict on the detector. **400** for an id that is not one of the
-  round's picks; **409** with no test running.
+  keeps its verdict on the detector.
+
+  A vote on a pick **already voted** corrects it (#5502), from any round and
+  after `done` too: the app's ↓ walks back to it and the user votes again.
+  The rounds already dealt stay dealt (each is still a uniform draw from its
+  band, so the ranges stay valid; `LineTest.relabel`). A correction to a
+  finished test keeps its verdict again; one that reopens it (a dry run
+  undone, say) deals the next round and drops the kept verdict until the test
+  is done again. **400** for an id that is neither one of the round's picks
+  nor a pick already voted; **409** with no test, or for a round's pick once
+  the test is done.
 
   The vote that leaves one pick of a running test deals the next round
   ahead (#5116): `test.ahead` is `{id, good, bad}`, `id` that last pick and
@@ -310,11 +320,8 @@ the phases run to, `kept_at` and `class_model`.
   round to the same band). The vote on `id` installs the one it names,
   exactly the round the test would have drawn after it, and the other is
   discarded. It is for fetching the next round's media during the last
-  pick, not for showing it. `ahead` is `null` otherwise, and an `unvote`
-  that puts a second pick back drops it.
-- **`unvote`** takes `{"id": 412}` and takes one vote of the current round
-  back (the ↓ key): the pick returns to `picks` and its session vote is
-  lifted. **400** for a vote not of this round.
+  pick, not for showing it. `ahead` is `null` otherwise, and a correction
+  deals it again for the labels as they stand.
 - **`cancel`** drops a running test; its votes so far stay session votes. A
   finished test is left as it is. Always **200**.
 - **`forget`** drops the [kept verdict](#the-kept-verdict) for this dataset,

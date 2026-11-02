@@ -96,11 +96,10 @@ export interface AutopilotState {
    * indicators after that, because it decides what autopilot picks: a vote
    * that knocks Stable off green sends it back to ``hard`` for boundary items.
    * But the user was told the detector is trained, so the panel reads this
-   * instead of the phase, keeping Done checked and showing further votes as
-   * an open-ended last step (Keep Improving) rather than bouncing back to
-   * Boundary. Display
-   * only: it never feeds the phase. Cleared only by falling back into the
-   * opening (votes un-done below its targets) or by a new run.
+   * instead of the phase, keeping Done the active step, checked, rather than
+   * bouncing back to Boundary; no step follows it (#5499). Display only: it
+   * never feeds the phase. Cleared only by falling back into the opening
+   * (votes un-done below its targets) or by a new run.
    */
   doneReached: boolean;
   /**

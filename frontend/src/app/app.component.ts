@@ -53,7 +53,6 @@ import {
   ImporterFlowState,
   NewDetectorFlowState,
 } from './services/new-thing-flows.service';
-import { DemoDatasetEntry } from './generated/api-client/models/demo-dataset-entry';
 import type { RecentSession } from './generated/api-client/models/recent-session';
 import { isPairCompatible } from './utils/context-compat';
 
@@ -432,11 +431,6 @@ export class AppComponent {
     // see the success event first; otherwise the close-handler runs first
     // and may clear state the success handler needs.
     this.newThingFlows.emitImportStarted();
-    this.newThingFlows.closeImporter();
-  }
-
-  onDemoSelected(demo: DemoDatasetEntry): void {
-    this.newThingFlows.emitDemoSelected(demo);
     this.newThingFlows.closeImporter();
   }
 

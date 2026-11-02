@@ -42,7 +42,13 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 BTAG = {"025": 0.25, "1": 1.0, "4": 4.0}
-SIZE = {"fhibe_faces_ik_1024": "1024", "fhibe_faces_ik_640": "640"}
+#: The face provider's crops, and #5486's other embedder: FaceNet's MTCNN crops (the arm before #5320).
+SIZE = {
+    "fhibe_faces_ik_1024": "1024",
+    "fhibe_faces_ik_640": "640",
+    "fhibe_faces_1024": "1024",
+    "fhibe_faces_640": "640",
+}
 #: Find's centroid line on face crops before #5478 (#5325), which the dev review's cells were drawn by.
 DEV_RULE = "count_gap_floor_skip25_b1_z5.5"
 ARMS = {"A": "A_x", "B": "B_x", "A_all": "A_all", "B_all": "B_all"}

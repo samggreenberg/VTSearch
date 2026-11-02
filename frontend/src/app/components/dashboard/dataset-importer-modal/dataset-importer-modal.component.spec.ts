@@ -904,6 +904,9 @@ describe('DatasetImporterModalComponent', () => {
       demo.onOutputDraftsChange(demo.outputDrafts().map((d) => (d.category === 'face' ? { ...d, checked: false } : d)));
       demo.selectDemo(mockDemos[1] as any);
       demo.submit();
+      // Offered once the import has started, as every picker does.
+      expect(offer).not.toHaveBeenCalled();
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
       expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
     });
 
@@ -927,6 +930,7 @@ describe('DatasetImporterModalComponent', () => {
       const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
       demo.selectDemo(mockDemos[1] as any);
       demo.submit();
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
       expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
     });
 
@@ -1074,7 +1078,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should record the demo selection without submitting on row click', () => {
     flushImporters();
-    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
     vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
@@ -1083,22 +1087,36 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.demoPicker().selectedDemo()).toBe(mockDemos[0] as any);
     // Auto-populates the Dataset Name from the chosen demo's label.
     expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
-    // No emit/close until the Import footer button is clicked.
-    expect(component.demoSelected.emit).not.toHaveBeenCalled();
+    // No request, emit or close until the Import footer button is clicked.
+    httpMock.expectNone('/api/dataset/load-demo');
+    expect(component.importStarted.emit).not.toHaveBeenCalled();
     expect(component.closed.emit).not.toHaveBeenCalled();
   });
 
-  it('should emit demoSelected and close when the demo picker submits', () => {
+  // #5498: the modal stays up, its Import button reading "Importing…", until
+  // the server has accepted the demo import; only then does it announce the
+  // start (on which the app closes it), as every other picker does.
+  it('should start the demo import itself and announce it only once the server answers', async () => {
     flushImporters();
-    vi.spyOn(component.demoSelected, 'emit');
-    vi.spyOn(component.closed, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     openAndFlushDemoPicker();
-
     component.demoPicker().selectDemo(mockDemos[0] as any);
-    component.demoPicker().submit();
-    expect(component.demoSelected.emit).toHaveBeenCalled();
-    expect(component.closed.emit).toHaveBeenCalled();
+    await settleZoneless(fixture);
+    const importBtn = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.form-actions .btn--primary')].at(-1)!;
+    expect(importBtn().textContent?.trim()).toBe('Import');
+
+    importBtn().click();
+    const req = httpMock.expectOne('/api/dataset/load-demo');
+    expect(req.request.body.name).toBe(mockDemos[0].name);
+    await settleZoneless(fixture);
+    expect(importBtn().textContent?.trim()).toBe('Importing…');
+    expect(importBtn().disabled).toBe(true);
+    expect(component.importStarted.emit).not.toHaveBeenCalled();
+
+    req.flush({ task_id: '_loading_1', task_ids: ['_loading_1'] });
+    expect(component.importStarted.emit).toHaveBeenCalledTimes(1);
   });
 
   it('should hide the demo tab bar in favor of a dropdown above the grid', async () => {
