@@ -62,6 +62,16 @@ export interface ColumnDef {
 export class ExportModalComponent implements OnInit {
   readonly detectorName = input('');
   /**
+   * Id of the detector this export belongs to, when the caller names one
+   * rather than exporting the active pair: the Dashboard row action, whose
+   * detector need not be loaded, let alone active. It goes out on the run
+   * request as ``detector_id``, so the server resolves the exporter's
+   * ``{detector_name}`` / ``{detector_id}`` against *this* detector instead of
+   * the top-bar's (issue #5494). Empty (the Find and Train callers) keeps
+   * resolving against the active detector.
+   */
+  readonly detectorId = input('');
+  /**
    * Name of the detector whose *persisted* labelset to export, when the
    * caller is naming one rather than exporting the pair it is working in.
    *
@@ -248,6 +258,12 @@ export class ExportModalComponent implements OnInit {
       this.detectorName() ||
       this.activeDetector.detectorName() ||
       this.labelSession.modelName,
+  );
+
+  /** The detector id the server will resolve ``{detector_id}`` against: the
+   *  one the caller named (sent as ``detector_id``), else the active one. */
+  readonly effectiveDetectorId = computed(
+    () => this.detectorId() || this.activeDetector.detectorId(),
   );
 
   constructor() {
@@ -573,6 +589,7 @@ export class ExportModalComponent implements OnInit {
       // before.
       return this.templateVars.resolveDefault(field, {
         detectorName: this.effectiveDetectorName(),
+        detectorId: this.effectiveDetectorId(),
       });
     }
     if (
@@ -770,12 +787,17 @@ export class ExportModalComponent implements OnInit {
     // best-effort open in the callback, and to the toast's Open action.
     const pendingTab = exporter.opens_url ? openBlankTab() : null;
 
+    // A named detector scopes the run server-side, so a field's
+    // `{detector_name}` names the detector being exported rather than
+    // whichever one the top bar has active (issue #5494).
+    const detectorId = this.detectorId();
     this.exportersApi
       .runExport({
         exporter_name: exporter.name,
         field_values: fieldValues,
         results: labelsData,
         payload_kind: 'labelset',
+        ...(detectorId ? { detector_id: detectorId } : {}),
       })
       .subscribe({
         next: (response) => {

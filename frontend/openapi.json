@@ -6999,6 +6999,11 @@
       "RunExportRequest": {
         "additionalProperties": false,
         "properties": {
+          "detector_id": {
+            "default": "",
+            "description": "Id of the detector this export belongs to, when the caller names one rather than exporting the active pair (the Dashboard row's Export labels). The exporter's ``{detector_name}`` / ``{detector_id}`` template variables then resolve against that detector, loaded or not, instead of the request's ``X-Detector-Id``; an unknown id is a 404 and one the user may not read a 403. Omit it to resolve against the active detector, as before.",
+            "type": "string"
+          },
           "exporter_name": {
             "minLength": 1,
             "type": "string"
@@ -12896,8 +12901,11 @@
           "400": {
             "description": "Missing plugin field or invalid filepath."
           },
+          "403": {
+            "description": "detector_id names a detector the user may not read."
+          },
           "404": {
-            "description": "Unknown exporter name."
+            "description": "Unknown exporter name, or detector_id names no detector."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

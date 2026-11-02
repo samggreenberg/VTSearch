@@ -104,6 +104,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Export labels from a Dashboard row fills in that row's detector** (issue #5494). An exporter field that uses
+  `{detector_name}` or `{detector_id}` (a file path, a URL, an email subject) took the detector the top bar had
+  active, not the row whose ⋯ menu you opened: it came out blank for a detector you had just imported and not yet
+  loaded, and with several detectors loaded it named whichever was loaded last. It now names the row's detector,
+  loaded or not.
+
 - **An import's progress counts its items, not out of 1000** (issue #5492). While an import ran more than one
   embedder (Step 3 of 4, Analyzing files), and through the whole of Step 4, the count beside the progress bar was out
   of a fixed 1000 that meant nothing: twenty images into a 50-image dataset it read `133/1000 SigLIP...`. It now
