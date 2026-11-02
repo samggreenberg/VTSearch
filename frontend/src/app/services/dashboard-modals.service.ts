@@ -13,6 +13,9 @@ export interface CombineDetectorsState {
 
 export interface ExportState {
   open: boolean;
+  /** The row's detector, which the export is scoped to server-side so its
+   *  `{detector_*}` templates name *it*, not the active detector (#5494). */
+  detectorId: string;
   detectorName: string;
 }
 
@@ -62,6 +65,7 @@ export class DashboardModalsService {
   });
   private readonly exportSubject = new BehaviorSubject<ExportState>({
     open: false,
+    detectorId: '',
     detectorName: '',
   });
   private readonly addLabelsSubject = new BehaviorSubject<AddLabelsState>({
@@ -137,12 +141,12 @@ export class DashboardModalsService {
     this.combineDetectorsSubject.next({ open: false });
   }
 
-  openExport(detectorName: string): void {
-    this.exportSubject.next({ open: true, detectorName });
+  openExport(detectorId: string, detectorName: string): void {
+    this.exportSubject.next({ open: true, detectorId, detectorName });
   }
 
   closeExport(): void {
-    this.exportSubject.next({ open: false, detectorName: '' });
+    this.exportSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 
   openAddLabels(detectorId: string, detectorName: string): void {

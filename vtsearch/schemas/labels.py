@@ -299,6 +299,19 @@ class RunExportRequestSchema(Schema):
             )
         },
     )
+    detector_id = fields.String(
+        load_default="",
+        metadata={
+            "description": (
+                "Id of the detector this export belongs to, when the caller names one rather than "
+                "exporting the active pair (the Dashboard row's Export labels). The exporter's "
+                "``{detector_name}`` / ``{detector_id}`` template variables then resolve against "
+                "that detector, loaded or not, instead of the request's ``X-Detector-Id``; an "
+                "unknown id is a 404 and one the user may not read a 403. Omit it to resolve "
+                "against the active detector, as before."
+            ),
+        },
+    )
 
 
 class RunExportResponseSchema(Schema):

@@ -1126,7 +1126,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Export / Add-Labels modal openers (state lives on DashboardModalsService) ---
 
   openExportModal(model: DetectorRegistryEntry): void {
-    this.modals.openExport(model.name);
+    this.modals.openExport(model.id, model.name);
   }
 
   openAddLabelsModal(model: DetectorRegistryEntry): void {

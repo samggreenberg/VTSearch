@@ -217,6 +217,13 @@ editable before the user hits Export. Resolving the active detector
 inside your export method instead gets you an empty box in the UI and
 a value that appears out of nowhere on submit.
 
+**Which detector `{detector_name}` names.** The one the export belongs
+to. From the app's Find and Train views that is the active detector; from
+a Dashboard row's Export labels it is the row's detector, which need not
+be loaded or active. The export route makes that detector the active
+context for the whole run, field validation and your export method alike,
+so even a body that reads `get_active_detector_context()` sees it.
+
 ## Server-path and URL validation
 
 **A declared field is already validated.** Because a field typed

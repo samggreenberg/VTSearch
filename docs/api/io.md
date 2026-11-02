@@ -42,6 +42,14 @@ the `GET /api/labels/export` response). When omitted it is inferred: a dict
 with a top-level `labels` key is a labelset. A kind the exporter doesn't list in `supported_payloads` is a 400.
 `detector_bundles` is refused with a 422: it is the trained classifiers
 themselves, which only the CLI pipeline has, so this route cannot build one.
+
+`detector_id` (optional) names the detector the export belongs to, when that
+is not the request's active one: the Dashboard row's Export labels sends it.
+The route then makes that detector the active one for the run (loaded or not),
+so the exporter's `{detector_name}` / `{detector_id}` template variables name
+it rather than the `X-Detector-Id` detector. An unknown id is a 404, and a
+detector the user may not read a 403. Omitted, the templates resolve against
+the active detector.
 A `labelset` reaches the exporter without what this server's embedder and head
 measured: each entry's `metadata["vt:provenance"]` loses `rank_at_vote` and
 `score_at_vote`, and a `detector_meta` loses `threshold`. An exported labelset
@@ -51,7 +59,8 @@ is references to labels, so it can rebuild the detector under another embedder.
 only when the exporter returns them
 (`display_results` is what the `gui` exporter hands back for in-app display).
 400 (missing plugin field, invalid file path, unsupported payload kind, or the
-exporter rejected its input), 404 (unknown exporter), 422 (unknown or
+exporter rejected its input), 403 (`detector_id` names a detector the user may
+not read), 404 (unknown exporter, or unknown `detector_id`), 422 (unknown or
 CLI-only `payload_kind`), 500 (exporter error).
 
 Built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,

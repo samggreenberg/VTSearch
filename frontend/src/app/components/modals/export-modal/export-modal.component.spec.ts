@@ -120,6 +120,29 @@ describe('ExportModalComponent', () => {
     req.flush({ success: true });
   });
 
+  // Issue #5494: the Dashboard row action names a detector that need not be
+  // the active one, so the run carries its id and the server resolves the
+  // exporter's `{detector_*}` templates against it, not the top bar's.
+  it('scopes the run to the detector the caller named', async () => {
+    fixture.componentRef.setInput('detectorId', 'row-det');
+    fixture.componentRef.setInput('detectorName', 'Sirens');
+    await flushInit();
+    TestBed.inject(ActiveContextService).setActivePair('ds1', 'active-det');
+    component.startExporter(mockExporters[0] as never);
+    const req = httpMock.expectOne('/api/exporters/export');
+    expect(req.request.body.detector_id).toBe('row-det');
+    req.flush({ success: true });
+  });
+
+  it('leaves the run on the active detector when no detector is named', async () => {
+    await flushInit();
+    TestBed.inject(ActiveContextService).setActivePair('ds1', 'active-det');
+    component.startExporter(mockExporters[0] as never);
+    const req = httpMock.expectOne('/api/exporters/export');
+    expect('detector_id' in req.request.body).toBe(false);
+    req.flush({ success: true });
+  });
+
   it('builds columns from available_columns once labels resolve', async () => {
     await flushInit();
     expect(component.labelsLoaded()).toBe(true);
@@ -658,6 +681,27 @@ describe('ExportModalComponent', () => {
       await flushInit();
       component.selectExporterTab(namedExporter as never);
       expect(component.formValues['label_set_name']).toBe('Sirens');
+    });
+
+    it('previews detector_id as the named detector, not the active one', async () => {
+      const idExporter = {
+        name: 'by_id',
+        display_name: 'By Id',
+        fields: [
+          {
+            key: 'target',
+            field_type: 'text',
+            default: 'labels/{detector_id}',
+            template_vars: ['detector_id'],
+          },
+        ],
+      };
+      fixture.componentRef.setInput('detectorId', 'row-det');
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInit();
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'active-det');
+      component.selectExporterTab(idExporter as never);
+      expect(component.formValues['target']).toBe('labels/row-det');
     });
 
     it('leaves a placeholder the field never declared', async () => {
