@@ -1534,8 +1534,11 @@ The right pane shows the result as it forms:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict takes the middle of the screen, where the picks
-were: it reads the ranges in a sentence, and offers three ways out, as Toasty
-does when Autopilot finishes in Train. If the result is out of date, or the
+were. It lays the ranges out as a form, one value to a row: **Line Keeps**
+(how many items the line keeps), **Fraction Correct** (the likely share of
+them that is right) and **Fraction Found** (the likely share of all the
+matches the line keeps; in words, for a detector with no class model). It
+then offers three ways out, as Toasty does when Autopilot finishes in Train. If the result is out of date, or the
 line has moved since the test, a note over the verdict says so. The right pane
 keeps the numbers behind it.
 
@@ -1555,7 +1558,7 @@ keeps the numbers behind it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/test-verdict.dark.webp" />
-  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
+  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
 </picture>
 
 **The verdict is kept on the detector.** Reaching Done saves it with the

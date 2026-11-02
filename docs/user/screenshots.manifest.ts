@@ -1306,7 +1306,7 @@ export const SHOTS: Shot[] = [
     id: 'test-verdict',
     embeddedIn: `${GUIDE}#the-result`,
     caption:
-      'The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
+      'The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
     themes: BOTH,
     clip: { target: '.verdict-card', pad: 8 },
     async recipe(page, h) {

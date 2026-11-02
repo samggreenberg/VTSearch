@@ -110,6 +110,13 @@ describe('LineTestStageComponent (#4524)', () => {
     expect(dots()[2].classList.contains('current')).toBe(true);
   });
 
+  /** The verdict's form as [label, value] rows. */
+  function verdictForm(): string[][] {
+    const form = el().querySelector('.verdict-card .verdict-form')!;
+    const values = Array.from(form.querySelectorAll('dd')).map((dd) => dd.textContent!.trim());
+    return Array.from(form.querySelectorAll('dt')).map((dt, i) => [dt.textContent!.trim(), values[i]]);
+  }
+
   async function done(response: LineTestResponse): Promise<void> {
     session.load();
     httpMock.expectOne('/api/line-test').flush(response);
@@ -135,9 +142,13 @@ describe('LineTestStageComponent (#4524)', () => {
     await done(wireLineTest(wireDone(), { presets }));
     const card = el().querySelector('.verdict-card') as HTMLElement;
     expect(card.querySelector('.section-title')!.textContent).toContain('Verdict');
-    expect(card.querySelector('.verdict')!.textContent).toContain(
-      'the line keeps the top 64: likely 55–95% of them are right, with about half of them found (30–70% of all the matches)',
-    );
+    // A form, not a sentence (#5503): each measured value on its own labelled row.
+    expect(verdictForm()).toEqual([
+      ['Line Keeps', '64'],
+      ['Fraction Correct', '55–95%'],
+      ['Fraction Found', '30–70%'],
+    ]);
+    expect(card.querySelector('.verdict-note')!.textContent).toContain('what AutoFind would ship');
     const exits = Array.from(card.querySelectorAll('.exit-btn')).map((b) => b.textContent!.trim());
     expect(exits).toEqual(['Move to AutoFind', 'Add Corrections and retrain']);
 
@@ -158,11 +169,13 @@ describe('LineTestStageComponent (#4524)', () => {
     expect(said).toEqual(['lean 4', 'autofind', 'corrections']);
   });
 
-  it('with no class model reads Found in the verdict in words only (#4542)', async () => {
+  it('with no class model reads Fraction Found in the verdict in words only (#4542)', async () => {
     await done(wireLineTest(wireDone({ class_model: false })));
-    const verdict = el().querySelector('.verdict')!.textContent!;
-    expect(verdict).toContain('with about half of them found. That is');
-    expect(verdict).not.toContain('of all the matches');
+    expect(verdictForm()).toEqual([
+      ['Line Keeps', '64'],
+      ['Fraction Correct', '55–95%'],
+      ['Fraction Found', 'About half of them found'],
+    ]);
   });
 
   it('says over the verdict that it is stale after corrections, or that the line moved, offering a new test', async () => {

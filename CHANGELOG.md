@@ -56,6 +56,11 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Tune's verdict reads as a form** (issue #5503). At Done the verdict put its numbers inside a sentence ("the line
+  keeps the top 76: likely 91–100% of them are right, with nearly all of them found (82–94% of all the matches)"),
+  which was hard to read. It now lays them out one to a row: **Line Keeps** 76, **Fraction Correct** 91–100%,
+  **Fraction Found** 82–94%.
+
 - **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
   stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
   dataset are, was never told Done: 81-87% of FHIBE sessions ran to the end without it. Now, once 16 picks in a row
