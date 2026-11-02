@@ -108,11 +108,33 @@
   line-height: 1.4;
 }
 
-.verdict {
+// The verdict as a form (#5503): labels in one column, the measured values
+// beside them in the next, each value large enough to read at a glance.
+.verdict-form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: baseline;
+  gap: var(--space-md) var(--space-xl);
   margin: 0;
-  font-size: var(--font-lg);
-  line-height: 1.5;
-  color: var(--text-primary);
+
+  dt {
+    color: var(--text-secondary);
+    cursor: help;
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--font-xl);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+}
+
+.verdict-note {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 .exits {

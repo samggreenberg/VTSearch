@@ -1043,7 +1043,7 @@ as they stood when the check started: of those, it counts the picks that
 fell among them. When it ends, Autopilot carries on, and the note under the
 Threshold, on the **Manual** tab, shows what it found:
 
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - when the check started the
   line kept 36 items you hadn't voted on; now, with the check's own picks
   voted and the line re-drawn, it keeps 30 more besides your votes. The range
@@ -1061,7 +1061,8 @@ most of the matches near the top, the items left there hold few of them, so
 the check before **Done!** can read low after a session that went well.
 
 **The likely range** says how much of the items the line kept, when the
-check started, is probably right. It comes from your picks alone, never from
+check started, is probably right. It reads as its centre and how far it
+reaches either way: *68 ± 13%* is roughly 55% to 80%. It comes from your picks alone, never from
 the detector's own guess: the picks that fell in each band's part of that
 set bound that part, exactly for its size (in a band of 8, 4 right of 5
 means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
@@ -1198,7 +1199,7 @@ note under the spectrum says what the line keeps:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
   on, besides your votes, and nothing has measured them yet.
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - a spot check has measured
   it; see [How close the line got](#how-close-the-line-got).
 - **12 pass the verification gate** - on a pattern-matching (**Structural**)
@@ -1510,14 +1511,15 @@ Positives** to keep more, or train the detector further.
 The **Threshold** sits above the phases (and above the list on **Review**).
 It is frozen from the first round of picks until **Done!**, because moving
 the line would move the bands under the picks. The note under it reads this
-collection's result (*Tested · likely 70–85% right, about half of them found
+collection's result (*Tested · likely 78 ± 8% right, about half of them found
 (checked 32) · 64 kept*), or *Untested · top 64 kept*; it never shows the
 check Train ran, which measured the training collection and would read as
 this one's.
 
 ### The result
 
-The right pane shows the result as it forms:
+The right pane shows the result as it forms. Each range reads as its centre
+and how far it reaches either way (*78 ± 8%* is roughly 70% to 85%):
 
 - **Balance (F-beta)** - the one number that weighs the two kinds of mistake
   the way the Threshold does, with its likely range.
@@ -1538,8 +1540,11 @@ The right pane shows the result as it forms:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict takes the middle of the screen, where the picks
-were: it reads the ranges in a sentence, and offers three ways out, as Toasty
-does when Autopilot finishes in Train. If the result is out of date, or the
+were. It lays the ranges out as a form, one value to a row: **Line Keeps**
+(how many items the line keeps), **Fraction Correct** (the likely share of
+them that is right) and **Fraction Found** (the likely share of all the
+matches the line keeps; in words, for a detector with no class model). It
+then offers three ways out, as Toasty does when Autopilot finishes in Train. If the result is out of date, or the
 line has moved since the test, a note over the verdict says so. The right pane
 keeps the numbers behind it.
 
@@ -1559,7 +1564,7 @@ keeps the numbers behind it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/test-verdict.dark.webp" />
-  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
+  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
 </picture>
 
 **The verdict is kept on the detector.** Reaching Done saves it with the
@@ -1809,7 +1814,7 @@ with bulk-action and per-card controls.
     positives**, **Stats**, **Export labels**) stay available, and
     **Tune** and **Find** work as usual. Under each name is the latest
     [test verdict](#the-result) the detector keeps (*Tested on
-    drawings-new: likely 70-85% right, about half of them found (34
+    drawings-new: likely 78 ± 8% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
     since, or *Untested*: an AutoFind detector ships its matches
     unchecked, and this is what it was measured to ship.

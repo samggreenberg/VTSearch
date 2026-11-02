@@ -63,6 +63,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Tune's verdict reads as a form, and every likely range as centre ± spread** (issue #5503). At Done the verdict
+  put its numbers inside a sentence ("the line keeps the top 76: likely 91–100% of them are right, with nearly all
+  of them found (82–94% of all the matches)"), which was hard to read. It now lays them out one to a row:
+  **Line Keeps** 76, **Fraction Correct** 96 ± 5%, **Fraction Found** 88 ± 6%. Every likely range in the app (the
+  Tune result pane, the balance control's check line, the Dashboard's kept verdicts, and F-beta) now reads the same
+  way, as its centre ± how far it reaches either way, in whole percents, rather than as its two ends.
+
 - **Autopilot's last step is Done** (issue #5499). Labeling on after **Done!** used to move the panel to a seventh
   step, **Keep Improving.**, whose light showed the lowest of the Smart, Stable and Span lights. After a Done that the
   expected F-beta or the 200-vote cap said, with a light short of green, it could stay red for the rest of the

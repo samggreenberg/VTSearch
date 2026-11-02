@@ -105,7 +105,7 @@ export function wireDone(overrides: Partial<LineTestState> = {}): LineTestState 
   };
 }
 
-/** A verdict the detector keeps (#4526): drawings-new, 34 picks, likely 70–85% right. */
+/** A verdict the detector keeps (#4526): drawings-new, 34 picks, likely 78 ± 8% right. */
 export function wireVerdict(overrides: Partial<LineTestVerdict> = {}): LineTestVerdict {
   return {
     dataset_id: 'ds-new',

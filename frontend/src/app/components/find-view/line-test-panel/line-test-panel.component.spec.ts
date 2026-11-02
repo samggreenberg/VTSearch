@@ -66,7 +66,7 @@ describe('LineTestPanelComponent (#4524)', () => {
     expect(steps(el)[0].classList.contains('done')).toBe(true);
     // 0.6 wide against a 0.2 target: beyond twice it.
     expect(light(el)!.dataset['color']).toBe('red');
-    expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('likely 55–95% right');
+    expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('likely 75 ± 20% right');
 
     const narrower = wireTest();
     narrower.report = { ...narrower.report, matches_width: 0.3, picks_above: 10 };

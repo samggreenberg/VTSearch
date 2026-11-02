@@ -22,7 +22,16 @@
               <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
             </p>
           }
-          <p class="verdict">{{ verdict() }}</p>
+          @if (verdictFields().length) {
+            <!-- A form, not a sentence (#5503): each measured value on its own labelled row. -->
+            <dl class="verdict-form">
+              @for (field of verdictFields(); track field.label) {
+                <dt [title]="field.title">{{ field.label }}</dt>
+                <dd>{{ field.value }}</dd>
+              }
+            </dl>
+            <p class="verdict-note">Likely ranges from the random picks: what AutoFind would ship from a collection like this one.</p>
+          }
           <div class="exits">
             <button
               type="button"
@@ -63,7 +72,7 @@
                       >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
                     </td>
                     <td class="num">{{ row.estimate!.count | number }}</td>
-                    <td class="num">{{ row.estimate!.precision.lo * 100 | number: '1.0-0' }}–{{ row.estimate!.precision.hi * 100 | number: '1.0-0' }}%</td>
+                    <td class="num">{{ percent(row.estimate!.precision) }}</td>
                     <td>{{ row.estimate!.found }}</td>
                   </tr>
                 }
