@@ -9,6 +9,8 @@
 #                                               scorer) or gdino (#5395's, GroundingDINO-tiny), as a GPU array
 #   unknown_class_5490.sh zeroshot              grade them, with SigLIP's text sort, at every level -> <root>/zeroshot
 #   unknown_class_5490.sh votes                 the vote arms' F1, AP and Goods by click -> <root>/votes (one CPU job)
+#   unknown_class_5490.sh viewer                the calibration viewer + curves.py's quality-over-clicks pair over every
+#                                               arm, anchored at click 0 on SigLIP's family text sort -> <root>/viewer
 #   unknown_class_5490.sh dirs [ARM]            run dirs <sota>/<date>-uc5490-<arm>-b1 on the grid
 #   unknown_class_5490.sh preflight ARM [IDX]   the preflight a launch of the same cells would pass
 #   unknown_class_5490.sh launch ARM [IDX]      one arm as a cpu array (default: seed 0's 92 cells, Binary + Region)
@@ -124,6 +126,34 @@ votes)
   } >"$ROOT/votes.sh"
   sbatch --parsable -p cpu -c 8 --mem 32G -t 2:00:00 -J uc5490-votes -o "$ROOT/logs/votes-%j.out" "$ROOT/votes.sh"
   ;;
+viewer)
+  V="$ROOT/viewer"; mkdir -p "$V/arms"
+  for arm in "${ARMS[@]}"; do ln -sfn "$S/$D-$(run_of "$arm")/results" "$V/arms/$arm"; done
+  arms=$(IFS=,; echo "${ARMS[*]}")
+  {
+    echo '#!/bin/bash'
+    echo 'set -euo pipefail'
+    env_lines
+    echo "export CALIB_FGVC_LEVEL=family"
+    echo "python text_baseline.py --results $GRID/results --out $V/text_baseline_family.csv"
+    echo "python viewer.py --results $V/arms --arms $arms --baseline $V/text_baseline_family.csv --out $V/viewer.html --no-skyline --title 'A class no model knows (#5490)' --subtitle 'FGVC-Aircraft, 46 sibling variants, beta 1, seed 0; SAM3 arms show its held set (the head is hold:head rows, in the report)' --embedder-label siglip=Binary --embedder-label siglip+dinov3_patch=Region"
+    # curves.py pools every embedder in a run dir, so each path gets its own dirs: tasks 0-45 Binary, 46-91 Region.
+    for path in binary region; do
+      path_arms=()
+      for arm in "${ARMS[@]}"; do
+        [[ $path == region && $arm == ex4 ]] && continue
+        path_arms+=("$arm")
+        mkdir -p "$V/$path/$arm/cells"
+        for f in "$S/$D-$(run_of "$arm")/results/cells"/task_*; do
+          n=$((10#$(basename "$f" | sed -E 's/^task_([0-9]+).*/\1/')))
+          if [[ $path == binary && $n -lt 46 ]] || [[ $path == region && $n -ge 46 ]]; then ln -sf "$f" "$V/$path/$arm/cells/"; fi
+        done
+      done
+      echo "python curves.py --results $V/$path --arms $(IFS=,; echo "${path_arms[*]}") --baseline $V/text_baseline_family.csv --out $V/figures-$path"
+    done
+  } >"$ROOT/viewer.sh"
+  sbatch --parsable -p cpu -c 8 --mem 48G -t 3:00:00 -J uc5490-viewer -o "$ROOT/logs/viewer-%j.out" "$ROOT/viewer.sh"
+  ;;
 dirs)
   [[ -s "$GRID/results/prepare_info.json" ]] || { echo "no prepared grid at $GRID" >&2; exit 2; }
   for arm in "${ARMS[@]}"; do
@@ -168,7 +198,7 @@ launch)
   exec bash "$HERE/launch.sh" redo "${3:-0-91}"
   ;;
 *)
-  sed -n '2,26p' "$0"
+  sed -n '2,28p' "$0"
   exit 2
   ;;
 esac
