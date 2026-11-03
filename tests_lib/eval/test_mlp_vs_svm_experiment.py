@@ -310,7 +310,7 @@ class TestPrecisionFrames:
 class TestRankFrames:
     """#4357: where the positives sit in the test half and the session's unvoted pool."""
 
-    def _run(self, steps, sink, pframes=None, **knobs):
+    def _run(self, steps, sink, pframes=None, label_quota=False, **knobs):
         clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
         return simulate_voting_iterations(
             clips,
@@ -326,8 +326,8 @@ class TestRankFrames:
             precision_frame_sink=pframes,
             precision_frame_steps=steps if pframes is not None else None,
             # The frames read the trained head's ranking: under the label quota
-            # (#4643) its early steps are the Goods' centroid's, with no frame.
-            label_quota=False,
+            # (#4643) its early steps are the Goods' centroid's (#5527 tests them).
+            label_quota=label_quota,
             **knobs,
         )
 
@@ -367,6 +367,43 @@ class TestRankFrames:
         # The pool is the unvoted remainder: it shrinks by one per vote.
         n_sim = sink[0]["n_pool"] + 10
         assert sink[1]["n_pool"] == n_sim - 20
+
+    @staticmethod
+    def _kept(row, n_pos):
+        """How many the row's line kept on the test half, from its precision and recall."""
+        tp = round(row["recall"] * n_pos)
+        return round(tp / row["precision"]) if row["precision"] > 0 else 0
+
+    def test_centroid_steps_record_their_frames(self):
+        """#5527: a click whose Test is the Goods' centroid leaves its frame, cut where Test cuts it."""
+        from vtscore.detectors.centroid_head import FACE_BALL_RULE
+
+        steps = tuple(range(1, 21))
+        sink: list = []
+        # From beta 1 up with two Goods the face ball holds (#5478): every click past that is the centroid's.
+        rows = self._run(steps, sink, label_quota=True, centroid_line=FACE_BALL_RULE, beta=1.0)
+        # Before the first Bad there is no calibration pass to read, on either tier.
+        by_t = {
+            r["t"]: r
+            for r in rows
+            if r.get("detector_tier") == "centroid" and r["phase"] not in ("check", "") and r["n_bad"] > 0
+        }
+        assert len(by_t) >= 10, "the session sits on the centroid"
+        frames = {f["t"]: f for f in sink if f["kind"] == "step"}
+        assert set(by_t) & set(steps) <= set(frames), "every listed centroid click has its frame"
+        for t in set(by_t) & set(frames):
+            f = frames[t]
+            assert f["test_line_k_b1"] == self._kept(by_t[t], f["n_test_pos"]), (
+                f"click {t}: the frame keeps the row's set"
+            )
+
+    def test_recording_centroid_frames_does_not_change_the_run(self):
+        from vtscore.detectors.centroid_head import FACE_BALL_RULE
+
+        knobs = {"label_quota": True, "centroid_line": FACE_BALL_RULE, "beta": 1.0}
+        plain = self._run(None, None, **knobs)
+        recorded = self._run(tuple(range(1, 21)), [], **knobs)
+        assert_same_rows(drop_timing(plain), drop_timing(recorded))
 
     def test_test_ranks_are_the_test_scores_sorted(self):
         """The ranks are the #4220 precision frame's own test half, sorted by score."""

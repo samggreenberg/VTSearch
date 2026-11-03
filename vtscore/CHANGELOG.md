@@ -3114,6 +3114,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **Rank frames on the Goods' centroid's clicks** (issue #5527). `simulate_voting_iterations` records a `step`
+  rank frame on a listed click whose Test is the Goods' centroid, as it does on the trained head's; before, such a
+  click left none, so a face-ball session (#5478, on the centroid for the whole session from beta 1 up) had only
+  its `last` and ceiling frames. A pure read: the rows are unchanged.
+
 - **A chain-clipped dataset matches the detector trained at its granularity** (issue #5282).
   `vtscore.detectors.input_spec.extract_input_spec_from_medias` read every `clipper_<key>` origin param as a clipper
   parameter, including the `clipper_chain` trail, so every spec it returned for a dataset clipped through the chain
