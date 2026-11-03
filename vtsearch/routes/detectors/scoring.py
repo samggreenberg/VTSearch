@@ -594,9 +594,12 @@ def defer_learned_sort_baseline(
     dataset asks for it.  Only while the sort's head is the one a Find would
     score with (:func:`~vtscore.detectors.model_loading.cached_head_is_current`):
     under the label quota a Find trains the Goods' centroid instead (#4643), and
-    its line is not the sort's.  Runs inside the sort's job, whose active
-    dataset is *ds_ctx*.  Never raises: the baseline is a side channel, and the
-    sort's result is what the job is for.
+    its line is not the sort's.  A sort on the training dataset leaves its
+    training-dataset pointer (#5501) on the same timer either way, alone when
+    there is no baseline to draw (#5514), so a detector trained here and never
+    Tuned still names the dataset its labels are on.  Runs inside the sort's
+    job, whose active dataset is *ds_ctx*.  Never raises: the baseline and the
+    pointer are a side channel, and the sort's result is what the job is for.
     """
     import numpy as np
 
@@ -608,8 +611,7 @@ def defer_learned_sort_baseline(
     if labelset is None or not results or not det_ctx.detector_id:
         return
     try:
-        if not cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx)):
-            return
+        draws_baseline = cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx))
         embedder = det_ctx.embedder or None
         # The stamp names the vectors' width: any scored media's gives it.
         dim = 0
@@ -639,6 +641,7 @@ def defer_learned_sort_baseline(
                 threshold=threshold,
                 embedder=embedder,
                 labels_held=home["labels_held"],
+                draws_baseline=draws_baseline,
             )
         )
     except Exception:  # noqa: BLE001 - see the docstring

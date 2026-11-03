@@ -234,16 +234,24 @@ class TestTheBaselineFromTheTrainView:
         assert EVIDENCE_BASELINE_KEY not in (_read_detector(trained["path"]) or {})
         assert not wait_for_baseline_draws(timeout=0)
 
-    def test_under_the_label_quota_the_sort_leaves_nothing(self, client, tmp_path, quiet_forever):
-        """Three Bads: a Find there trains the Goods' centroid, whose line is not the sort's."""
+    def test_under_the_label_quota_the_sort_leaves_no_baseline(self, client, tmp_path, quiet_forever):
+        """Three Bads: a Find there trains the Goods' centroid, whose line is not the sort's.
+
+        The sort still leaves the training-dataset pointer waiting (#5514), and
+        the read off the training dataset lands it, with no baseline.
+        """
         from vtscore.detectors.evidence_baseline import wait_for_baseline_draws
 
         trained = self._train(client, tmp_path, bad_ids=[18, 19, 20])
-        assert wait_for_baseline_draws(timeout=0)
+        assert not wait_for_baseline_draws(timeout=0)
+        a_entry, _a_ctx = trained["a"]
         _b_entry, b_ctx = trained["b"]
         data = self._find_and_read(client, b_ctx, trained["detector_id"])
         assert data["available"] is True
         assert data["baseline"] == "none"
+        on_disk = _read_detector(trained["path"]) or {}
+        assert EVIDENCE_BASELINE_KEY not in on_disk
+        assert on_disk[TRAINING_DATASET_KEY]["dataset_id"] == a_entry["id"]
 
     def test_another_dataset_reads_the_baseline_the_sort_left(self, client, quiet_forever, trained):
         from vtscore.detectors.evidence_baseline import baseline_stamp, stored_baseline
@@ -302,6 +310,28 @@ class TestTheBaselineFromTheTrainView:
         assert client.get("/api/votes").status_code == 200
         # No rehydrate: the scores and the ranking the sort left are still there.
         assert det_ctx.last_learned_scores and det_ctx.line_ranking is not None
+
+    def test_under_the_label_quota_the_pointer_is_recorded_once_the_votes_stop(self, client, tmp_path, quiet_now):
+        """#5514: no baseline to draw, but the training dataset is still recorded, so the domain check can follow it."""
+        from vtscore.detectors.evidence_baseline import wait_for_baseline_draws
+        from vtscore.detectors.training_domain import recorded_training_dataset
+
+        trained = self._train(client, tmp_path, bad_ids=[18, 19, 20])
+        assert wait_for_baseline_draws(timeout=30.0)
+        a_entry, _a_ctx = trained["a"]
+        on_disk = _read_detector(trained["path"]) or {}
+        assert EVIDENCE_BASELINE_KEY not in on_disk
+        assert recorded_training_dataset(on_disk) == {
+            "dataset_id": a_entry["id"],
+            "dataset_name": "train-a",
+            "labels_held": 6,
+        }
+
+        det_ctx = get_active_detector_context()
+        assert det_ctx.last_learned_scores
+        assert client.get("/api/votes").status_code == 200
+        # No rehydrate: the write does not read as an outside edit.
+        assert det_ctx.last_learned_scores
 
     def test_unloading_the_detector_lands_the_waiting_draw(self, client, quiet_forever, trained):
         """An unloaded detector is something another process may read next, so its baseline lands now."""
