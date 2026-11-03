@@ -75,7 +75,7 @@ concrete enough to ship on its own.
 
 - **Residual token violations accumulate because the style audit is not gated** — `.claude/scripts/style-check.py` (medium impact)
 
-  The curated hits were swept in #5500; the four raw z-indexes left in the global stylesheets wait on the bundle budget (#5505). The remaining raw `opacity: 0.7` hits are the documented exceptions (hover-brighten rest states, done/future step dims). Unlike ruff/codespell, this checker runs only when someone remembers `/style-check`, so violations land silently in PRs whose authors never open the guide.
+  The curated hits were swept in #5500. The remaining raw `opacity: 0.7` hits are the documented exceptions (hover-brighten rest states, done/future step dims). Unlike ruff/codespell, this checker runs only when someone remembers `/style-check`, so violations land silently in PRs whose authors never open the guide.
 
   *Direction:* Wire `style-check.py` into run-tests.sh as a gate the way the screenshots wiring-check already is, with an annotation/whitelist mechanism for the deliberate exceptions (the `// kept exact` off-scale spacings, the opacity exceptions above, the scanner's broad §5.14 column-flex hits).
 

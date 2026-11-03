@@ -20,54 +20,7 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
-### Added
-
-- **The domain warning reaches Find and AutoFind** (issue #5501). Tune's warning that a dataset looks unlike the one a
-  detector was trained on ("68% of this dataset looks atypical vs photos: likely domain shift") now runs for every
-  detector of a Find or AutoFind: the Find Results dialog shows it under its summary, an AutoFind's finished notice
-  turns to a warning naming the detector, and the exported results carry the figure, which the email exporter prints
-  under each detector and flags in its subject. The training dataset no longer has to be loaded: a detector remembers
-  the dataset it was trained or tuned on, and the check reads that dataset from disk, so a run after a restart or an
-  AutoFind on a fresh import still warns. See [Trust a detector](docs/user/howto/trust-a-detector.md).
-
-- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
-  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
-  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
-  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
-  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
-  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
-
-- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
-  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
-  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
-  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
-  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
-  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
-  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
-
-- **An import alert can say what the import left out** (issue #5449). The event a server's
-  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
-  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
-  reason), so an alert email can tell you which files to look into. The
-  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
-
-- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
-  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
-  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
-  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
-  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
-  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
-  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
-  on request; a Face dataset built before this gets its thumbnails on its next save.
-
-- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
-  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
-  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
-  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
-  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
-  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
-  `max_results:`. It cannot be combined with `--resume`. See
-  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+## 2026-11-03
 
 ### Changed
 
@@ -131,6 +84,55 @@ what is on `dev` but not yet on `main`; each release dates that section
 - **A multi-dataset import's names no longer carry a badge** (issue #5461). Each dataset one import produced showed
   a badge with its kind of media after its name, so a face dataset read "Photos – Face", then **Face**, then
   **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
+
+### Added
+
+- **The domain warning reaches Find and AutoFind** (issue #5501). Tune's warning that a dataset looks unlike the one a
+  detector was trained on ("68% of this dataset looks atypical vs photos: likely domain shift") now runs for every
+  detector of a Find or AutoFind: the Find Results dialog shows it under its summary, an AutoFind's finished notice
+  turns to a warning naming the detector, and the exported results carry the figure, which the email exporter prints
+  under each detector and flags in its subject. The training dataset no longer has to be loaded: a detector remembers
+  the dataset it was trained or tuned on, and the check reads that dataset from disk, so a run after a restart or an
+  AutoFind on a fresh import still warns. See [Trust a detector](docs/user/howto/trust-a-detector.md).
+
+- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
+  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
+  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
+  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
+  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
+  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
+
+- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
+  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
+  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
+  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
+  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
+  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
+  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+
+- **An import alert can say what the import left out** (issue #5449). The event a server's
+  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
+  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
+  reason), so an alert email can tell you which files to look into. The
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+
+- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
+  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
+  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
+  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
+  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
+  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
+  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
+  on request; a Face dataset built before this gets its thumbnails on its next save.
+
+- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
+  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
+  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
+  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
+  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
+  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
+  `max_results:`. It cannot be combined with `--resume`. See
+  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
 ### Fixed
 
