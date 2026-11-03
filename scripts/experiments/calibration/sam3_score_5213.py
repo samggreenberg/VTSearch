@@ -96,9 +96,21 @@ NOUNS: dict[str, tuple[str, ...]] = {
 
 
 def prompt_table(dataset: str, cells: list[str]) -> dict[str, dict[str, list[str]]]:
-    """class -> {"typed": [text], "noun": [phrases]} for every class the cells name."""
+    """class -> {"typed": [text], "noun": [phrases]} for every class the cells name.
+
+    ``fgvc_aircraft`` (#5490) has no typed/noun pair: each cell takes every level of the loader's
+    table (``variant``, ``family``, ..., ``fake_name``), one prompt each, so one scoring pass serves
+    every opening its study runs.
+    """
     from vtscore.eval import scale_bands  # noqa: PLC0415
 
+    if dataset == "fgvc_aircraft":
+        pile = str(Path(__file__).resolve().parent.parent / "pile")
+        if pile not in sys.path:
+            sys.path.append(pile)
+        from pilebuild.loaders import fgvc_aircraft  # noqa: PLC0415
+
+        return {c: {k: [t] for k, t in fgvc_aircraft.prompt_levels(c).items()} for c in cells}
     out: dict[str, dict[str, list[str]]] = {}
     for cell in cells:
         cls, _ = scale_bands.parse_cell(cell)
@@ -192,7 +204,7 @@ def main() -> int:
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     info = next(iter(prepare["datasets"][args.dataset].values()))
     table = prompt_table(args.dataset, info["selected_categories"])
-    prompts = sorted({p for v in table.values() for kind in ("typed", "noun") for p in v[kind]})
+    prompts = sorted({p for v in table.values() for kind in v.values() for p in kind})
     (out / "prompts.json").write_text(json.dumps({"classes": table, "prompts": prompts}, indent=1))
 
     medias = load_medias(EMBEDDINGS_DIR / f"{args.dataset}__{args.pickle_embedder}.pkl")

@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-02-unknown-class-5490.8e6361f0ab92.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/text_baseline_family.csv": {
+     "bytes": 226742,
+     "oid": "10ebc9ae666ae5b39970e80f91be98ad33e893cf"
+    },
+    "tables/votes_info.json": {
+     "bytes": 341,
+     "oid": "44a44611537f4a13e45ebf44fc5027b313a5760b"
+    },
+    "tables/votes_paired.csv": {
+     "bytes": 14717,
+     "oid": "ee87d25d88d790040b66a5d07cf8e8698f88fdbb"
+    },
+    "tables/votes_per_click.csv": {
+     "bytes": 393854,
+     "oid": "6565ce9324ed49d0a8f2626d35cc4202bda81bf6"
+    },
+    "tables/votes_summary.csv": {
+     "bytes": 13331,
+     "oid": "b8a45cde43fab0ceaedcc424fdd4a3c38f13ac1a"
+    },
+    "tables/zeroshot_chance.csv": {
+     "bytes": 101,
+     "oid": "e7bcf2ed3dc655450e62bc721b436fd314ceac76"
+    },
+    "tables/zeroshot_paired.csv": {
+     "bytes": 4156,
+     "oid": "522ce1e350e7f57e566bd002cc0f06363fcfa290"
+    },
+    "tables/zeroshot_per_cell.csv": {
+     "bytes": 137003,
+     "oid": "82c9ccacbd8f6dab42c346e7a35725b042195a34"
+    },
+    "tables/zeroshot_summary.csv": {
+     "bytes": 4548,
+     "oid": "e4b2b2fe2c4224f1e463efe80fca74ccd307467b"
+    }
+   }
+  }
+ ]
+}

@@ -43,15 +43,18 @@ export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$SOTA_DATE}"
 # SOTA_DATASET=o365_better re-reads a contrast on the confirmation bench (#4817):
 # `coco_better`'s construction on Objects365, nothing tuned on it. A review never
-# sets it. Each dataset has its own embedders variable, so both are set alike.
+# sets it. Each dataset has its own embedders variable, so all are set alike.
+# SOTA_DATASET=fgvc_aircraft is #5490's sibling-variant bench: no size bands, the
+# opening's text chosen by CALIB_FGVC_LEVEL.
 export SOTA_DATASET="${SOTA_DATASET:-coco_better}"
-case "$SOTA_DATASET" in coco_better|o365_better) ;;
-  *) echo "SOTA_DATASET must be coco_better or o365_better" >&2; exit 2 ;; esac
+case "$SOTA_DATASET" in coco_better|o365_better|fgvc_aircraft) ;;
+  *) echo "SOTA_DATASET must be coco_better, o365_better or fgvc_aircraft" >&2; exit 2 ;; esac
 export CALIB_DATASETS="$SOTA_DATASET"
 # SOTA_EMBEDDERS swaps the columns for an A/B on the embedder itself (#4837 runs
 # `siglip,embeddinggemma2`); a review never sets it, so "the app" stays named here.
 export CALIB_COCO_BETTER_EMBEDDERS="${SOTA_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 export CALIB_O365_BETTER_EMBEDDERS="$CALIB_COCO_BETTER_EMBEDDERS"
+export CALIB_FGVC_AIRCRAFT_EMBEDDERS="$CALIB_COCO_BETTER_EMBEDDERS"
 # SOTA_PATCH_STYLES swaps the region column's geometry for an A/B on the style
 # itself (#4711 runs the raw-patch HAC trees `max_patch_hac`/`max_patch_pca_hac`);
 # a review never sets it. One style per run dir keeps the grid at 288 cells a seed.
@@ -104,13 +107,16 @@ fi
 # context for "does this detector miss the other sizes" without it being a study.
 # The whole-cell thinning draws from the split RNG, so the harness refuses the
 # two together; `off` reaches it as unset.
-if [[ -n "${CALIB_TARGET_PREVALENCE:-}" ]]; then
+if [[ -n "${CALIB_TARGET_PREVALENCE:-}" || "$SOTA_DATASET" == fgvc_aircraft ]]; then
+  # fgvc_aircraft's cells carry no band to test across.
   export CALIB_TEST_BANDS=off
 else
   export CALIB_TEST_BANDS=all
 fi
 export CALIB_SAFE_THRESHOLDS=1
-export CALIB_REQUIRE_OPENING=text
+# SOTA_OPENING=example opens every cell on CALIB_SEED_EXAMPLES photos of its target
+# instead of the text sort (#5490's "supply examples" arm); a review never sets it.
+export CALIB_REQUIRE_OPENING="${SOTA_OPENING:-text}"
 export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_EMIT_PICKS=1
 # Where the positives sit in each ranking (#4357): the test half at these clicks

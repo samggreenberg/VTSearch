@@ -173,7 +173,7 @@ def main() -> int:
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     info = next(iter(prepare["datasets"][args.dataset].values()))
     table = prompt_table(args.dataset, info["selected_categories"])
-    prompts = sorted({p for v in table.values() for kind in ("typed", "noun") for p in v[kind]})
+    prompts = sorted({p for v in table.values() for kind in v.values() for p in kind})
     (out / "prompts.json").write_text(json.dumps({"classes": table, "prompts": prompts}, indent=1))
 
     medias = load_medias(EMBEDDINGS_DIR / f"{args.dataset}__{args.pickle_embedder}.pkl")
@@ -190,8 +190,27 @@ def main() -> int:
     model = AutoModelForZeroShotObjectDetection.from_pretrained(args.model, dtype=dtype).to(dev).eval()
     fill = None if args.no_cache else cache_backbone(model)
 
-    typed = {p for v in table.values() for p in v["typed"]}
-    sets = [[j for j, p in enumerate(prompts) if p in typed], [j for j, p in enumerate(prompts) if p not in typed]]
+    if all("typed" in v for v in table.values()):
+        typed = {p for v in table.values() for p in v["typed"]}
+        groups = [typed, set(prompts) - typed]
+    else:
+        # fgvc_aircraft (#5490), {level: [text]}: a caption holds one level's prompts and never two siblings' names,
+        # so a variant's score is not read against its siblings in the same caption.
+        levels: dict[str, set[str]] = {}
+        siblings: dict[str, set[str]] = {}
+        for v in table.values():
+            for level, ps in v.items():
+                if level != "variant":
+                    levels.setdefault(level, set()).update(ps)
+            siblings.setdefault(v["family"][0], set()).update(v["variant"])
+        rounds: dict[int, set[str]] = {}
+        for names in siblings.values():
+            for r, p in enumerate(sorted(names)):
+                rounds.setdefault(r, set()).add(p)
+        groups = [*levels.values(), *rounds.values()]
+    sets = [[j for j, p in enumerate(prompts) if p in g] for g in groups]
+    if sorted(j for s in sets for j in s) != list(range(len(prompts))):
+        raise SystemExit("caption sets do not cover every prompt exactly once")
     captions = [
         ({k: v.to(dev) for k, v in enc.items()}, {j: torch.tensor(q, device=dev) for j, q in pos.items()})
         for enc, pos in pack(processor.tokenizer, prompts, args.chunk_tokens, sets)
