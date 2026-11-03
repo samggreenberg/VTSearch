@@ -22,7 +22,7 @@ SE taken over the 16 families (cluster SE): 46 cells are not 46 independent prom
 shown and AP by click, the Goods each opening finds, every arm paired with ``sig-family`` (today's app when the user
 can only type the family), and what losing the name costs each opener: ``X:variant-family`` is the name's worth to
 opener X, ``sam3-sig:variant-family`` whether SAM3 loses more of it than SigLIP does. SAM3 arms are read under four
-hand-over rules (``hold``, ``head``, ``g20`` = the head from the 20th Good, #5312's route, and ``best``, a bound).
+hand-over rules (``hold``, ``quota`` = the head from the first click it exists, ``g20`` = the head from the 20th Good, #5312's route, and ``best``, a bound).
 
     python unknown_class_5490.py zeroshot --results <grid>/results --scores sam3=DIR gdino=DIR --out DIR
     python unknown_class_5490.py votes --out DIR
@@ -277,6 +277,7 @@ def votes(a) -> int:
     # shown[(arm, rule)][(cell, emb)] = (F1 curve, AP curve); goods[arm][(cell, emb)] = Goods by click.
     shown: dict[tuple[str, str], dict] = {}
     goods: dict[str, dict] = {}
+    info: dict = {}
     for arm in ARMS:
         cells = Path(a.root) / f"{a.date}-uc5490-{arm}-b1" / "results" / "cells"
         if not any(cells.glob("task_*.csv*")):
@@ -287,13 +288,21 @@ def votes(a) -> int:
         if arm.startswith("sam3-"):
             hold, head = curves(rows, ""), curves(rows, HOLD_TAG)
             shown[(arm, "hold")] = hold
-            shown[(arm, "head")] = head
-            g20, best = {}, {}
-            for k in set(hold) & set(head) & set(goods[arm]):
-                has = np.isfinite(head[k][0])
-                take = has & (goods[arm][k] >= HAND_OVER)
-                g20[k] = tuple(np.where(take, head[k][j], hold[k][j]) for j in (0, 1))
-                best[k] = tuple(np.where(has, np.fmax(head[k][j], hold[k][j]), hold[k][j]) for j in (0, 1))
+            # A session whose head never forms (no hold:head row: the quota never met) shows SAM3's set throughout;
+            # dropping it would keep only the cells where voting found enough Goods.
+            nan = np.full(T + 1, np.nan)
+            quota, g20, best = {}, {}, {}
+            for k in hold:
+                hd = head.get(k, (nan, nan))
+                gd = goods[arm].setdefault(k, np.zeros(T + 1))
+                has = np.isfinite(hd[0])
+                take = has & (gd >= HAND_OVER)
+                quota[k] = tuple(np.where(has, hd[j], hold[k][j]) for j in (0, 1))
+                g20[k] = tuple(np.where(take, hd[j], hold[k][j]) for j in (0, 1))
+                best[k] = tuple(np.where(has, np.fmax(hd[j], hold[k][j]), hold[k][j]) for j in (0, 1))
+                info.setdefault("sam3_head_never_forms", {}).setdefault(arm, {}).setdefault(k[1], 0)
+                info["sam3_head_never_forms"][arm][k[1]] += int(not has.any())
+            shown[(arm, "quota")] = quota
             shown[(arm, "g20")] = g20
             shown[(arm, "best")] = best
         else:
@@ -301,7 +310,7 @@ def votes(a) -> int:
     if ("sig-family", "shown") not in shown:
         raise SystemExit("sig-family (the comparison every row is paired with) has no cells")
 
-    summary, paired, per_click, info = [], [], [], {}
+    summary, paired, per_click = [], [], []
     for emb, path in PATHS.items():
         base = shown[("sig-family", "shown")]
         keys = sorted(k for k in base if k[1] == emb)
@@ -311,6 +320,8 @@ def votes(a) -> int:
         cats = [k[0] for k in keys]
         fam = pd.Series([fa.family_of(c) for c in cats])
         info[path] = {"cells": len(keys), "families": int(fam.nunique())}
+        if len(keys) != len(fa.cells()):
+            raise SystemExit(f"{path}: {len(keys)} cells common to every arm, not {len(fa.cells())}")
 
         def mat(arm_rule, j, keys=keys):
             return np.vstack([shown[arm_rule][k][j] for k in keys])
@@ -343,7 +354,7 @@ def votes(a) -> int:
                                   "goods": float(g[:, t].mean()) if g is not None else np.nan})  # fmt: skip
 
         # What losing the name costs each opener, and whether SAM3 pays more (a difference of paired differences).
-        for opener, rule in (("sig", "shown"), ("sam3", "g20"), ("sam3", "hold"), ("sam3", "head")):
+        for opener, rule in (("sig", "shown"), ("sam3", "g20"), ("sam3", "hold"), ("sam3", "quota")):
             for named, unnamed in (("variant", "family"), ("variant", "fake"), ("family", "fake")):
                 ka, kb = (f"{opener}-{named}", rule), (f"{opener}-{unnamed}", rule)
                 if ka not in shown or kb not in shown:
