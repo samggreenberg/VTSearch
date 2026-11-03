@@ -14,8 +14,9 @@ much as for one trained in this session.
 
 Only while that dataset is loaded, though, so the detector also records it
 (#5501): :data:`TRAINING_DATASET_KEY` names the dataset and how many of the
-labels it held, written with the Evidence baseline whenever one is drawn there
-(:mod:`vtscore.detectors.evidence_baseline`).  A pointer and a count, never a
+labels it held, written with the Evidence baseline whenever one is drawn there,
+and on its own by a learned sort there that draws none (#5514;
+:mod:`vtscore.detectors.evidence_baseline`).  A pointer and a count, never a
 vector, so the no-persisted-vectors rule is untouched; the check that reads it
 fetches the dataset's own vectors from its saved file.
 """

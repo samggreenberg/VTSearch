@@ -164,6 +164,10 @@ get_browse_details_metadata_width  # noqa: F821
 set_browse_details_metadata_width  # noqa: F821
 get_grid_icon_size_popup  # noqa: F821
 set_grid_icon_size_popup  # noqa: F821
+get_grid_icon_size_picker  # noqa: F821
+set_grid_icon_size_picker  # noqa: F821
+get_grid_icon_size_results  # noqa: F821
+set_grid_icon_size_results  # noqa: F821
 get_popup_metadata_shown  # noqa: F821
 set_popup_metadata_shown  # noqa: F821
 get_popup_preview_size  # noqa: F821
@@ -243,6 +247,8 @@ tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the bala
 quiet_forever  # noqa: F821 - holds the evidence-baseline draw waiting so only a read lands it
 quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the sort ends
 label_files  # noqa: F821 - writes the labels' origin files and points the resolver at them
+short_run  # noqa: F821 - pins HardDryRun's target to the test's short RUN
+one_item_per_city  # noqa: F821 - trims the toponymy demo to one item per city so the loads stay quick
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
