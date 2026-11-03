@@ -19,7 +19,7 @@ from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.datasets.labelset import imported_region_box
-from vtscore.io import desanitize_csv_cell, read_server_bytes
+from vtscore.utils.io import desanitize_csv_cell, read_server_bytes
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
 

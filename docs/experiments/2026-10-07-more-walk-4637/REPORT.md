@@ -57,7 +57,7 @@ paired per run. ± is one SE over classes, because the runs of one class are not
 
 ## Result
 
-![The returned set over clicks](figures/walk_over_clicks.png)
+![The returned set over clicks](figures/walk_over_clicks.webp)
 
 *Mean F-beta of the returned set over trained runs, per preset. Grey is today. Before click ~23 no session has reached
 Hard, so today and green show the typed query's set.*
@@ -69,7 +69,7 @@ Hard, so today and green show the typed query's set.*
 | D, shown | 0.47 / 0.36 / 0.44 | 0.55 / 0.45 / 0.52 | 0.47 / 0.36 / 0.42 | 0.55 / 0.44 / 0.51 | 0.64 / 0.53 / 0.61 |
 | D, typed query until Hard | 0.49 / 0.39 / 0.48 | 0.55 / 0.45 / 0.54 | 0.48 / 0.37 / 0.46 | 0.53 / 0.43 / 0.51 | 0.63 / 0.53 / 0.60 |
 
-![Paired gains over clicks](figures/walk_gain_over_clicks.png)
+![Paired gains over clicks](figures/walk_gain_over_clicks.webp)
 
 *Paired gains over clicks, ± 1 SE over classes.*
 

@@ -1,4 +1,4 @@
-"""Tests for ``scripts/setuptools_spec.py``.
+"""Tests for ``scripts/install/setuptools_spec.py``.
 
 ``install.sh`` used to pin ``setuptools<82`` for torch 2.12.0's sake; a venv
 rebuilt with that pin landed on setuptools 81, which carries PYSEC-2026-3447 and
@@ -18,7 +18,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("setuptools_spec", REPO_ROOT / "scripts" / "setuptools_spec.py")
+    spec = importlib.util.spec_from_file_location(
+        "setuptools_spec", REPO_ROOT / "scripts" / "install" / "setuptools_spec.py"
+    )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

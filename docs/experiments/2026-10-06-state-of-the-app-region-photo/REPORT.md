@@ -88,7 +88,7 @@ A **review**, not an experiment: the app as it ships on the region path, the way
 | 1 | 0.36 | 0.45 | 0.58 | **0.61** | +0.034 ± 0.005 | 49 / 47 | 4% / 2% |
 | 4 | 0.49 | 0.55 | 0.66 | **0.70** | +0.044 ± 0.006 | 92 / 94 | 27% / 26% |
 
-![The objective over clicks, per preset](figures/objective_at_own_beta.png)
+![The objective over clicks, per preset](figures/objective_at_own_beta.webp)
 
 1. **The presets return what they promise.** After the check:
    - the 1/4 preset returns a median of 29 images at precision 0.79 and recall 0.46;
@@ -127,7 +127,7 @@ as it ships (#4655).
 - **Not paired by seed.** The binary review ran 10 seeds (1,440 runs a preset) and this one 2 (288). Seed 1
   moved no region number by more than 0.02, which sizes the noise in the region rows.
 
-![The objective over clicks, both paths, per preset](figures/vs_binary_objective.png)
+![The objective over clicks, both paths, per preset](figures/vs_binary_objective.webp)
 
 The objective at each point, then the returned set after the check (✓):
 
@@ -152,7 +152,7 @@ The objective at each point, then the returned set after the check (✓):
   - at 1, more recall than precision (+0.12 against +0.07);
   - at 4, nearly all recall (+0.14 against +0.02), on a median of 94 images returned against 83.
 
-![The returned set, both paths, per preset](figures/vs_binary_path.png)
+![The returned set, both paths, per preset](figures/vs_binary_path.webp)
 
 The size bands and the hardest classes are set side by side
 [below](#where-it-does-well-and-where-it-does-poorly).
@@ -163,7 +163,7 @@ Per preset, the returned set's precision against its recall from the typed query
 clicks, to after the check. These are means over all 288 runs, a session still in the opening or one that never
 trained counted at the typed query's set (#4605, #4631); the returned size is a median.
 
-![Precision against recall through the session, per preset](figures/precision_recall_path.png)
+![Precision against recall through the session, per preset](figures/precision_recall_path.webp)
 
 | preset | point | precision | recall | F-beta | returned, median | runs |
 |---:|---|---:|---:|---:|---:|---:|
@@ -210,7 +210,7 @@ detector on screen, and one that never trains reads the typed query's.
 | 4 | app line | 0.47 | 0.49 | 0.55 | **0.66** | 0.70 |
 | 4 | top 128 | 0.49 | 0.48 | 0.54 | **0.66** | 0.74 |
 
-![The returned set's share of the best cut, per preset](figures/returned_at_own_beta.png)
+![The returned set's share of the best cut, per preset](figures/returned_at_own_beta.webp)
 
 **The labels line matches a fixed top-K on the same ranking.** The text sort's app line is the one the app draws
 today: the count line at 1/4 and 1 (#4603), #4136's guarded line at 4. Under top-K the detector beats the text sort by 50 clicks (0.55/0.44/0.54 against
@@ -226,7 +226,7 @@ The ranking barely depends on the preset (shown: the beta 1 sessions):
 | **AP** | 0.42 | 0.42 | 0.50 | **0.64** | 0.68 |
 | **Goods found** | — | 11 | 15 | **25** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
 **No early dip.**
 - Both paths show the text sort's ranking through the opening, so AP starts at the text level (#4605).
@@ -292,7 +292,7 @@ large and +0.07 at small.
 They count in every table at their typed query's set (#4631). On the binary path, chair@small never trains in
 any of 10 seeds.
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 ## Headroom (full labels minus 150 clicks)
 

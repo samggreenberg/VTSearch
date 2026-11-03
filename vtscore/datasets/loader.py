@@ -249,7 +249,13 @@ def export_dataset_to_file(
         # ``thumbnail_bytes`` at build time and ``_write_demo_cache`` strips
         # them, so any image media still missing one at save gets it generated
         # here from the in-memory source bytes -- a one-time, offline cost.
-        if media.get("media_type") == "image" and not entry.get("thumbnail_bytes") and entry.get("media_bytes"):
+        # Faces converted before ``image2face`` thumbnailed its crops (#5465)
+        # are the same small still images, so they get the same backfill.
+        if (
+            media.get("media_type") in ("image", "face")
+            and not entry.get("thumbnail_bytes")
+            and entry.get("media_bytes")
+        ):
             from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
             thumb = make_image_thumbnail(entry["media_bytes"])

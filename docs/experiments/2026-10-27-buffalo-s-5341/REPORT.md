@@ -42,7 +42,7 @@ At 640 px the AP change is −0.079 ± 0.0031 and the pronoun gap widens by 0.05
   about −0.01 of the session mean, but buffalo_s's loss is eight times larger and broader, and the lines
   (#5325) were tuned on ResNet-50 cosines.
 
-![The share of subject photos above each landmark error, per detector](fig_landmarks.png)
+![The share of subject photos above each landmark error, per detector](fig_landmarks.webp)
 
 *Figure 1. The share of subject photos whose landmark error against FHIBE's five annotated points is above a
 given value (log scale). The sample is the photos where both the detector and buffalo_l's find the subject

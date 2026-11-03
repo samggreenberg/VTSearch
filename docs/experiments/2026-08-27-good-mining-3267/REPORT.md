@@ -313,7 +313,7 @@ not depend on a fitted mixture to interpret it.
 
 The issue opens by asserting it — *"getting enough Goods is important to VTSearch
 runs doing well. (Certainly being Good-starved seems related to failing.)"* —
-and every table above takes it as given. [`premise_starvation_vs_cost.png`](figures/premise_starvation_vs_cost.png)
+and every table above takes it as given. [`premise_starvation_vs_cost.webp`](figures/premise_starvation_vs_cost.webp)
 tests it directly, pooled over all arms because the claim is about trajectories
 rather than openings.
 
@@ -371,7 +371,7 @@ The first two figures are the headline — **what the user's detector is worth a
 they keep clicking**, against the free typed query it started from. The mining
 figures after them explain *how* an opening got there; read these first.
 
-![cost_vs_clicks.png](figures/cost_vs_clicks.png)
+![cost_vs_clicks.webp](figures/cost_vs_clicks.webp)
 
 ***The headline: how good the user's detector is as they keep clicking.** One
 panel per dataset, one line per arm, mean over every seed and category on that
@@ -389,7 +389,7 @@ an arm that starves looks better than it is on exactly those clicks. Read a leve
 only off a solid segment. Averaged across a wide prevalence range, so it says
 which arm, not how well any one category does.*
 
-![average_precision_vs_clicks.png](figures/average_precision_vs_clicks.png)
+![average_precision_vs_clicks.webp](figures/average_precision_vs_clicks.webp)
 
 *The same figure for **average precision** — the ranking, with the threshold taken
 out of it. Higher is better here. An arm that improves cost but not AP moved the
@@ -398,9 +398,9 @@ rule. Note the right-hand panel against where its curves start: on
 `visual_genome_m` no arm's ranking climbs back to the value it opened at, at any
 click.*
 
-![cost_vs_clicks_runs__coco_val.png](figures/cost_vs_clicks_runs__coco_val.png)
+![cost_vs_clicks_runs__coco_val.webp](figures/cost_vs_clicks_runs__coco_val.webp)
 
-![cost_vs_clicks_runs__visual_genome_m.png](figures/cost_vs_clicks_runs__visual_genome_m.png)
+![cost_vs_clicks_runs__visual_genome_m.webp](figures/cost_vs_clicks_runs__visual_genome_m.webp)
 
 ***The individuals: every seed of every arm as its own line** (cost, lower is
 better), coloured by the category's prevalence in the pool. A mean cannot show
@@ -416,27 +416,27 @@ typed query was worth on that exact cell; a never-trained run is the lone `x` at
 click 0 with nothing to its right. The same pair for average precision is in
 [`REPORT_generated.md`](REPORT_generated.md).*
 
-![mining_curve.png](figures/mining_curve.png)
+![mining_curve.webp](figures/mining_curve.webp)
 
 *Positives found against clicks spent, mean over cells with an inter-quartile
 band. This is the "what do I get after 20 clicks?" figure. It averages across the
 whole prevalence range, so read the banded table above before reading a level off
 it.*
 
-![mining_per_run.png](figures/mining_per_run.png)
+![mining_per_run.webp](figures/mining_per_run.webp)
 
 *The same, one line per run. A mean hides that some runs never leave the floor,
 and the flat lines along the bottom of `flat_mid` and `deep_first` are the 33% and
 32% of cells that never found a positive — the spread is the finding here, not
 the mean.*
 
-![starvation.png](figures/starvation.png)
+![starvation.webp](figures/starvation.webp)
 
 *Left: how often an opening finds no positive at all. Right: how much of the
 horizon it then spends held on its last round. Two panels because they are two
 different facts, and the right one is a distribution, not a level.*
 
-![mining_by_prevalence.png](figures/mining_by_prevalence.png)
+![mining_by_prevalence.webp](figures/mining_by_prevalence.webp)
 
 *Left: prevalence banded into terciles of the categories (equal categories, hence
 equal seeds, hence equal weight), mean paired contrast ± SE. Right: every category
@@ -444,13 +444,13 @@ as its own point — deliberately **not** joined, because the x axis is a proper
 each category happens to have and not an axis anything moves along. Colours match
 across panels.*
 
-![opening_depth.png](figures/opening_depth.png)
+![opening_depth.webp](figures/opening_depth.webp)
 
 *Where each opening aimed against where its picks landed. The two coincide for
 every arm except `prod`, whose bimodal opening makes a median meaningless (see
 the † note above).*
 
-![premise_starvation_vs_cost.png](figures/premise_starvation_vs_cost.png)
+![premise_starvation_vs_cost.webp](figures/premise_starvation_vs_cost.webp)
 
 *Final cost against positives found in the opening, pooled over all arms, with
 binned medians. This tests the issue's premise rather than assuming it.*

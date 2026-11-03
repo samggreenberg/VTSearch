@@ -30,7 +30,7 @@ from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_bytes
+from vtscore.utils.io import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 

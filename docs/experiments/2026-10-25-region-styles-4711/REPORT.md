@@ -44,9 +44,9 @@ as #5191 rebuilt it:
 Means are over sessions. SEs are over classes, because one class's bands are not independent. Every number is in
 `tables/rs4711_summary.csv`, per session in `tables/rs4711_per_run.csv`, per vote in `tables/rs4711_curves.csv`.*
 
-![Over the votes: F1 shown, AP, oracle F1 for every arm, and the trees' F1 gain over MaxPatch with ±2 SE](figures/rs4711_over_clicks.png)
+![Over the votes: F1 shown, AP, oracle F1 for every arm, and the trees' F1 gain over MaxPatch with ±2 SE](figures/rs4711_over_clicks.webp)
 
-![Mean F1 over votes 1-150, each tree's gain over MaxPatch by object size, ±2 SE](figures/rs4711_bands.png)
+![Mean F1 over votes 1-150, each tree's gain over MaxPatch by object size, ±2 SE](figures/rs4711_bands.webp)
 
 ## The question
 

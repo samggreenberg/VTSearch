@@ -175,7 +175,7 @@ def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
     Clippers and cleaners need the actual payload to compute clip boundaries,
     slice, or clean (without it they no-op while the trail still records them
     as run), so we load the source via
-    :func:`~vtscore.media.lazy_clip.load_reference_source` (which also fills
+    :func:`~vtscore.media.clipping.lazy_clip.load_reference_source` (which also fills
     ``duration`` / ``width`` / ``height`` / ``thumbnail``, skipped at
     thin-import time) and tag the parent with a ``_lazy_source`` marker.  The
     marker rides along into every derived clip via the clipper's
@@ -189,7 +189,7 @@ def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
 
     Returns ``True`` if at least one parent was hydrated.
     """
-    from vtscore.media.lazy_clip import CHAIN_REPLAY_TYPES, load_reference_source  # noqa: PLC0415
+    from vtscore.media.clipping.lazy_clip import CHAIN_REPLAY_TYPES, load_reference_source  # noqa: PLC0415
 
     if any(step.get("kind") == "converter" for step in steps):
         return False
@@ -249,7 +249,7 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
     it, and a clipper that cut a converter's output (a rendered page tiled, a
     document's text split into sentences) cut something no file holds, so the
     item's recipe is its whole chain trail, replayed from the source and led
-    by the converter for a converter output (:mod:`vtscore.media.lazy_clip`).
+    by the converter for a converter output (:mod:`vtscore.media.clipping.lazy_clip`).
     Its stored payload and any ``original_*`` snapshot are dropped only when
     that replay reproduces both of them here, byte for byte; otherwise - a
     replay that is not deterministic, a trail recorded before
@@ -287,7 +287,7 @@ def _serves_same_lazily(clip: dict, source: str) -> bool:
     by its whole file - is rebuilt by its recipe or is that file.
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
-    from vtscore.media.lazy_clip import clip_recipe, recipe_is_exclusive  # noqa: PLC0415
+    from vtscore.media.clipping.lazy_clip import clip_recipe, recipe_is_exclusive  # noqa: PLC0415
 
     recipe = clip_recipe(clip)
     if recipe is not None and recipe[0] == "chain":
@@ -319,7 +319,7 @@ def _replay_reproduces(clip: dict, source: str) -> bool:
     drop.
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
-    from vtscore.media.lazy_clip import lazy_clip_bytes, lazy_original_bytes  # noqa: PLC0415
+    from vtscore.media.clipping.lazy_clip import lazy_clip_bytes, lazy_original_bytes  # noqa: PLC0415
 
     payload = _payload_of(clip)
     if payload is None:

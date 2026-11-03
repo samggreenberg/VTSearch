@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-06-pooled-prior-4539.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/picks_by_world.png": {
+     "bytes": 41917,
+     "oid": "115736dc643776dede2e141649002fe6268428da"
+    },
+    "harness_check.json": {
+     "bytes": 10183,
+     "oid": "9929caac2793f97eb51189e80429f05126ed7923"
+    },
+    "pick.csv": {
+     "bytes": 2143,
+     "oid": "932b85db843094a5642f3d6893c48066fca38154"
+    },
+    "provenance.json": {
+     "bytes": 2294,
+     "oid": "203c27378fe05a665a52e81e277bce8c0cdee7df"
+    },
+    "summary.csv": {
+     "bytes": 143470,
+     "oid": "e6a133ccd939986043b8ca88cba6f3e5c361a0be"
+    }
+   }
+  }
+ ]
+}

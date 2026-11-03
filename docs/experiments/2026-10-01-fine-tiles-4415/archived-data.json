@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-fine-tiles-4415.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/armA-steps.csv": {
+     "bytes": 335283,
+     "oid": "3eedd296cf2e1a4073293fb71244b238d399f8d7"
+    },
+    "measurements/armB-positives_final.csv": {
+     "bytes": 64449,
+     "oid": "85bbfd87933b150e512991820325a1ea9d0e70e3"
+    },
+    "measurements/armB-steps.csv": {
+     "bytes": 328437,
+     "oid": "600518cd32833b3b4081e9f6df69d1d100f16292"
+    },
+    "measurements/armC-steps.csv": {
+     "bytes": 327767,
+     "oid": "437595062f6846805e66e541c8643dce8a93229f"
+    }
+   }
+  }
+ ]
+}

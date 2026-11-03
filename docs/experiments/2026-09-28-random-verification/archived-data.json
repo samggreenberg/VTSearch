@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-random-verification.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "examples.csv": {
+     "bytes": 12767,
+     "oid": "f9f12bbd29a02a72f988e186abf6d1db75e840bf"
+    },
+    "min_audit.csv": {
+     "bytes": 100,
+     "oid": "d23bd98aa1401a34993c85ed2d7efb5b4d434814"
+    },
+    "oracle.csv": {
+     "bytes": 673,
+     "oid": "149cb7fbe953281512a07752070957244a05f096"
+    },
+    "provenance.json": {
+     "bytes": 1735,
+     "oid": "a518f207640dd5083687ffb9cb24a1aee0284d7e"
+    },
+    "summary.csv": {
+     "bytes": 113989,
+     "oid": "f4b9a9e85d4da288515ef15d6465551cd6b46e17"
+    },
+    "summary_by_band.csv": {
+     "bytes": 360806,
+     "oid": "a5ea7eb730cfdd3112434e57247dc2e667f472f9"
+    },
+    "summary_by_t.csv": {
+     "bytes": 464072,
+     "oid": "9f4942daafe77a38dd6a795e0890d7b5009086fc"
+    }
+   }
+  }
+ ]
+}

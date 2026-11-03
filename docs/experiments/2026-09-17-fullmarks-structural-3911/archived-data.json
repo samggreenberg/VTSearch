@@ -1,0 +1,35 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-fullmarks-structural-3911.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/sift_budgets.json": {
+     "bytes": 159,
+     "oid": "319342f6986b895b65341c9d15dc4c0eadc84678"
+    },
+    "measurements/sift_rank_m_8192.csv": {
+     "bytes": 35857,
+     "oid": "ea18a85abdeef7314d4ae568fd1d8e92f31f8a99"
+    },
+    "measurements/sift_rank_s_16384.csv": {
+     "bytes": 37317,
+     "oid": "3f501bb7e3a4b73cc41d61744ac8457e2f8030f4"
+    },
+    "measurements/sift_rank_s_4096.csv": {
+     "bytes": 37552,
+     "oid": "8ab544b1062110f666ffa771da1c4d852516c84b"
+    },
+    "measurements/sift_rank_s_8192.csv": {
+     "bytes": 37191,
+     "oid": "d3c052252a94988a597571451a675eaebaf352d5"
+    },
+    "measurements/splg_rank_s_2048.csv": {
+     "bytes": 10717,
+     "oid": "f0a0b12cc2cfd3984f1cb5b2b432d19cd0ac73e1"
+    }
+   }
+  }
+ ]
+}

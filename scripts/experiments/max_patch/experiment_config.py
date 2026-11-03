@@ -53,7 +53,7 @@ MAX_STEPS = int(os.environ.get("MAXPATCH_MAX_STEPS", "150"))
 #: Whether the simulated user's opening query is embedded through the
 #: embedder's ``description_wrappers`` ensemble ("Enrich Sort Descriptions") or
 #: plainly.  Tracks the app's shipped default for ``enrich_descriptions``
-#: (``vtsearch/settings_models.py``), which is ``False``; passed explicitly at
+#: (``vtsearch/settings/models.py``), which is ``False``; passed explicitly at
 #: every ``embed_text_query`` call so the opening this harness measures is the
 #: one a real user sees rather than whatever the library happens to default to
 #: (#3341).  The sibling knob is ``calibration/experiment_config.SEED_ENRICH``.

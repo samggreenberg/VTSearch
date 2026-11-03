@@ -1,0 +1,63 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-opening-handoff-4604.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/ap.csv": {
+     "bytes": 415,
+     "oid": "05570dc46cd82b886824418c2851365d49dd29df"
+    },
+    "tables/ap_1pct.csv": {
+     "bytes": 273,
+     "oid": "edbfb604eb2517fcd040bf2a1a3159b1e7edfe31"
+    },
+    "tables/by_band.csv": {
+     "bytes": 782,
+     "oid": "2786ec158a1fd911950a75bb6d227b9cf5b97e7a"
+    },
+    "tables/curves.csv": {
+     "bytes": 50076,
+     "oid": "032e41a941af46b421cba7192660049a0c13756c"
+    },
+    "tables/headline.csv": {
+     "bytes": 3595,
+     "oid": "0b697b1d06872c9047514ea49785b201e1149f43"
+    },
+    "tables/headline_1pct.csv": {
+     "bytes": 1937,
+     "oid": "bcdb5e5c4b7b24744366cad211f0a9ddb72bf5e7"
+    },
+    "tables/provenance.json": {
+     "bytes": 637,
+     "oid": "ca58ddd834728f93f02f535a05e1020ce60ef38b"
+    },
+    "tables/reconcile.csv": {
+     "bytes": 715,
+     "oid": "0b9dc3b83d6283898cf08d37a26acbd004c55eb3"
+    },
+    "tables/returned_set.csv": {
+     "bytes": 752,
+     "oid": "ceebb3e993e687bf0ff93a6e38ca71ee3306f496"
+    },
+    "tables/rules.csv": {
+     "bytes": 261419,
+     "oid": "f026e6f986bfc511d3eeda5750a227c420dd66d3"
+    },
+    "tables/rules_1pct.csv": {
+     "bytes": 132691,
+     "oid": "e7467caa4d08bb202d8b1ca3f017d8e7fecb3347"
+    },
+    "tables/split_half.csv": {
+     "bytes": 1882,
+     "oid": "c9a9aa011c3a945ecba31971c49ac592644293bf"
+    },
+    "tables/split_half_1pct.csv": {
+     "bytes": 1048,
+     "oid": "3bf720582637ffe4dab7c6c8ba0679cb3ee19e3c"
+    }
+   }
+  }
+ ]
+}

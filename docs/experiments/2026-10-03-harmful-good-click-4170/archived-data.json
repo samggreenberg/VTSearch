@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-03-harmful-good-click-4170.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/tiles-rep1-steps.csv": {
+     "bytes": 348346,
+     "oid": "43e826bd39a6a014b6e6332b16e1d0515270113e"
+    },
+    "measurements/tiles-rep2-steps.csv": {
+     "bytes": 337587,
+     "oid": "ff5fb62a77d890748ec2c2e78b9cdbec984361ee"
+    },
+    "measurements/whole-rep1-steps.csv": {
+     "bytes": 326901,
+     "oid": "3567c47503910c2fd17c95a486d4530261a303f3"
+    },
+    "measurements/whole-rep2-steps.csv": {
+     "bytes": 315386,
+     "oid": "fb196cae75b33950fc4fc982fa2790a91d02b560"
+    }
+   }
+  }
+ ]
+}

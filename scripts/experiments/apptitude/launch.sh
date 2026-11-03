@@ -41,7 +41,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 # The pile's datadir, never the live app's (the bashrc exports that one).
 if [[ "$VTSEARCH_DATA_DIR" == "/expscratch/$USER/vtsearch-data" ]]; then
@@ -121,7 +121,7 @@ prepare)
   echo "CALIB_EXP=$CALIB_EXP classes=$(grep -vc '^#' "$CALIB_CATEGORY_FILE") seeds=$CALIB_N_SEEDS beta=${CALIB_BETA:-default}"
   submit prepare --job-name=apptitude-prep --mem=8G --cpus-per-task=2 --time=1:00:00 \
     --partition="$PARTITION" --export=ALL --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python prepare_data.py"
   ;;
 
 size)
@@ -133,7 +133,7 @@ size)
   for idx in ${IDXS//,/ }; do
     submit "size$idx" --job-name="apptitude-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time=2:00:00 --partition="$PARTITION" --export=ALL --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $idx"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $idx"
   done
   echo "read Elapsed and MaxRSS off 'sacct -j <id> --format=Elapsed,MaxRSS,State' before sizing the array"
   ;;
@@ -173,7 +173,7 @@ PYSHAPE
   submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL --output="$LOGS/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
   ;;
 
 redo)
@@ -183,7 +183,7 @@ redo)
   submit redo --job-name="$JOB_NAME-redo" --array="$IDXS%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL --output="$LOGS/redo-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
   ;;
 
 status)

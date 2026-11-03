@@ -198,7 +198,8 @@ class TestColdFind:
 
 class TestCli:
     def test_the_cli_names_a_detector_it_ran_as_the_centroid(self, capsys):
-        from vtscore import cli, cli_progress
+        from vtscore.cli import detectors as cli_detectors
+        from vtscore.cli import progress as cli_progress
         from vtscore.datasets.labelset import LabeledElement, LabelSet
         from vtscore.detectors.centroid_head import centroid_head
         from vtscore.state.core import DetectorContext
@@ -209,7 +210,7 @@ class TestCli:
         previous = cli_progress.get_format()
         cli_progress.set_format("json")
         try:
-            cli._report_centroid("cli", ctx, ls)
+            cli_detectors._report_centroid("cli", ctx, ls)
         finally:
             cli_progress.set_format(previous)
         event = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
@@ -217,12 +218,12 @@ class TestCli:
         assert (event["tier"], event["goods_owed"], event["bads_owed"]) == ("centroid", 2, 3)
 
     def test_a_trained_detector_is_not_named(self, capsys):
-        from vtscore import cli
+        from vtscore.cli import detectors as cli_detectors
         from vtscore.datasets.labelset import LabelSet
         from vtscore.state.core import DetectorContext
         from vtscore.training.mlp import LINEAR_SVM_HEAD, build_model
 
         ctx = DetectorContext("cli", name="cli", media_type="image")
         ctx.model = build_model(DIM, hidden_dim=LINEAR_SVM_HEAD)
-        cli._report_centroid("cli", ctx, LabelSet([]))
+        cli_detectors._report_centroid("cli", ctx, LabelSet([]))
         assert "centroid" not in capsys.readouterr().out

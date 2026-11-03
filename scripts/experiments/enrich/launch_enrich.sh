@@ -21,7 +21,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- CHECK WHAT WAS SUBMITTED" >&2'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 export VTS_REPO="$WT"
 
 EXP="${VTS_ENRICH_EXP:-/expscratch/$USER/enrich-3127}"
@@ -84,7 +84,7 @@ submit_chunk() {
     --mem="$MEM" \
     --time="$TIME" \
     --output="$LOGS/$chunk-%j.out" \
-    --wrap "source $WT/gridenv.sh && $RUNENV && $cmd") || {
+    --wrap "source $WT/scripts/grid/gridenv.sh && $RUNENV && $cmd") || {
       echo "SUBMIT FAILED for $chunk" >&2; return 1; }
   # A submission is not a launch: --parsable returns an EMPTY id when the submit
   # filter refuses the job, which looks exactly like a queued job.
@@ -137,7 +137,7 @@ size)
   jid=$(sbatch --parsable --job-name="$JOB_PREFIX-size" --partition=gpu \
     --gres="gpu:${gpu}:1" --cpus-per-task="$CPUS" --mem="$MEM" --time=2:00:00 \
     --output="$LOGS/size-%j.out" \
-    --wrap "source $WT/gridenv.sh && $RUNENV && cd $HERE && python run_enrich.py --exp $EXP --wrappers --datasets $DS")
+    --wrap "source $WT/scripts/grid/gridenv.sh && $RUNENV && cd $HERE && python run_enrich.py --exp $EXP --wrappers --datasets $DS")
   [[ "$jid" =~ ^[0-9]+$ ]] || { echo "SIZE SUBMIT FAILED (empty job id)" >&2; exit 1; }
   echo "size cell $DS -> job $jid (gpu:$gpu, log: $LOGS/size-$jid.out)"
   ;;
@@ -167,7 +167,7 @@ control)
   jid=$(sbatch --parsable --job-name="$JOB_PREFIX-ctl-$EMB" --partition=gpu \
     --gres="gpu:${gpu}:1" --cpus-per-task="$CPUS" --mem="$MEM" --time="$TIME" \
     --output="$LOGS/ctl-$EMB-%j.out" \
-    --wrap "source $WT/gridenv.sh && $RUNENV && cd $HERE && python run_enrich.py --exp $EXP --wrappers --embedder $EMB --datasets $DS")
+    --wrap "source $WT/scripts/grid/gridenv.sh && $RUNENV && cd $HERE && python run_enrich.py --exp $EXP --wrappers --embedder $EMB --datasets $DS")
   [[ "$jid" =~ ^[0-9]+$ ]] || { echo "CONTROL SUBMIT FAILED (empty job id)" >&2; exit 1; }
   echo "control $EMB -> job $jid (gpu:$gpu, log: $LOGS/ctl-$EMB-$jid.out)"
   ;;

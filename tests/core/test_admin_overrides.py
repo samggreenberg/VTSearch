@@ -1,6 +1,6 @@
 """Tests for the declarative admin-override registry.
 
-The registry (:mod:`vtsearch.admin_overrides`) is what stops the
+The registry (:mod:`vtsearch.settings.admin_overrides`) is what stops the
 process-level admin knobs from drifting apart the way they had: before it,
 each was hand-plumbed through argparse, the environment, the settings
 resolvers and the ``/api/settings`` overlay separately, and only three of the
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from vtsearch import admin_overrides
-from vtsearch import cli_main
+from vtsearch.settings import admin_overrides
+from vtsearch.cli import main as cli_main
 from vtsearch import settings as settings_mod
 
 

@@ -41,7 +41,7 @@ For each held-out count, the rounding residual (held out − fraction × count) 
 cadence the runs share survives that average, and a run-by-run cadence cancels. Each amplitude is tested against a
 null that flips the sign of every run of a category at random.
 
-![Step 0: shared amplitude of the held-out total's rounding residual](figures/step0_cadence.png)
+![Step 0: shared amplitude of the held-out total's rounding residual](figures/step0_cadence.webp)
 
 *The held-out total's shared rounding residual at each frequency, per rule. Shading is the sign-flip null's 95th
 percentile, and dotted lines mark the split's own frequencies. `round()` (grey) spikes at every one of them,
@@ -69,7 +69,7 @@ the region path.
 
 ### (1) The objective
 
-![Δ-objective, nearest − dither](figures/contrasts.png)
+![Δ-objective, nearest − dither](figures/contrasts.webp)
 
 *Paired on (category, seed), ±2 SE clustered on category. The dashed line is the ship rule's −0.003.*
 
@@ -86,7 +86,7 @@ the region path.
 Bold is more than 2 SE from zero. The votes 31–45 window was chosen after seeing the curves; it is where the binary
 paired difference dips.
 
-![The objective over votes, and the paired difference](figures/curves.png)
+![The objective over votes, and the paired difference](figures/curves.webp)
 
 *Top: the mean objective, F1 of the withheld half above the line the app holds, at each vote. Bottom: the paired
 difference ±2 SE. The binary dip at votes 30–45 is where the first detector shows (the typed-query hold ends near
@@ -95,7 +95,7 @@ vote 30) and the two rules draw different lines at 7–8 Goods. On the region pa
 
 ### (3) The band: what `nearest` buys
 
-![Line switches per run](figures/switches.png)
+![Line switches per run](figures/switches.webp)
 
 *How often each run's line switches between the head's count line and the labels line, over the clicks where the
 app shows a trained detector. Each switch is read off the recorded class model at that click.*
@@ -121,7 +121,7 @@ Inside the band the dither's coin, not the run, decides which line a click draws
 clicks on either line differ only by the coin, which makes it a randomized trial of the two lines that the app
 runs by itself.
 
-![The coin as a trial](figures/coin.png)
+![The coin as a trial](figures/coin.webp)
 
 | Goods | dither's share of clicks on the labels line | labels line − count line, same run | runs |
 |---|---|---|---|
@@ -143,7 +143,7 @@ than the dither's, and its band objective reads +0.014 ± 0.010 (unresolved).
 
 ### (2) Ripple
 
-![Periodograms of the high-passed mean curves](figures/ripple.png)
+![Periodograms of the high-passed mean curves](figures/ripple.webp)
 
 *Each arm's mean objective curve, and the paired difference, high-passed by a centred 20-vote mean (which keeps
 every tested frequency whole). Shading is the sign-flip null's 95th percentile, the dashed line is twice its median

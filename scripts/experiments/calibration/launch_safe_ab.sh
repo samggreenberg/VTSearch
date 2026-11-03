@@ -91,14 +91,14 @@ CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQ
 P=$(sbatch --parsable --job-name=ab-prep --gres="${CALIB_GRES:-gpu:v100:1}" \
   --mem="${CALIB_PREP_MEM:-32G}" --cpus-per-task=6 --time="${CALIB_PREP_TIME:-3:00:00}" \
   --partition=gpu --export=ALL --output="$LOGS/prepare-%j.out" \
-  --wrap="source $WT/gridenv.sh && $SHARED && export CALIB_EXP=$CALIB_AB_ON_EXP CALIB_RESULTS=$CALIB_AB_ON_EXP/results && cd $HERE && python prepare_data.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $SHARED && export CALIB_EXP=$CALIB_AB_ON_EXP CALIB_RESULTS=$CALIB_AB_ON_EXP/results && cd $HERE && python prepare_data.py")
 echo "prepare job: $P"
 
 # --- Stage 1: a tiny launcher job submits both arrays + both analyzers once the
 # cell count is known (it is not, until prepare has selected the categories). ---
 S=$(sbatch --parsable --dependency=afterok:$P --job-name=ab-launch --mem=4G --cpus-per-task=1 \
   --time=0:20:00 --partition=cpu --export=ALL --output="$LOGS/launch-%j.out" \
-  --wrap="source $WT/gridenv.sh && $SHARED && cd $HERE && bash launch_ab_cells.sh")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $SHARED && cd $HERE && bash launch_ab_cells.sh")
 echo "A/B launcher job (after prepare): $S"
 echo "ON  -> $CALIB_AB_ON_EXP/results   (REPORT.md, REPORT_AB.md)"
 echo "OFF -> $CALIB_AB_OFF_EXP/results"

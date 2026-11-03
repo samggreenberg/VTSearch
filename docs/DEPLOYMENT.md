@@ -101,7 +101,7 @@ cloud or multi-homed host that is every interface, not just loopback.
   `get_file_access_base_dir()` return `data/<username>/`, which *does* confine
   the browse root and every server-path importer/exporter to that subtree.
   Whether it also *gates* access depends on the provider: the `_enforce_auth`
-  `before_request` hook (`vtsearch/hooks.py`) rejects unauthenticated `/api/*`
+  `before_request` hook (`vtsearch/runtime/request_hooks.py`) rejects unauthenticated `/api/*`
   requests with 401 only when the provider's `enforce_auth()` is true.
   `--login api_key` enforces — a request without a valid Bearer token (keys in
   `data/api_keys.json`) gets 401, except `/api/auth/status`, `/api/auth/login`
@@ -278,7 +278,7 @@ startup sequence runs at WSGI import time. See
 | `docker/Dockerfile.labbench` | `docker-compose.labbench.yml`, `docker-compose.labbench-audio.yml` | `python:3.12-slim` | The slim build for image and audio, or for one of them (`MEDIA_TYPE` build arg: unset, the default, for both; `image` or `audio` for one, locked to it): only those types' dependencies, each type's embedder locked, the embedders' weights baked under `/opt/vtsearch/models`, and every dataset expiring after 14 days. What it locks and hides, and why each LabBench variant needs its own data volume: [SETUP.md § LabBench](SETUP.md#labbench-slim-image-or-audio). |
 | `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg, with that type's default embedder weights baked under `/opt/vtsearch/models`; see [SETUP.md § Single media type](SETUP.md#single-media-type-audio-only-video-only). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
-| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
+| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/install/cache_gated_models.sh`. |
 
 All of them persist state in the volume mounted at `/app/data` (named
 `vtsearch-data` in the compose files); a container without that mount loses its
@@ -365,6 +365,7 @@ data/
 ├── local_uploads/                    # Files uploaded through the browser
 ├── staging/                          # Scratch space for in-flight imports
 ├── logs/                             # App logs written by the SLURM launcher (VTSEARCH_LOG_FILE)
+├── metrics/                          # Usage metrics, one events-YYYY-MM.jsonl per month (enable_metrics)
 ├── images/, video/, synthetic/       # Demo/synthetic media materialised by the downloaders
 └── ESC-50-master/, gtzan/, ...       # Extracted demo dataset sources
 ```
@@ -385,9 +386,49 @@ single-user default keeps `user_settings.json` directly in the data dir. See
 | `data/saved_datasets/`, `data/dataset_registry.json` | **Yes** | Every registered dataset (pickle + registry entry); losing them means re-importing |
 | `data/api_keys.json` | **Yes** (if used) | API keys for `--login api_key` |
 | `data/images/`, `video/`, `synthetic/` | Safe to delete | Demo/synthetic media; re-materialised on the next demo load |
+| `data/metrics/` | Optional | Usage metrics; losing them loses only the usage history |
 | `data/staging/` | Safe to delete | Scratch space for in-flight imports |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
+
+### Usage metrics
+
+The browser app reports which features people use, so whoever runs a server can see whether anyone opens Browse,
+which exporters they pick, and which display options and settings they ever change. Each event becomes one JSON line
+in `data/metrics/events-YYYY-MM.jsonl`, a new file each month:
+
+```json
+{"ts":"2026-10-30T16:31:24.420Z","user":"alice","session":"3f1c…","group":"resultsExported","attributes":{"exporter":"server_csv","payload":"find_results"},"client_ts":1793385084301}
+```
+
+`ts` is when the server received the event (UTC); `client_ts` is when the browser logged it (epoch milliseconds),
+since the browser sends events in batches. `user` is the logged-in user (`default` on a single-user server), and
+`session` is one page load, so a visit's events can be read together.
+
+| `group` | Logged when | `attributes` |
+|---------|-------------|--------------|
+| `view` | The user lands on a different view | `view`: `dashboard`, `train`, `tune` or `browse` |
+| `datasetImported` | A dataset import starts | `importer` (the importer plugin, or `demo`, `local_folder`, `local_files`, `pickle_file`), plus `media_type` or `demo` when known |
+| `datasetsCombined`, `datasetPromoted`, `datasetExported` | Combine, Tune's To Dataset, or a dataset download | — |
+| `resultsExported` | Results are exported | `exporter`, `payload` |
+| `labelsImported` | Labels are imported | `importer`, `into` (`new_detector` / `existing_detector`) |
+| `detectorCreated` | A detector is created | `source` (`new_detector_form` / `labelset`), `media_type`, `embedder_type`, or `importer` |
+| `detectorExported` | A portable detector bundle is exported | — |
+| `find` | The Dashboard's Find runs | — |
+| `settingsImported`, `settingsExported` | Settings are imported or exported | `importer` / `exporter` |
+| `settingChanged` | A user setting changes, including the display options that persist as settings (panel drag bars, thumbnail sizes, focus modes, the Browse panel widths) | `key`; `entry` (the media type) for a per-media-type setting; `value` when it is a plain string, number or boolean |
+| `click` | A control tagged for counting is clicked (the header buttons, the image viewer's zoom / rotate toolbar) | `target`: the control's name |
+
+The file answers questions with a line of `jq`. For example, how many times each exporter was used:
+
+```bash
+jq -r 'select(.group == "resultsExported") | .attributes.exporter' data/metrics/events-*.jsonl | sort | uniq -c
+```
+
+To stop recording, set `"enable_metrics": false` in `data/settings.json` and restart (see
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)). To send events somewhere other than this file, a deployment
+that builds its own frontend can replace the metrics provider; see
+[FRONTEND.md § Usage metrics](FRONTEND.md#usage-metrics).
 
 ---
 
@@ -403,7 +444,7 @@ warms every embedder referenced by the dataset and detector registries
 so the first request that uses each embedder doesn't pay the cold-load
 cost. On an empty registry, nothing is preloaded.
 
-`scripts/download_models.sh` prefetches the most commonly used models for
+`scripts/install/download_models.sh` prefetches the most commonly used models for
 offline deployments:
 
 | Model | Media type | HuggingFace ID | Approx. size |
@@ -520,12 +561,12 @@ shared server — or any machine with several VTSearch checkouts — the multi-G
 demo sources only need to exist once: the downloaders skip a download whenever
 the dataset's extraction path already exists under the data dir, so a communal
 cache directory whose entries mirror that extraction layout can be symlinked
-into each data dir. [`scripts/link-demo-cache.sh`](../scripts/link-demo-cache.sh)
+into each data dir. [`scripts/data/link-demo-cache.sh`](../scripts/data/link-demo-cache.sh)
 does the wiring:
 
 ```bash
-scripts/link-demo-cache.sh /shared/vtsearch-demos ./data            # link cached demos in
-scripts/link-demo-cache.sh /shared/vtsearch-demos ./data --harvest  # donate demos this
+scripts/data/link-demo-cache.sh /shared/vtsearch-demos ./data            # link cached demos in
+scripts/data/link-demo-cache.sh /shared/vtsearch-demos ./data --harvest  # donate demos this
                                                                     # data dir downloaded, then link
 ```
 
@@ -575,7 +616,7 @@ VTSearch can run fully offline once models are cached. Follow these steps:
 Run the provided script on a machine with internet access:
 
 ```bash
-./scripts/download_models.sh [CACHE_DIR]
+./scripts/install/download_models.sh [CACHE_DIR]
 ```
 
 This downloads all five embedding models (CLAP General, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
@@ -627,7 +668,7 @@ containers):
 
 ```bash
 # Pre-download on host
-./scripts/download_models.sh /opt/vtsearch-models
+./scripts/install/download_models.sh /opt/vtsearch-models
 
 # Run with mount
 docker run -p 5000:5000 \
@@ -713,7 +754,7 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VTSEARCH_DEVICE` | `auto` | Preferred compute device for embedding, training, and scoring. `auto` resolves to `cuda` when a usable GPU is visible, then `mps`, then `cpu`; explicit values (`cuda`, `cuda:1`, `cpu`, `mps`) pass through unchanged. Resolution is lazy — the var records intent, torch is only imported when a device is actually needed. Pin it to `cpu` to keep a shared GPU free, or to `cuda:N` to place the process on one card of a multi-GPU box. |
-| `VTSEARCH_TORCH_THREADS` | server: the process's CPU allocation; library/batch use: `1` | Thread count for `torch` and the native math libraries. When the server starts (`python app.py` **or** gunicorn importing `app.py`), `vtsearch/torch_threads.py` resolves it — the variable if set, otherwise the CPUs this process may run on (`os.sched_getaffinity`, i.e. the SLURM/cgroup/container allocation) — and exports the result as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported, **overwriting** any value already in the environment (including the `OMP_NUM_THREADS=1` the Dockerfiles set). Code that imports `vtscore` without `app.py` (scripts, tests) defaults to `1`. Each thread allocates its own scratch buffers, so lower it on a memory-constrained box. |
+| `VTSEARCH_TORCH_THREADS` | server: the process's CPU allocation; library/batch use: `1` | Thread count for `torch` and the native math libraries. When the server starts (`python app.py` **or** gunicorn importing `app.py`), `vtsearch/runtime/torch_threads.py` resolves it — the variable if set, otherwise the CPUs this process may run on (`os.sched_getaffinity`, i.e. the SLURM/cgroup/container allocation) — and exports the result as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported, **overwriting** any value already in the environment (including the `OMP_NUM_THREADS=1` the Dockerfiles set). Code that imports `vtscore` without `app.py` (scripts, tests) defaults to `1`. Each thread allocates its own scratch buffers, so lower it on a memory-constrained box. |
 | `IMAGEKIT_FACE_PROVIDER` | the config's `provider`, else `oss` | Which face backend runs Face (the `image2face` converter and the `face` embedder): `oss` (open SCRFD + ArcFace/MagFace ONNX weights on ONNX Runtime) or `ext` (an external backend module behind the same interface, which must be installed; see `IMAGEKIT_EXT_BACKEND`), or a third-party provider registered under its own name. See [Face models](#face-models) and [`imagekit/README.md`](../imagekit/README.md). |
 | `IMAGEKIT_EXT_BACKEND` | the config's `ext_backend`, else `ext_backend` | The module the `ext` face provider imports when its pipeline is built (with `importlib.import_module`, so a dotted path works). It must expose `face.FaceDetector`, `face.FaceEmbeddingExtractor` and `RuntimeOptions`; the compat tag its extractor reports is stamped on every face verbatim. Face stays off, naming the module, while it is not installed. See [`imagekit/README.md`](../imagekit/README.md#provider-architecture). |
 | `IMAGEKIT_FACE_CONFIG` | `data/models/imagekit/face.json` (under `VTSEARCH_MODELS_DIR`) | Path to the pipeline config JSON naming the face models (and optionally a `runtime` block). Relative model paths resolve against the file's directory. With no config whose models exist, Face is off: see [Face models](#face-models). The runtime follows `VTSEARCH_DEVICE` (install `onnxruntime-gpu` for CUDA) and `VTSEARCH_TORCH_THREADS`. |
@@ -739,8 +780,8 @@ These are read by the installer, not the running app.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu129` (and `cu13x`); see [GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129). |
-| `VTS_CUML_CU12_SPEC` | unset | Replace the pip requirement the cuML step installs (`cuml-cu12>=26.8` on `cu129`, `cuml-cu13>=26.8` on `cu13x`), and run the step on a tag it would otherwise skip. For assembling a different RAPIDS on your own terms, e.g. `VTS_CUML_CU12_SPEC='cuml-cu12<26'` on a Volta card, which costs pandas dropping to 2.x. |
+| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu126`, `cu129` (and `cu13x`); see [GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-cu118-and-cu128). |
+| `VTS_CUML_CU12_SPEC` | unset | Replace the pip requirement the cuML step installs (`cuml-cu12>=26.8` on `cu126` and `cu129`, `cuml-cu13>=26.8` on `cu13x`), and run the step on a tag it would otherwise skip. For assembling a different RAPIDS on your own terms, e.g. `VTS_CUML_CU12_SPEC='cuml-cu12<26'` on `cu128`, which costs pandas dropping to 2.x. |
 | `VTSEARCH_NO_AGPL` | `0` | Set to `1` to install the `*-no-agpl.txt` requirement set, omitting the AGPL-licensed dependencies. See [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies). |
 | `VTSEARCH_AUTO_DRIVER` | `0` | On a box with NVIDIA hardware but no working driver, `1` installs the driver unattended instead of prompting. |
 | `VTSEARCH_ASSUME_CPU` | `0` | The opposite unattended answer: `1` skips the driver and installs the CPU stack. On a non-interactive shell with neither set, the installer takes neither privileged action. |

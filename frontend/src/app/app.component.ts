@@ -2,9 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   HostListener,
   inject,
+  Injector,
   signal,
 } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
@@ -41,9 +43,9 @@ import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import { BuildSkewService } from './services/build-skew.service';
-import { TrainingDomainAlertService } from './services/training-domain-alert.service';
 import { AutoFindService } from './services/autofind.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
+import { MetricsService } from './services/metrics.service';
 import { ToastyHintComponent } from './components/toasty-hint/toasty-hint.component';
 import { AboveDialogsDirective } from './directives/above-dialogs.directive';
 import {
@@ -51,7 +53,6 @@ import {
   ImporterFlowState,
   NewDetectorFlowState,
 } from './services/new-thing-flows.service';
-import { DemoDatasetEntry } from './generated/api-client/models/demo-dataset-entry';
 import type { RecentSession } from './generated/api-client/models/recent-session';
 import { isPairCompatible } from './utils/context-compat';
 
@@ -95,6 +96,10 @@ export class AppComponent {
   private newThingFlows = inject(NewThingFlowsService);
   private hfAuth = inject(HuggingFaceAuthService);
   private toast = inject(ToastService);
+  // Constructed here so its `data-metric` click listener is live from startup.
+  private metrics = inject(MetricsService);
+  /** The view the last `view` metrics event named (#5475). */
+  private lastLoggedView = '';
   // Constructed here so it watches for finished AutoFind runs from app start,
   // whichever view the user is on; the template mounts its results dialog.
   autofind = inject(AutoFindService);
@@ -161,8 +166,15 @@ export class AppComponent {
     // downstream of it, and nothing else in the app can tell them (#2898).
     inject(BuildSkewService).check();
     // Warn when a detector meets a dataset unlike the one it was trained on,
-    // before the user runs it there (#4961).
-    inject(TrainingDomainAlertService).start();
+    // before the user runs it there (#4961). Loaded lazily: the warning waits
+    // on a request anyway, and the service (with the words it shares with
+    // Find Results, #5501) need not ride the eager bundle.
+    const injector = inject(Injector);
+    let destroyed = false;
+    inject(DestroyRef).onDestroy(() => (destroyed = true));
+    void import('./services/training-domain-alert.service').then((m) => {
+      if (!destroyed) injector.get(m.TrainingDomainAlertService).start();
+    });
     this.auth.checkStatus();
     this.hfAuth.refresh();
     this.handleHuggingFaceRedirect();
@@ -198,6 +210,7 @@ export class AppComponent {
             e.urlAfterRedirects.startsWith('/tune') ||
             onBrowse,
         );
+        this.logView(e.urlAfterRedirects);
       });
 
     this.newThingFlows.importer$.subscribe((state) => {
@@ -206,6 +219,21 @@ export class AppComponent {
     this.newThingFlows.newDetector$.subscribe((state) => {
       this.newDetectorFlow.set(state);
     });
+  }
+
+  /**
+   * Log a `view` metrics event when the user lands on a different view
+   * (`dashboard`, `train`, `tune`, `browse`; #5475). Keyed on the route's
+   * first segment, so a pair switch or a query-param update inside one view
+   * is not a new visit. The Train view's route is still `/label`, so it is
+   * renamed to what the user sees.
+   */
+  private logView(url: string): void {
+    const segment = url.split(/[/?#]/)[1] || 'dashboard';
+    const view = segment === 'label' ? 'train' : segment;
+    if (view === this.lastLoggedView) return;
+    this.lastLoggedView = view;
+    this.metrics.logEvent({ group: 'view', attributes: { view } });
   }
 
   /**
@@ -403,11 +431,6 @@ export class AppComponent {
     // see the success event first; otherwise the close-handler runs first
     // and may clear state the success handler needs.
     this.newThingFlows.emitImportStarted();
-    this.newThingFlows.closeImporter();
-  }
-
-  onDemoSelected(demo: DemoDatasetEntry): void {
-    this.newThingFlows.emitDemoSelected(demo);
     this.newThingFlows.closeImporter();
   }
 

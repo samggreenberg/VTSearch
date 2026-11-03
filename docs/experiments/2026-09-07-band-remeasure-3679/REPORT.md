@@ -26,7 +26,7 @@ with `python figures.py`.
 
 ## The result
 
-![Band gap, both scopes](figures/band-gap.png)
+![Band gap, both scopes](figures/band-gap.webp)
 
 Paired `cost(small) - cost(large)` within `(class, seed)` at `t=150`, every arm
 reported separately because the encoder is a blocking factor and not a contrast.
@@ -44,7 +44,7 @@ seeds, the same five columns.
 
 ## Why it narrowed: the gap closed from the easy end
 
-![Cost by band](figures/cost-levels.png)
+![Cost by band](figures/cost-levels.webp)
 
 Cost at `t=150` rose in every band of every arm, and monotonically in band size:
 

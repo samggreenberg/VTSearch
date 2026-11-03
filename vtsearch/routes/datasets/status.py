@@ -17,11 +17,8 @@ from vtscore.concurrency.progress import (
     loading_tasks,
 )
 from vtsearch.auth import get_current_user
-from vtsearch.schemas.datasets import (
-    CancelDatasetLoadResponseSchema,
-    DatasetRegistryOkResponseSchema,
-    DatasetStatusResponseSchema,
-)
+from vtsearch.schemas.datasets.registry import DatasetRegistryOkResponseSchema
+from vtsearch.schemas.datasets.status import CancelDatasetLoadResponseSchema, DatasetStatusResponseSchema
 from vtsearch.state import (
     bad_votes,
     get_dataset_display_name,

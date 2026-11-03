@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.utils.scores``; NaN/Inf cannot leak into JSON scores.
+"""Tests for ``vtscore.training.thresholds.knobs``; NaN/Inf cannot leak into JSON scores.
 
 Logical-bug audit M13: ``learned_scores`` in ``/api/votes`` (and the cousin
 endpoints ``/api/learned-sort``, ``/api/find-label``, ``/api/find``,
@@ -19,7 +19,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from vtscore.utils.scores import (
+from vtscore.training.thresholds.knobs import (
     NON_FINITE_SCORE_SENTINEL,
     finite_or,
     sigmoid_to_finite_array,
@@ -154,7 +154,7 @@ class TestScoreAllMediaNaNSafety:
     """``_score_all_media`` (non-region path) must not leak NaN to results."""
 
     def test_non_region_path_replaces_nan_with_sentinel(self):
-        from vtscore.detectors.training import _score_all_media
+        from vtscore.detectors.training_scoring import _score_all_media
 
         rng = np.random.default_rng(0)
         clips: dict[int, dict] = {}

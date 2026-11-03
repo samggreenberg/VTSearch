@@ -23,7 +23,7 @@
 #
 # That table is informational. The baked embedder is whatever the server warms
 # for the type at startup, because the build runs that very preload
-# (scripts/preload_default_embedder.py); this file names no model, so a change
+# (scripts/install/preload_default_embedder.py); this file names no model, so a change
 # of default cannot leave the image baking the wrong one.
 #
 # The lock is VTSEARCH_SOLO_MEDIA_TYPE (set below), the admin override the
@@ -105,9 +105,9 @@ ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
     HF_HUB_DOWNLOAD_TIMEOUT=120 \
     PYTHONUNBUFFERED=1
 ARG MEDIA_TYPE=
-COPY scripts/preload_default_embedder.py scripts/preload_default_embedder.py
+COPY scripts/install/preload_default_embedder.py scripts/install/preload_default_embedder.py
 RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
-    python -u scripts/preload_default_embedder.py "$MEDIA_TYPE"
+    python -u scripts/install/preload_default_embedder.py "$MEDIA_TYPE"
 
 # ---------- application layer ----------
 COPY . .

@@ -413,7 +413,7 @@ not the archive's.
 ## CLI usage
 
 ```
-python scripts/detect_faces.py <detect_model> <output> (--dir DIR | --list FILE | --img PATH)
+python scripts/data/detect_faces.py <detect_model> <output> (--dir DIR | --list FILE | --img PATH)
     [--use-gpu] [--gpu-device-id N] [--num-threads N] [--confidence-threshold T] [--model-config PATH]
 ```
 
@@ -421,7 +421,7 @@ Detection only. `<detect_model>` is the `.onnx` or a directory holding it and
 its JSON config; `<output>` is the detections CSV. Prints `Total Detects: N`.
 
 ```
-python scripts/process_faces.py <config> <output_prefix> (--dir DIR | --list FILE | --img PATH)
+python scripts/data/process_faces.py <config> <output_prefix> (--dir DIR | --list FILE | --img PATH)
     [--provider NAME] [--use-gpu] [--gpu-device-id N] [--num-threads N] [--confidence-threshold T]
 ```
 
@@ -495,7 +495,7 @@ imagekit/
         providers/
             oss.py         # OssFacePipeline
             ext.py         # ExtFacePipeline (lazy import of the IMAGEKIT_EXT_BACKEND module)
-scripts/
+scripts/data/
     detect_faces.py        # detection-only CLI
     process_faces.py       # full pipeline CLI
 ```

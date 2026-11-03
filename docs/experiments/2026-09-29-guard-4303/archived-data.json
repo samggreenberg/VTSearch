@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-29-guard-4303.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "harvest.csv": {
+     "bytes": 178,
+     "oid": "9ae8664ce40d0fb7b0e60ecf54eb5f3e04e86ce9"
+    },
+    "opening.csv": {
+     "bytes": 130,
+     "oid": "e55640ca62893ef68103202457240c83f7661dfd"
+    },
+    "quality_paired.csv": {
+     "bytes": 3890,
+     "oid": "436d9bec862618772e94399040af25869185cefb"
+    },
+    "starved.csv": {
+     "bytes": 290,
+     "oid": "cce9efaceeb445afa6f40603d309b67a5f44c00f"
+    },
+    "verdict.json": {
+     "bytes": 338,
+     "oid": "798fdd10e688cc7902224980df10df9c81fd4922"
+    }
+   }
+  }
+ ]
+}

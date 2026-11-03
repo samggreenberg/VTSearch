@@ -8,7 +8,7 @@
 #SBATCH --time=1:30:00
 set -euo pipefail
 cd /expscratch/sgreenberg/worktrees/vts-bs-run
-source gridenv.sh >/dev/null 2>&1
+source scripts/grid/gridenv.sh >/dev/null 2>&1
 source scripts/experiments/pile/pile_env.sh
 unset IMAGEKIT_FACE_CONFIG IMAGEKIT_FACE_PROVIDER
 export VTSEARCH_DEVICE=cpu VTSEARCH_TORCH_THREADS=8 OMP_NUM_THREADS=8

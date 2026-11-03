@@ -23,7 +23,9 @@ FIRST_CUDA13_ORT = (1, 27)
 
 
 def _load_check_dockerfiles():
-    spec = importlib.util.spec_from_file_location("check_dockerfiles", REPO_ROOT / "scripts" / "check-dockerfiles.py")
+    spec = importlib.util.spec_from_file_location(
+        "check_dockerfiles", REPO_ROOT / "scripts" / "gates" / "check-dockerfiles.py"
+    )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

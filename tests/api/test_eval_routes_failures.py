@@ -121,7 +121,7 @@ class TestContextErrorsAreNot500:
     Regression for issue #3644.  Every route in this blueprint reads the
     request-scoped proxies, which raise ``DetectorNotLoadedError`` /
     ``DatasetNotLoadedError`` when the client names a pair the backend has not
-    finished loading - the app-wide 409 contract that ``vtsearch/hooks.py``
+    finished loading - the app-wide 409 contract that ``vtsearch/runtime/request_hooks.py``
     hands off to the global error handlers.  These handlers each wrap their
     body in ``except Exception`` and abort 500, which used to swallow that
     contract and report a poll landing inside a detector's load window as an

@@ -57,6 +57,19 @@ def _fake_load(target_medias):
     }
 
 
+def _load_with_an_unreadable_item(target_medias):
+    """:func:`_fake_load` plus one media with no vector, for the embedder to decline."""
+    _fake_load(target_medias)
+    target_medias[2] = {
+        **target_medias[1],
+        "id": 2,
+        "md5": "unreadable-md5",
+        "embedding": None,
+        "filename": "broken.wav",
+        "origin_name": "broken.wav",
+    }
+
+
 def _failing_load(_target_medias):
     raise RuntimeError("importer blew up")
 
@@ -70,12 +83,12 @@ _ORIGIN = {"importer": "test_post_load", "params": {}}
 
 def _run_load(tmp_path, load_fn, post_load=None, on_finished=None) -> str:
     """Run one full load synchronously and return its task id."""
-    from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+    from vtscore.datasets.load_origin import _run_origin_load_in_background
     from vtsearch import settings as settings_mod
 
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved"))
     with mock.patch(
-        "vtscore.datasets.load_pipeline.threading.Thread",
+        "vtscore.datasets.load_workers.threading.Thread",
         side_effect=_sync_thread_factory(),
     ):
         return _run_origin_load_in_background(
@@ -163,6 +176,24 @@ class TestOnFinishedHook:
         assert event.error == ""
         assert event.origin == _ORIGIN
         assert event.origin is not _ORIGIN, "a hook must not be able to edit the dataset's recorded origin"
+        assert (event.n_imported, event.n_dropped, event.dropped) == (1, 0, [])
+
+    def test_reports_the_items_a_load_dropped(self, isolated_settings, tmp_path, monkeypatch):
+        """The total and the dropped list reach the hook, so a mailer can tell the user (#5449)."""
+        from tests.helpers import register_declining_embedder
+        from vtscore.datasets.registry import list_datasets
+
+        register_declining_embedder(monkeypatch, "clap", "audio", decline={"broken.wav"})
+        events: list[DatasetImported] = []
+        _run_load(tmp_path, _load_with_an_unreadable_item, on_finished=events.append)
+
+        (event,) = events
+        assert event.outcome == SUCCEEDED
+        assert (event.n_imported, event.n_media, event.n_dropped) == (2, 1, 1)
+        assert event.dropped == [{"reason": mock.ANY, "count": 1, "items": ["broken.wav"]}]
+        assert "CLAP" in event.dropped[0]["reason"]
+        (entry,) = list_datasets()
+        assert event.dropped == entry["dropped_groups"], "the list the dataset's Stats window shows"
 
     def test_reports_a_failed_load(self, isolated_settings, tmp_path):
         events: list[DatasetImported] = []
@@ -174,6 +205,7 @@ class TestOnFinishedHook:
         assert event.error == "importer blew up" == _snapshot(task_id)["error"]
         assert event.dataset_id == ""
         assert event.n_media == 0
+        assert (event.n_imported, event.n_dropped, event.dropped) == (0, 0, [])
         assert event.name == "Post-load test"
         assert event.user == "default"
 
@@ -204,3 +236,16 @@ class TestOnFinishedHook:
         snapshot = _snapshot(task_id)
         assert snapshot["status"] == "idle"
         assert snapshot["error"] is None
+
+
+class TestEmbedderMemory:
+    def test_a_single_load_remembers_the_pick_through_the_public_register(self, isolated_settings, tmp_path):
+        """The load reads the hook at call time, so one installed after import is the one it calls."""
+        from vtscore.datasets.load_pipeline import register_last_embedder_persistence_hook
+
+        remembered: list[tuple[str, str]] = []
+        register_last_embedder_persistence_hook(lambda media_type, embedder: remembered.append((media_type, embedder)))
+
+        _run_load(tmp_path, _fake_load)
+
+        assert remembered == [("audio", "clap")]

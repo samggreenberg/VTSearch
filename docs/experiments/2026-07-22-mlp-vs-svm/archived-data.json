@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-07-22-mlp-vs-svm.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "prepare_info.json": {
+     "bytes": 14533,
+     "oid": "0842e012766f9cf6bb52c54561da3222e7d3eae9"
+    },
+    "stage_a.csv.gz": {
+     "bytes": 849643,
+     "oid": "019478e8629ca893355977a2622ab3984aa4feb9"
+    },
+    "stage_b.csv.gz": {
+     "bytes": 2102436,
+     "oid": "dae16fb74fabc41889df79c51a48d3f083c7fa75"
+    },
+    "stage_c.csv": {
+     "bytes": 5084,
+     "oid": "8d7783784ed62706fb9c6979dda797299d95643e"
+    },
+    "stage_c_parity.json": {
+     "bytes": 41,
+     "oid": "745c9b45c4a4881a80e41df879c547291faf92df"
+    }
+   }
+  }
+ ]
+}

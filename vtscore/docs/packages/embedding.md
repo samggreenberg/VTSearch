@@ -391,7 +391,11 @@ non-cached matrix is built. Cross-dataset Find takes the fresh path.
   saved `.pkl`*, a freshly-built primary matrix is also written next to
   that pickle as `<stem>.embmat.npy` + `<stem>.embids.npy`, and a later
   cold load `mmap`s it back instead of restacking the matrix from
-  per-item embeddings. Details below.
+  per-item embeddings. Details below. `stored_primary_vectors(pkl_path)`
+  reads a saved dataset's primary vectors without loading it, from that
+  sidecar when there is one and from the container otherwise: the
+  training-domain overlap check uses it for a training dataset that is not
+  loaded (#5501).
 - **Thread safety:** every read/write of the in-memory cache goes
   through `vtscore.state.core._state_lock`, but the build itself (and
   the sidecar read/write) runs *outside* the lock, so callers that miss
@@ -565,7 +569,7 @@ def default_concurrent_embeddings() -> int: ...
 ```
 
 (`vtscore/embedding/loader.py`.) Heuristics for the dataset-
-load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
+load `ConcurrencyGate`s in `vtscore.datasets.load_workers`:
 
 - **Downloads** - `VTSEARCH_MAX_CONCURRENT_DOWNLOADS` when set, else
   `max(1, min(4, os.cpu_count()))`. Bandwidth- and disk-bound.

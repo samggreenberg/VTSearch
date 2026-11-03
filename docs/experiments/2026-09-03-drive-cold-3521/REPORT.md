@@ -41,7 +41,7 @@ unambiguous win with no compensating loss: bar error **0.35 → 0.00** for
 
 ## 2. The fork, measured
 
-![The coverage step, restored versus rebuilt](figures/branch_cost.png)
+![The coverage step, restored versus rebuilt](figures/branch_cost.webp)
 
 *The coverage step of a dataset open, against dataset size, on a log axis. Green
 is the atlas restored from the cache inside the dataset's own pickle; red is the
@@ -117,7 +117,7 @@ next run — the one that really pays the load — needs in order to be written 
 
 ## 4. H3 and H4 — what each profile does to a progress bar
 
-![Bar error by branch](figures/bar_error_by_branch.png)
+![Bar error by branch](figures/bar_error_by_branch.webp)
 
 *Within-leg holdout — half of each leg's own reps fit the profile, the other half
 score it. Height is the fraction of the progress bar budgeted to the wrong step;

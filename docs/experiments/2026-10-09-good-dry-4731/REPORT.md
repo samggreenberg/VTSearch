@@ -28,7 +28,7 @@ now the app's, and the study's "dry run + head" arm is today's default arm. The 
 leave a slow walk too early: 3–4 per 100 face sessions at 5 or more photos, and 54 of 144 fired
 COCO sessions. The worst lose 0.22 and 0.11.
 
-![Mean F-beta over clicks, per arm, photo-count stratum and dataset](fig_fhibe_curves.png)
+![Mean F-beta over clicks, per arm, photo-count stratum and dataset](fig_fhibe_curves.webp)
 
 *Figure 1. Mean F-beta (beta 1) of the set Test gives at each click, over 100 people per row, one
 example photo each. Click 1 is the example. Today (blue), the dry run alone (green) and the dry run
@@ -151,7 +151,7 @@ classes.
 | medium | 245 | 0.409 (0.350) | +0.0012 ± 0.0012 | −0.0010 ± 0.0008 | +0.0006 ± 0.0013 | −0.0013 ± 0.0009 |
 | large | 245 | 0.685 (0.600) | 0 | 0 | 0 | 0 |
 
-![COCO Better Binary: mean F-beta of the set shown over clicks, every run and the runs where the dry run fires](fig_coco_guard.png)
+![COCO Better Binary: mean F-beta of the set shown over clicks, every run and the runs where the dry run fires](fig_coco_guard.webp)
 
 *Figure 2. COCO Better Binary photo, beta 1. Left: all 720 runs. Right: the 144 where the Good walk
 runs 16 picks dry with a Good in hand. Q and D pick the same media; they differ only in what Test
@@ -203,12 +203,12 @@ runs at every preset (20%), and in 50 of 288 Region runs (17%). Every fired run 
 click, and every other run is identical to the control throughout. Region is priced against #4637's two-seed
 Region text baseline.*
 
-![COCO Better Binary at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_binary_b1.png)
+![COCO Better Binary at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_binary_b1.webp)
 
 *Figure 3. COCO Better Binary, beta 1, on today's opening. Left: all 720 runs. Right: the 144 where the Good walk
 runs 16 picks dry with a Good in hand. Blue is the app before #4731; orange is the app.*
 
-![COCO Better Region at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_region_b1.png)
+![COCO Better Region at beta 1 on today's opening: mean F-beta of the set shown over clicks](fig_coco_guard_region_b1.webp)
 
 *Figure 4. The same for Region at beta 1, 2 seeds: all 288 runs, and the 50 where the exit fires. Beta 1/4 and 4
 for Binary are `fig_coco_guard_binary_b025.png` and `fig_coco_guard_binary_b4.png`.*

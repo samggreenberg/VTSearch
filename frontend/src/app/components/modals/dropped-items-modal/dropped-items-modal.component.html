@@ -1,0 +1,45 @@
+<vt-modal [title]="'Dropped items: ' + datasetName()" [open]="true" (closed)="close()">
+  <button class="btn btn--secondary btn--sm back-btn" (click)="close()" title="Return to dataset stats">&larr; Back</button>
+
+  @if (total() === 0) {
+    <p class="empty-state">Nothing was dropped from this dataset.</p>
+  } @else {
+    <p class="lead">
+      {{ total() | number }} item(s) were left out of this dataset because they had no vector: the embedder could not
+      read them, or they were missing a vector the rest of the dataset has.
+    </p>
+
+    <div class="table-scroll">
+      <table class="data-table dropped-table">
+        <thead>
+          <tr>
+            <th title="The item's file name, and where in the file for a clip">Item</th>
+            <th title="Why the item has no vector">Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track $index) {
+            <tr>
+              <td [title]="row.item">{{ row.item }}</td>
+              <td [title]="row.reason">{{ row.reason }}</td>
+            </tr>
+          }
+          @if (unlisted() > 0) {
+            <tr class="truncated-row">
+              <td colspan="2">… {{ unlisted() | number }} more not listed (only the first names are kept)</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="copy-row">
+      <vt-clipboard-copy
+        mode="table"
+        [rows]="clipboardRows"
+        [columns]="clipboardColumns"
+        copyLabel="Copy"
+      ></vt-clipboard-copy>
+    </div>
+  }
+</vt-modal>

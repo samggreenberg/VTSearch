@@ -98,7 +98,7 @@ negatives' own shape and the Good component's true mean and spread.
 
 ## The Bad component fitted on the corpus
 
-![Each candidate's gain over today's line, its set size and what it keeps with no positives](figures/binary/candidates.png)
+![Each candidate's gain over today's line, its set size and what it keeps with no positives](figures/binary/candidates.webp)
 
 *Per preset over votes, on the class model's cut: each candidate's F-beta gain over today's line on the same heads
 (top), its median set size against the best set's (middle), and the mean number of images it keeps on the withheld
@@ -203,7 +203,7 @@ of the corpus can be called negative.
 Sessions at vote 50 picked by rule among those the fitted Bad component with the bound at 4x moves (best set of 10
 or more; `chances_5040.py examples`): the one it hurts most, the median, the one it helps most.
 
-![Beta 1/4, vote 50](figures/binary/examples_bad_ssl_bound_x4_b025_vote50.png)
+![Beta 1/4, vote 50](figures/binary/examples_bad_ssl_bound_x4_b025_vote50.webp)
 
 *Left: the withheld half's top on a log count scale, positives green, negatives grey; today's cut (black), the arm's
 (orange) and the best cut (purple dashes). Right: each image's chance of a positive under today's 3-part fit, the
@@ -248,7 +248,7 @@ in the set's tail. On 1,000-image Region corpora it loses 0.013 to 0.032 (vote 2
 component's mean alone overshoots far less (0.42 to 0.49 at the edge early) and gains at every click, +0.007 to
 +0.040 with the bound at 4x; on 1,000-image Region corpora it loses up to 0.026 too (vote 50).
 
-![Region Photo, beta 1, vote 25: the Bad component's mean fitted, the bound at 4x](figures/region/examples_bad_ssl_mean_bound_x4_b1_vote25.png)
+![Region Photo, beta 1, vote 25: the Bad component's mean fitted, the bound at 4x](figures/region/examples_bad_ssl_mean_bound_x4_b1_vote25.webp)
 
 *Region sessions at vote 25 picked by rule, as the Binary panels are. `toothbrush@large` keeps 98 today where the best
 set is 50; the full fit keeps 261 (`figures/region/examples_bad_ssl_bound_x4_b1_vote25.png`), its mean alone 163.
@@ -261,7 +261,7 @@ the line) and its stop reads their expected F-beta (#4878), so every session run
 before the detector is even shown. Each arm is the app with one change, 720 sessions per preset (144 class@band cells
 x 5 seeds, Binary Photo, 200 clicks and the closing check), paired by cell and seed with the app's own sessions.
 
-![F-beta over clicks, each arm against the app, at each preset](figures/ab_over_clicks.png)
+![F-beta over clicks, each arm against the app, at each preset](figures/ab_over_clicks.webp)
 
 *Top: the mean F-beta of the set the app shows on the withheld half at each click (the typed query's set until the
 detector is shown, about click 30); circles, after the closing check. Bottom: each arm's paired gain over the app,

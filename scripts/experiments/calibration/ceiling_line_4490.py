@@ -50,6 +50,7 @@ import pandas as pd  # noqa: E402
 from scipy.stats import norm  # noqa: E402
 
 from _cells_paths import testscore_files  # noqa: E402
+from vtscore.training.thresholds import class_model as CM  # noqa: E402
 from vtscore.training.thresholds import labels_line as LL  # noqa: E402
 
 BETAS = (0.25, 1.0, 4.0)
@@ -193,7 +194,7 @@ def shape_line(snap: dict, scores: np.ndarray, pdf0):
     """Goods ~ the class model's Good normal (spread floored on this corpus), negatives ~ *pdf0*; the positives'
     share by EM on the corpus; each item's chance from it; the counted F-beta cut (``corpus_cut``)."""
     model = model_of(snap)
-    u = LL._finite_unit(scores)
+    u = CM._finite_unit(scores)
     x = LL._logit(u)
     fm = model.floored(LL.corpus_sigma_floor(u))
     f1, f0 = norm.pdf(x, fm.mu_pos, fm.sigma), pdf0(x)
@@ -217,7 +218,7 @@ def bads_share_above_median(snap: dict, scores: np.ndarray) -> float:
     _, xn = folds_xy(snap)
     if xn.size == 0:
         return float("nan")
-    x = np.sort(LL._logit(LL._finite_unit(scores)))
+    x = np.sort(LL._logit(CM._finite_unit(scores)))
     return 1.0 - np.searchsorted(x, np.median(xn)) / x.size
 
 
@@ -229,7 +230,7 @@ def top_enrichment(snap: dict, scores: np.ndarray, q: float = REP_TOP_Q) -> floa
     _, xn = folds_xy(snap)
     if xn.size == 0:
         return float("nan")
-    cut = float(np.quantile(LL._logit(LL._finite_unit(scores)), 1.0 - q))
+    cut = float(np.quantile(LL._logit(CM._finite_unit(scores)), 1.0 - q))
     return float((xn >= cut).mean()) / q
 
 
@@ -281,7 +282,7 @@ def near_bads(q: float):
     def rule(snap: dict, scores: np.ndarray):
         if not fold_model_matches(snap):
             return shipped(snap, scores)
-        cut = float(np.quantile(LL._logit(LL._finite_unit(scores)), 1.0 - q))
+        cut = float(np.quantile(LL._logit(CM._finite_unit(scores)), 1.0 - q))
         kept_folds = [
             (s[(y >= 0.5) | (LL._logit(s) >= cut)], y[(y >= 0.5) | (LL._logit(s) >= cut)]) for s, y in folds_of(snap)
         ]

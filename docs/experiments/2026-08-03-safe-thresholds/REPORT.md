@@ -75,7 +75,7 @@ the ≫30-vote regime.
 `safe_thresholds` blends the conformal threshold with a GMM threshold fitted on
 the current score distribution (`calculate_safe_threshold`): **full** authority
 below 6 votes, majority authority to ~13. It ships **off**
-(`vtsearch/settings_models.py`, a per-user checkbox in the settings modal), and
+(`vtsearch/settings/models.py`, a per-user checkbox in the settings modal), and
 the #2781 calibration study ran every arm with it off, so it had never been
 measured under region voting.
 
@@ -207,7 +207,7 @@ Two of these settle open questions:
 
 ## Decision
 
-1. **Ship `safe_thresholds = True` as the default** (`vtsearch/settings_models.py`).
+1. **Ship `safe_thresholds = True` as the default** (`vtsearch/settings/models.py`).
    Note the flip only reaches users who never touched the toggle — anyone with a
    persisted `false` keeps it. If the intent is genuinely "on for all users",
    that needs either a migration of persisted `false` values or removing the

@@ -9,7 +9,7 @@ is the most common settings mistake on a fresh deployment, so start here:
 
 | Tier | File | Holds | Model |
 |------|------|-------|-------|
-| **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings_models.py`) |
+| **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings/models.py`) |
 | **Per-user** | `<user data dir>/user_settings.json` | Every user preference — theme, volume, autopilot, AutoFind, panel layout, browse prefs. Resolved per request from the logged-in user. | `UserSettings` (same module) |
 
 The per-user file lives at `data/user_settings.json` in a single-user
@@ -63,7 +63,8 @@ through their CLI flag or environment variable.
   "browse_signpost_vocab": {},
   "default_settings_source": null,
   "default_labelset_source": null,
-  "labelset_source_push_interval_seconds": 60
+  "labelset_source_push_interval_seconds": 60,
+  "enable_metrics": true
 }
 ```
 
@@ -168,11 +169,19 @@ through their CLI flag or environment variable.
   slow target or a burst of votes costs one write per window; pending pushes
   are flushed on a normal shutdown. `0` pushes as soon as the previous push
   lands. Clamped to `[0, 86400]`.
+- `enable_metrics`: whether the server records usage metrics (default `true`):
+  the views people open, the datasets they import and results they export, the
+  settings they change and the tagged controls they click, appended to
+  `data/metrics/events-YYYY-MM.jsonl`. `false` records nothing, and the SPA
+  stops sending once the server says so. Settings-file only (there is no flag or
+  env var); surfaced read-only at `GET /api/settings` and on the Settings
+  dialog's Server tab. What a line holds is in
+  [DEPLOYMENT.md § Usage metrics](DEPLOYMENT.md#usage-metrics).
 
 ## Per-user tier — `user_settings.json`
 
 An abridged example; the full field list is `UserSettings` in
-`vtsearch/settings_models.py`.
+`vtsearch/settings/models.py`.
 
 ```json
 {
@@ -196,7 +205,7 @@ An abridged example; the full field list is `UserSettings` in
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
-  "autopilot_goal_diversity": 40,
+  "autopilot_goal_diversity": 0,
   "autofind_detectors": [],
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
@@ -219,6 +228,14 @@ An abridged example; the full field list is `UserSettings` in
 }
 ```
 
+- `autopilot_goal_diversity`: how many Coverage Atlas regions Autopilot's
+  **Explore Diversity** step asks your votes to cover before Done. `0` (the
+  default since #5473) skips the step, so Done waits on the Smart and Stable
+  lights alone; any positive goal turns it back on (`40` was the default
+  before). Skipping it stopped sessions about 20 votes sooner with the same
+  F-beta on faces and slightly less on COCO
+  ([report](experiments/2026-10-30-skip-diversity-5473/REPORT.md)); what it is
+  worth depends on the embedder and the data. Clamped to ≥ 0.
 - `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
   `"dark"`, `"light"`, or `"highviz"`.
 - `autofind_detectors`: detector names to run on each web import, from a

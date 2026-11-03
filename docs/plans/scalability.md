@@ -118,7 +118,7 @@ rather than windowed.
 
 ### S4: `medias` dict — one Python dict entry per item
 
-**File:** `vtscore/state/core.py` (`DatasetContext.medias`, a `MediasDict`)
+**File:** `vtscore/state/dataset_context.py` (`DatasetContext.medias`, a `MediasDict`)
 
 Each item is a Python `dict` with ~10 keys, embeddings stored inline
 (`loader_pickle._build_pickle_full_media` writes `"embeddings"` into each entry).
@@ -137,11 +137,11 @@ arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 ### S6: epoch counter for embedding-matrix invalidation — ⏸ GATED (partly shipped)
 
-**File:** `vtscore/state/core.py`, `vtscore/embedding/matrix.py`
+**File:** `vtscore/state/dataset_context.py`, `vtscore/embedding/matrix.py`
 
 > **Verdict (re-confirmed): defer.** The invalidation half already shipped safely
 > — `media_revision`, bumped automatically by the `MediasDict` subclass on every
-> structural change (`MediasDict` in `core.py`), keys the matrix cache's *validity*
+> structural change (`MediasDict` in `dataset_context.py`), keys the matrix cache's *validity*
 > via an O(1) revision compare in `get_embedding_matrix`, and the original O(N) id-list
 > comparison is gone. Crucially, the auto-bumping `MediasDict` removes the
 > staleness risk the earlier gating flagged (a manual invariant every mutation
@@ -177,7 +177,7 @@ false hit can't happen because `media_revision` bumps on every structural change
 
 ### S10: head scoring pass — O(N) inference on every retrain
 
-**File:** `vtscore/detectors/training.py` (`_score_all_media`, called on every retrain)
+**File:** `vtscore/detectors/training_scoring.py` (`_score_all_media`, called on every retrain)
 
 Scoring all media runs the head over every item after every vote (a matrix
 multiply for the shipped linear SVM), and the threshold fit repeats the pass once
@@ -193,7 +193,7 @@ votes and retrain once.
 
 ### S11: cross-dataset label population — serial I/O, O(N_labels)
 
-**File:** `vtscore/detectors/labelset_training.py` (`populate_label_embeddings`,
+**File:** `vtscore/detectors/labelset_embeddings.py` (`populate_label_embeddings`,
 serial `for idx, elem in …` loop)
 
 Resolves the file and embeds each LabelSet element serially — for uncached
@@ -281,7 +281,7 @@ the *pickle* loader, which still reads the whole file at once.
 
 ### S20: CLI autodetect scores every item, serial label resolution per detector
 
-**Files:** `vtscore/cli.py` (`_train_detectors_for_first_chunk`, serial
+**Files:** `vtscore/cli/detectors.py` (`_train_detectors_for_first_chunk`, serial
 `for det_name in detector_names:` loop), `vtsearch/routes/detectors/scoring.py`
 
 **Partly shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):

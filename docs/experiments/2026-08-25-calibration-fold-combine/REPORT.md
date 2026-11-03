@@ -271,6 +271,48 @@ inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
 > the two-cell design. That is why #3258 — which proposed a mode-dependent
 > combine rule — was closed unbuilt rather than rescoped.
 
+> ### ⚠ Correction, 2026-11-02: the combine arms *were* run on the middle cell, and the `space` leg follows the voting mode
+>
+> The box above says the combine arms "have never been run on the middle
+> cell". They had been, a week before it was written: SLURM array **541929**
+> (2026-08-26) re-ran this grid with `dinov3_patch` under `whole_image` added
+> (`launch_folds_3115.sh`'s default `CALIB_PATCH_STYLES` since #3260), **96/96
+> cells, 0 failures**, both acceptance identities holding. Its write-up stayed
+> on a branch that was never merged, so the 2026-09-02 resolution reasoned from
+> #3310's neighbouring knob instead of from this. Recorded here from that
+> branch; the numbers are the branch's, not re-derived.
+>
+> | env | `combine` | `space` | `total` |
+> |---|---:|---:|---:|
+> | `dinov3_patch` / `max_patch` (region) | −0.0160 | **−0.0324** | −0.0484 |
+> | `dinov3_patch` / `whole_image` (binary) | +0.0001 | **+0.0248** | +0.0249 |
+> | `siglip` / `whole_image` (binary) | −0.0078 | **+0.0357** | +0.0280 |
+>
+> **The `space` leg follows the voting mode, not the embedder.** DINOv3 under
+> `whole_image` sits with SigLIP under `whole_image` (+0.025 vs +0.036), not
+> with DINOv3 under `max_patch` (−0.032). That is the outcome the 2026-08-25
+> box pre-registered as "it follows the voting mode". The fold count (#3310)
+> and the calibration fraction (#3287) follow the embedder; this study's
+> `space` leg does not, so the box above's "key on the embedder" does not
+> carry over to this rule. Per that box's own caveat, it is still one embedder
+> for the mode contrast, so it discriminates between the two hypotheses rather
+> than establishing either.
+>
+> **The `combine` leg does not generalise as stated.** It is a null on
+> `dinov3/whole` (+0.0001) against −0.0078 and −0.0160 on the other two cells,
+> so "averaging beats pooling in both voting modes" was a fact about two
+> cells. Why both legs behave this way is worked through, post hoc, under
+> *Second run, post hoc: the rule and the metric want different things* below.
+>
+> **What this does not change.** #3258 was closed on two grounds. This run
+> contradicts the first (that the mode framing is an artifact) but not the
+> second: since #3516 the pooled conformal rule reaches users only through the
+> Inclusion re-cut fallback and the library-tier `train_detector_from_origins`,
+> so a mode-dependent combine rule would reach only those, and the closure
+> stands. Array 541929 finished before PR #3269 changed how the harness seeds,
+> so the seeding caveat at the top applies to it exactly as it does to array
+> 539811: contrasts between arms within a cell hold.
+
 ### BLUF
 
 **Both docstrings are wrong, and they are wrong in different places.**
@@ -280,9 +322,10 @@ inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
   survive contact: averaging the folds' own conformal cuts beats pooling their
   scores by **−0.0078 ± 0.0015** (binary) and **−0.016 ± 0.003** (region).
 - **The comparability premise is cell-dependent, and that is the finding.**
-  (Written as *mode*-dependent; see the two correction boxes above — the cells
-  confound mode with the embedder, and #3310 later found the embedder is what
-  neighbouring knobs follow.) The
+  (Written as *mode*-dependent; see the correction boxes above — the cells
+  confound mode with the embedder, #3310 later found the embedder is what
+  neighbouring knobs follow, and the 2026-11-02 box records the run that filled
+  the missing corner for this leg: it follows the mode after all.) The
   anchored path keeps each fold's haystack *"to read a cut's quantile in the
   scale it was measured on"*. On **region** voting that is right and worth
   **−0.032 ± 0.005**; on **binary** voting it is wrong and costs
@@ -317,7 +360,7 @@ the contradiction resolves: the combine axis agrees in both modes, and only the
 *space* axis flips. A one-line change to the run design bought the difference
 between a paradox and a mechanism.
 
-![Region voting](figures/regret_over_votes_region_k4.png)
+![Region voting](figures/regret_over_votes_region_k4.webp)
 
 *Region voting, K=4: paired Δregret against the pooled cut over the vote axis,
 averaged over 48 runs with ±1 SE bands. Every combine rule beats pooling past
@@ -325,7 +368,7 @@ averaged over 48 runs with ±1 SE bands. Every combine rule beats pooling past
 the endpoint — the ordering before ~15 votes is reversed, and this figure does
 not license the deep-regime numbers being applied to the cold start.*
 
-![Binary voting](figures/regret_over_votes_binary_k4.png)
+![Binary voting](figures/regret_over_votes_binary_k4.webp)
 
 *Binary voting, same axes. The sign of the quantile-space arms (orange) flips
 relative to region: worse past ~20 votes, not better. The anchored rule's huge
@@ -413,7 +456,7 @@ Region's combine gap grows and saturates by K≈8; binary's is flat from K=2. Th
 *space* leg shrinks with K in both — the opposite of the predicted direction.
 Since production ships K=2, none of this changes what a user gets today.
 
-![Contrasts over K](figures/contrasts_over_k_region.png)
+![Contrasts over K](figures/contrasts_over_k_region.webp)
 
 *Region voting: each contrast over the fold count, ±1 SE. The shaded band at
 K<3 is where mean and median are the same rule by construction, so the median
@@ -594,9 +637,59 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
   confound that #2897 had, but it left **mode perfectly confounded with the
   embedder**: SigLIP is the only binary cell and DINOv3 the only region one. See
   the correction at the top; this is the study's principal weakness and it was
-  not caught before the run.
+  not caught before the run. Array 541929 later filled the missing corner (see
+  the 2026-11-02 correction under *Results*), which still leaves one embedder
+  for the mode contrast.
 - **Uniform prevalence.** The grid deliberately holds prevalence fixed at 7.1%,
   so nothing here says how the combine rule behaves on a rare category.
+
+## Second run, post hoc: the rule and the metric want different things
+
+*Written 2026-08-26 alongside array 541929 and recorded here on 2026-11-02;
+see the correction box under* Results. *Not pre-registered.* From the same
+cells via `scripts/experiments/folds_3115/drill_folds_3115.py`, which walks a
+contrast down env → category → run → step.
+
+Every arm sits **below** the oracle cut on 70–92 % of deep steps — the trained
+threshold systematically over-admits — and regret tracks how *unbalanced* the two
+error rates are rather than which combine rule ran:
+
+| voting | arm | FPR | FNR | ratio | below oracle | regret |
+|---|---|---:|---:|---:|---:|---:|
+| binary | `xcal` (pooled) | 0.207 | 0.146 | 1.4× | 78 % | 0.043 |
+| binary | `tmean` | 0.184 | 0.160 | **1.15×** | 70 % | **0.034** |
+| region | `xcal` (pooled) | 0.257 | 0.059 | **4.3×** | 92 % | 0.098 |
+| region | `qmean` | 0.179 | 0.089 | 2.0× | 79 % | 0.049 |
+| region | `anchored` | 0.165 | 0.089 | 1.85× | 87 % | **0.036** |
+
+The cause is a documented mismatch, not a defect. `CONFORMAL_BASE_BUDGET = 0.25`
+makes the conformal rule cap **false negatives** at 25 % and only put a *floor*
+under false positives — deliberately asymmetric, "don't miss matches". But
+`inclusion_cost_weights(0)` is **(1.0, 1.0)**: the metric weights the two errors
+equally. Measured FNR lands far under its budget (0.146 / 0.059) while FPR runs
+1.4–4.3× higher. The rule is doing exactly what it documents, scored against a
+different objective.
+
+That explains the whole result set without appealing to anything about pooling:
+
+- Any rule that **raises** the cut moves toward the cost optimum. `qmean` raises
+  it on region (87 % of steps) and lowers it on binary (87 % of steps) — hence
+  the sign flip, and hence why the flip follows the voting geometry, which is
+  what determines the direction of the rank transfer.
+- Production's **anchored** rule follows no miss budget at all — it cuts from the
+  fitted score distribution — and lands at 0.035 / 0.036, near-identical across
+  modes and best in both.
+
+**For binary specifically:** its problem is the same over-admission, milder
+(1.4× vs 4.3×), which is *why* the combine rule matters less there. The lever
+that moves it is the one production already pulled on the main path: cut from
+the fitted distribution rather than from a miss budget. (Written when the
+pooled conformal cut was believed to threshold reloaded detectors; after the
+2026-09-02 corrections it reaches only the Inclusion re-cut fallback and the
+library API.)
+
+The mechanism is not uniform either: within binary, `boat` carries 16 % of the
+effect against `umbrella`'s 1 %, and `boat`'s worst run is 3× its best.
 
 ## Follow-ups
 
@@ -619,7 +712,11 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
   design, and #3310 filled the missing corner: on this grid, calibration knobs
   follow the **embedder**, not the voting mode (see the resolution note above).
   Anyone reviving this should key on the embedder and must run the combine arms
-  on the middle cell first.
+  on the middle cell first. *Correction, 2026-11-02:* they had been run (array
+  541929), and this rule's `space` leg follows the voting mode, not the
+  embedder; see the correction box under *Results*. The closure stands on the
+  other half: the pooled rule has no shipped site left that a mode-dependent
+  rule would improve.
 - **~~`tmean` is the cheap, safe half.~~ Withdrawn 2026-09-02 — it is cheap but
   it is not safe here.** Averaging does beat pooling in both cells past ~100
   votes, with no haystack, rank transfer or mode switch. But the `combine` leg
@@ -652,7 +749,9 @@ fold — and quoting a previous grid's seconds is exactly how #3129 produced a
 Analysis code, all in-tree: `scripts/experiments/calibration/folds_combine_3115.py`
 (the contrast), `scripts/experiments/calibration/analyze_folds_2897.py` (the
 driver and the fold-count axis),
-`scripts/experiments/calibration/make_folds_3115_figs.py` (figures), and
+`scripts/experiments/calibration/make_folds_3115_figs.py` (figures),
+`scripts/experiments/folds_3115/drill_folds_3115.py` (the post-hoc drill-down
+behind *Second run, post hoc*), and
 `scripts/experiments/calibration/selftest_analyze_folds_2897.py`, which plants a
 known answer — including the two acceptance identities — and checks the analyzer
 recovers exactly it.

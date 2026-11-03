@@ -23,7 +23,7 @@ found at all, which the supply census measured (#4709). There, the loss at 640 w
 below MTCNN's 24 px floor, so this arm's extra difficulty is mostly a pixel floor, not finding a face
 in context.
 
-![F-beta of what Find returns over votes, per arm, from 1 and from 4 starting photos](fig_fbeta_by_vote.png)
+![F-beta of what Find returns over votes, per arm, from 1 and from 4 starting photos](fig_fbeta_by_vote.webp)
 
 *Figure 1. Mean over 562 people of the F-beta (beta 1) of what Find returns on the withheld half, at
 every vote. Blue is SigLIP on the whole photo, orange FaceNet on the face crop; solid is 1024 px,

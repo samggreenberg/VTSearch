@@ -1263,6 +1263,40 @@ describe('NewDetectorModalComponent', () => {
       expect(component.datasetPickBusy()).toBe(false);
     });
 
+    // A face under the Face Quality cut sinks a one-photo search; one clear face
+    // among the picks is enough (#5372).
+    it('warns, without blocking, while every face picked is a hard view', async () => {
+      const warning = () => (fixture.nativeElement as HTMLElement).querySelector('.hard-view-warning');
+      const pick = (id: number, hardView: boolean | null) => {
+        component.onDatasetItemPicked(id);
+        httpMock
+          .expectOne('/api/server-media-files/from-media-id')
+          .flush({ filename: `f${id}.png`, original_name: `face_${id}.png`, face_hard_view: hardView });
+      };
+      openOn(faces);
+
+      pick(42, true);
+      await fixture.whenStable();
+      expect(component.hardViewFaces()).toBe(1);
+      expect(warning()?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'This photo is a hard view of the face (turned, covered or small). Searching from it may miss this person; a clearer photo will help.',
+      );
+
+      pick(43, true);
+      await fixture.whenStable();
+      expect(warning()?.textContent).toContain('These photos are all hard views');
+
+      pick(44, false);
+      await fixture.whenStable();
+      expect(warning()).toBeNull();
+
+      component.removeMediaExample(2);
+      pick(45, null);
+      await fixture.whenStable();
+      // No verdict counts as clear: the warning only shows when the server is sure.
+      expect(warning()).toBeNull();
+    });
+
     it('opens the grid of that dataset from the button, with Back to the form', async () => {
       openOn(faces);
       await fixture.whenStable();
@@ -1275,9 +1309,9 @@ describe('NewDetectorModalComponent', () => {
       expect(el.querySelector('vt-dataset-example-picker')).toBeTruthy();
       expect(el.querySelector('.media-picker .back-btn')?.textContent).toContain('Back');
       httpMock.expectOne('/api/media-types').flush({ media_types: [] });
-      const ids = httpMock.expectOne('/api/medias/ids');
-      expect(ids.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
-      ids.flush([]);
+      const listing = httpMock.expectOne('/api/medias/picker');
+      expect(listing.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
+      listing.flush({ ids: [], total: 0, order: 'dataset' });
       await settleResource();
 
       component.backToMain();

@@ -67,7 +67,7 @@ Both drawn boxes, mapped back to their pages:
 
 | bat_leaf `fspp0201` (the proposal covered the top half) | p_lorillard_crest `fhkw0113` (an oval-framed crest the fit missed) |
 |---|---|
-| ![](examples/drawn-bat_leaf-m159.png) | ![](examples/drawn-p_lorillard_crest-fhkw0113.png) |
+| ![](examples/drawn-bat_leaf-m159.webp) | ![](examples/drawn-p_lorillard_crest-fhkw0113.webp) |
 
 ## Held back, then finished (#4125)
 

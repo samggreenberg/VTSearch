@@ -99,12 +99,12 @@ describe('LineTestResultComponent (#4524)', () => {
 
   it('shows the ranges with their lights and the F-beta headline as a running test forms', async () => {
     const el = await show(wireLineTest(wireTest()));
-    expect(el.querySelector('.headline-value')!.textContent!.trim()).toBe('0.60 (0.45–0.78)');
+    expect(el.querySelector('.headline-value')!.textContent!.trim()).toBe('0.62 ± 0.17');
     const rows = Array.from(el.querySelectorAll('.range-row')) as HTMLElement[];
     expect(rows[0].textContent).toContain('Right');
-    expect(rows[0].querySelector('dd')!.textContent!.trim()).toBe('55–95%');
+    expect(rows[0].querySelector('dd')!.textContent!.trim()).toBe('75 ± 20%');
     expect(rows[0].dataset['light']).toBe('red');
-    expect(rows[1].querySelector('dd')!.textContent).toContain('about half of them found (30–70%)');
+    expect(rows[1].querySelector('dd')!.textContent).toContain('about half of them found (50 ± 20%)');
     expect(el.querySelector('.result-note')!.textContent).toContain('12 matches it likely holds are the detector\'s own estimate');
     // No verdict and no exits yet.
     expect(el.querySelector('.exits')).toBeNull();
@@ -117,7 +117,7 @@ describe('LineTestResultComponent (#4524)', () => {
     expect(el.querySelectorAll('.precision-chart .range-bar').length).toBe(6);
     expect(el.querySelector('.precision-chart .current')).not.toBeNull();
     expect(el.querySelector('.chart-legend')!.textContent).toContain('Line: the top 64');
-    expect(el.querySelector('.chart-readout')!.textContent).toContain('Top 64: likely 55–95% right');
+    expect(el.querySelector('.chart-readout')!.textContent).toContain('Top 64: likely 75 ± 20% right');
     expect(el.textContent).not.toContain('Checked by you');
   });
 
@@ -128,7 +128,7 @@ describe('LineTestResultComponent (#4524)', () => {
     const rows = Array.from(el.querySelectorAll('.bands tbody tr')) as HTMLElement[];
     expect(rows.length).toBe(1);
     expect(rows[0].textContent).toContain('▲ 33–64');
-    expect(rows[0].textContent).toContain('36–98%');
+    expect(rows[0].textContent).toContain('67 ± 31%');
   });
 
   it('with no class model reads Found in words only and says it is unmeasured below the picks (#4542)', async () => {

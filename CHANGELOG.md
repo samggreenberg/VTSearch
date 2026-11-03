@@ -20,6 +20,181 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-11-03
+
+### Changed
+
+- **Tune's verdict reads as a form, and every likely range as centre ± spread** (issue #5503). At Done the verdict
+  put its numbers inside a sentence ("the line keeps the top 76: likely 91–100% of them are right, with nearly all
+  of them found (82–94% of all the matches)"), which was hard to read. It now lays them out one to a row:
+  **Line Keeps** 76, **Fraction Correct** 96 ± 5%, **Fraction Found** 88 ± 6%. Every likely range in the app (the
+  Tune result pane, the balance control's check line, the Dashboard's kept verdicts, and F-beta) now reads the same
+  way, as its centre ± how far it reaches either way, in whole percents, rather than as its two ends.
+
+- **Autopilot's last step is Done** (issue #5499). Labeling on after **Done!** used to move the panel to a seventh
+  step, **Keep Improving.**, whose light showed the lowest of the Smart, Stable and Span lights. After a Done that the
+  expected F-beta or the 200-vote cap said, with a light short of green, it could stay red for the rest of the
+  session, as if something were still owed. Now **Done!** stays the current step, with its green check, however long
+  you label on; when a later vote moves a light off green, its line reads **Detector trained**. Toasty's hand-off no
+  longer says to "keep clicking to sharpen it", which never said when to stop: it says you can keep voting, but you
+  don't need to.
+
+- **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
+  stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
+  dataset are, was never told Done: 81-87% of FHIBE sessions ran to the end without it. Now, once 16 picks in a row
+  past the opening (Refine Boundary, Explore Diversity or a spot check) were not Good, the two lights judge the
+  detector on the Goods it has. Measured on FHIBE faces, 13-19% of sessions told Done becomes ~100%, at about vote
+  42-54 instead of ~130, with the same F-beta at Done (within 0.003); on COCO photos Done comes about 3 votes
+  sooner at 0.001-0.004 lower F-beta
+  ([report](docs/experiments/2026-10-30-min-goods-5477/REPORT.md)).
+
+- **Find Results is laid out by what each control does** (issue #5464). What changes the list sits above it:
+  Good / Bad / Both, a new **Sort by** Score or **Similarity** (look-alikes side by side, by a 1-D UMAP of the whole
+  dataset that is now fit and saved with its Browse map), and the same **Columns** checkboxes the Export dialog has,
+  which decide what the list shows, what is copied and what is exported. The list can show a **Thumbnail** of each
+  item, sized by its own smaller / bigger buttons and loaded as you scroll. **Browse** sits under the list; the
+  destinations are tabs, **Clipboard** first and opening by default, in place of the unlabelled exporter pulldown;
+  and the footer is **Close**, **Export** and **Export and Close**. The Media Type in its summary carries its
+  icon, as on the Dashboard.
+
+- **Autopilot skips its Explore Diversity step by default** (issue #5473). The **Goal diversity** setting
+  (`autopilot_goal_diversity`) now defaults to 0, which skips the step: Done waits on the Smart and Stable lights
+  (or the expected F-beta level) alone, and the Autopilot panel leaves the step out. Measured on FHIBE faces and COCO
+  Better, sessions are told to stop about 20 votes sooner, with the same F-beta at the stop on faces and 0.004 to
+  0.012 less on COCO ([report](docs/experiments/2026-10-30-skip-diversity-5473/REPORT.md)). How much the step is
+  worth depends on the embedder and the data, so any positive goal turns it back on (40 was the old default).
+
+- **Server log lines carry the new module names** (issue #5398). The loose top-level modules of `vtsearch/` moved
+  into `runtime/`, `cli/`, `openapi/` and `settings/`, and each logs under its module's name, so a filter or alert
+  keyed on a logger name needs the new one: the slow-request and request-phase lines that came from `vtsearch.hooks`
+  now come from `vtsearch.runtime.request_hooks`, and `vtsearch.autofind`, `vtsearch.import_hooks`,
+  `vtsearch.diagnose` and `vtsearch.settings_store` are `vtsearch.runtime.autofind`, `vtsearch.runtime.import_hooks`,
+  `vtsearch.runtime.diagnose` and `vtsearch.settings.store`. The cuML fallback warning moved from
+  `vtscore.gpu_backends` to `vtscore.config.gpu_backends`. Nothing else an operator sees changes.
+- **Toasty's hints are bigger, and you can drag them out of the way** (issue #5462). Toasty stands a little larger
+  beside every hint. Drag him or his speech bubble to move the hint; the next hint appears in its usual spot. Point at
+  Toasty and he changes his face. On the dataset a detector was trained on he now looks surprised rather than happy,
+  and the Browse map's first hint reads "Drag to pan or wheel to zoom."
+- **The helper scripts moved into folders by purpose** (issue #5408). `scripts/install.sh` stays where it was; the
+  other scripts that were loose in `scripts/` now live in `scripts/gates/` (the `run-tests.sh` checks),
+  `scripts/release/` (release and publishing), `scripts/install/` (model downloads and Docker image setup) and
+  `scripts/data/` (dataset builders and the face CLIs). A deployment that calls one by its old path needs the new
+  one: `scripts/install/download_models.sh`, `scripts/install/cache_gated_models.sh` and
+  `scripts/data/link-demo-cache.sh`. The old paths were not kept.
+- **A multi-dataset import's names no longer carry a badge** (issue #5461). Each dataset one import produced showed
+  a badge with its kind of media after its name, so a face dataset read "Photos – Face", then **Face**, then
+  **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
+
+### Added
+
+- **The domain warning reaches Find and AutoFind** (issue #5501). Tune's warning that a dataset looks unlike the one a
+  detector was trained on ("68% of this dataset looks atypical vs photos: likely domain shift") now runs for every
+  detector of a Find or AutoFind: the Find Results dialog shows it under its summary, an AutoFind's finished notice
+  turns to a warning naming the detector, and the exported results carry the figure, which the email exporter prints
+  under each detector and flags in its subject. The training dataset no longer has to be loaded: a detector remembers
+  the dataset it was trained or tuned on, and the check reads that dataset from disk, so a run after a restart or an
+  AutoFind on a fresh import still warns. See [Trust a detector](docs/user/howto/trust-a-detector.md).
+
+- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
+  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
+  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
+  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
+  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
+  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
+
+- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
+  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
+  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
+  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
+  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
+  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
+  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+
+- **An import alert can say what the import left out** (issue #5449). The event a server's
+  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
+  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
+  reason), so an alert email can tell you which files to look into. The
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+
+- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
+  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
+  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
+  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
+  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
+  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
+  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
+  on request; a Face dataset built before this gets its thumbnails on its next save.
+
+- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
+  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
+  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
+  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
+  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
+  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
+  `max_results:`. It cannot be combined with `--resume`. See
+  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
+### Fixed
+
+- **The Synthetic World Map demos import under any embedder** (issue #5508). Both demos (image and audio) ship
+  synthetic vectors at a fixed width: 768 for image, SigLIP's, and 512 for audio, CLAP's. Picking any embedder of
+  another width, such as `sift_vlad` or `clip` for image or `ast` for audio, made the import fail once it was
+  running, with a "vector is 768-dimensional but 8192 was expected" error. The vectors are now made at the picked
+  embedder's width. They are still synthetic, so a text query against them means nothing, whichever embedder is picked.
+
+- **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
+  Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
+  server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
+  Opened from the top bar on the Label view, where the Dashboard isn't open, the import was lost outright. Like
+  every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
+  the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
+
+- **Find Results' selected buttons are readable** (issue #5500). The selected Good / Bad / Both and Sort
+  by buttons drew grey text on their blue (or, in High Visibility, yellow) fill, too faint to read in any theme; the
+  selected click / hover focus button in the view toolbar had the same grey icon. They now use the same dark or light
+  text as every other selected toggle.
+
+- **Export labels from a Dashboard row fills in that row's detector** (issue #5494). An exporter field that uses
+  `{detector_name}` or `{detector_id}` (a file path, a URL, an email subject) took the detector the top bar had
+  active, not the row whose ⋯ menu you opened: it came out blank for a detector you had just imported and not yet
+  loaded, and with several detectors loaded it named whichever was loaded last. It now names the row's detector,
+  loaded or not.
+
+- **An import's progress counts its items, not out of 1000** (issue #5492). While an import ran more than one
+  embedder (Step 3 of 4, Analyzing files), and through the whole of Step 4, the count beside the progress bar was out
+  of a fixed 1000 that meant nothing: twenty images into a 50-image dataset it read `133/1000 SigLIP...`. It now
+  counts what that pass is working through, the images embedded so far out of the images being embedded
+  (`20/50 SigLIP...`), starting again for each embedder, and in Step 4 whatever each step there counts. The bar still
+  fills once across the whole import.
+
+- **Find Results lists its hits on a laptop screen again.** The dialog's list took whatever height the rest of the
+  dialog left over, and on a laptop screen a crowded dialog (a note about the run, an auto-export line, an exporter
+  with several fields) left none: the summary said there were hundreds of Good results while the list under it was
+  zero pixels tall, and so was the progress bar Browse shows in its place while it builds the map. The list now keeps
+  room for a few rows and the dialog scrolls for the rest.
+
+- **A dataset with an item one embedder could not read can be browsed again** (issue #3798). An import that runs
+  two embedders, or one embedder over vectors the importer shipped, kept an item one of them could not read as
+  long as the other gave it a vector, so the dataset was saved with a hole in one of its spaces, and Browse, sort
+  and Train failed on it with `has no embedding for embedder`, on every load. Such an item is now dropped at import
+  like any unreadable one, and a dataset already saved with one is repaired the next time it loads: the item is
+  removed, the dataset is saved without it, and a warning names it.
+- **Dropped items stay listed after the toast is gone** (issue #3798). The items an import drops (and any a load
+  repairs away) are kept with the dataset: its Dashboard row shows **N dropped**, which opens the Stats window, and
+  its new **Dropped items** row lists each one with its reason, with **Copy** to take the list elsewhere.
+
+- **A failed AutoFind export names its exporter and says where to fix it** (issue #5463). The toast and the Find
+  Results dialog said an export "via webhook" (or `email_smtp`, `server_json_file`) failed, by the exporter's
+  internal name. They now name it as the exporter picker does, **Webhook (HTTP POST)** say, and end with "Check the
+  exporter in Settings › AutoFind.", the tab where it is set up or paused. A successful export names it the same way.
+  `auto_export` in the API carries the new `exporter_display_name`.
+
+- **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
+  emailed the Good and Bad rows as one list with nothing to tell them apart, and so did a `--stream-results
+  --keep-negatives` run. Each row now carries its label: a `[good]` / `[bad]` tag in the plain text and a Label
+  column in the HTML table. An export of one side looks as it did, except that a detector with nothing to send now
+  says "No hits." where it said "No positive hits found.", which was wrong for a **Bad** export.
+
 ## 2026-10-28
 
 ### Changed
@@ -69,6 +244,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **New Detector warns about a hard starting face** (issue #5372). When every face you picked on the **Face**
+  tab is a hard view (turned, covered or small), a note under the faces says that a search from it may miss the
+  person and that a clearer photo will help. It never blocks **Create**, and one clear face clears it. The verdict
+  is the face's Face Quality under 14. That cut was read on the GRID's default face models (buffalo_s), so a
+  server with other face models shows no warning. The study is in
+  [`docs/experiments/2026-10-28-face-quality-5372/`](docs/experiments/2026-10-28-face-quality-5372/REPORT.md).
+
 - **Toasty shows you round the Browse map** (issue #5360). Every Browse map, however you opened it, now has a
   hint, one at a time. It starts with how to move around (drag to pan, double-click to zoom), then the
   thumbnail-size buttons, right-clicking a tile to see everything in it, clicking a tile to select its items, and,
@@ -115,7 +297,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   one, and Face turns on, with no restart. Without one, Face is left out of every picker, an import that asks for
   faces anyway fails naming what is missing, and the startup log says which
   ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#face-models)). `IMAGEKIT_FACE_PROVIDER` picks the backend. Two CLIs,
-  `scripts/detect_faces.py` and `scripts/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
+  `scripts/data/detect_faces.py` and `scripts/data/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
   now a runtime dependency.
 
 - **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the
@@ -2939,7 +3121,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   separate `vtscore/` package. The user-facing application surface (the Flask
   app, the Angular SPA, the settings system, the auth layer) is unchanged.
   Internally, every library-candidate import path moved from `vtsearch.<lib>`
-  to `vtscore.<lib>`; `vtsearch/state/__init__.py` is now a thin app-tier shim
+  to `vtscore.<lib>`; `vtsearch.state` is now a thin app-tier shim
   that re-exports `vtscore.state` and layers the proxy view (`medias`,
   `good_votes`, …) on top. See
   [`vtscore/docs/architecture.md`](vtscore/docs/architecture.md) for the

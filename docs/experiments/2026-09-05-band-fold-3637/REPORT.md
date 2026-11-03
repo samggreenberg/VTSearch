@@ -74,7 +74,7 @@ another band (#3616's hazard). Everywhere else all three agree by construction.
 
 ## 1. The fold is right, and it is not close
 
-![the verdict](figures/verdict.png)
+![the verdict](figures/verdict.webp)
 
 *Panel (a): each mode's band against COCO's, over all 9,996 pairs and over the
 two subsets where the modes actually disagree. Panel (b): on the 225 the fold
@@ -154,7 +154,7 @@ sign still favours the fold.
 
 ## 2. Un-banding a reviewed image is not new: the build has always done it, eight times as often
 
-![two halves](figures/two-halves.png)
+![two halves](figures/two-halves.webp)
 
 *Both bars are "images the class's own VG spelling puts in a band", and both show
 what a second, better-informed source then says. The top bar is what
@@ -185,7 +185,7 @@ ledger, is the structural argument.**
 
 ## 3. The ledger is real and it never binds
 
-![supply](figures/supply.png)
+![supply](figures/supply.webp)
 
 *Positive supply per cell under `fold`, log scale, with what `guarded` would add
 back beside each bar. The red line is `SCALE_N_POS`: every cell designates 100
@@ -228,7 +228,7 @@ the same number, which is the self-check that licenses the rest of the table.
 
 ## 4. The guard's own threshold is in the right place
 
-![inflation](figures/inflation.png)
+![inflation](figures/inflation.webp)
 
 *The scatter guard's cut swept from 1.2 to 5.0. Purple (right axis) is how many
 images the fold un-bands at that cut; green (left axis) is how often COCO agrees

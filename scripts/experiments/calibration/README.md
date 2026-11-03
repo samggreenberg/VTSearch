@@ -29,11 +29,38 @@ last link of the #2836 chain. Splitting them would force duplication or a shared
 layer that re-flattens what the split just separated.
 
 What the subdirectories were actually wanted for is **knowing which file belongs
-to which study**, and that is a table. `scripts/check-calibration-index.py`
+to which study**, and that is a table. `scripts/gates/check-calibration-index.py`
 (a `run-tests.sh` gate) requires this index to be *total* in both directions:
 every `.py` and `.sh` here appears in it exactly once, and every file it names
 exists. So a new study's files cannot land unclassified, and a deletion cannot
 leave a phantom row.
+
+**And it takes no new studies (#5406).** An index stops the heap from being
+unclassified, not from growing: the directory doubled, from 124 files to 231, in
+the two months after #3409. The move had only got dearer by then, since about 150
+files in other study directories import the shared layer from here as well. So
+the directory is closed to new study files instead. A new study lives in its own
+`scripts/experiments/<study>/`, as `fhibe/`, `gp_head/` and `state_of_app/`
+already do, and reaches the pipeline from there. A script puts this directory on
+`sys.path`:
+
+```python
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "calibration"))
+import common  # noqa: E402
+
+common.setup_env()
+```
+
+A launcher points at it (`CALIB="$HERE/../calibration"`) and calls the stages
+through it, as in `cd "$CALIB" && python run_cells.py …` or
+`bash "$CALIB/launch_bands.sh"`. That holds for a follow-up to a study filed
+below too, which goes in its own directory rather than beside the study it
+extends.
+The same gate enforces the rule: a file filed under **The studies** must be one
+already here when #5406 closed the directory. A genuinely shared script is still
+welcome, filed under **The shared layer**, where its row tells every study what
+it is.
 
 ### The shared layer
 
@@ -358,7 +385,7 @@ its **candidate 2** ("drop the mixture-weight factor: `lam = fnr/fpr` instead of
 computes — the prior-odds factor in `rate`'s `lam` cancels the `w_lo/w_hi` inside
 `_rate_cut`'s `offset` exactly, so `rate` is prior-free and its interior root is
 invariant to the mixture weights at every inclusion (pinned by
-`tests_lib/detectors/test_cut_inclusion_sweep.py::TestRateIsPriorFree`). The rule
+`tests_lib/eval/test_cut_inclusion_sweep.py::TestRateIsPriorFree`). The rule
 that genuinely retains the priors is `cross_tilt`, added as the literal reading
 of candidate 2 so the issue's text gets priced too. Candidate 4 ("keep `mid`") is
 the `mid` arm, the honest null.
@@ -388,7 +415,7 @@ folds a live `calibrate_count=K` run trains are the first K of these. Every K is
 therefore paired within the step, the arm at `K == CALIB_CALIBRATE_COUNT`
 reproduces the step's own conformal cut, and the extra folds cannot perturb the
 live trajectory (all three asserted in
-`tests_lib/detectors/test_fold_count_variant_rows.py`).
+`tests_lib/eval/test_fold_count_variant_rows.py`).
 
 Price is set by the grid's **maximum**, not its length: `Kmax - calibrate_count`
 extra fold fits per step. Size it from one real cell before submitting.
@@ -443,7 +470,7 @@ each positive's ground-truth box (the owner's ruling on #3321, #4159);
 `skyline_test_xfit` stays whole-image only. The harness warns and skips an arm a
 column cannot run rather than improvising one.
 See [`docs/EVAL.md`](../../../docs/EVAL.md) for the full read, and
-`tests_lib/detectors/test_skyline_arm.py` for the telescope, vote-independence
+`tests_lib/eval/test_skyline_arm.py` for the telescope, vote-independence
 and cross-fitting checks.
 
 ## Voted-media exclusion floor (issue #3312)

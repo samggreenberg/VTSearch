@@ -46,15 +46,15 @@ We measured each model **the way you actually experience VTSearch**: votes are c
 
 ## Error curves
 
-![Cost curves](fig_cost_curves.png)
+![Cost curves](fig_cost_curves.webp)
 
 **Figure 1. Total error (cost = FPR + FNR) as votes accumulate.** One panel per dataset (columns) × prevalence arm (rows); each line is a trainer, shaded band = bootstrap 95% confidence interval across categories × seeds. **Lower and earlier-dropping is better** — it means fewer total mistakes for the same voting effort.
 
-![FPR curves](fig_fpr_curves.png)
+![FPR curves](fig_fpr_curves.webp)
 
 **Figure 2. False-positive rate (false alarms) vs votes.** **Lower is better.** Watch the *rare* rows: a model that keeps FPR low here avoids drowning a 1%-prevalence search in false alarms.
 
-![FNR curves](fig_fnr_curves.png)
+![FNR curves](fig_fnr_curves.webp)
 
 **Figure 3. False-negative rate (missed matches) vs votes.** **Lower is better.** In the rare arm this is the make-or-break metric: missing real matches when they are already scarce is the costly failure the switch criterion guards against.
 
@@ -94,7 +94,7 @@ Paired Wilcoxon signed-rank of each SVM against the MLP on the per-(dataset, cat
 
 A cheap static label-count sweep (random balanced labels, not Autopilot) used only to pick the best configuration per SVM kernel family before the definitive run.
 
-![Stage A screen](fig_stage_a_screen.png)
+![Stage A screen](fig_stage_a_screen.webp)
 
 **Figure 4. Ranking quality (AUROC) vs number of labels for the best config in each kernel family. Higher is better.** This decides which SVM flavours are worth carrying into the definitive Autopilot comparison.
 
@@ -108,11 +108,11 @@ Backends measured: {'mlp': 'torch-cuda', 'svm_linear': 'sklearn-cpu', 'svm_rbf':
 
 (sklearn↔cuML score-parity check skipped — cuML unavailable, see note above.)
 
-![Training time](fig_timing_train.png)
+![Training time](fig_timing_train.webp)
 
 **Figure 5. Fit time vs training-set size (log–log). Lower = faster.** The MLP trains a fixed number of epochs regardless of size; a kernel SVM's fit grows super-linearly, so the lines cross as the label budget grows.
 
-![Inference time](fig_timing_infer.png)
+![Inference time](fig_timing_infer.webp)
 
 **Figure 6. Scoring time vs number of items scored (log–log). Lower = faster.** The MLP is a fixed two-layer multiply; a kernel SVM's scoring grows with its support-vector count, so it is costlier to score very large collections.
 

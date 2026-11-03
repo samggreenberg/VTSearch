@@ -31,7 +31,7 @@ future numpy upgrade can.
   constants in `kernel/setparam-ref.c`), and on 0.3.29 to 0.3.33 the setting changed no result, so reporting
   2048 KB only switches the block off. That is what upstream's fix does for a forced Haswell core, and what
   OpenMathLib/OpenBLAS#6021's reporter measured on a Genoa host.
-- **The app's exposure.** Real. `vtscore.media.structural_tiles.fit_projection`, which fits a document
+- **The app's exposure.** Real. `vtscore.media.structural.structural_tiles.fit_projection`, which fits a document
   collection's Stage-1 projection (a float32 SVD over 8,192-wide tile vectors), segfaults on the EPYC 9534
   under numpy 2.5.4. In the suite it took down 11 test workers, and pytest then gave up 10,720 tests in
   ([below](#the-apps-own-suite-on-the-epyc-9534)). A server on such a CPU would crash the first time it
@@ -57,7 +57,7 @@ future numpy upgrade can.
 
 ## Which ops crash or disagree
 
-![Per numpy version and L2 setting, whether each probed op gives the same result on every node](figures/ops_by_numpy.png)
+![Per numpy version and L2 setting, whether each probed op gives the same result on every node](figures/ops_by_numpy.webp)
 
 *Each cell is one op on 6 nodes under the Haswell pin: "same" when every node returned the same bits, "differ"
 when one did not, "crash" when one segfaulted. Every "differ" and "crash" is the EPYC 9534. The figure does not
@@ -79,8 +79,8 @@ say which result is more accurate; the probed values are random.*
 | bug | exported empty (detected: 1 MB) | **11** | 10,720, then pytest's internal error | 10,637 | 34 |
 | fix | 2048 (`gridenv.sh`'s default) | **0** | 16,728, to the end | 16,646 | 26 |
 
-- **Every segfault is the same call:** `np.linalg.svd` in `vtscore/media/structural_tiles.py:fit_projection`,
-  reached from the `projection` fixture of `tests_lib/detectors/test_structural_stage1.py` (10) and from
+- **Every segfault is the same call:** `np.linalg.svd` in `vtscore/media/structural/structural_tiles.py:fit_projection`,
+  reached from the `projection` fixture of `tests_lib/training/test_structural_stage1.py` (10) and from
   `test_structural_tiles.py` (1). Each one killed an xdist worker, and after the eleventh pytest stopped.
 - **The 8 tests that failed only in the bug arm** are the Stage-1 tests whose worker crashed, plus pytest's
   internal error.

@@ -33,7 +33,7 @@ The gains are small there because VLAD's top 50 rarely holds a positive
 (#3928). The accept decision is the exception: on FullMarks the MLP's boundary
 accepts almost nothing (F1 0.01–0.04 past 10 votes), and the gate's does not.
 
-![AP against votes](figures/ap_curves.png)
+![AP against votes](figures/ap_curves.webp)
 
 ## Setup
 
@@ -106,14 +106,14 @@ the inlier ranking's top three are unlabelled images with 41–54 inliers
 (`07696844.jpg`, `07707617.jpg`, `07674361.jpg`). That class is weak for every
 arm (AP 0.18). Those images are worth a look before reading anything into it.
 
-![Per class](figures/paired_v10.png)
+![Per class](figures/paired_v10.webp)
 
 ## The accept decision
 
 Keeping the MLP only for the threshold was the issue's fallback option. It does
 not survive either: its F1 is below the gate's on every corpus.
 
-![F1 against votes](figures/f1_curves.png)
+![F1 against votes](figures/f1_curves.webp)
 
 **Separate from this issue:** the gate itself is poorly calibrated for
 documents at 8,192 keypoints. With every page verified, its F1 is 0.20–0.26

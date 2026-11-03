@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-structural-gate-calibration-4367.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/rules.csv": {
+     "bytes": 39177,
+     "oid": "ba1d2fe8998df7195a3572ec955065f022e442c6"
+    },
+    "measurements/validate-steps.csv": {
+     "bytes": 335283,
+     "oid": "3eedd296cf2e1a4073293fb71244b238d399f8d7"
+    }
+   }
+  }
+ ]
+}

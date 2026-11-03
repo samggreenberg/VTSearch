@@ -29,7 +29,7 @@ GRES_ARG=(--gres="$GRES")
 
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=${VTSEARCH_DATA_DIR:-} VTSEARCH_MODELS_DIR=${VTSEARCH_MODELS_DIR:-} HF_HOME=${HF_HOME:-}"
 
-N=$(cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; eval "$ENVX"; python run_cells.py --print-cells 2>/dev/null | tail -1)
+N=$(cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1; eval "$ENVX"; python run_cells.py --print-cells 2>/dev/null | tail -1)
 if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
   echo "ERROR: could not determine cell count (got '$N'); is prepare done?" >&2
   exit 1
@@ -72,7 +72,7 @@ fi
 B=$(sbatch --parsable --job-name="$JOB_NAME" --array=0-$((N-1))%$CONC \
   "${GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
   --export=ALL --output="$LOGS/cells-%A_%a.out" \
-  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
 require_jobid "$B" "$JOB_NAME's cells array"
 echo "cells array: $B"
 # Recorded now, so a refused analyze step below still leaves the array findable.
@@ -90,7 +90,7 @@ ATIME="${CALIB_ANALYZE_TIME:-0:40:00}"
 A=$(sbatch --parsable --dependency=afterany:$B --job-name="$JOB_NAME-analyze" --mem="$AMEM" \
   --cpus-per-task=4 --time="$ATIME" --partition=cpu \
   --export=ALL --output="$LOGS/analyze-%j.out" \
-  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
 require_jobid "$A" "$JOB_NAME's analyze step"
 echo "analyze: $A"
 echo "Report -> $CALIB_RESULTS/REPORT.md"

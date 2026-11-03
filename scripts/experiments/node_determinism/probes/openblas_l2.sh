@@ -31,7 +31,7 @@ fi
 body() {
   cat <<BODY
 set -uo pipefail
-source $VTS_REPO/gridenv.sh >/dev/null 2>&1
+source $VTS_REPO/scripts/grid/gridenv.sh >/dev/null 2>&1
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OPENBLAS_CORETYPE=Haswell
 mkdir -p $PROBE_DIR
 out=$PROBE_DIR/\$(hostname -s).tsv

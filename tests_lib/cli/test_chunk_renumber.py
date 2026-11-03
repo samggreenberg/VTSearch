@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.cli._renumber_chunks``.
+"""Tests for ``vtscore.cli.sources._renumber_chunks``.
 
 Every chunked importer/loader yields chunks whose media IDs restart at
 1.  The in-process consumer ``consume_chunks_into`` renumbers them as it
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.cli import _renumber_chunks, _renumber_deferred_chunks
+from vtscore.cli.sources import _renumber_chunks, _renumber_deferred_chunks
 from vtscore.datasets.chunks import DeferredChunk
 
 

@@ -15,7 +15,7 @@ STARVED_DIR="${STARVED_DIR:-/expscratch/$USER/starved-4216}"
 RUNS_ROOT="${RUNS_ROOT:-/expscratch/$USER}"
 DOCS="$REPO/docs/experiments/2026-10-14-starved-small-4216"
 SRUN=(srun --ntasks=1 --partition=cpu --time=01:00:00 --immediate=1200)
-ENV="source $REPO/gridenv.sh >/dev/null 2>&1 && cd $HERE"
+ENV="source $REPO/scripts/grid/gridenv.sh >/dev/null 2>&1 && cd $HERE"
 
 case "${1:-}" in
   scan)

@@ -6,7 +6,7 @@ import io
 import logging
 from typing import Any
 
-from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.clipping.cleaner import MediaCleaner
 from vtscore.media.image.edge_trim import (
     DEFAULT_EDGE_TOL,
     DEFAULT_MAX_EDGE_TRIM,

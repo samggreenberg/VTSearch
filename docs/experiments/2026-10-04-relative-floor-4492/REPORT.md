@@ -22,7 +22,7 @@ which Find already has, and it makes the line invariant to rescaling the logit s
 Binary, COCO Better, all 144 cells, 5 seeds, one set of sessions per preset (2,160 runs). Each is paired with the
 #4474 review's sessions on the same cell and seed. The objective is F-beta of the withheld half above Find's line.
 
-![The objective over clicks](figures/objective_over_clicks.png)
+![The objective over clicks](figures/objective_over_clicks.webp)
 
 | preset | click 5 | 7 | 10 | 15 | 25 | 50 | 75 | 150 | after the check |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|

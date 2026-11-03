@@ -757,7 +757,7 @@ def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -
         download_parquet_shards,
         extract_images_to_folders,
     )
-    from vtscore.media.image._demo_categories import RICO_SCREEN2WORDS_CATEGORIES  # noqa: PLC0415
+    from vtscore.media.image.demo._demo_categories import RICO_SCREEN2WORDS_CATEGORIES  # noqa: PLC0415
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
     base = _core.DATA_DIR / "rico_screen2words"
@@ -828,7 +828,7 @@ def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
         extract_images_to_folders,
         list_parquet_shards,
     )
-    from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES  # noqa: PLC0415
+    from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES  # noqa: PLC0415
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
     base = _core.DATA_DIR / "rvl_cdip"
@@ -968,7 +968,7 @@ def download_visual_genome(on_progress: Optional[ProgressCallback] = None) -> Pa
     Unlike the folder-per-class image demos, Visual Genome is **multi-label**:
     one image is typically a positive example of several object categories at
     once.  The category assignment and bounding-box normalization happen at
-    load time in :mod:`vtscore.media.image._demo_sources`, which reads the
+    load time in :mod:`vtscore.media.image.demo._demo_sources`, which reads the
     extracted ``objects.json`` — this function only fetches the raw files.
 
     Args:

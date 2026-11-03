@@ -33,7 +33,7 @@ WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 PREC="$WT/scripts/experiments/precision"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 
 export VTS_REPO="$WT"
 export VTS_FASTPROC_STUDY="${VTS_FASTPROC_STUDY:-/expscratch/$USER/fastproc-3146}"
@@ -113,7 +113,7 @@ prepare)
     submit "prep-$arm" --job-name="fprocbench-prep-$arm" --mem=32G --cpus-per-task=8 \
       --time=2:00:00 --partition="$PARTITION" \
       --output="$exp/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $(arm_env "$arm") && cd $CALIB && python prepare_data.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$arm") && cd $CALIB && python prepare_data.py"
   done
   echo
   echo "when all finish: bash $0 verify-pairing   (categories+exemplars MUST match)"
@@ -138,7 +138,7 @@ size)
   submit "size-$ARM-$IDX" --job-name="fprocbench-size" --mem="$MEM" --cpus-per-task="$CPUS" \
     --time=2:00:00 --partition="$PARTITION" \
     --output="$exp/logs/size-$IDX-%j.out" \
-    --wrap="source $WT/gridenv.sh && $(arm_env "$ARM") && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $IDX"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$ARM") && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $IDX"
   ;;
 
 cells)
@@ -158,7 +158,7 @@ cells)
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" \
       --output="$exp/logs/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $(arm_env "$arm") && cd $CALIB && python run_cells.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $(arm_env "$arm") && cd $CALIB && python run_cells.py"
   done
   ;;
 

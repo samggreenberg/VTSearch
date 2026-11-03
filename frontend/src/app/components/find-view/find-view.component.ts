@@ -6,6 +6,8 @@ import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, finalize, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
+import type { Media } from '../../models/api.models';
 import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
@@ -27,6 +29,7 @@ import { VtDialogService } from '../../services/dialog.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ActiveDetectorService } from '../../services/active-detector.service';
 import { MediaStateService } from '../../services/media-state.service';
+import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
@@ -125,6 +128,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
    */
   readonly lineTest = inject(LineTestSessionService);
   private readonly mediaPrefetch = inject(MediaPrefetchService);
+  private readonly metadataCache = inject(MediaMetadataCacheService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -248,6 +252,25 @@ export class FindViewComponent implements OnInit, OnDestroy {
    *  scored, and nothing has been checked yet; the first check ends it. */
   readonly reviewHint = computed(
     () => this.findTab() === 'review' && !this.sortState.sortBusy && this.voteState.verifiedIds.size === 0,
+  );
+  /**
+   * The test's pick on screen, for the centre panel (#5502): the round's pick
+   * waiting for a vote, or the one a ↓ walk stands on. Null when there is no
+   * pick to vote, and the stage (the verdict, or a word on what it waits for)
+   * takes the pane.
+   */
+  readonly testPick = computed<Media | null>(() => {
+    const id = this.lineTest.currentId();
+    if (id === null) return null;
+    // Read the cache's version so a batch arriving repaints the viewer.
+    this.metadataCache.version();
+    return this.mediaState.getMedia(id);
+  });
+  /** Toasty's hint over Good / Bad (#4807): the test's first pick, before any vote. */
+  readonly testVoteHint = computed<VoteHintId | null>(() =>
+    this.lineTest.running() && (this.lineTest.test()?.labelled ?? 0) === 0 && this.lineTest.votes().size === 0
+      ? 'test-vote'
+      : null,
   );
   /** The server's Autopilot-only lock (#4666): Tune shows no Review tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
@@ -382,11 +405,12 @@ export class FindViewComponent implements OnInit, OnDestroy {
       this.applyPanelPx();
     });
 
-    // The centre panel lives on the Review tab only (#4524), so every switch
-    // to Review makes a new one, and each needs its `init`: its settings, the
-    // shortcuts, its keyboard subscription. Only the one the view opened with
-    // used to get it, and Tune opens on Autopilot, where there is none
-    // (#4555). A tick later, as the view-init call this replaces did, and only
+    // A centre panel comes and goes with the tab and the test (#4524): Review
+    // has one, and Autopilot has one while there is a pick to vote (#5502),
+    // the stage taking the pane otherwise. Each new one needs its `init`: its
+    // settings, the shortcuts, its keyboard subscription. Only the one the
+    // view opened with used to get it, and Tune opens on Autopilot, where
+    // there was none (#4555). A tick later, as the view-init call this replaces did, and only
     // if a switch back has not torn it down by then, nor the view gone: a
     // destroyed view's `centerPanel()` still names its last panel, whose
     // `init` would start the shortcuts with nothing left to stop them.
@@ -415,8 +439,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
     // this one (#3896) — the same fix as the Train view's — on whichever tab
     // is up, since each votes through its own queue.
     //
-    // On Autopilot that is the test's round (#5099): the stage shows the
-    // picks one at a time, and without this every pick waited on a fresh
+    // On Autopilot that is the test's round (#5099): the centre panel shows
+    // the picks one at a time, and without this every pick waited on a fresh
     // download. Tracks the round, its votes and the pick on screen.
     //
     // On Review it is the boundary walk: {@link advanceToBoundary} runs only

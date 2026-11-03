@@ -267,7 +267,8 @@ class TestLaunchCells:
         wt = tmp_path / "wt"
         calib = wt / "scripts" / "experiments" / "calibration"
         calib.mkdir(parents=True, exist_ok=True)
-        (wt / "gridenv.sh").write_text("")
+        (wt / "scripts" / "grid").mkdir(parents=True, exist_ok=True)
+        (wt / "scripts" / "grid" / "gridenv.sh").write_text("")
         (calib / "run_cells.py").write_text("print(720)\n")
         # launch_cells.sh counts its cells with a bare `python`, which a venv provides.
         python = bin_dir / "python"

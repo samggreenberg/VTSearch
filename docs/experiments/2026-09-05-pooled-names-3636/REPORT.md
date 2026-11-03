@@ -45,7 +45,7 @@ and losers alike. `crane` (the machine) is in `bird`/`species` and `jet ski` is
 in `boat`/`vessel` because a group whose losers were quietly left out is not a
 measurement.
 
-![what a group is worth](figures/group-verdicts.png)
+![what a group is worth](figures/group-verdicts.webp)
 
 **88 groups, and how they were declared decides their fate.** A *construction*
 is a declared vocabulary applied to every class — a colour word, a size word, a
@@ -72,7 +72,7 @@ that survived its gate**; everything left is a **hyponym** — the whole name is
 different, so no vocabulary groups it — and reaching those needs a hand-declared
 kind, which is what this study added and what mostly did not survive.
 
-![why the kinds fail](figures/member-spread.png)
+![why the kinds fail](figures/member-spread.webp)
 
 `bird`/`species` pools 24 names to 33% and **10 of its 20 measured members
 dissent**. The spread is not noise, it is two populations: `geese` 1.00, `dove`
@@ -162,7 +162,7 @@ name.
 
 ## The ledger
 
-![what pooling adds](figures/pooled-ledger.png)
+![what pooling adds](figures/pooled-ledger.webp)
 
 **25 names inherited a verdict** — 17 `alias`, 7 `ambiguous`, 1 `context` —
 carrying 91 non-COCO images. Scored against the same 56,579 non-COCO images

@@ -7,7 +7,7 @@
 # Reads the `size` cells directly (they are one cell each, so this is a picture
 # and not a test) across an EASY category and the HARDEST one.
 set -u
-source /exp/sgreenberg/projects/vts-acq-2877/gridenv.sh >/dev/null 2>&1
+source /exp/sgreenberg/projects/vts-acq-2877/scripts/grid/gridenv.sh >/dev/null 2>&1
 cd /exp/sgreenberg/projects/vts-acq-2877/scripts/experiments/calibration || exit 1
 export CALIB_EXP=/expscratch/sgreenberg/acq-2877/sizing
 

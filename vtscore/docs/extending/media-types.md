@@ -298,7 +298,7 @@ that returns the mesh unchanged.
 ## Testing pattern
 
 ```python
-# tests_lib/core/test_mesh3d_media_type.py
+# tests_lib/media/test_mesh3d_media_type.py
 from pathlib import Path
 
 from vtscore.media import get, get_by_folder_name
@@ -327,7 +327,7 @@ class TestMesh3DLoad:
         assert data["duration"] == 0
 ```
 
-Follow the pattern in [`tests_lib/core/`](../../../tests_lib/core/)
+Follow the pattern in [`tests_lib/media/`](../../../tests_lib/media/)
 for media-type tests - the autouse fixtures stub every embedder, so
 your test only needs to exercise the `MediaType` itself. If your type
 needs a custom test medium, add a fixture under `tests_lib/fixtures/`

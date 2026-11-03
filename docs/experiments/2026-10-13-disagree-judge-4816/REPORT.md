@@ -63,7 +63,7 @@ part they sat in when picked does worse over votes 1-150 (-0.009 / -0.003 / +0.0
 out (the row below it). On Region the same families are priced against today's hand-over at the quota
 (below).
 
-![The set on screen at every vote](fig_by_vote.png)
+![The set on screen at every vote](fig_by_vote.webp)
 
 *Figure 1. Mean F-beta of the set on screen at every vote, over all 720 runs. Blue: today, the query's set to
 vote 30 (grey rule), then the head's. Orange: the best judge, cross-fitted, which stays on today's line. Green:
@@ -124,7 +124,7 @@ spread across four sources:
 Leaving out the opening does not remove the bias. The votes past it are 1.4, 2.3 and 4 times as rich as Q only
 at beta ¼, 1 and 4.
 
-![Each part's votes against the part](fig_parts.png)
+![Each part's votes against the part](fig_parts.webp)
 
 *Figure 2. The share of Goods among the votes in each part (orange) against the part's own share (blue). Votes
 in Q only and in neither come off the top of the part: the head's ranking, or the text sort in the opening. So
@@ -153,7 +153,7 @@ is worse on the withheld half.
 
 More cases at beta 1 and 4 are in [examples.md](examples.md).
 
-![Every run's gain](fig_per_run.png)
+![Every run's gain](fig_per_run.webp)
 
 *Figure 3. Every run's gain over today across votes 1-150, sorted. The bound (green) loses in 37%, 30% and 24% of
 the runs (beta ¼, 1, 4): there the voting half and the withheld half disagree about which set is better. The judge

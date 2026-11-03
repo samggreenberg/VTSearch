@@ -1,9 +1,0 @@
-dataset,embedder,text_mAP,learned_F1
-caltech101_m,siglip,0.9898,0.9455
-caltech101_m,embeddinggemma2,0.9967,0.9588
-caltech256_a,siglip,0.9948,0.9928
-caltech256_a,embeddinggemma2,0.9949,0.9958
-visual_genome_m,siglip,0.5416,0.3344
-visual_genome_m,embeddinggemma2,0.5805,0.3741
-enrico_m,siglip,0.2349,0.3272
-enrico_m,embeddinggemma2,0.3258,0.3415

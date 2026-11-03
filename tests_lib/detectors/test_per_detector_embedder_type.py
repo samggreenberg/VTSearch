@@ -35,11 +35,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from vtscore.detectors.training import (
-    _build_vote_xy,
-    _score_all_media,
-    detector_score_embedder,
-)
+from vtscore.detectors.training import detector_score_embedder
+from vtscore.detectors.training_scoring import _score_all_media
+from vtscore.detectors.training_votes import _build_vote_xy
 from vtscore.embedding.binding import (
     dataset_supplied_types,
     detector_dataset_compatible,

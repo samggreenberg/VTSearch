@@ -1,0 +1,35 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-17-embed-precision-3143.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "BENCH_POWER_TABLES.txt": {
+     "bytes": 3537,
+     "oid": "505d07d92e2f258a1737021c76268746320e52e8"
+    },
+    "BENCH_TABLES.txt": {
+     "bytes": 3431,
+     "oid": "6740ecb840930665b1f66297c390ec14fd4899e0"
+    },
+    "DRIFT_TABLES.txt": {
+     "bytes": 32734,
+     "oid": "647df78fe25a9ba1c2eca395cc0b67ac4c5d4a3a"
+    },
+    "drift.csv": {
+     "bytes": 3049,
+     "oid": "0d185abb40ea6ed0360ff698c9de494085131eee"
+    },
+    "examples.json": {
+     "bytes": 38630,
+     "oid": "a8a552b8e4e3e83371dd5ac89ea6dd1ed178132b"
+    },
+    "pairwise_drift.csv": {
+     "bytes": 10898,
+     "oid": "7708455a799105a394e7e587b80af847c7235be1"
+    }
+   }
+  }
+ ]
+}

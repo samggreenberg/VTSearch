@@ -76,7 +76,7 @@ balance's rule on the withheld ranking and never sees the check.
 
 ## 3. The harvest and the objective
 
-![beta 1: the objective over clicks per acquisition arm](figures/objective_beta1.png)
+![beta 1: the objective over clicks per acquisition arm](figures/objective_beta1.webp)
 
 Under the × 0.5 cut the picks take the positives out of the user's unvoted
 top: at click 150 its top 32 holds 2.7 positives (9% right) against 9.4 (29%)
@@ -182,7 +182,7 @@ the line and may trim them, never walks past them; `shallow_only=True`,
 
 ### 5.1 Round two: every preset, 5 seeds
 
-![The check's shape per preset](figures/objective_check.png)
+![The check's shape per preset](figures/objective_check.webp)
 
 The objective after the check (`objective_check_beta{0.5,1,2}.md`; d is
 paired against the app's walk, ± SE; the unchecked line is the same in
@@ -223,7 +223,7 @@ precision, recall; the check's votes):
 - `objective_beta1.md`, `objective_walk.md`, `objective_guard_beta{0.5,1}.md`,
   `objective_check_beta{0.5,1,2}.md`: `compare_arms.py` over the arms (the
   objective first, the rank-count reading and the diagnostic after);
-  `figures/objective_check.png` from `figs_check.py`; `figures/objective_beta{0.5,1,2}.png`,
+  `figures/objective_check.webp` from `figs_check.py`; `figures/objective_beta{0.5,1,2}.png`,
   `figures/objective_walk.png` from `figs_objective.py`.
 - On the GRID: `/expscratch/sgreenberg/p-aware-acq-4409/` (the #4409 arms,
   re-scored on 2026-10-02) and `/expscratch/sgreenberg/acq-sweep-4428/`

@@ -233,7 +233,7 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 # (``images/n<id>/<md5>.jpg``), so the demo fetches just the ones its variant
 # needs, one file at a time.  Which ones is pinned in
 # ``vtscore/media/assets/celebrity_together.json``
-# (``scripts/build_celebrity_together_manifest.py``).
+# (``scripts/data/build_celebrity_together_manifest.py``).
 CELEBRITY_TOGETHER_REPO_ID = "Juoguessr/celebritytogether"
 CELEBRITY_TOGETHER_FILE_URL = f"https://huggingface.co/datasets/{CELEBRITY_TOGETHER_REPO_ID}/resolve/main/images/{{}}"
 #: Parallel fetches.  Each photo is ~72 KB, so the download is latency-bound on

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.host_seams import HostSeams, restore_host_seams
+from vtscore.host.seams import HostSeams, restore_host_seams
 
 #: Training epochs for the whole test session (production default is 200; 30 is
 #: enough for the tiny epoch-trained heads to converge on the small test fixtures).
@@ -84,7 +84,7 @@ def capture_startup_host_seams() -> None:
     """
     global _startup_host_seams
 
-    from vtscore.host_seams import capture_host_seams
+    from vtscore.host.seams import capture_host_seams
 
     _startup_host_seams = capture_host_seams()
 
@@ -230,7 +230,7 @@ def reset_shared_state(medias_snapshot) -> None:
     # again.  Without this the gates' counts are whatever the previous test in
     # the worker process left behind, which made the assertions in
     # ``TestLoadingGates`` a lottery over xdist scheduling (issue #3613).
-    from vtscore.datasets.load_pipeline import reset_load_gates_for_tests
+    from vtscore.datasets.load_workers import reset_load_gates_for_tests
 
     reset_load_gates_for_tests()
 
@@ -254,7 +254,7 @@ def reset_shared_state(medias_snapshot) -> None:
 
     # Reset CLI progress format so a test that flips it to "json" can't leak the
     # choice into the next test.
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
 
     cli_progress.set_format("text")
 

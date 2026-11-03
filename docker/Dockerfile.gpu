@@ -142,7 +142,7 @@ RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 # ---------- cuML / RAPIDS layer (GPU UMAP + k-means) ----------
 # cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means
 # (~20-100x on large sets); without it the app falls back to CPU umap-learn /
-# scikit-learn (see vtscore/gpu_backends.py). The base image is CUDA 12, so we
+# scikit-learn (see vtscore/config/gpu_backends.py). The base image is CUDA 12, so we
 # install the cuml-cu12 wheel from the NVIDIA index. This is its own RUN layer
 # so it stays cache-friendly and doesn't disturb the pinned torch install above.
 #

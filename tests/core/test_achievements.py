@@ -1014,7 +1014,7 @@ class TestDisableAchievements:
         achievements.record_find(123)
         # Sanity check that something was stored.
         from vtsearch.auth import get_current_user
-        from vtsearch.settings import _user_caches
+        from vtsearch.settings.tiers import _user_caches
 
         username = get_current_user()
         assert "achievement_state" in _user_caches.get(username, {})
@@ -1033,7 +1033,7 @@ class TestDisableAchievements:
 
         # State on disk is gone; the public read returns a zeroed shell.
         from vtsearch.auth import get_current_user
-        from vtsearch.settings import _user_caches
+        from vtsearch.settings.tiers import _user_caches
 
         username = get_current_user()
         assert "achievement_state" not in _user_caches.get(username, {})

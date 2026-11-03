@@ -41,7 +41,7 @@ is ours rather than the data's.
 
 ## Most of it is not silence
 
-![what the confirmed errors actually are](fig_error_source.png)
+![what the confirmed errors actually are](fig_error_source.webp)
 
 `silence_rate.py` has to call a pair silent when the queue does not **designate**
 that image for that class, because a designation is all a cell pickle carries
@@ -143,7 +143,7 @@ the true VG-silence rate is at or below 1.0% rather than at it.
 
 ## What the rate is, and is not
 
-![silence rate by class](fig_silence_by_class.png)
+![silence rate by class](fig_silence_by_class.webp)
 
 **An upper bound on the *uniform* off-COCO rate, not an estimate of it.** The
 queue's images are selected for holding a class of *C*, so they are cluttered
@@ -154,7 +154,7 @@ high as silence on a uniform draw.
 
 Three things push the other way, and each is counted rather than argued:
 
-![what the bound is made of](fig_bound_budget.png)
+![what the bound is made of](fig_bound_budget.webp)
 
 - **Screening.** The pass is screened (#3760), so a positive below a class's cut
   was never shown to anyone. #3768's 600 random below-cut images found **zero**,

@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 
-from vtscore.cli import _load_importer_whole, _reference_files_choice
+from vtscore.cli.sources import _load_importer_whole, _reference_files_choice
 
 
 class TestReferenceFilesChoice:

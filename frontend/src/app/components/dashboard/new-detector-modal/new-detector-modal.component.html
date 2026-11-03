@@ -585,6 +585,14 @@
         <button type="button" class="btn btn--secondary btn--sm" (click)="removeMediaExample(i)" title="Remove this example">Remove</button>
       </div>
     }
+    @if (hardViewFaces(); as faces) {
+      <!-- Advice, never a block: Create stays enabled (#5372). -->
+      <p class="hard-view-warning" role="status">
+        {{ faces === 1 ? 'This photo is a hard view' : 'These photos are all hard views' }} of the face
+        (turned, covered or small). Searching from {{ faces === 1 ? 'it' : 'them' }} may miss this
+        person; a clearer photo will help.
+      </p>
+    }
     @if (showAdd) {
       <div class="add-example-row">
         @if (exampleDataset()) {

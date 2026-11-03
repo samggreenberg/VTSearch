@@ -103,7 +103,7 @@ require_jobid() {
 
 activate_venv() {
   # shellcheck disable=SC1091
-  source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/gridenv.sh" >&2; exit 1; }
+  source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/scripts/grid/gridenv.sh" >&2; exit 1; }
 }
 
 link_prepare() {
@@ -172,7 +172,7 @@ case "$MODE" in
     mkdir -p "$CALIB_EXP/logs" "$PREP"
     J=$(sbatch --parsable --job-name="gp3959-prep-$ENV_NAME" --mem=32G --cpus-per-task=4 --time=2:00:00 \
       --partition=cpu --export=ALL --output="$CALIB_EXP/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && cd $CAL && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && cd $CAL && python prepare_data.py")
     require_jobid "$J" "prepare"
     echo "prepare $ENV_NAME: job $J -> $PREP"
     ;;
@@ -186,7 +186,7 @@ case "$MODE" in
     [[ -n "${GPGRID_AFTER:-}" ]] && dep=(--dependency="afterok:$GPGRID_AFTER")
     J=$(sbatch --parsable --job-name="gp3959-text-$ENV_NAME" --mem=16G --cpus-per-task=2 --time=2:00:00 \
       "${dep[@]}" --partition=cpu --export=ALL --output="$CALIB_EXP/logs/text-baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && cd $CAL && python text_baseline.py --results $PREP --out $PREP/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && cd $CAL && python text_baseline.py --results $PREP --out $PREP/text_baseline.csv")
     require_jobid "$J" "text baseline"
     echo "text baseline $ENV_NAME: job $J -> $PREP/text_baseline.csv"
     ;;
@@ -218,7 +218,7 @@ PY
     [[ -n "${GPGRID_AFTER:-}" ]] && dep=(--dependency="afterok:$GPGRID_AFTER")
     J=$(sbatch --parsable --job-name="gp3959-size-$ENV_NAME-$arm" --mem=16G --cpus-per-task=1 --time=4:00:00 \
       "${dep[@]}" --partition=cpu --export=ALL --output="$CALIB_EXP/logs/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && cd $CAL && /usr/bin/time -v python run_cells.py --index $idx")
+      --wrap="source $WT/scripts/grid/gridenv.sh && cd $CAL && /usr/bin/time -v python run_cells.py --index $idx")
     require_jobid "$J" "size"
     echo "size $ENV_NAME/$arm idx $idx: job $J (read Elapsed + MaxRSS off sacct)"
     ;;

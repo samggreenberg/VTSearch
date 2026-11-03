@@ -1,6 +1,13 @@
 <!-- Both float over every view and every dialog: vtAboveDialogs moves them
-     into the topmost open <dialog>, outside of which the page is inert. -->
-<vt-toast-container vtAboveDialogs />
+     into the topmost open <dialog>, outside of which the page is inert.
+     The toast stack is deferred to keep ~12kB off the initial bundle (#5505);
+     `on immediate` fetches it right after first render, while the server that
+     just served the page is surely up, and a toast raised before it lands is
+     shown on arrival (ToastService holds the stack). The offline banner must
+     stay eager: it is the one thing that renders when no chunk can be fetched. -->
+@defer (on immediate) {
+  <vt-toast-container vtAboveDialogs />
+}
 <vt-offline-banner vtAboveDialogs />
 @if (auth.needsLogin) {
   <vt-login (loggedIn)="auth.checkStatus()" />
@@ -13,6 +20,7 @@
         aria-label="Recent sessions"
         [attr.aria-expanded]="menuOpen"
         aria-haspopup="true"
+        data-metric="recentSessionsMenu"
         (click)="toggleMenu($event)"
         >
         <span aria-hidden="true"></span>
@@ -33,6 +41,7 @@
               class="burger-item burger-subitem"
               role="menuitem"
               tabindex="-1"
+              data-metric="recentSession"
               (click)="onRecentClicked(s)"
               [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
               >
@@ -50,6 +59,7 @@
     <button
       class="logo-btn"
       [class.disabled]="!isOnLabelView()"
+      data-metric="logoDashboard"
       (click)="onDashboard()"
       [title]="isOnLabelView() ? 'Go to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >
@@ -60,6 +70,7 @@
       class="top-bar-btn"
       [class.disabled]="!isOnLabelView()"
       [disabled]="!isOnLabelView()"
+      data-metric="dashboardButton"
       (click)="onDashboard()"
       [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >Dashboard</button>
@@ -74,8 +85,8 @@
           </vt-toasty-hint>
         } @else {
           <vt-toasty-hint hintId="autopilot-done" [anchor]="dashboardBtn" reach="right">
-            Your detector is trained! Click <strong>Dashboard</strong> to put it to work, or keep
-            clicking to sharpen it.
+            Your detector is trained! Click <strong>Dashboard</strong> to put it to work. You can
+            keep voting, but you don't need to.
           </vt-toasty-hint>
         }
       }
@@ -88,6 +99,7 @@
         class="header-icon-btn"
         aria-label="Achievements"
         title="Achievements: usage milestones and tier progress"
+        data-metric="achievementsButton"
         (click)="onAchievements()"
         ><svg aria-hidden="true" [class.trophy-open]="showAchievements()" [class.trophy-close]="achievementsClosing"
         (animationend)="onTrophyAnimationEnd()"
@@ -109,6 +121,7 @@
     class="header-icon-btn"
     aria-label="Help"
     title="Help (?)"
+    data-metric="helpButton"
     (click)="onHelp()"
     ><svg aria-hidden="true" [class.help-open]="showKeyboardHelp" [class.help-close]="helpClosing"
     (animationend)="onHelpAnimationEnd()"
@@ -121,6 +134,7 @@
     class="header-icon-btn"
     aria-label="Settings"
     title="Settings"
+    data-metric="settingsButton"
     (click)="onSettings()"
     ><svg aria-hidden="true" [class.gear-open]="showSettings()" [class.gear-close]="gearClosing"
     (animationend)="onGearAnimationEnd()"
@@ -146,7 +160,6 @@
     [initialTab]="importerFlow().initialTab"
     (closed)="onImporterClosed()"
     (importStarted)="onImportStarted()"
-    (demoSelected)="onDemoSelected($event)"
     />
 }
 }

@@ -110,9 +110,9 @@ def test_gate_script_exports_env_var():
     the env var is the only channel; if this assignment disappears the
     gate-only tests above would skip and the gate would pass vacuously.
     """
-    source = (_REPO_ROOT / "scripts" / "check-vtscore-clean.py").read_text()
+    source = (_REPO_ROOT / "scripts" / "gates" / "check-vtscore-clean.py").read_text()
     assert "os.environ[BLOCK_ENV_VAR]" in source or f'os.environ["{BLOCK_ENV_VAR}"]' in source, (
-        f"scripts/check-vtscore-clean.py no longer sets {BLOCK_ENV_VAR} for xdist workers."
+        f"scripts/gates/check-vtscore-clean.py no longer sets {BLOCK_ENV_VAR} for xdist workers."
     )
 
 

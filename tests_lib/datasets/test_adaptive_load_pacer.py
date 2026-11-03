@@ -173,7 +173,39 @@ def test_finalize_progress_composes_with_pacer(clock):
     assert _overall(tracker) > at_finalize_start
     fin.begin("projection")
     fin.update("loading", "Projecting…", 1, 1)
+    fin.begin("similarity_order")
+    fin.update("loading", "Ordering by similarity…", 1, 1)
     assert _overall(tracker) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_embed_loop_paces_on_its_cumulative_fraction_not_the_restarting_counts(clock):
+    # #5492: EmbedLoopProgress hands the pacer each embedder's real item counts,
+    # which restart per embedder, and the loop's cumulative position as
+    # ``within``. Pacing off the counts would read the first of three embedders
+    # finishing as the whole embed phase done: a 10s pass projected as a 10s
+    # phase, when the loop is on course for 30s.
+    from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+    tracker, pacer = _make(TERMS)
+    prog = EmbedLoopProgress(pacer, 3)
+    prog.begin(0)
+    prog("embedding", "Embedding SigLIP...", 0, 50)
+    at_embed_start = _overall(tracker)
+    clock.advance(10.0)
+    prog("embedding", "Embedding SigLIP...", 50, 50)
+    snap = tracker.get()
+    assert (snap["current"], snap["total"]) == (50, 50)
+    assert pacer._terms["embed"] == pytest.approx(30.0)
+    after_first = _overall(tracker)
+    for idx in (1, 2):
+        prog.begin(idx)
+        prog("embedding", "Embedding DINOv3...", 0, 50)
+        clock.advance(10.0)
+        prog("embedding", "Embedding DINOv3...", 50, 50)
+    at_embed_end = _overall(tracker)
+    # The bar crossed a third of the embed slice per embedder, not all of it on the first.
+    assert after_first - at_embed_start == pytest.approx((at_embed_end - at_embed_start) / 3)
+    assert at_embed_end < 1.0
 
 
 def test_unmapped_status_passes_through(clock):

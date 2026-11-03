@@ -79,7 +79,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=clip3292-pile \
       --partition=gpu --gres=gpu:v100:1 --mem=32G --cpus-per-task=4 --time=3:00:00 \
       --export=ALL --output="$LOGS/pile-%j.out" \
-      --wrap="source $WT/gridenv.sh && cd $PILE_DIR && \
+      --wrap="source $WT/scripts/grid/gridenv.sh && cd $PILE_DIR && \
         python smoke_clip_3292.py && \
         python build_pile.py --embedders clip,clip_l --datasets vg_scale && \
         python build_pile.py --verify --embedders clip,clip_l --datasets vg_scale,vg_scale_any")
@@ -106,7 +106,7 @@ case "$MODE" in
     # claim 480G of a 1074G allowance, and two at once would also blow the CPU
     # cap (240 cpus, 2 charged per task).  Serially they are ~12 min each.
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh"
+    source "$WT/scripts/grid/gridenv.sh"
     for EMB in $ARMS; do
       BASE="$(base_for "$EMB")"
       echo "=== $EMB -> $BASE ==="

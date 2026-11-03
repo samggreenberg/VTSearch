@@ -267,7 +267,7 @@ class TestEupeAdapter:
 
 class TestEmbedderCapabilities:
     def test_dinov2_patch_supports_patch_regions(self):
-        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+        from vtscore.media.image.embedders.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
         e = ImageDinov2PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -275,13 +275,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov2_single_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+        from vtscore.media.image.embedders.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
         e = ImageDinov2SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_dinov3_patch_supports_patch_regions(self):
-        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+        from vtscore.media.image.embedders.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
         e = ImageDinov3PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -289,13 +289,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov3_single_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+        from vtscore.media.image.embedders.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         e = ImageDinov3SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_eupe_patch_supports_patch_regions_and_carries_license_notice(self):
-        from vtscore.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_patch import ImageEupePatchEmbedder
 
         e = ImageEupePatchEmbedder()
         assert e.supports_patch_regions is True
@@ -304,7 +304,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_eupe_single_carries_license_notice(self):
-        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedders.embedder_eupe_single import ImageEupeSingleEmbedder
 
         e = ImageEupeSingleEmbedder()
         assert e.supports_patch_regions is False
@@ -312,7 +312,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_siglip_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.supports_patch_regions is False
@@ -320,7 +320,7 @@ class TestEmbedderCapabilities:
 
     def test_default_patch_forward_returns_none(self):
         """Single-vector embedders inherit the ABC default and return None."""
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.patch_forward({"media_path": "/nonexistent.jpg"}) is None
@@ -371,29 +371,29 @@ class TestDinoAttentionBackend:
         return calls[0]
 
     def test_dinov3_patch_requests_eager_attention(self):
-        from vtscore.media.image import _dinov3_shared
-        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+        from vtscore.media.image.embedders import _dinov3_shared
+        from vtscore.media.image.embedders.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov3PatchEmbedder(), _dinov3_shared)
         assert kwargs.get("attn_implementation") == "eager"
 
     def test_dinov3_single_does_not_force_attention_backend(self):
-        from vtscore.media.image import _dinov3_shared
-        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+        from vtscore.media.image.embedders import _dinov3_shared
+        from vtscore.media.image.embedders.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov3SingleEmbedder(), _dinov3_shared)
         assert "attn_implementation" not in kwargs
 
     def test_dinov2_patch_requests_eager_attention(self):
-        from vtscore.media.image import _dinov2_shared
-        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+        from vtscore.media.image.embedders import _dinov2_shared
+        from vtscore.media.image.embedders.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov2PatchEmbedder(), _dinov2_shared)
         assert kwargs.get("attn_implementation") == "eager"
 
     def test_dinov2_single_does_not_force_attention_backend(self):
-        from vtscore.media.image import _dinov2_shared
-        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+        from vtscore.media.image.embedders import _dinov2_shared
+        from vtscore.media.image.embedders.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
         kwargs = self._captured_load_kwargs(ImageDinov2SingleEmbedder(), _dinov2_shared)
         assert "attn_implementation" not in kwargs
@@ -893,7 +893,7 @@ class TestRegionAwareTraining:
         Bound to ``dinov3_patch`` because that is what a grid-bearing media
         actually looks like: the grid lives in the *patch-slot* embedder's
         space, and every patch behaviour - scoring
-        (:func:`~vtscore.detectors.training._score_all_media`), the Bad-vote
+        (:func:`~vtscore.detectors.training_scoring._score_all_media`), the Bad-vote
         flood, the Good-vote pool - is gated on the detector scoring in that
         slot.  A grid hung off a semantic embedder is a shape no loader
         produces, and would (correctly) be scored image-level.
@@ -921,7 +921,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_uses_nearest_patch_when_grid_present(self):
         """A yes-vote with region_box trains on the raw patch nearest the box,
         not the CLS embedding."""
-        from vtscore.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training_votes import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=42)
         box = (0.0, 0.0, 0.5, 0.5)  # top-left quadrant of a 4x4 grid
@@ -936,7 +936,7 @@ class TestRegionAwareTraining:
         """The train/score invariant: the Good vote's vector must appear in the
         stack the scorer max-pools, or the classifier learns to separate the
         training geometry from the scoring geometry (perfect ranking, FNR 1)."""
-        from vtscore.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training_votes import _training_vec_for_vote
         from vtscore.embedding.matrix import media_score_rows
 
         media = self._media_with_patch_grid(0.99, cid=7)
@@ -949,7 +949,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
         a stashed region_box, training must use the full-image CLS vector."""
-        from vtscore.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training_votes import _training_vec_for_vote
 
         media = {
             "id": 1,
@@ -962,7 +962,7 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, media_embedding(media))
 
     def test_train_and_score_falls_back_to_cls_when_no_region_box(self):
-        from vtscore.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training_votes import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=1)
         vec = _training_vec_for_vote(media, region_box=None)
@@ -1133,7 +1133,7 @@ class TestRegionAwareTraining:
         stored vector, on every pass, without resolving its origin file - so
         the per-vote retrain on the labels' own dataset is not what re-embeds
         boxed labels from file (#4192's follow-up)."""
-        import vtscore.detectors.labelset_training as lt
+        import vtscore.detectors.labelset_embeddings as lt
         from vtscore.datasets.labelset import LabeledElement, LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
         from vtscore.state.core import DetectorContext
@@ -1352,7 +1352,7 @@ class TestRegionAwareTrainingCrossDataset:
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
 
-        with caplog.at_level(logging.DEBUG, logger="vtscore.detectors.labelset_training"):
+        with caplog.at_level(logging.DEBUG, logger="vtscore.detectors.labelset_embeddings"):
             populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)
@@ -1396,7 +1396,7 @@ class TestRegionAwareTrainingCrossDataset:
         elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
-        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_embeddings"):
             populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)
@@ -1606,7 +1606,7 @@ class TestBadVoteRegionFlooding:
         np.testing.assert_array_equal(vecs[0], vec)
 
     def test_build_vote_xy_floods_bad_patch_vote_with_grouped_rows(self):
-        from vtscore.detectors.training import _build_vote_xy
+        from vtscore.detectors.training_votes import _build_vote_xy
 
         good_media, _ = self._patch_media(1)
         bad_media, _ = self._patch_media(2)
@@ -1638,7 +1638,7 @@ class TestBadVoteRegionFlooding:
         assert abs(w[y == 1].sum() - w[y == 0].sum()) < 1e-6
 
     def test_flood_context_noop_when_every_bag_is_one_row(self):
-        from vtscore.detectors.training import _flood_context
+        from vtscore.detectors.training_calibration import _flood_context
 
         X = [np.zeros(4, dtype=np.float32) for _ in range(3)]
         y = [1.0, 0.0, 0.0]

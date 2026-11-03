@@ -839,9 +839,9 @@ class TestLearnedSortQueryHold:
     """
 
     def _space(self, monkeypatch, *, patch_space):
-        import vtscore.detectors.training as training
+        import vtscore.detectors.training_calibration as training_calibration
 
-        monkeypatch.setattr(training, "_patch_space_for", lambda _name: patch_space)
+        monkeypatch.setattr(training_calibration, "_patch_space_for", lambda _name: patch_space)
 
     def test_a_single_vector_space_under_the_hold_returns_it_on_wait_cache_and_poll(self, client, monkeypatch):
         from tests.conftest import _wait_for_job

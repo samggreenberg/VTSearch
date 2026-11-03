@@ -31,7 +31,7 @@ over 288 runs (2 seeds × 144 classes) at β 1:
 harness carry no per-space rule. On this bench that trades about 0.002 of F-beta, within one SE, for
 +0.005 AP.
 
-![Find's F-beta and AP at every vote, Region path](fig_region_by_vote.png)
+![Find's F-beta and AP at every vote, Region path](fig_region_by_vote.webp)
 
 *Figure 1. Region path, β 1, 288 runs a head. F-beta of what a Find returns (left; every run counted,
 the 9 that never find a Good at 0) and AP (right), the plain SVM in grey and the head start in blue.*
@@ -59,7 +59,7 @@ the 9 that never find a Good at 0) and AP (right), the plain SVM in grey and the
 |---|---|
 | Run dirs | `state-of-the-app/2026-10-11-region4776{control,prior}-b1` (288 cells each, 0 failed) |
 | Analysis | `scripts/experiments/fhibe/prior_4776.py --pair region-b1=<prior cells>::<control cells>`; figure `scripts/experiments/fhibe/region_4785_figure.py --scale 0.969` |
-| Files here | `region_ab.csv` (the pair's session means, unscaled), `region_curves.csv` (per vote), `fig_region_by_vote.png` |
+| Files here | `region_ab.csv` (the pair's session means, unscaled), `region_curves.csv` (per vote), `fig_region_by_vote.webp` |
 
 Reproduce:
 

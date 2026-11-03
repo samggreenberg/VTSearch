@@ -654,18 +654,18 @@ def _load_synthetic_toponymy(clips, embedder, on_progress):
     the VTSBrowse sign display.  See :mod:`vtscore.media._toponymy_demo`.
     """
 
-    from vtscore.media._toponymy_demo import generate_items, total_cities  # noqa: PLC0415
-
-    # CLAP's audio/text space is 512-D; match it so the baked vectors slot
-    # into the primary embedder's slot and text queries don't dimension-clash.
+    from vtscore.media._toponymy_demo import baked_dim, generate_items, total_cities  # noqa: PLC0415
     from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
-    items = generate_items(dim=512)
+    # Bake at the load's embedder's declared width, so the vectors fit the slot
+    # they are filed under whichever embedder was picked (#5508).  512 is
+    # CLAP's width, for an embedder that declares none.
+    emb_name = embedder.name if embedder is not None else "clap"
+    items = generate_items(dim=baked_dim(emb_name, fallback=512))
     n_cities = total_cities()
     total = len(items)
     on_progress("loading", f"Generating {total} synthetic clips…", 0, total)
 
-    emb_name = embedder.name if embedder is not None else "clap"
     clip_id = 1
     for i, item in enumerate(items):
         wav_bytes = _synthetic_tone_wav(item.city_index, n_cities)

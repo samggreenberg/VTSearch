@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-30-skip-diversity-5473.b3671f180b50.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/nodiv_5473_curves.csv": {
+     "bytes": 75243,
+     "oid": "8d8818877915eddfbcc2cd1979aa0f969b4a1807"
+    },
+    "tables/nodiv_5473_per_run.csv": {
+     "bytes": 886951,
+     "oid": "3eaa006b5823b9fb78f0570aefd3ac0accab9061"
+    },
+    "tables/nodiv_5473_summary.csv": {
+     "bytes": 7375,
+     "oid": "0311de760ba8b272488c8e419a10ab06528cafd4"
+    }
+   }
+  }
+ ]
+}

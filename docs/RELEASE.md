@@ -17,7 +17,7 @@ Work through the steps in order.
 Run:
 
 ```
-python scripts/vulture-audit.py
+python scripts/gates/vulture-audit.py
 ```
 
 The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `tests_shared/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
@@ -30,7 +30,7 @@ The **findings** are intentionally **not** a `run-tests.sh` gate (false positive
 Two constraints on that triage:
 
 - **A hit on a public, documented, or entry-point-facing `vtscore` name is not evidence it can be deleted.** Out-of-tree extensions import `vtscore` symbols no in-repo grep can see, so the library tier surfaces public names with no *internal* caller by construction. Those get a whitelist entry with a true reason. Removing one is a deliberate library break: it needs an `[Unreleased]` entry in `vtscore/CHANGELOG.md` and the owner's explicit sign-off. See CLAUDE.md, "Dead code in `vtscore/` is a claim you cannot verify by grepping".
-- **The whitelist entry's reason has to be true.** `python scripts/vulture-audit.py --check-whitelist` (a `run-tests.sh` lane) fails when an entry suppresses nothing, so a fabricated justification does not stay hidden — but it also means whitelisting is no longer free. Whitelist what is genuinely reflective; delete what is genuinely dead.
+- **The whitelist entry's reason has to be true.** `python scripts/gates/vulture-audit.py --check-whitelist` (a `run-tests.sh` lane) fails when an entry suppresses nothing, so a fabricated justification does not stay hidden — but it also means whitelisting is no longer free. Whitelist what is genuinely reflective; delete what is genuinely dead.
 
 ## 2. Land the cleanup
 
@@ -56,7 +56,7 @@ Use the summary verbatim as the PR body (step 5) and also output it in chat, wri
 
 `scripts/punchcard/punchcard.py` is a **pure renderer**: it reads the hand-maintained data file `scripts/punchcard/pr_merges.txt` (one `<pr_number>|<merged_at_utc_iso8601>` line per merged PR) and rewrites the PNG. It does **not** generate the data file — you refresh that yourself first.
 
-- Append a line for each PR merged into `dev` since the last release. `python scripts/release-prs.py` enumerates them from step 3's `origin/main..origin/dev` window (step 6 walks the same window for the same list, and step 6 says why it is a script rather than `git log --merges`); take each PR's number and merge timestamp (`merged_at`, UTC ISO 8601) and add `<pr_number>|<merged_at>` to `scripts/punchcard/pr_merges.txt`. The file is sorted-unique by PR number, so keep it that way.
+- Append a line for each PR merged into `dev` since the last release. `python scripts/release/release-prs.py` enumerates them from step 3's `origin/main..origin/dev` window (step 6 walks the same window for the same list, and step 6 says why it is a script rather than `git log --merges`); take each PR's number and merge timestamp (`merged_at`, UTC ISO 8601) and add `<pr_number>|<merged_at>` to `scripts/punchcard/pr_merges.txt`. The file is sorted-unique by PR number, so keep it that way.
 - Run `python scripts/punchcard/punchcard.py`, which rewrites `scripts/punchcard/vtsearch_pr_punchcard.png`.
 - Commit the regenerated PNG and the updated `pr_merges.txt`.
 
@@ -99,13 +99,13 @@ Now that the release PR is open, close the GitHub issues whose fixes are include
 
 **Find the candidate issues** from this release's PRs:
 
-- List the pull requests merged into `dev` within this release range with `python scripts/release-prs.py` — the same `origin/main..origin/dev` window used for the summary in step 3. It prints `<pr>|<sha>|<subject>` per PR, so `| cut -d'|' -f1` gives the numbers; anything it could not attribute to a PR goes to stderr for a glance rather than being dropped. **PRs here are merged, never squashed** (CLAUDE.md, "Merging a PR") — this walk does not depend on that, but the rule's other reasons stand.
+- List the pull requests merged into `dev` within this release range with `python scripts/release/release-prs.py` — the same `origin/main..origin/dev` window used for the summary in step 3. It prints `<pr>|<sha>|<subject>` per PR, so `| cut -d'|' -f1` gives the numbers; anything it could not attribute to a PR goes to stderr for a glance rather than being dropped. **PRs here are merged, never squashed** (CLAUDE.md, "Merging a PR") — this walk does not depend on that, but the rule's other reasons stand.
 - For each such PR, read its body and collect **every** issue it references, keeping track of which keyword introduced each reference. Sort them into two buckets:
   - **Closing** — `Closes #N`, `Fixes #N`, `Resolves #N` (case-insensitive).
   - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
 - Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to the PR that carried it (step 6b's `NEEDS REVIEW` notes give the recipe, including the case where the SHA is not on `dev` at all), then reconcile it like any other orphan.
 
-**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and `dev` already holds a few. `scripts/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
+**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and `dev` already holds a few. `scripts/release/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
 
 Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main` (#2930, #2940 and #2951 did exactly this). So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
@@ -131,7 +131,7 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 ## 6b. Audit the `solved` and `experiment` labels
 
-`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md, "Issue lifecycle"; the reasons are in [`docs/ISSUES.md`](ISSUES.md#solved-no-problem-solving-left)). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
+`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md, "Issue lifecycle"; the reasons are in [`docs/ISSUES.md`](ISSUES.md#solved-no-problem-solving-left)). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/release/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
 
 It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body ([`docs/ISSUES.md`](ISSUES.md#experiment-a-scheduling-gate)). That half only ever adds. `.claude/hooks/require-issue-labels.py` blocks the writes that would drop the label, but only where `gh` works and only for a label the issue already has, so this audit is what notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue anyway.
 
@@ -161,13 +161,13 @@ The script is a pure function from data to plan — it does no network I/O of it
 ```
 
 ```
-python scripts/reconcile-solved-labels.py --input plan-input.json
+python scripts/release/reconcile-solved-labels.py --input plan-input.json
 ```
 
 It prints five action buckets (`ADD solved`, `REMOVE solved`, `ADD experiment`, `NEEDS REVIEW`, `CLEAR ASSIGNEE`) plus a `no change: N issue(s)` summary line at the end. **Apply everything except `NEEDS REVIEW` directly** — those buckets are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
 
 - **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute — hiding an issue that still needs solving — while skipping would leave solved work in the human queue.
-- **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --first-parent --oneline | tail -1`, which names the commit that landed it — a merge commit or a squash, and either one carries its PR number. If `git merge-base --is-ancestor <sha> origin/dev` fails, the SHA is not on `dev` at all and the recipe returns nothing: its branch was **squashed** on merge, which discards the branch's own commits. Match the subject against the window instead (`python scripts/release-prs.py | grep -i '<words from the subject>'`), or open the SHA on GitHub, which still knows its PR. Then re-run with a corrected pointer.
+- **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --first-parent --oneline | tail -1`, which names the commit that landed it — a merge commit or a squash, and either one carries its PR number. If `git merge-base --is-ancestor <sha> origin/dev` fails, the SHA is not on `dev` at all and the recipe returns nothing: its branch was **squashed** on merge, which discards the branch's own commits. Match the subject against the window instead (`python scripts/release/release-prs.py | grep -i '<words from the subject>'`), or open the SHA on GitHub, which still knows its PR. Then re-run with a corrected pointer.
 - **The issue carries `solved` but nothing resolves it** — stale, or fixed in an earlier release.
 
 That is the same "not silently skipped" principle step 6 applies to non-closing references.
@@ -213,7 +213,7 @@ This is what makes issue-dismissal trickle back automatically: because plans hol
 grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .
 ```
 
-Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule (#2982 is the incident). `scripts/check-docs.py` fails on a dangling citation, so the full `./run-tests.sh` in step 8 catches any you miss.
+Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule (#2982 is the incident). `scripts/gates/check-docs.py` fails on a dangling citation, so the full `./run-tests.sh` in step 8 catches any you miss.
 
 ## 8. Merge the release PR
 
@@ -233,7 +233,7 @@ reached `main`.
    run that should owe nothing to any other. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
    All Errors") and gate again. If it cannot be fixed in this run, leave the
    release PR open, comment on it naming the failing gates, and file an issue.
-3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A
+3. **Check the window did not move.** Re-run `python scripts/release/release-prs.py`. A
    PR it lists that step 6 never saw landed on `dev` during this run, and this
    merge would ship it with its issue still open, after which no release window
    would ever contain it again. Take any such PR through steps 4, 4c, 6 and 7

@@ -11,7 +11,7 @@ every name it always did from ``vtscore.media.embedder``:
   (``timed_progress``, ``intercept_tqdm_progress``,
   ``intercept_weight_loading_progress``, ``embedder_load_setup``,
   ``load_pretrained_local_first``, ``hf_token``, ``IMPORT_MODULE_ESTIMATES``).
-* :mod:`vtscore.media.torch_ops` — tensor/device adapters
+* :mod:`vtscore.media.torch_utils.torch_ops` — tensor/device adapters
   (``extract_tensor``, ``to_compute_device``, ``embed_autocast``,
   ``to_model_inputs``, ``to_float32``).
 """
@@ -39,7 +39,7 @@ from vtscore.media.load_progress import (
     load_pretrained_local_first,
     timed_progress,
 )
-from vtscore.media.torch_ops import (
+from vtscore.media.torch_utils.torch_ops import (
     embed_autocast,
     extract_tensor,
     to_compute_device,
@@ -50,7 +50,7 @@ from vtscore.media.torch_ops import (
 if TYPE_CHECKING:
     from vtscore.media.patch_embed import PatchEmbedOutput
     from vtscore.media.structural import StructuralFeatures
-    from vtscore.media.structural_tiles import TileVectors
+    from vtscore.media.structural.structural_tiles import TileVectors
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
@@ -744,7 +744,7 @@ class MediaEmbedder(ABC):
         """Whether the loader derives ``media["tile_vectors"]`` for this embedder's datasets (#3928).
 
         Only structural embedders for document pages turn it on; see
-        :mod:`vtscore.media.structural_tiles`.  If you set it ``True`` you must
+        :mod:`vtscore.media.structural.structural_tiles`.  If you set it ``True`` you must
         override :meth:`tile_vectors_forward_bulk`.
         """
         return False

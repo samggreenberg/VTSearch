@@ -83,9 +83,9 @@ To publish by hand — a deck rendered from a branch that is not going to `dev`
 soon, say — run the same script the workflow runs, from the repository root:
 
 ```bash
-./scripts/publish-slides.sh                  # every deck
-./scripts/publish-slides.sh hold-the-line    # just this one
-./scripts/publish-slides.sh --dry-run        # render, print the plan, upload nothing
+./scripts/release/publish-slides.sh                  # every deck
+./scripts/release/publish-slides.sh hold-the-line    # just this one
+./scripts/release/publish-slides.sh --dry-run        # render, print the plan, upload nothing
 ```
 
 (The workflow also has a **Run workflow** button in the repository's Actions

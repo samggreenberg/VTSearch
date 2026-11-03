@@ -67,8 +67,8 @@ dependencies = [
     # turns on copy-on-write and the string dtype. The major is 3 since #4390,
     # which moved the GPU stack with it: every GPU install adds cuml-cu12>=26.8,
     # whose cudf-cu12 is the first to take pandas 3 (it pins pandas>=3,<3.0.4),
-    # and RAPIDS 26.x needs the CUDA 12.9 libraries only the cu129 torch wheel
-    # pins (scripts/install.sh, docker/Dockerfile.gpu). A later pandas minor is
+    # beside a cu129 or cu126 torch (scripts/install.sh, docker/Dockerfile.gpu,
+    # and the GRID venvs). A later pandas minor is
     # held by cudf the same way, so move the two together. Change the matching
     # pins in requirements/labbench.txt and requirements/image-embedders.txt in
     # the same commit (tests_lib/meta/test_requirements.py checks they agree).
@@ -181,7 +181,7 @@ include = ["vtsearch*", "vtscore*", "imagekit*"]
 
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
-# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
+# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/data/build_vlad_codebook.py.
 "vtscore.media" = ["assets/*.npy", "assets/*.json"]
 # The imagekit face models' JSON configs: the SCRFD defaults the detector falls
 # back to, and the reference configs a deployment copies beside its weights.
@@ -205,7 +205,7 @@ select = ["E4", "E7", "E9", "F", "S", "C901"]
 # S101 (assert): used for type narrowing where pyright needs help; the
 #   project never runs under `python -O`.
 # S104 (bind 0.0.0.0): intentional for `python app.py --host 0.0.0.0`,
-#   and tests_lib/core/test_ssrf_validation.py uses the literal as a fixture.
+#   and tests_lib/security/test_ssrf_validation.py uses the literal as a fixture.
 # S105 (hardcoded password): false-positive-prone on env-var name strings.
 # S110/S112 (silent except): used as best-effort fallbacks for optional
 #   imports, logging setup, and progress-tracker teardown.
@@ -234,11 +234,11 @@ max-complexity = 10
 # Intentional `git` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
-"scripts/gen-docs-inventories.py" = ["S603", "S607"]
+"scripts/gates/gen-docs-inventories.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
 "vtscore/media/audio/decode.py" = ["S603"]
 "vtscore/media/video/decode.py" = ["S603"]
-"vtsearch/routes/media/list.py" = ["S603"]
+"vtsearch/routes/media/_serving.py" = ["S603"]
 # Atom feed parsing for the arXiv text-dataset downloader.
 "vtscore/datasets/downloader/text.py" = ["S314"]
 
@@ -327,7 +327,7 @@ DEP001 = [
     "huggingface_hub",
     "cuml",
     # SuperPoint/LightGlue backend for the structural (SPLG) image embedder,
-    # imported lazily inside ``vtscore.media.structural_splg`` methods and
+    # imported lazily inside ``vtscore.media.structural.structural_splg`` methods and
     # opt-in only (users install ``lightglue`` to enable structural matching).
     "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
@@ -345,7 +345,7 @@ DEP001 = [
 # anything: the install path already pins them through the parent.
 # ``huggingface_hub`` ships with ``transformers`` and is imported directly by
 # the ParaSpeechCLAP embedder (``hf_hub_download`` for its checkpoint file).
-# ``cuml`` is the optional GPU backend imported by ``vtscore.gpu_backends``
+# ``cuml`` is the optional GPU backend imported by ``vtscore.config.gpu_backends``
 # (guarded by try/except; see its DEP001 ignore for the CPU-only dev box where
 # it isn't installed at all). On a GRID RAPIDS venv cuml *is* installed — pulled
 # in transitively by the RAPIDS stack rather than declared here — so deptry
@@ -416,12 +416,12 @@ testpaths = ["tests", "tests_lib"]
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
     "slow: long-running tests (a CLI subprocess run of app.py, the real-toponymy fit tests)",
-    "core: basic app functionality (audio, medias, votes, inclusion, settings, frontend)",
+    "core: basic app functionality (media types and embedders, votes, state, settings, plugins, security, frontend)",
     "api: API contracts, error handling, dashboard",
-    "sorting: text sort, learned sort, diversity, safe thresholds",
-    "datasets: dataset loading, splitting, combining, origins, dedup",
-    "io: importers, exporters, labels",
-    "detectors: detectors, clippers, eval",
+    "sorting: training and safe thresholds, text sort, learned sort, diversity",
+    "datasets: dataset importers and loading, splitting, combining, origins, dedup, the clipper chain",
+    "io: exporters, label I/O, datasource and seed importers, settings I/O, sync sources",
+    "detectors: detectors and the eval harness",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",

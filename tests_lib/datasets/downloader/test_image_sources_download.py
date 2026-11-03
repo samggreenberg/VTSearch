@@ -1,0 +1,1020 @@
+"""Tests for new image dataset downloads and load_demo_source integration.
+
+Covers: Oxford Flowers 102, Food-101, EuroSAT, Places365.
+"""
+
+import tarfile
+import zipfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_oxford_flowers_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Create minimal Oxford Flowers tgz and labels MAT fixtures."""
+    import scipy.io  # noqa: PLC0415
+
+    tgz_path = tmp_path / "102flowers.tgz"
+    tree_root = tmp_path / "tgz_staging" / "jpg"
+    tree_root.mkdir(parents=True)
+
+    # Create 6 tiny JPEG-like files.
+    for i in range(1, 7):
+        (tree_root / f"image_{i:05d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+    import tarfile as tf_mod
+
+    with tf_mod.open(tgz_path, "w:gz") as tf:
+        tf.add(tree_root, arcname="jpg")
+
+    # Create labels MAT file: 6 images, labels cycle through 1-3.
+    labels = np.array([1, 2, 3, 1, 2, 3], dtype=np.int64)
+    mat_path = tmp_path / "imagelabels.mat"
+    scipy.io.savemat(str(mat_path), {"labels": labels.reshape(1, -1)})
+
+    return tgz_path, mat_path
+
+
+def _make_food101_tar(tmp_path: Path) -> Path:
+    """Create a minimal Food-101 tar.gz fixture."""
+    tar_path = tmp_path / "food-101.tar.gz"
+
+    tree_root = tmp_path / "tar_staging" / "food-101" / "images"
+    for cat in ("apple_pie", "sushi"):
+        d = tree_root / cat
+        d.mkdir(parents=True)
+        for i in range(3):
+            (d / f"{i}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+    with tarfile.open(tar_path, "w:gz") as tf:
+        tf.add(tmp_path / "tar_staging" / "food-101", arcname="food-101")
+
+    return tar_path
+
+
+def _make_eurosat_zip(tmp_path: Path) -> Path:
+    """Create a minimal EuroSAT zip fixture."""
+    zip_path = tmp_path / "EuroSAT_RGB.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for cat in ("Forest", "Residential"):
+            for i in range(3):
+                zf.writestr(f"EuroSAT_RGB/{cat}/{cat}_{i:05d}.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+    return zip_path
+
+
+def _make_places365_tar(tmp_path: Path) -> Path:
+    """Create a minimal Places365 val_256 tar fixture."""
+    tar_path = tmp_path / "val_256.tar"
+
+    tree_root = tmp_path / "tar_staging" / "val_256"
+    tree_root.mkdir(parents=True)
+    for i in range(1, 5):
+        (tree_root / f"Places365_val_{i:08d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+    with tarfile.open(tar_path, "w") as tf:
+        tf.add(tree_root, arcname="val_256")
+
+    return tar_path
+
+
+def _make_places365_filelist_tar(tmp_path: Path, labels_bytes: bytes) -> Path:
+    """Create a minimal Places365 filelist tar fixture.
+
+    Mirrors the structure of MIT's ``filelist_places365-standard.tar``: a
+    tarball whose root contains a ``places365_val.txt`` member (alongside
+    other label files we don't use).  The production code only reads the
+    val member, so that's the only one we need to fake.
+    """
+    tar_path = tmp_path / "filelist_places365-standard.tar"
+    labels_src = tmp_path / "_filelist_staging_places365_val.txt"
+    labels_src.write_bytes(labels_bytes)
+    with tarfile.open(tar_path, "w") as tf:
+        tf.add(labels_src, arcname="places365_val.txt")
+    labels_src.unlink()
+    return tar_path
+
+
+# ---------------------------------------------------------------------------
+# download_oxford_flowers
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadOxfordFlowers:
+    def test_returns_extract_directory(self, tmp_path):
+        """download_oxford_flowers returns the oxford_flowers/ directory."""
+        from vtscore.datasets import downloader as dl_module
+
+        tgz_path, mat_path = _make_oxford_flowers_fixture(tmp_path)
+
+        def fake_download(url, dest, size, cb):
+            if "imagelabels" in url:
+                import shutil
+
+                shutil.copy(str(mat_path), str(dest))
+            else:
+                import shutil
+
+                shutil.copy(str(tgz_path), str(dest))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            result = dl_module.download_oxford_flowers(on_progress=lambda *a: None)
+
+        assert result.name == "oxford_flowers"
+        assert (result / "jpg").is_dir()
+        assert (result / "imagelabels.mat").exists()
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If the extract directory already exists, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "oxford_flowers"
+        jpg_dir = extract_dir / "jpg"
+        jpg_dir.mkdir(parents=True)
+        (jpg_dir / "image_00001.jpg").write_bytes(b"\xff\xd8")
+        (extract_dir / "imagelabels.mat").write_bytes(b"mat")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_oxford_flowers(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+# ---------------------------------------------------------------------------
+# download_food101
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadFood101:
+    def test_returns_images_directory(self, tmp_path):
+        """download_food101 returns the food-101/images/ directory."""
+        import shutil
+
+        from vtscore.datasets import downloader as dl_module
+
+        tar_path = _make_food101_tar(tmp_path)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module.core,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
+            ),
+        ):
+            result = dl_module.download_food101(on_progress=lambda *a: None)
+
+        assert result.name == "images"
+        assert result.parent.name == "food-101"
+        assert (result / "apple_pie").is_dir()
+        assert (result / "sushi").is_dir()
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If the images directory already exists, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        images_dir = tmp_path / "food-101" / "images" / "apple_pie"
+        images_dir.mkdir(parents=True)
+        (images_dir / "1.jpg").write_bytes(b"\xff\xd8")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_food101(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+# ---------------------------------------------------------------------------
+# download_eurosat
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadEurosat:
+    def test_returns_extract_directory(self, tmp_path):
+        """download_eurosat returns the EuroSAT_RGB/ directory."""
+        import shutil
+
+        from vtscore.datasets import downloader as dl_module
+
+        zip_path = _make_eurosat_zip(tmp_path)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module.core,
+                "download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
+            ),
+        ):
+            result = dl_module.download_eurosat(on_progress=lambda *a: None)
+
+        assert result.name == "EuroSAT_RGB"
+        assert result.exists()
+        assert (result / "Forest").is_dir()
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If the extract directory already exists, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "EuroSAT_RGB"
+        (extract_dir / "Forest").mkdir(parents=True)
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_eurosat(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+# ---------------------------------------------------------------------------
+# load_oxford_flowers_metadata
+# ---------------------------------------------------------------------------
+
+
+class TestLoadOxfordFlowersMetadata:
+    def test_maps_labels_to_categories(self, tmp_path):
+        """Reads imagelabels.mat and maps numeric labels to category names."""
+        import scipy.io
+
+        from vtscore.datasets.metadata import load_oxford_flowers_metadata
+
+        jpg_dir = tmp_path / "jpg"
+        jpg_dir.mkdir()
+        for i in range(1, 5):
+            (jpg_dir / f"image_{i:05d}.jpg").write_bytes(b"\xff\xd8")
+
+        # Labels: 1-indexed. 4 images with labels [1, 2, 1, 2]
+        labels = np.array([1, 2, 1, 2], dtype=np.int64)
+        scipy.io.savemat(str(tmp_path / "imagelabels.mat"), {"labels": labels.reshape(1, -1)})
+
+        categories = ["cat_a", "cat_b", "cat_c"]
+        metadata = load_oxford_flowers_metadata(tmp_path, categories)
+
+        assert len(metadata) == 4
+        assert metadata["image_00001.jpg"]["category"] == "cat_a"
+        assert metadata["image_00002.jpg"]["category"] == "cat_b"
+        assert metadata["image_00003.jpg"]["category"] == "cat_a"
+
+
+# ---------------------------------------------------------------------------
+# load_demo_source: image (oxford_flowers_102, food101, eurosat)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDemoSourceOxfordFlowers:
+    """ImageMediaType.load_demo_source with source='oxford_flowers_102'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "siglip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
+
+    def test_oxford_flowers_populates_clips(self, tmp_path):
+        """load_demo_source with source='oxford_flowers_102' fills the clips dict."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        # Create stub image files.
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "image_00001.jpg": {"category": "rose", "path": tmp_path / "img1.jpg"},
+            "image_00002.jpg": {"category": "sunflower", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_oxford_flowers", return_value=tmp_path),
+            patch.object(metadata_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="oxford_flowers_102",
+                categories=["rose", "sunflower"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 2
+        categories_seen = {c["category"] for c in clips.values()}
+        assert categories_seen == {"rose", "sunflower"}
+
+    def test_oxford_flowers_slice_is_applied(self, tmp_path):
+        """slice_start/slice_end limits images per category."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        fake_metadata = {}
+        for i in range(10):
+            p = tmp_path / f"img_{i}.jpg"
+            p.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+            fake_metadata[f"image_{i + 1:05d}.jpg"] = {"category": "rose", "path": p}
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_oxford_flowers", return_value=tmp_path),
+            patch.object(metadata_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="oxford_flowers_102",
+                categories=["rose"],
+                slice_start=2,
+                slice_end=5,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 3
+
+
+class TestLoadDemoSourceFood101:
+    """ImageMediaType.load_demo_source with source='food101'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "siglip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
+
+    def test_food101_populates_clips(self, tmp_path):
+        """load_demo_source with source='food101' fills the clips dict."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "apple_pie/1.jpg": {"category": "apple_pie", "path": tmp_path / "img1.jpg"},
+            "sushi/1.jpg": {"category": "sushi", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_food101", return_value=tmp_path),
+            patch.object(metadata_module, "load_image_metadata_from_folders", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="food101",
+                categories=["apple_pie", "sushi"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 2
+        categories_seen = {c["category"] for c in clips.values()}
+        assert categories_seen == {"apple_pie", "sushi"}
+
+
+class TestLoadDemoSourceEurosat:
+    """ImageMediaType.load_demo_source with source='eurosat'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "siglip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
+
+    def test_eurosat_populates_clips(self, tmp_path):
+        """load_demo_source with source='eurosat' fills the clips dict."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "Forest/Forest_00001.jpg": {"category": "Forest", "path": tmp_path / "img1.jpg"},
+            "Residential/Residential_00001.jpg": {"category": "Residential", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_eurosat", return_value=tmp_path),
+            patch.object(metadata_module, "load_image_metadata_from_folders", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="eurosat",
+                categories=["Forest", "Residential"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 2
+        categories_seen = {c["category"] for c in clips.values()}
+        assert categories_seen == {"Forest", "Residential"}
+
+
+def test_unsupported_source_still_raises():
+    """Non-existent sources still raise ValueError."""
+    from vtscore.media.image.media_type import ImageMediaType
+
+    mt = ImageMediaType()
+    with pytest.raises(ValueError, match="Unsupported image source"):
+        mt.load_demo_source(
+            source="unknown_source",
+            categories=[],
+            slice_start=0,
+            slice_end=10,
+            clips={},
+            on_progress=lambda *a: None,
+        )
+
+
+# ---------------------------------------------------------------------------
+# download_places365
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadPlaces365:
+    def test_returns_extract_directory(self, tmp_path):
+        """download_places365 returns the places365/ directory with val_256/ and labels."""
+        from vtscore.datasets import downloader as dl_module
+
+        val_tar_path = _make_places365_tar(tmp_path)
+        labels_bytes = b"Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 1\n"
+        filelist_tar_path = _make_places365_filelist_tar(tmp_path, labels_bytes)
+
+        def fake_download(url, dest, size, cb):
+            import shutil
+
+            src = filelist_tar_path if "filelist" in url else val_tar_path
+            shutil.copy(str(src), str(dest))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            result = dl_module.download_places365(on_progress=lambda *a: None)
+
+        assert result.name == "places365"
+        assert (result / "val_256").is_dir()
+        assert (result / "places365_val.txt").read_bytes() == labels_bytes
+        assert any(p.name.startswith("Places365_val_") for p in (result / "val_256").iterdir())
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If val_256/ and the labels file already exist, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "places365"
+        val_dir = extract_dir / "val_256"
+        val_dir.mkdir(parents=True)
+        (val_dir / "Places365_val_00000001.jpg").write_bytes(b"\xff\xd8")
+        (extract_dir / "places365_val.txt").write_text("Places365_val_00000001.jpg 0\n")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_places365(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+# ---------------------------------------------------------------------------
+# load_places365_metadata
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPlaces365Metadata:
+    def test_maps_indices_to_categories(self, tmp_path):
+        """Reads places365_val.txt and maps numeric indices to category names."""
+        from vtscore.datasets.metadata import load_places365_metadata
+
+        val_dir = tmp_path / "val_256"
+        val_dir.mkdir()
+        for i in range(1, 4):
+            (val_dir / f"Places365_val_{i:08d}.jpg").write_bytes(b"\xff\xd8")
+
+        labels_text = "Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 2\nPlaces365_val_00000003.jpg 1\n"
+        (tmp_path / "places365_val.txt").write_text(labels_text)
+
+        categories = ["airfield", "alley", "amphitheater"]
+        metadata = load_places365_metadata(tmp_path, categories)
+
+        assert len(metadata) == 3
+        assert metadata["Places365_val_00000001.jpg"]["category"] == "airfield"
+        assert metadata["Places365_val_00000002.jpg"]["category"] == "amphitheater"
+        assert metadata["Places365_val_00000003.jpg"]["category"] == "alley"
+        assert metadata["Places365_val_00000001.jpg"]["path"] == val_dir / "Places365_val_00000001.jpg"
+
+    def test_out_of_range_indices_are_skipped(self, tmp_path):
+        """Label indices outside the categories list are silently ignored."""
+        from vtscore.datasets.metadata import load_places365_metadata
+
+        (tmp_path / "val_256").mkdir()
+        (tmp_path / "places365_val.txt").write_text(
+            "Places365_val_00000001.jpg 0\n"
+            "Places365_val_00000002.jpg 99\n"  # out of range
+            "Places365_val_00000003.jpg -1\n"  # out of range
+            "Places365_val_00000004.jpg bogus\n"  # unparseable
+        )
+
+        metadata = load_places365_metadata(tmp_path, ["airfield"])
+
+        assert list(metadata) == ["Places365_val_00000001.jpg"]
+
+
+# ---------------------------------------------------------------------------
+# load_demo_source: places365
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDemoSourcePlaces365:
+    """ImageMediaType.load_demo_source with source='places365'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "siglip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
+
+    def test_places365_populates_clips(self, tmp_path):
+        """load_demo_source with source='places365' fills the clips dict."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "Places365_val_00000001.jpg": {"category": "airfield", "path": tmp_path / "img1.jpg"},
+            "Places365_val_00000002.jpg": {"category": "beach", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield", "beach"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 2
+        categories_seen = {c["category"] for c in clips.values()}
+        assert categories_seen == {"airfield", "beach"}
+
+    def test_places365_filters_by_requested_categories(self, tmp_path):
+        """Metadata entries whose category is not requested are dropped."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "Places365_val_00000001.jpg": {"category": "airfield", "path": tmp_path / "img1.jpg"},
+            "Places365_val_00000002.jpg": {"category": "beach", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 1
+        assert next(iter(clips.values()))["category"] == "airfield"
+
+    def test_places365_slice_is_applied(self, tmp_path):
+        """slice_start/slice_end limits images per category."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import metadata as metadata_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        fake_metadata = {}
+        for i in range(10):
+            p = tmp_path / f"img_{i}.jpg"
+            p.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+            fake_metadata[f"Places365_val_{i + 1:08d}.jpg"] = {"category": "airfield", "path": p}
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield"],
+                slice_start=2,
+                slice_end=5,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 3
+
+
+def _make_roxford_images_tgz(tmp_path: Path) -> Path:
+    """Create a minimal Oxford Buildings tgz of flat, landmark-prefixed JPEGs."""
+    tgz_path = tmp_path / "oxbuild_images-v1.tgz"
+    staging = tmp_path / "roxford_staging"
+    staging.mkdir()
+    for stem in ("all_souls_000013", "all_souls_000026", "radcliffe_camera_000158", "oxford_002124"):
+        (staging / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+    # The real tarball stores files flat (no top-level directory), so add each
+    # member at the archive root.
+    with tarfile.open(tgz_path, "w:gz") as tf:
+        for p in sorted(staging.glob("*.jpg")):
+            tf.add(p, arcname=p.name)
+    return tgz_path
+
+
+class TestDownloadRoxford5k:
+    def test_returns_extract_directory_with_images_and_gnd(self, tmp_path):
+        """download_roxford5k returns roxford5k/ with a flat jpg/ dir and the gnd pkl."""
+        from vtscore.datasets import downloader as dl_module
+
+        tgz_path = _make_roxford_images_tgz(tmp_path)
+        gnd_bytes = b"\x80\x04}\x94."  # arbitrary non-empty payload; not parsed here
+
+        def fake_download(url, dest, size, cb):
+            import shutil
+
+            if url.endswith(".pkl"):
+                Path(dest).write_bytes(gnd_bytes)
+            else:
+                shutil.copy(str(tgz_path), str(dest))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            result = dl_module.download_roxford5k(on_progress=lambda *a: None)
+
+        assert result.name == "roxford5k"
+        assert (result / "jpg").is_dir()
+        assert (result / "jpg" / "all_souls_000013.jpg").exists()
+        assert (result / "gnd_roxford5k.pkl").read_bytes() == gnd_bytes
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If jpg/ and the gnd pkl already exist, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "roxford5k"
+        jpg_dir = extract_dir / "jpg"
+        jpg_dir.mkdir(parents=True)
+        (jpg_dir / "all_souls_000013.jpg").write_bytes(b"\xff\xd8")
+        (extract_dir / "gnd_roxford5k.pkl").write_bytes(b"gnd")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_roxford5k(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+class TestLoadDemoSourceRoxford:
+    """ImageMediaType.load_demo_source with source='roxford5k'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "sift_vlad"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(8192, dtype=np.float32))
+        return mock_emb
+
+    def test_buckets_images_by_landmark_prefix(self, tmp_path):
+        """Filenames map to their landmark category; non-landmarks fall into 'other'."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        roxford_dir = tmp_path / "roxford5k"
+        jpg_dir = roxford_dir / "jpg"
+        jpg_dir.mkdir(parents=True)
+        for stem in ("all_souls_000013", "radcliffe_camera_000158", "oxford_002124", "trinity_000001"):
+            (jpg_dir / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with patch.object(dl_module, "download_roxford5k", return_value=roxford_dir):
+            mt.load_demo_source(
+                source="roxford5k",
+                categories=["all_souls", "radcliffe_camera", "other"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        categories_seen = {c["category"] for c in clips.values()}
+        # all_souls + radcliffe_camera landmarks, plus oxford/trinity → "other".
+        assert categories_seen == {"all_souls", "radcliffe_camera", "other"}
+        assert len(clips) == 4
+
+
+class TestPlaces365CategoriesList:
+    """The hardcoded ``PLACES365_CATEGORIES`` matches the upstream label space."""
+
+    def test_has_365_unique_entries(self):
+        from vtscore.media.image.demo._demo_categories import PLACES365_CATEGORIES
+
+        cats = PLACES365_CATEGORIES
+        assert len(cats) == 365
+        assert len(set(cats)) == 365
+        # Spot-check entries near the index that previously had an off-by-one
+        # error (swimming_pool/indoor vs swimming_pool/outdoor).
+        assert cats[324] == "swimming_hole"
+        assert cats[325] == "swimming_pool_indoor"
+        assert cats[326] == "swimming_pool_outdoor"
+        assert cats[0] == "airfield"
+        assert cats[364] == "zen_garden"
+
+
+# ---------------------------------------------------------------------------
+# The shared clip builder every image demo source stamps its media through
+# ---------------------------------------------------------------------------
+
+
+class TestEmitImageClip:
+    """``_emit_image_clip`` is the one media-dict builder for image demos.
+
+    Every source's clip shape now depends on this function, so the keys it
+    omits matter as much as the ones it sets: a single-label demo that grew a
+    ``categories`` key would silently change how the eval harness decides
+    ground-truth membership.
+    """
+
+    _BASE = {
+        "embedder_name": "fake",
+        "embeddings": {"fake": [0.0, 1.0]},
+        "image_bytes": b"pretend-png",
+        "filename": "cat/a.png",
+        "category": "cat",
+        "width": 10,
+        "height": 20,
+        "demo_origin": {"importer": "demo", "params": {}},
+    }
+
+    def _emit(self, **overrides):
+        from vtscore.media.image.demo._demo_sources import _emit_image_clip
+
+        return _emit_image_clip(7, **{**self._BASE, **overrides})
+
+    def test_single_label_clip_omits_the_multilabel_keys(self):
+        """No ``categories`` key at all — not an empty list.
+
+        ``vtscore.eval.labels.media_is_positive`` switches on the *presence* of
+        ``categories``: an empty list there would read as "positive for
+        nothing" and score every single-label demo as all-negative.
+        """
+        clip = self._emit()
+
+        assert "categories" not in clip
+        assert "regions" not in clip
+        assert "thumbnail_bytes" not in clip
+        assert clip["category"] == "cat"
+
+    def test_multilabel_clip_copies_categories_and_regions(self):
+        cats = ["man", "dog"]
+        regions = [{"box": [0.1, 0.2, 0.3, 0.4], "label": "man"}]
+        clip = self._emit(category="man", categories=cats, regions=regions)
+
+        assert clip["categories"] == ["man", "dog"]
+        assert clip["regions"] == regions
+        # Copied, not aliased: mutating the clip must not reach the collector's
+        # records (several sources hand the same list to more than one image).
+        clip["categories"].append("cat")
+        assert cats == ["man", "dog"]
+        assert clip["regions"] is not regions
+
+    def test_multilabel_without_boxes_still_gets_a_regions_list(self):
+        clip = self._emit(categories=["man"], regions=None)
+
+        assert clip["regions"] == []
+
+    def test_origin_name_mirrors_the_filename(self):
+        clip = self._emit(filename="dog/b.png")
+
+        assert clip["origin_name"] == "dog/b.png"
+
+    def test_thumbnail_rides_along_only_when_present(self):
+        clip = self._emit(thumbnail_bytes=b"thumb")
+
+        assert clip["thumbnail_bytes"] == b"thumb"
+
+    def test_stamps_the_identity_and_payload_fields(self):
+        clip = self._emit()
+
+        assert clip["id"] == 7
+        assert clip["media_type"] == "image"
+        assert clip["embedder"] == "fake"
+        assert clip["duration"] == 0
+        assert clip["file_size"] == len(b"pretend-png")
+        assert clip["media_bytes"] == b"pretend-png"
+        assert clip["media_string"] is None
+        assert clip["width"] == 10
+        assert clip["height"] == 20
+        assert clip["origin"] == {"importer": "demo", "params": {}}
+
+
+class TestEmbedLoop:
+    """``_embed_loop`` drives every source; the per-source render is the only variable."""
+
+    class _Embedder:
+        """Embeds every other image, so ids get dropped mid-run."""
+
+        name = "fake"
+        _model = object()  # pre-"loaded", so the load guard is a no-op
+
+        def __init__(self, fail_every_other=False):
+            self.fail_every_other = fail_every_other
+            self.calls = 0
+
+        def embed_media(self, media):
+            self.calls += 1
+            if self.fail_every_other and self.calls % 2 == 0:
+                return None
+            return np.arange(3, dtype=np.float32)
+
+    @staticmethod
+    def _images(tmp_path: Path, n: int) -> list:
+        from PIL import Image  # noqa: PLC0415
+
+        out = []
+        for i in range(n):
+            p = tmp_path / f"img{i}.png"
+            Image.new("RGB", (8, 12), (i * 10, 0, 0)).save(p)
+            out.append((p, "cat"))
+        return out
+
+    def _run(self, tmp_path, n=3, clips=None, **kw):
+        from vtscore.media.image.demo._demo_sources import _embed_loop, _render_single_label_image
+
+        clips = {} if clips is None else clips
+        _embed_loop(
+            self._images(tmp_path, n),
+            clips,
+            kw.pop("embedder", self._Embedder()),
+            kw.pop("on_progress", lambda *a: None),
+            {"importer": "demo", "params": {}},
+            kw.pop("skip_embedding", False),
+            _render_single_label_image,
+        )
+        return clips
+
+    def test_seeds_clip_ids_after_whatever_is_already_there(self, tmp_path):
+        """Sources are loaded into a shared dict, so ids continue, never restart."""
+        clips = {4: {"id": 4}}
+
+        self._run(tmp_path, n=2, clips=clips)
+
+        assert sorted(clips) == [4, 5, 6]
+
+    def test_a_dropped_embedding_does_not_consume_its_clip_id(self, tmp_path):
+        clips = self._run(tmp_path, n=4, embedder=self._Embedder(fail_every_other=True))
+
+        assert sorted(clips) == [1, 2]
+        assert [c["filename"] for c in clips.values()] == ["cat/img0.png", "cat/img2.png"]
+
+    def test_skip_embedding_stores_no_vectors_and_calls_no_embedder(self, tmp_path):
+        emb = self._Embedder()
+
+        clips = self._run(tmp_path, n=2, embedder=emb, skip_embedding=True)
+
+        assert emb.calls == 0
+        assert all(c["embeddings"] == {} for c in clips.values())
+        # The media itself is still fully stamped, so the clipper that will
+        # re-embed the crops has real bytes and dimensions to work from.
+        assert all(c["media_bytes"] and c["width"] == 8 for c in clips.values())
+
+    def test_progress_reports_the_right_phase_for_each_mode(self, tmp_path):
+        for skip, status, verb in [(False, "embedding", "Embedding"), (True, "loading", "Loading")]:
+            seen: list = []
+            self._run(tmp_path, n=2, skip_embedding=skip, on_progress=lambda *a: seen.append(a))
+
+            assert seen[0] == (status, f"{verb} 2 images...", 0, 2)
+            assert seen[1] == (status, f"{verb} cat/img0.png", 1, 2)
+            assert seen[-1] == (status, f"{verb} cat/img1.png", 2, 2)

@@ -182,14 +182,14 @@ apps.
 ### Putting the seams back in tests
 
 Every seam above is a process global, so a test that installs one leaks it
-into every test that follows in the same process. `vtscore.host_seams`
+into every test that follows in the same process. `vtscore.host.seams`
 snapshots the whole set so your test harness doesn't have to know which
 private module global backs each one (it covers Hooks 1-3 plus the
 current-user resolver and the other host seams listed in
 [architecture.md](architecture.md#dependency-direction)):
 
 ```python
-from vtscore.host_seams import capture_host_seams, restore_host_seams
+from vtscore.host.seams import capture_host_seams, restore_host_seams
 
 # Once, after your app has finished installing its seams.
 _STARTUP_SEAMS = capture_host_seams()
@@ -366,7 +366,7 @@ Notes on the multi-thread story:
 - `train_model` is thread-safe: the production linear-SVM head is fitted
   by liblinear, which touches no global RNG, and the BCE heads use a
   local `torch.Generator` plus `torch.random.fork_rng()`.
-- The state lock (`_state_lock` in `vtscore/state/core.py`) is an
+- The state lock (`_state_lock` in `vtscore/state/primitives.py`) is an
   `RLock`, so one public function can call another while holding the
   lock without deadlock.
 - Per-thread progress callbacks are available via

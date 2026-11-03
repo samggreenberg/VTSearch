@@ -23,7 +23,7 @@ the harness's weighted FNR/FPR at the shipped threshold, where lower is better.
 | Binary cost (same seeds) | 0.49 | 0.44 | 0.40 | 0.33 | 0.15 |
 | **Region** F1 | 0.021 | | | **0.065** | — |
 
-![Region and Binary, mean cost over clicks, same seeds](figures/compare_cost.png)
+![Region and Binary, mean cost over clicks, same seeds](figures/compare_cost.webp)
 
 1. **Region voting is better than binary at every click count.** At 150 clicks
    region ends at 0.24 against binary's 0.33, and it is lower in **328 of 432**
@@ -92,7 +92,7 @@ ends better than binary does.
 
 Every cell, text only → final → full labels:
 
-![Per class and size](figures/per_cell.png)
+![Per class and size](figures/per_cell.webp)
 
 ## Images: what a click does, and when
 

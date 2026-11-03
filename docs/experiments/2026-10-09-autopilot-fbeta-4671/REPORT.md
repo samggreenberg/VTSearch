@@ -54,7 +54,7 @@ Both decide what Autopilot asks, so both need trajectories.
 
 ## Result
 
-![The objective at every vote, and each arm's paired difference from today's app](figures/autopilot_curves.png)
+![The objective at every vote, and each arm's paired difference from today's app](figures/autopilot_curves.webp)
 
 *Top: the objective at each preset, the mean of 720 runs per arm at every vote. Bottom: each arm minus today's app,
 paired, with ±2 SE. The orange dip at votes 7–20 is the old opening showing its 3-Good, 4-Bad detector, where today's
@@ -86,7 +86,7 @@ The session means behind them, and the per-vote reads, are in `REPORT_autopilot.
 | the opening before #4288 | −2.7 | −2.2 to −3.3 | −0.4 to −1.5 |
 | New on the Hard pick | 0.0 | +1.4 to +1.5 | +1.2 to +1.3 |
 
-![What the user gets at every vote: precision, recall, the returned set's size and AP](figures/autopilot_returned.png)
+![What the user gets at every vote: precision, recall, the returned set's size and AP](figures/autopilot_returned.webp)
 
 *Every run at every vote. The old opening's sets are more precise from vote 8–10 on, and its AP is higher from vote
 24; it returns fewer images. Without the atlas walk, the app returns a few more images, at higher recall.*

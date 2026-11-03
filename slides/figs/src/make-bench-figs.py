@@ -52,7 +52,7 @@ from slide_figure import FULL_BLEED, INK, SIDEBAR, SOFT, save  # noqa: E402
 SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
-REPORT = REPO / "docs" / "experiments" / "overview-bench"
+REPORT = REPO / "docs" / "experiments" / "2026-08-12-overview-bench"
 FIGURES = REPORT / "figures"
 
 #: One colour per representation, matching the published report exactly so a

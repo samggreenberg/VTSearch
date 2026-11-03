@@ -5,6 +5,8 @@ Each dataset is a single ZIP file containing:
 - ``medias.pkl``     — the pickled ``{"medias": {...}, ...}`` dict
 - ``meta.json``      — embedder, clipper, media_type, timestamps, age-off
 - ``projection.npz`` — (optional, appended later) frozen 2-D layout + pyramid
+- ``similarity_order.json`` — (optional, appended later) the ids in 1-D
+  similarity order, for the example picker
 
 See ``docs/plans/vtsbrowse.md`` for the persistence carve-out.
 """
@@ -345,6 +347,37 @@ def remove_region_labels(path: str | Path) -> None:
     if present:
         _rewrite_without(p, _REGION_LABELS_ENTRY)
         logger.info("Removed region labels from container: %s", p)
+
+
+#: ZIP entry holding the dataset's 1-D similarity order (see
+#: ``vtscore.projection.similarity_order``): its media ids sorted by a 1-D UMAP
+#: of their embeddings, so a list of every item can put look-alikes together.
+#: Ids only — JSON, no vectors — and checked against the live id set on read.
+_SIMILARITY_ORDER_ENTRY = "similarity_order.json"
+
+
+def append_similarity_order(path: str | Path, ids: list[int], method: str) -> None:
+    """Append (or replace) the 1-D similarity order in a container."""
+    p = Path(path)
+    body = json.dumps({"method": method, "ids": [int(i) for i in ids]}, separators=(",", ":")).encode("utf-8")
+
+    _replace_entry(p, _SIMILARITY_ORDER_ENTRY, body)
+
+    logger.info("Appended similarity order (%d items) to container: %s", len(ids), p)
+
+
+def read_similarity_order(path: str | Path) -> tuple[list[int], str] | None:
+    """Read ``(ids, method)`` of the 1-D similarity order from a container, or ``None``."""
+    try:
+        with zipfile.ZipFile(str(path), "r") as zf:
+            if _SIMILARITY_ORDER_ENTRY not in zf.namelist():
+                return None
+            body = zf.read(_SIMILARITY_ORDER_ENTRY)
+        payload = json.loads(body.decode("utf-8"))
+        return [int(i) for i in payload["ids"]], str(payload.get("method", ""))
+    except Exception:
+        logger.warning("Failed to read similarity order from container %s", path, exc_info=True)
+        return None
 
 
 def _serialize_projection(projection: Any, pyramid: Any) -> bytes:

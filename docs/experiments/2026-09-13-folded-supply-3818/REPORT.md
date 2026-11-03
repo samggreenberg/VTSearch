@@ -38,7 +38,7 @@ cache that has been silently inert since the image directory grew by 170 files.
 
 ## The apportionment, and the control it needs
 
-![what the 441 are](fig_apportionment.png)
+![what the 441 are](fig_apportionment.webp)
 
 | class | folded | cell full | scattered | oversize | undesignated in the queue | designated |
 |---|---:|---:|---:|---:|---:|---:|
@@ -76,7 +76,7 @@ the supply the build already has and does not need.**
 
 ## Neither filter is worth moving
 
-![the two filters against their own cuts](fig_filters.png)
+![the two filters against their own cuts](fig_filters.webp)
 
 The 86 images the band rules dropped are the only part of the 441 that a change
 to `vg_scale` could recover, so each is plotted against the cut that dropped it
@@ -101,7 +101,7 @@ a cut.
 
 ## Every cell is over-subscribed
 
-![supply against seats](fig_oversubscription.png)
+![supply against seats](fig_oversubscription.webp)
 
 `cell_full` is only a finding if a seat was available, and none was. The 27 cells
 of these nine classes have **20,118 banded candidates for 2,700 seats**. The

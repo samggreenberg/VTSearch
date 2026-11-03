@@ -1,4 +1,4 @@
-"""The stale-tree gate itself: `scripts/check-phantom-base.py`.
+"""The stale-tree gate itself: `scripts/gates/check-phantom-base.py`.
 
 The gate exists because five PRs silently reverted the work that merged just
 before them, and nothing noticed for as long as two days (#2821's revert
@@ -42,7 +42,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "check-phantom-base.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "check-phantom-base.py"
 
 
 def _git(repo: Path, *args: str) -> str:

@@ -6,7 +6,7 @@ A converter output or a clip records *how it was made* in ``origin.params``:
 :mod:`vtscore.converters.runner`), and ``clipper_chain`` /
 ``clipper`` / ``clipper_<key>`` / ``clip_start`` … for chain output (see
 :func:`vtscore.datasets.clipper_chain._stamp_origin`).  Those keys are the
-machine-readable recipe :mod:`vtscore.media.lazy_clip` replays to reproduce
+machine-readable recipe :mod:`vtscore.media.clipping.lazy_clip` replays to reproduce
 the bytes on demand; they are not what a human wants to read in the labeling
 UI's metadata grid.
 

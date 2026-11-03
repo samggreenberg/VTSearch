@@ -86,7 +86,7 @@ AP below 0.1, the review's bar. Differences are paired, with SEs over people.
 | 640 | **roll** | **0.709** | **+0.023 ± 0.003** | **274** | 110 / 51 |
 | 640 | similarity | 0.692 | +0.006 ± 0.004 | 324 | 117 / 108 |
 
-![The screen by how far the starting face is turned](fig_screen_by_roll.png)
+![The screen by how far the starting face is turned](fig_screen_by_roll.webp)
 
 *Figure 1. The screen by the starting face's roll (the angle the landmarks' fit removes). Top: mean
 AP of the start's example sort. Bottom: the share of starts that fail (AP < 0.1). One column per
@@ -139,7 +139,7 @@ though no such session failed: alignment improves every photo's vector, the ones
 later included. At click 0 the example sort's own objective barely moves (−0.010 to +0.015, each
 within 2 SE), because its line keeps few photos. The gain comes as soon as the walk has a few Goods.
 
-![The paired gain at every click](fig_session_gain.png)
+![The paired gain at every click](fig_session_gain.webp)
 
 *Figure 2. Roll minus plain crop, in the objective the session shows at every click, mean over the
 562 people; colour is the preset, solid 1024 px with a ±1 SE band, dashed 640 px. From about click

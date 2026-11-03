@@ -57,9 +57,9 @@ MARKDOWN_TEST_SURFACE: tuple[str, ...] = (
 # test fails on a report whose title stopped parsing.
 DOC_READING_SOURCES: tuple[str, ...] = (
     "vtsearch/achievements_catalog.py",
-    "scripts/check-calibration-index.py",
-    "scripts/check-docs.py",
-    "scripts/check-extension-docs.py",
-    "scripts/publish-sota-site.py",
+    "scripts/gates/check-calibration-index.py",
+    "scripts/gates/check-docs.py",
+    "scripts/gates/check-extension-docs.py",
+    "scripts/release/publish-sota-site.py",
     "scripts/screenshots/wiring-check.py",
 )

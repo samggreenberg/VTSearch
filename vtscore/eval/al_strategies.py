@@ -246,7 +246,7 @@ def _hard_pick_by_index(ctx: ALContext, ranking: dict[int, float], threshold: fl
     Mirrors the app's ``autoSelectNext`` pick rule
     (``frontend/src/app/utils/auto-select-next.ts``, pinned by the
     ``autopilot.auto_select_next`` mirror in
-    ``scripts/check-eval-app-sync.py``): rank every item in the current sort
+    ``scripts/gates/check-eval-app-sync.py``): rank every item in the current sort
     descending, find the first position whose score is at or below *threshold*,
     and take the unlabeled item whose **index** is closest to it.
 

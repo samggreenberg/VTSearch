@@ -5,8 +5,8 @@ A detector declares the embedding space it needs (its ``media_type``); it does
 from one media type to another, so one detector can score a dataset of mixed
 source types: media whose type already matches the detector are scored
 directly, and media of another type are routed through a one-hop converter
-(``video2image``, ``document2image``, …) before embedding.  See
-``docs/plans/cli-detector-converter.md``.
+(``video2image``, ``document2image``, …) before embedding.  See "Scoring
+across source types" in ``docs/CLI.md``.
 
 This module owns the source-type → target-type routing and the per-detector
 "prepare a scoring snapshot" step the CLI pipeline runs before scoring.  It is

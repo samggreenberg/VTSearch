@@ -226,7 +226,7 @@ export class ChartsService {
     ctx.fillText('0', left - 5, top + chartHeight + 5);
   }
 
-  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityPoint[], goalDiversity = 40): void {
+  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityPoint[], goalDiversity = 0): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const palette = this.resolvePalette();

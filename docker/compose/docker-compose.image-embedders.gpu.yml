@@ -9,7 +9,7 @@
 # the host BEFORE building. See docker/Dockerfile.image-embedders.gpu
 # for details.
 #
-#   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh   # one-time
+#   HF_TOKEN=hf_xxx ./scripts/install/cache_gated_models.sh   # one-time
 #   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up
 #   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up -d
 #   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml down

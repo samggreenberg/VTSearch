@@ -252,7 +252,7 @@ the affordable K=3 would need to clear 0.005 from −0.0025.
 
 ## Figures
 
-![cost over clicks](figures/cost_vs_clicks.png)
+![cost over clicks](figures/cost_vs_clicks.webp)
 
 One panel per **geometry** (there is one dataset, and `max_patch` must never be
 averaged with `whole_image`); colour is the fold count; the band is the
@@ -282,7 +282,7 @@ does — at K=2, cost against the free text sort:
 was already worth, and ends 150 clicks later barely past it. That is not this
 study's question, but it is the axis this study's effect has to be read against.
 
-![average precision over clicks](figures/average_precision_vs_clicks.png)
+![average precision over clicks](figures/average_precision_vs_clicks.webp)
 
 Per-run versions — every seed its own line, one file per geometry — are in
 [`figures/`](figures/).

@@ -192,7 +192,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=cc4739-prep --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P -> $CALIB_EXP/logs/prepare-$P.out"
     ;;
@@ -207,7 +207,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name="cc4739-size-$LEG-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
     require_jobid "$S" "size"
     echo "size job: $S (leg $LEG, cell $IDX, $ARM) -> $CALIB_EXP/logs/size-$S.out"
     ;;
@@ -219,7 +219,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=cc4739-baseline --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $ROOT/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $ROOT/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T -> $ROOT/text_baseline.csv"
     ;;

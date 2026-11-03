@@ -93,13 +93,13 @@ run.
 
 ### The table, at click 30 and click 150
 
-![Train x test at click 150](figures/matrix_t150_siglip.png)
+![Train x test at click 150](figures/matrix_t150_siglip.webp)
 
 *Mean over classes. Bold marks the best training size in each test column. The white lines split
 pure sizes from mixes. F1 is shown but is **not comparable across columns**: each test size has its
 own positive count, and the SML columns pool all three.*
 
-![Train x test at click 30](figures/matrix_t30_siglip.png)
+![Train x test at click 30](figures/matrix_t30_siglip.webp)
 
 *The same at click 30. The shape is already set. 31% of small-trained runs still have no detector
 at click 30 and sit at the text sort.*
@@ -168,7 +168,7 @@ small chairs: the text sort and every detector miss them.
 
 ### Per class
 
-![Per class at click 150](figures/per_class_cost_t150_siglip.png)
+![Per class at click 150](figures/per_class_cost_t150_siglip.webp)
 
 *Each dot is one training size's cost on a test size minus the matched size's, one row per
 class. Right of zero is worse than training at the test size. Large training (green) on small
@@ -177,23 +177,23 @@ classes that disagree, not a uniform penalty.*
 
 ### Quality over clicks
 
-![Cost over clicks on small objects](figures/test_S__cost_vs_clicks.png)
+![Cost over clicks on small objects](figures/test_S__cost_vs_clicks.webp)
 
 *Test size S, one line per training size, click 0 = the text sort alone. The small-trained line is
 dashed until ~120 clicks because its runs have no detector until they find a positive (coverage
 strip). The large-trained line falls to the text sort's level by about click 20 and stays there.*
 
-![Cost over clicks, natural mix](figures/test_SMLn__cost_vs_clicks.png)
+![Cost over clicks, natural mix](figures/test_SMLn__cost_vs_clicks.webp)
 
 *Test size SML (natural). Medium, large and both mixes overlap from about click 20. Small training
 sits apart.*
 
 Medium and large test sizes, and every run as its own line:
-[test M](figures/test_M__cost_vs_clicks.png), [test L](figures/test_L__cost_vs_clicks.png),
-[runs, S](figures/test_S__cost_vs_clicks_runs__test_S.png),
-[runs, M](figures/test_M__cost_vs_clicks_runs__test_M.png),
-[runs, L](figures/test_L__cost_vs_clicks_runs__test_L.png),
-[runs, SMLn](figures/test_SMLn__cost_vs_clicks_runs__test_SMLn.png).
+[test M](figures/test_M__cost_vs_clicks.webp), [test L](figures/test_L__cost_vs_clicks.webp),
+[runs, S](figures/test_S__cost_vs_clicks_runs__test_S.webp),
+[runs, M](figures/test_M__cost_vs_clicks_runs__test_M.webp),
+[runs, L](figures/test_L__cost_vs_clicks_runs__test_L.webp),
+[runs, SMLn](figures/test_SMLn__cost_vs_clicks_runs__test_SMLn.webp).
 
 ## Literal examples
 

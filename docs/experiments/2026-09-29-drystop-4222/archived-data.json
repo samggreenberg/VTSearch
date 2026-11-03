@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-29-drystop-4222.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "floor_summary.csv": {
+     "bytes": 2327,
+     "oid": "040819cd6aaf7ab94f821c6d524f2062a781f5b7"
+    },
+    "harvest.csv": {
+     "bytes": 1178,
+     "oid": "b8eef618f953535f13e45aabfad36e56eac35fd0"
+    },
+    "opening.csv": {
+     "bytes": 557,
+     "oid": "5b05bacbca3c078b0e910bb7d459820a5566cdc5"
+    },
+    "order_opening.csv": {
+     "bytes": 355,
+     "oid": "769cb26c4dc25eac7d68db1dc33b5cb6ef0067ae"
+    },
+    "order_quality_paired.csv": {
+     "bytes": 17309,
+     "oid": "15e19ac42193f443f6ada182119cc29b80e33ea2"
+    },
+    "quality_paired.csv": {
+     "bytes": 30527,
+     "oid": "a1db53eed7cef0dc521594489b8395315bb011dd"
+    },
+    "starved.csv": {
+     "bytes": 2202,
+     "oid": "608a005ec13235dadb04b4f96eff6c03735951cf"
+    },
+    "verdict.json": {
+     "bytes": 1355,
+     "oid": "cba556d75e7cf5bf4ca350469c77d2470c130fb1"
+    }
+   }
+  }
+ ]
+}

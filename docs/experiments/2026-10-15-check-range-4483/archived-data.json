@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-15-check-range-4483.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/examples.csv": {
+     "bytes": 2320,
+     "oid": "e18e5a449dc7d7fdd3b8133b2ab36917ca782af9"
+    },
+    "tables/realized_check.json": {
+     "bytes": 85,
+     "oid": "2b30b0b4e5131199c72691ac07c56553cf5d98cd"
+    },
+    "tables/summary.csv": {
+     "bytes": 24298,
+     "oid": "2a805bffbbd3b8f143aabc796a65a9cb69f2961a"
+    },
+    "tables/what_users_read.csv": {
+     "bytes": 944,
+     "oid": "e2b37c00063f3911070d39d8841e8a9688eb69fe"
+    }
+   }
+  }
+ ]
+}

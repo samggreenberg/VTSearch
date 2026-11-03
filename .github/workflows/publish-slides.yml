@@ -4,7 +4,7 @@
 # tests nothing: `./run-tests.sh` is still the whole gate (see CLAUDE.md). All this does is
 # render the decks and push the PDFs to the rolling `slides-latest` release, so
 # the newest deck has a stable URL that does not require cloning the repo and
-# running Marp. The rendering and upload logic lives in scripts/publish-slides.sh
+# running Marp. The rendering and upload logic lives in scripts/release/publish-slides.sh
 # so it can be run and debugged from a laptop, not only from here.
 name: Publish slide decks
 
@@ -13,12 +13,12 @@ on:
     branches: [dev]
     paths:
       - 'slides/**'
-      - 'scripts/publish-slides.sh'
+      - 'scripts/release/publish-slides.sh'
       - '.github/workflows/publish-slides.yml'
   # GitHub offers the "Run workflow" button only for workflows present on the
   # *default* branch, `main`. This file is there, so manual dispatch works; the
   # push trigger above fires from `dev` regardless. From a laptop,
-  # scripts/publish-slides.sh publishes by hand without GitHub Actions at all.
+  # scripts/release/publish-slides.sh publishes by hand without GitHub Actions at all.
   workflow_dispatch:
 
 permissions:
@@ -55,4 +55,4 @@ jobs:
       - name: Render and publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/publish-slides.sh
+        run: ./scripts/release/publish-slides.sh

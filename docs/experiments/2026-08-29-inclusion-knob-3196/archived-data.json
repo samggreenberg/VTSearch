@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-29-inclusion-knob-3196.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "cost_vs_clicks.csv": {
+     "bytes": 28153,
+     "oid": "a85aca3a129e81e9104cde242c17ec8281b2db7a"
+    },
+    "cutincl_regret_vs_incumbent.csv": {
+     "bytes": 91734,
+     "oid": "dc146ebf484310e03b0dd843c7e4b4ff81eb2875"
+    },
+    "incl3196_by_band.csv": {
+     "bytes": 1512,
+     "oid": "d157938a735a4077f88ddabb5b070cc4b33b8b6f"
+    },
+    "incl3196_head_contrast.csv": {
+     "bytes": 1338,
+     "oid": "6228ea1f75478404aea585340a712214d1d08af8"
+    },
+    "incl3196_offset_gap.csv": {
+     "bytes": 9072,
+     "oid": "6c2cd0d210b004169e77fc75ca3ea72aeab16a29"
+    },
+    "incl3196_per_cell.csv": {
+     "bytes": 1492711,
+     "oid": "e469a985ee21b5c2afc27fb6084324607845adb9"
+    },
+    "incl3196_per_env.csv": {
+     "bytes": 7777,
+     "oid": "ba790db4bff5f6f0eab972642de3c7e58d49f51e"
+    },
+    "incl3196_qtilt_liveness.csv": {
+     "bytes": 3995,
+     "oid": "309867af9b4f0e0cf8a9735680bd51f76dd70e44"
+    },
+    "incl3196_summary.json": {
+     "bytes": 3465,
+     "oid": "a10d5985916f518b3a24ef3a1054634cded1b859"
+    }
+   }
+  }
+ ]
+}

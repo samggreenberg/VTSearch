@@ -14,6 +14,8 @@ import json
 import pytest
 
 from vtsearch import settings as settings_mod
+from vtsearch.settings import schema as settings_schema
+from vtsearch.settings import tiers as settings_tiers
 
 
 @pytest.fixture(autouse=True)
@@ -30,14 +32,14 @@ class TestSoloMediaTypeSettings:
         assert settings_mod.get_effective_solo_media_type() is None
 
     def test_is_a_server_tier_setting(self):
-        assert "solo_media_type" in settings_mod._SERVER_KEYS
+        assert "solo_media_type" in settings_schema._SERVER_KEYS
 
     def test_persisted_value_is_effective(self, isolated_settings):
         settings_mod.set_solo_media_type("image")
         assert settings_mod.get_effective_solo_media_type() == "image"
 
         # Persisted to the server settings file, not a per-user file.
-        raw = json.loads(settings_mod.SETTINGS_PATH.read_text())
+        raw = json.loads(settings_tiers.SETTINGS_PATH.read_text())
         assert raw["solo_media_type"] == "image"
 
     def test_persisted_empty_string_normalises_to_none(self):

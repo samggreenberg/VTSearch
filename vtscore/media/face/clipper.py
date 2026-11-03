@@ -8,7 +8,7 @@ that keeps every embeddable media type's clipper list non-empty.
 from __future__ import annotations
 
 
-from vtscore.media.clipper import DefaultClipper
+from vtscore.media.clipping.clipper import DefaultClipper
 
 
 class FaceDefaultClipper(DefaultClipper):

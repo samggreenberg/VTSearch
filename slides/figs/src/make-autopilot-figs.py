@@ -15,7 +15,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 * `autopilot-steps` walks the harness's port of the phase machine
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
-  `scripts/check-eval-app-sync.py`) through the steps, and every target it
+  `scripts/gates/check-eval-app-sync.py`) through the steps, and every target it
   prints is that module's constant.
 * `autopilot-smart` is Smart's idea, a student's Spanish classes, and
   `autopilot-smart-trend` runs the shipped `rising_status_from_scores` on a
@@ -84,7 +84,7 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
     BAD_TARGET,
     GOOD_TARGET,
     MORE_DRY_RUN,
-    SPAN_GREEN_DEFAULT,
+    SPAN_GREEN_ON,
     STOP_CAP,
     next_phase,
 )
@@ -900,7 +900,7 @@ def span_fig() -> None:
         assert got == run and len(picks) == picks_in, (picks_in, got)
     # Every pick the slide draws has its leaf named, and no leaf is named for a cell the walk never picks.
     assert set(_span_covered(max(SPAN_RUNS))[2]) == set(SPAN_PICK_LEAVES)
-    assert SPAN_GREEN_DEFAULT == len(_span_cells()) == 40
+    assert SPAN_GREEN_ON == len(_span_cells()) == 40
     _save(SPAN_STAGES, _span_stage, "autopilot-span")
 
 

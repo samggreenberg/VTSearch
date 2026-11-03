@@ -17,7 +17,7 @@ OUT=${ANALYSE_OUT:-$EXP/analysis}
 FIGS=$OUT/figures
 mkdir -p "$OUT" "$FIGS"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 cd "$WT/scripts/experiments/calibration" || exit 2

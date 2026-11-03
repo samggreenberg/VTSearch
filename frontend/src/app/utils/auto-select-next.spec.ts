@@ -8,7 +8,7 @@ import type { SortedItem } from '../services/sort-state.service';
  * Unit coverage for the auto-advance pick rule extracted out of
  * `LabelViewComponent.autoSelectNext`. The Python eval harness reproduces this
  * rule (`vtscore/eval/al_strategies._hard_pick_by_index`) and
- * `scripts/check-eval-app-sync.py` pins it, so these cases double as the
+ * `scripts/gates/check-eval-app-sync.py` pins it, so these cases double as the
  * executable statement of what the harness has to keep matching — in
  * particular that `hard` measures distance in **rank space**, not score space.
  */

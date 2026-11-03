@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-28-calibration-fold-count-3310.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/levels.csv": {
+     "bytes": 11492,
+     "oid": "23c988a7f3ce5084907f79f62d1bcce95c262926"
+    },
+    "agg/ship_rules.csv": {
+     "bytes": 3112,
+     "oid": "e8c1dc04ca0f8dd46471ef10e12fceee311e3164"
+    }
+   }
+  }
+ ]
+}

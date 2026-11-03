@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-07-spike-check-2847.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/fig0_literal_repro.png": {
+     "bytes": 202845,
+     "oid": "d8f92bc57bcfae7f2f1551196f3d98fbc13680ee"
+    },
+    "figures/fig0b_literal_repro_nosafe.png": {
+     "bytes": 192307,
+     "oid": "7372233a61293d55429e14fb981fac647b4eae62"
+    }
+   }
+  }
+ ]
+}

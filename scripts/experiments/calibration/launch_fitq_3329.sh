@@ -54,7 +54,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ER
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -200,7 +200,7 @@ PYCHK
   submit prepare --job-name=fitq-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
   ;;
 
 list)
@@ -232,7 +232,7 @@ size)
     submit "size$idx" --job-name="fitq-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time=2:00:00 --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
       --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
   done
   echo "when these finish: sacct -j <id> --format=Elapsed,MaxRSS,State  ->  set CALIB_MEM/CALIB_TIME from the REGION cell"
   ;;
@@ -242,7 +242,7 @@ baseline)
   submit baseline --job-name=fitq-baseline --mem=16G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
     --output="$LOGS/baseline-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $CALIB_EXP/analysis/text_baseline.csv"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $CALIB_EXP/analysis/text_baseline.csv"
   ;;
 
 cells)
@@ -284,7 +284,7 @@ PYSHAPE
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
     --output="$LOGS/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
 redo)
@@ -296,7 +296,7 @@ redo)
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
     --output="$LOGS/redo-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
 status)

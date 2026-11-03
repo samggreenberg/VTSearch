@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.io import read_server_json
+from vtscore.utils.io import read_server_json
 from vtsearch.settings_io.importers.base import SettingsImporter, PluginField
 
 

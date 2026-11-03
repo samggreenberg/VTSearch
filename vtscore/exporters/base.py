@@ -87,6 +87,7 @@ __all__ = [
     "ResultsExporter",
     "StreamResume",
     "UnsupportedPayloadError",
+    "hit_column_value",
     "iter_stream_batches",
     "resolve_stream_batch_size",
 ]
@@ -128,6 +129,32 @@ class UnsupportedPayloadError(ValueError):
     than a 500: asking a labelset-only exporter for a find-results export is a
     bad request, not a server fault.
     """
+
+
+#: Column keys a scored run's ``selected_columns`` can name that are not keys of
+#: the hit itself but of the detector result it belongs to.  See
+#: :func:`hit_column_value`.
+_RUN_LEVEL_COLUMNS = {"detector": "detector_name", "threshold": "threshold"}
+
+
+def hit_column_value(detector_result: dict[str, Any], hit: dict[str, Any], column: str) -> Any:
+    """One hit's value in a ``selected_columns`` *column* of a scored run, or ``None``.
+
+    How an exporter honours the Find Results dialog's column choice (see
+    :meth:`ResultsExporter.export_find_results`): ``detector`` and
+    ``threshold`` read the detector result the hit belongs to; any other
+    column is the hit's own key (``filename``, ``md5``, ``score``, ``label``,
+    ``origin``, ``origin_name``, clip bounds, ...), else a key of its
+    ``custom_metadata``.  The value comes back as the payload holds it (an
+    ``origin`` stays a dict), for the exporter to format; ``None`` when the
+    hit has nothing under that key.
+    """
+    run_key = _RUN_LEVEL_COLUMNS.get(column)
+    if run_key is not None:
+        return detector_result.get(run_key)
+    if column in hit:
+        return hit[column]
+    return (hit.get("custom_metadata") or {}).get(column)
 
 
 def resolve_stream_batch_size(value: Any, default: int = 500) -> int:
@@ -341,29 +368,49 @@ class ResultsExporter(PluginBase):
                                "detector_name": "...",
                                "threshold": 0.5,
                                "balance": {...},      # may be absent or None
-                               "total_hits": 15,      # positives only
+                               "total_hits": 15,      # len(hits)
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
+                               "training_domain": {...},  # may be absent or None
                              }
                            },
                            "missing_detectors": [...],
+                           "selected_columns": ["origin_name", "score", ...],
                          }
 
                      Each hit comes from
-                     :func:`vtscore.utils.hits.build_media_hit`: ``id``,
+                     :func:`vtscore.datasets.labelset.build_media_hit`: ``id``,
                      ``filename``, ``category``, ``score``, plus ``origin`` /
                      ``origin_name`` / ``md5``, the importer-supplied
                      ``custom_metadata`` (when the media carries any - this is
                      how an exporter correlates a hit back to the caller's own
                      system), and any clip bounds the media carries.
 
-                     **``negative_hits`` is conventionally ignored.** Every
-                     built-in exporter writes positives only, because "the
-                     items the detector found" is what an export is for.  The
-                     key is nonetheless always present (the CLI fills it only
-                     under ``--keep-negatives``), so an exporter that wants the
-                     below-threshold items can read it.  ``missing_detectors``
-                     is likewise informational.
+                     **Export ``hits``; ``negative_hits`` is informational.**
+                     ``hits`` is the set this export is for, and whoever built
+                     the payload has already chosen which side of the threshold
+                     goes into it (#5283): the Find Results dialog's Good /
+                     Bad / Both moves the side it lists into ``hits`` and
+                     empties ``negative_hits``, and a run with nobody to ask (a
+                     CLI ``--autodetect``, a background AutoFind) sends the
+                     above-threshold side.  When ``hits`` holds both sides,
+                     every hit carries ``"label"`` (``"good"`` / ``"bad"``), as
+                     a streamed run's records do (:meth:`export_cli_streaming`),
+                     and an exporter that writes a row per hit should keep it.
+                     Do not export ``negative_hits`` as well: that overrides
+                     the choice, so a CLI run (which fills it) would send items
+                     nobody asked for, while the dialog (which empties it)
+                     would send none.  ``missing_detectors`` is likewise
+                     informational.
+
+                     **``selected_columns``** (optional) is the user's column
+                     choice from the Find Results dialog, in order: a hit's
+                     own keys, keys of its ``custom_metadata``, and the
+                     detector result's ``detector`` / ``threshold``, which
+                     :func:`hit_column_value` resolves.  Honour it for tabular
+                     output; a delivery exporter that sends whole hits may
+                     ignore it.  It is absent on non-UI call paths (the CLI,
+                     a background AutoFind's auto-export).
 
                      **``balance``** says what the line at ``threshold``
                      keeps (:func:`vtscore.state.core.detector_balance_state`):
@@ -376,6 +423,21 @@ class ResultsExporter(PluginBase):
                      Informational, like ``missing_detectors``:
                      ``threshold`` stays the float the hits were cut at,
                      whatever it says.
+
+                     **``training_domain``** (#5501) says how much of the
+                     scored dataset looks unlike the dataset the detector was
+                     trained on: ``{"reference_dataset_id",
+                     "reference_dataset_name", "labels_total",
+                     "labels_in_reference", "labels_in_active",
+                     "domain_shift", "reason"}``, where ``domain_shift`` is
+                     :func:`vtscore.coverage.domain_shift_report`'s dict
+                     (``frac_atypical``, ``shifted``, ...) or ``None`` with
+                     ``reason`` saying why there was nothing to compare.  An
+                     app run (Find, AutoFind, ``POST /api/auto-detect``) sets
+                     it; the CLI does not.  Informational too: a report or a
+                     message may print ``frac_atypical`` and the verdict, as
+                     the email exporter does, and a tabular exporter may skip
+                     it.
 
             field_values: Mapping of :attr:`PluginField.key` -> value supplied
                 by the user.
@@ -669,10 +731,15 @@ class ResultsExporter(PluginBase):
                 from one import (#4707) calls this once per dataset and adds
                 ``"dataset"`` (``{"name", "media_type", "category", "id"}``)
                 naming the one these records belong to; exporters that write
-                a metadata header should carry it.
+                a metadata header should carry it.  ``--max-results N``
+                (#5279) adds ``"max_results"`` (int), and *records* then
+                holds only each detector's best N.
             records: Yields ``(detector_name, hit)`` tuples in chunk order
-                (NOT globally sorted by score).  Each *hit* is the dict from
-                :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
+                (NOT globally sorted by score), or, with ``"max_results"`` in
+                the header, detector by detector, each one's sorted by score,
+                highest first, all of them once the last chunk is scored.
+                Each *hit* is the dict from
+                :func:`vtscore.datasets.labelset.build_media_hit` plus a ``"label"``
                 key (``"good"`` for above-threshold, ``"bad"`` otherwise).
             field_values: Mapping of :attr:`PluginField.key` → value.
 
@@ -719,7 +786,9 @@ class ResultsExporter(PluginBase):
                 whether ``"bad"`` entries are included).  A run that makes
                 several datasets from one import (#4707) calls this once per
                 dataset and adds ``"dataset"``, as in
-                :meth:`export_cli_streaming`.  No threshold and no balance
+                :meth:`export_cli_streaming`, and ``--max-results`` adds
+                ``"max_results"``, ordering *elements* as it orders the
+                records there.  No threshold and no balance
                 state: those are numbers the head measured, and a labelset
                 carries none (#5131).
             elements: Yields serialised
@@ -792,10 +861,10 @@ class ResultsExporter(PluginBase):
           ``resume.commit(position)``.  Never commit a chunk only partly
           written: the run then resumes after it and the rest is lost.
 
-        Write in place rather than through :func:`~vtscore.io.atomic_write_stream`,
+        Write in place rather than through :func:`~vtscore.utils.io.atomic_write_stream`,
         so what was committed outlives the process.
-        :func:`~vtscore.io.resumable_write_stream` and
-        :func:`~vtscore.io.commit_write_stream` do both halves for a text file,
+        :func:`~vtscore.utils.io.resumable_write_stream` and
+        :func:`~vtscore.utils.io.commit_write_stream` do both halves for a text file,
         with the position a byte offset.
 
         Args:

@@ -2,7 +2,7 @@
 slow-phase / lock-wait timers for the request paths a labeling session hits.
 
 Written for issue #3853, where the app froze for 5-20 s a few times per
-labeling session and the per-request timer (``vtsearch.hooks``) could show
+labeling session and the per-request timer (``vtsearch.runtime.request_hooks``) could show
 *that* every in-flight request finished at the same instant but not *why*: a
 timer on each request cannot tell a thread that held the GIL from a lock
 convoy from a process the kernel stopped scheduling.  Three instruments here

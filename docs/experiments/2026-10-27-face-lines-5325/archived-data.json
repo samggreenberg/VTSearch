@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-27-face-lines-5325.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ab.csv": {
+     "bytes": 4423,
+     "oid": "4be6fec8ba6225eb96bc19c852718efd72079fb0"
+    },
+    "click0.csv": {
+     "bytes": 7326,
+     "oid": "1e896dc318a511d18624b71032e6da7971538cea"
+    },
+    "curves.csv": {
+     "bytes": 39558,
+     "oid": "c7257041b06cf762c13406481a25bebb1cb9f50a"
+    },
+    "find.csv": {
+     "bytes": 32450,
+     "oid": "aa6990059c380457855f4e4ca8f6ea5044510057"
+    },
+    "k1-1024-objective_by_click-control.csv": {
+     "bytes": 17844,
+     "oid": "86f73461dec49b76feb7a8c5edb04132895ca837"
+    },
+    "k1-1024-objective_by_click.csv": {
+     "bytes": 17850,
+     "oid": "b779700bfde87f0793bed94b7020238beac733ec"
+    },
+    "pronoun.csv": {
+     "bytes": 4056,
+     "oid": "888c28cffe58aa1428fbc3e3b5a5555b444c39be"
+    },
+    "set.csv": {
+     "bytes": 648,
+     "oid": "f85edf7248b70f92209d7d2425896a405ec39a6d"
+    }
+   }
+  }
+ ]
+}

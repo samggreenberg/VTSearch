@@ -21,7 +21,7 @@ import { ThemeService, EffectiveTheme } from '../../../services/theme.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 
 /** Fallback "Email us" recipient used until server settings resolve. Matches
- *  the backend default (``vtsearch.settings_models.DEFAULT_SUPPORT_EMAIL``). */
+ *  the backend default (``vtsearch.settings.models.DEFAULT_SUPPORT_EMAIL``). */
 const DEFAULT_SUPPORT_EMAIL = 'sam.greenberg@gmail.com';
 
 interface Shortcut {

@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-starved-small-4216.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "classes.csv": {
+     "bytes": 10393,
+     "oid": "8f788c490874f09faf783b03c2bc345428b4b778"
+    },
+    "cost.csv": {
+     "bytes": 6358,
+     "oid": "33c80619019f7d40c09ae8597e4ad701bcd5c428"
+    },
+    "harvest.csv": {
+     "bytes": 2141,
+     "oid": "603253eba6295da119c024b8fadfa93fd513fa5d"
+    },
+    "mechanism.csv": {
+     "bytes": 1289,
+     "oid": "f319b6965c14a328e1ab7264e7a4be5a69a2c333"
+    },
+    "paired.csv": {
+     "bytes": 16236,
+     "oid": "e53d9200be9793d1aa89958f78f412c790679625"
+    },
+    "reach_by_band.csv": {
+     "bytes": 612,
+     "oid": "37418d5d5503d2191aa0ee4b573ea02c1a50f6ef"
+    },
+    "reach_paired.csv": {
+     "bytes": 631,
+     "oid": "77ad9bd818a4c2d46c6091a95ff6c7c8d84f43ed"
+    },
+    "share_by_arm.csv": {
+     "bytes": 7032,
+     "oid": "21e9a298d52b897b74a86257a2b6445462762d61"
+    }
+   }
+  }
+ ]
+}

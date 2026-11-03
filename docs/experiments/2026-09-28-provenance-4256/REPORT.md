@@ -53,7 +53,7 @@ Part of #4224; the provenance test proposed on #4221 and filed as #4256. Pool:
 
 ## Results
 
-![Promises broken, of those made, at X = 50%, per opening, for all votes against learned-sort votes only, under the shipped and the consistent reference pool](figures/broken_by_evidence.png)
+![Promises broken, of those made, at X = 50%, per opening, for all votes against learned-sort votes only, under the shipped and the consistent reference pool](figures/broken_by_evidence.webp)
 
 X = 50%, all four checkpoints pooled (2,662 frames per arm):
 
@@ -98,7 +98,7 @@ t = 100 to 1.9% (52) at t = 150, which is within noise of all-votes (1.7%). The 
 learned arm passes the gate in 0% of frames at t = 25 and 50, and in 3.3% at
 t = 150.
 
-![Calibration positives per checkpoint, all votes against learned-sort votes only, per opening, with the 10-positive gate](figures/learned_positives.png)
+![Calibration positives per checkpoint, all votes against learned-sort votes only, per opening, with the 10-positive gate](figures/learned_positives.webp)
 
 (Means over cells. The gate is per frame: 62% of g20 frames pass it although its
 mean sits near 10.)

@@ -42,7 +42,7 @@ Bad images flooded region rows into the fit, so easy classes found 11.1 positive
 cells by the AP of an arm independent of both heads here (`docs/experiments/2026-09-28-head-switch-4219/region_categories.txt`);
 mid is the 72 between them. Every number is in `tables/lr4278_summary.csv`; per session in `tables/lr4278_per_run.csv`.*
 
-![Logistic minus shipped over the votes: F-beta shown, Goods found, the acquisition cut's share of the pool, and how often its picks are Good](figures/lr4278_over_clicks.png)
+![Logistic minus shipped over the votes: F-beta shown, Goods found, the acquisition cut's share of the pool, and how often its picks are Good](figures/lr4278_over_clicks.webp)
 
 ## The question
 
@@ -83,7 +83,7 @@ easy Region classes, and if so, is it the cut?
 
 ## Why it loses: the class model reads the logistic head's scores as holding twice the positives
 
-![The served line over the votes: images flagged per withheld positive, and the class model's prevalence against the truth](figures/lr4278_line.png)
+![The served line over the votes: images flagged per withheld positive, and the class model's prevalence against the truth](figures/lr4278_line.webp)
 
 The labels line draws the detector's line where the class model expects the best F-beta. Autopilot's acquisition
 samples where the same model's posterior crosses 0.5. Both read the model's idea of how many positives the corpus

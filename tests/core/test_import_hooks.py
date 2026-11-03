@@ -1,6 +1,6 @@
 """The admin's ``--on-dataset-imported`` hooks (#4616).
 
-:mod:`vtsearch.import_hooks` turns ``module:function`` specs from the flag or
+:mod:`vtsearch.runtime.import_hooks` turns ``module:function`` specs from the flag or
 ``VTSEARCH_ON_DATASET_IMPORTED`` into the functions the load pipeline calls when
 a user's import ends.  What it owes an admin: a bad spec fails at startup
 (loudly on the CLI, as a warning under gunicorn), the flag wins over the env
@@ -17,7 +17,9 @@ import pytest
 
 from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported, ImportOutcome
 from vtscore.state.current_user import thread_user
-from vtsearch import cli_main, import_hooks, settings
+from vtsearch import settings
+from vtsearch.cli import main as cli_main
+from vtsearch.runtime import import_hooks
 
 #: What the module-level hooks below were called with, in call order.
 _calls: list[tuple[str, DatasetImported]] = []

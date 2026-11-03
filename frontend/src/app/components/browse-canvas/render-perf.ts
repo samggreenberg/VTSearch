@@ -30,7 +30,7 @@
  * ``auto`` runs the detection described above; ``full`` and ``reduced`` pin
  * the pipeline, so an admin can force the cheap path on a deployment whose
  * clients the probe can't recognize, or force the rich one if detection ever
- * misfires. Mirrors ``BrowseGraphics`` in ``vtsearch/settings_models.py``.
+ * misfires. Mirrors ``BrowseGraphics`` in ``vtsearch/settings/models.py``.
  */
 export type BrowseGraphicsMode = 'auto' | 'full' | 'reduced';
 

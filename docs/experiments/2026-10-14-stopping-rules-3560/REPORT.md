@@ -88,7 +88,7 @@ furthest below their own best (0.10–0.15).
 
 ## What comes after Done
 
-![F-beta gained since Done, over the sessions whose stop leaves 40 clicks before it and 60 after](figures/around_stop.png)
+![F-beta gained since Done, over the sessions whose stop leaves 40 clicks before it and 60 after](figures/around_stop.webp)
 
 *The y-axis is F-beta at each click minus F-beta at Done, paired within session: the mean, with the
 inter-quartile band. Each panel holds only the sessions whose stop has 40 clicks before it and 60 after
@@ -102,7 +102,7 @@ it by another 0.07–0.08. Autopilot's lights turn green on a detector still imp
 
 ## Where the clicks before Done went
 
-![Mean clicks before Done, by stretch, per preset and band](figures/stages.png)
+![Mean clicks before Done, by stretch, per preset and band](figures/stages.webp)
 
 *Means over the sessions that reached Done, so the stretches add up to the mean stop click (right).
 Read the fire rate first: small objects reach Done in only two thirds of sessions.*

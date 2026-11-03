@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-16-state-of-the-app-binary-photo.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "stopping_by_preset.csv": {
+     "bytes": 4933,
+     "oid": "e3da151ced36ad5b2ecdd01e4fe62ebce7ce13da"
+    },
+    "why/confusers_bag_or_luggage.jpg": {
+     "bytes": 49817,
+     "oid": "9cb01c04afb7a428dba3cdcfba45ea90ecdf224c"
+    },
+    "why/confusers_bench.jpg": {
+     "bytes": 49185,
+     "oid": "51d2eaf0dfff1fb07119d5349cb46668d1aef5a4"
+    },
+    "why/confusers_book.jpg": {
+     "bytes": 51964,
+     "oid": "2f4810a51fef0e001001a8928f682674cc76596c"
+    },
+    "why/confusers_bottle.jpg": {
+     "bytes": 45989,
+     "oid": "c3ebc73e120ff922348743e66affe08bf8d535c0"
+    },
+    "why/confusers_dining_table.jpg": {
+     "bytes": 53103,
+     "oid": "fd3e79686b8af8db95f6e6403cecb2626a33ae4e"
+    },
+    "why/confusers_enclosed_road_vehicle.jpg": {
+     "bytes": 52515,
+     "oid": "ff5b82347958ada28b2c2543bc6174f6623d6d1e"
+    },
+    "why/confusers_spoon.jpg": {
+     "bytes": 40822,
+     "oid": "53170a284ca6d4860f8b327fb9294892fa7d5b44"
+    },
+    "why/why.csv": {
+     "bytes": 1435,
+     "oid": "498252d37de8c6b3bddcac260be84fc5d665ac5c"
+    }
+   }
+  }
+ ]
+}

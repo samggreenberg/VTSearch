@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-gp-head-3954.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "budget.csv": {
+     "bytes": 1217,
+     "oid": "17d6f5411936b7907e8bd09b90664ca177a9d60a"
+    },
+    "crossover.csv": {
+     "bytes": 547,
+     "oid": "e9379ac453f02ad5d25638684c5122f25268612e"
+    },
+    "cut_health.csv": {
+     "bytes": 977,
+     "oid": "c9543136092bd3673cf1e18abbad6470de6bf521"
+    },
+    "figures/average_precision_vs_clicks.csv": {
+     "bytes": 82697,
+     "oid": "d399fd8112ed0621b79d7a2d7fb9a2d2460d9de9"
+    },
+    "figures/average_precision_vs_clicks.png": {
+     "bytes": 76852,
+     "oid": "12769afd8d4099100417a5f0efa243b10712618c"
+    },
+    "figures/average_precision_vs_clicks_runs__caltech101_m.png": {
+     "bytes": 109468,
+     "oid": "c672f87319fb7ce811fd14bfdb4ba53273100d4b"
+    },
+    "figures/cost_vs_clicks.csv": {
+     "bytes": 107341,
+     "oid": "d9f41ea8fd9c2dec6713eba1affc9dff174217f6"
+    },
+    "load_provenance.json": {
+     "bytes": 1606,
+     "oid": "f1f38a3bb951be71a26293e64b1ae834a15423dc"
+    },
+    "stage_a_summary.csv": {
+     "bytes": 3570,
+     "oid": "11513d8dce49344d1ab7bf832773ffb13b287485"
+    }
+   }
+  }
+ ]
+}

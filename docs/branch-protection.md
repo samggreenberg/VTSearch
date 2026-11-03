@@ -44,7 +44,7 @@ branch rule's push restriction, not by giving anyone a weaker role.
 `suite-grid` is a GitHub commit status posted by
 [`scripts/slurm/suite.sbatch`](../scripts/slurm/suite.sbatch) at the end of every
 GRID run of the full suite, success or failure, on the exact SHA it tested. It is
-the only machine-readable record that a commit passed the suite (the repo's two
+the only machine-readable record that a commit passed the suite (the repo's three
 GitHub Actions workflows only publish and gate nothing), so it is worth posting
 and worth reading on a PR.
 

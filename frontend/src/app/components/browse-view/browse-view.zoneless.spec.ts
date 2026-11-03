@@ -719,7 +719,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       const component = await openMap();
       expect(shownHint()).toEqual({
         id: 'browse-pan-zoom',
-        text: 'This map shows your audio clips, with similar ones near each other. Drag to pan, or double-click to zoom in.',
+        text: 'This map shows your audio clips, with similar ones near each other. Drag to pan or wheel to zoom.',
       });
       expect(fixture.nativeElement.querySelector('.bin-popup-empty-hint')).not.toBeNull();
 

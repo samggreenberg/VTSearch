@@ -1,0 +1,75 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-25-sam3-5213.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/sam3_5213_counts.json": {
+     "bytes": 130,
+     "oid": "e2d3348d289464cedc4b85e8da92c159d138f021"
+    },
+    "tables/sam3_5213_crossover.csv": {
+     "bytes": 1455,
+     "oid": "90c1628ebfca701c31f3500fe4cfa08473e42379"
+    },
+    "tables/sam3_5213_paired.csv": {
+     "bytes": 1878,
+     "oid": "38c4ca4c00796edc3a04e9ad55eb4b19744be5e4"
+    },
+    "tables/sam3_5213_per_cell.csv": {
+     "bytes": 257212,
+     "oid": "f96dcef703d6b80e584d2579482bafe384b7e6bb"
+    },
+    "tables/sam3_5213_per_class_AP.csv": {
+     "bytes": 4040,
+     "oid": "d8120f0f122c3a07f7284b1e9cb718654fbdc9dc"
+    },
+    "tables/sam3_5213_summary.csv": {
+     "bytes": 5553,
+     "oid": "fb980253379a532709c481d7b18d97ec537d5c5a"
+    },
+    "tables/sam3_5213_summary_seed0.csv": {
+     "bytes": 5537,
+     "oid": "90120b2e9c56f223fb7afac547c5571f33ca4cd1"
+    },
+    "tables/sam3_5240_counts.json": {
+     "bytes": 251,
+     "oid": "2f87f62c9df407a1c1a02290330948a5d348ed03"
+    },
+    "tables/sam3_5240_per_class.csv": {
+     "bytes": 5930,
+     "oid": "e0e3c0ab2e0d9ee4b7c5dde4485925a4026715a2"
+    },
+    "tables/sam3_5240_summary.csv": {
+     "bytes": 17266,
+     "oid": "21a6aaab600a3bd75928a45b415e483880fff3f4"
+    },
+    "tables/sam3_5241_cells.csv": {
+     "bytes": 28932,
+     "oid": "eaa2a78e081285967c607cec17f470c279f5ac7b"
+    },
+    "tables/sam3_5241_gate.csv": {
+     "bytes": 33681,
+     "oid": "92bb646c5b21c1b2aca7465e56b2a018ef40f8dc"
+    },
+    "tables/sam3_5241_gate_per_click.csv": {
+     "bytes": 95372,
+     "oid": "123fe9520bdd964706f981c9375bb99325392739"
+    },
+    "tables/sam3_5241_info.json": {
+     "bytes": 1557,
+     "oid": "511f3b9db2b2055b920eabdf7d601af7ead3e0bd"
+    },
+    "tables/sam3_5241_per_click.csv": {
+     "bytes": 71286,
+     "oid": "e91da60fc0c23a589e274bcdd18ad433e3c271d1"
+    },
+    "tables/sam3_5241_summary.csv": {
+     "bytes": 22283,
+     "oid": "b2b75887efac06cb196b64b7317de8e95067a239"
+    }
+   }
+  }
+ ]
+}

@@ -232,7 +232,7 @@ class TestDryRunOverrideDetectors:
         dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["autofind-tm"])
 
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
         from vtscore.cli import autodetect_main
 
         cli_progress.set_format("json")
@@ -253,7 +253,7 @@ class TestDryRunOverrideDetectors:
         dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["autofind-tm"])
 
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
         from vtscore.cli import autodetect_main
 
         cli_progress.set_format("json")

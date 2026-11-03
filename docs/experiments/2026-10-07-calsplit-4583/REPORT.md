@@ -34,7 +34,7 @@ category. Bold means more than 2 SE from zero.
 
 ## Result
 
-![Every contrast's paired Δ-objective, ±2 SE](figures/contrasts.png)
+![Every contrast's paired Δ-objective, ±2 SE](figures/contrasts.webp)
 
 *Every contrast against the shipped arm, at each preset (blue: mean over votes 1–150; orange: after the check).
 All bars sit within ±0.006 of zero, and most cross it.*
@@ -78,13 +78,13 @@ All bars sit within ±0.006 of zero, and most cross it.*
 *fewer* than 0.5, and precision rises 0.60 → 0.64. Holding out more votes widens the line without buying recall
 the objective can see.
 
-![Each run's paired Δ-objective after the check](figures/run_deltas.png)
+![Each run's paired Δ-objective after the check](figures/run_deltas.webp)
 
 *Each dot is one run (category × seed). In every contrast and at every preset, about a third of runs are
 better by more than 0.01 and a third worse. The means sit on zero because the runs split evenly, not because
 they agree. That spread is the σ an A/B is sized with (below).*
 
-![The objective over votes, per preset](figures/curves.png)
+![The objective over votes, per preset](figures/curves.webp)
 
 *The four binary arms per preset are indistinguishable from vote 23, when the first detector shows, to vote 150.
 The dip at vote 23 is the first detector's line scoring below the typed query's set. It is the same in every arm,

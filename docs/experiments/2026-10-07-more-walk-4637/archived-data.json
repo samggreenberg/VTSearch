@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-more-walk-4637.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/walk_bands.csv": {
+     "bytes": 4005,
+     "oid": "7f180b84615bae8e031a09929bcff6720391ea3d"
+    },
+    "tables/walk_curves.csv": {
+     "bytes": 35332,
+     "oid": "2df15f16ea34ce26a687e51f1709b9e6d545fe20"
+    },
+    "tables/walk_rules.csv": {
+     "bytes": 11511,
+     "oid": "b294b9c588a74a9f9b87bbb3cc78e178c81b81d6"
+    },
+    "tables/walk_summary.csv": {
+     "bytes": 5738,
+     "oid": "3d7d07c10ff7dec266381f5722f338ec6faeab03"
+    }
+   }
+  }
+ ]
+}

@@ -259,7 +259,7 @@ export class ProgressModalComponent implements OnInit {
         this.chartsService.renderDiversityChart(
           canvas,
           data as DiversityPoint[],
-          this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
+          this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 0,
         );
         break;
     }

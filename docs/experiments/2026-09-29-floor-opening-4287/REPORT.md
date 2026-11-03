@@ -24,7 +24,7 @@ never confirms (0.0% of sessions, both openings), and a 10% floor confirms in 10
 sessions either way. The `@small` cells don't move at either pool, which matches #4216:
 the positives are there, but neither sort surfaces them.
 
-![Check outcome by votes cast, both openings](check_by_votes.png)
+![Check outcome by votes cast, both openings](check_by_votes.webp)
 
 *The y-axes do not start at zero. Each point is the mean over 626–702 sessions × 20
 simulated checks.*
@@ -134,7 +134,7 @@ Goods found by then):
   ([README](../2026-09-28-rank-frames/README.md)). The g3 0.44% file comes from #4222's
   control, not #4220's r7 run that the committed file uses. They share the same opening
   and frame count.
-- `check_by_votes.png`: the figure.
+- `check_by_votes.webp`: the figure.
 
 Reproduce, from `scripts/experiments/calibration/` (the export needs the GRID; the rest
 runs anywhere from the committed frames):

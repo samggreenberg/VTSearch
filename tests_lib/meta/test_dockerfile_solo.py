@@ -2,7 +2,7 @@
 
 The image locks itself to the media type named by its ``MEDIA_TYPE`` build arg
 and bakes that type's default embedder through
-``scripts/preload_default_embedder.py``. A build only fails when that script
+``scripts/install/preload_default_embedder.py``. A build only fails when that script
 says so: the server-side preload it calls logs a load failure and carries on,
 so a script that forgot to check the result would ship an image with no
 weights in it, which then downloads them on first boot -- exactly what the
@@ -28,7 +28,7 @@ import vtscore.embedding
 from vtscore.media import all_type_ids
 
 _ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = _ROOT / "scripts" / "preload_default_embedder.py"
+_SCRIPT = _ROOT / "scripts" / "install" / "preload_default_embedder.py"
 _DOCKERFILE = _ROOT / "docker" / "Dockerfile.solo"
 
 
@@ -160,5 +160,7 @@ def test_dockerfile_bakes_and_locks_the_same_media_type() -> None:
     """One ``MEDIA_TYPE`` feeds both, so the baked weights match the lock."""
     text = re.sub(r"\\\n\s*", " ", _DOCKERFILE.read_text())
     assert re.search(r"^ARG MEDIA_TYPE=?\s*$", text, re.MULTILINE)
-    assert re.search(r'^RUN .*python -u scripts/preload_default_embedder\.py "\$MEDIA_TYPE"', text, re.MULTILINE)
+    assert re.search(
+        r'^RUN .*python -u scripts/install/preload_default_embedder\.py "\$MEDIA_TYPE"', text, re.MULTILINE
+    )
     assert re.search(r"^ENV .*VTSEARCH_SOLO_MEDIA_TYPE=\$\{MEDIA_TYPE\}", text, re.MULTILINE)

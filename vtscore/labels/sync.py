@@ -568,7 +568,7 @@ def sync_from_labelset_source(
         return None
     if changes:
         _rehydrate_loaded(did)
-        from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
+        from vtscore.host.achievements import record_achievement  # noqa: PLC0415
 
         record_achievement("detector_import", did)
     schedule_labelset_push(name, detector_id=did)

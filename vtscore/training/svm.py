@@ -360,7 +360,7 @@ def train_svm(
         # tried when a usable GPU + cuML resolve; any hiccup (missing install,
         # unsupported param, fit-time kernel-compile error) degrades to sklearn
         # and flips the process-global kill switch, mirroring
-        # :mod:`vtscore.gpu_backends`.
+        # :mod:`vtscore.config.gpu_backends`.
         base, used_backend = _fit_decision_sigmoid(
             kernel,
             C,
@@ -413,7 +413,7 @@ def train_svm(
 # Process-global kill switch: once a cuML SVM fit fails at runtime (typically a
 # lazy nvrtc kernel-compile error from a mismatched CUDA toolchain), stop paying
 # the failure on every subsequent fit and go straight to sklearn — mirroring the
-# pattern in :mod:`vtscore.gpu_backends`.
+# pattern in :mod:`vtscore.config.gpu_backends`.
 _cuml_svm_failed = False
 
 
@@ -447,7 +447,7 @@ def _fit_decision_sigmoid(
     if sample_weight is not None and backend == "cuml":
         raise ValueError("backend='cuml' cannot honour sample_weight; cuML's SVMs take no per-row weights")
     if want_cuml and backend == "auto":
-        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+        from vtscore.config.gpu_backends import cuml_enabled  # noqa: PLC0415
 
         want_cuml = cuml_enabled()
 
@@ -503,7 +503,7 @@ def fit_linear_svm_head(
 
     Scores stay comparable to the logistic head's because both end in
     ``sigmoid(w·x + b)``: production applies the sigmoid downstream
-    (:func:`vtscore.utils.scores.sigmoid_to_finite_scores`), which reproduces
+    (:func:`vtscore.training.thresholds.knobs.sigmoid_to_finite_scores`), which reproduces
     :meth:`SVMClassifier.predict_proba`'s ``decision_sigmoid`` mode value for
     value.  Neither head's output is a calibrated probability - the decision
     point is the separately calibrated threshold, not 0.5.

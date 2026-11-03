@@ -36,7 +36,7 @@ keepalive = 5
 errorlog = "-"
 loglevel = os.environ.get("VTSEARCH_LOG_LEVEL", "warning").lower()
 
-# Access log mirrors the dev server (see vtsearch.logging_config.setup_logging):
+# Access log mirrors the dev server (see vtsearch.runtime.logging_config.setup_logging):
 # quiet by default, on once the operator opts into INFO/DEBUG. At warning+ we
 # leave it disabled; at info/debug we stream gunicorn's access log to stdout so
 # request activity is visible in production logs too.

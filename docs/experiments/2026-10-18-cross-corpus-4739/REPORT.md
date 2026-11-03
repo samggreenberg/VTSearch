@@ -92,7 +92,7 @@ The owner's design (2026-10-16) has two legs:
 
 ## Result
 
-![The walk's price on the objective, by Find corpus](figures/walk_price_by_corpus.png)
+![The walk's price on the objective, by Find corpus](figures/walk_price_by_corpus.webp)
 
 *`nowalk` minus `ctl` at every vote, paired over 720 runs, ±2 SE; above zero the walk costs. Solid: on the Find
 corpus. Dashed: in-corpus. On `screens0` the two are the same series, so the dashed line is hidden. Votes 1–29 are
@@ -136,7 +136,7 @@ The vote ranges, and the per-vote paired curves, are in `screens0/paired_curve.c
   ahead at 9–12 votes from vote 136.
 - **Beta 4:** the Hard pick is ahead from vote 33 to 150, peaking at +0.013 at votes 61–70.
 
-![Screens returned when the Find corpus is the screens alone](figures/screens_returned.png)
+![Screens returned when the Find corpus is the screens alone](figures/screens_returned.webp)
 
 *Mean over 720 runs at every vote. Before vote 30 both arms show the typed query's set. The `ctl` spikes at votes
 40–45 (and 85 at beta 4) are a few runs returning many screens at once. Means, not medians: the median is 1–3 and
@@ -144,7 +144,7 @@ hides them.*
 
 ### What a photo detector returns among the screens
 
-![Screens returned by four detectors](figures/screens_examples.png)
+![Screens returned by four detectors](figures/screens_examples.webp)
 
 *Four seed-0 cells of `screens_only`, `ctl` at beta 4, re-run on the frozen tree with `VTS_DUMP_TEST_SCORES`. Each
 re-run matches its grid cell exactly. The screens shown are those the last detector returns (score at or above the
@@ -171,7 +171,7 @@ overlap check exists to warn about (#4961).
 
 ## The flags
 
-![The two flags: share of runs each fires in, by Find corpus, at each snapshot vote](figures/flags_operating_range.png)
+![The two flags: share of runs each fires in, by Find corpus, at each snapshot vote](figures/flags_operating_range.webp)
 
 *Beta 1; the other presets read the same (`flags.csv`). Solid `ctl`, dashed `nowalk`. The overlap lines for the
 two screens legs lie on each other at 1.0.*

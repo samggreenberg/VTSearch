@@ -6434,7 +6434,7 @@ def _land_p_labels(n_good: int, n_bad: int, split: float) -> float:
     reads the head's own scores of every Good.
     """
     from vtscore.config.runtime import DEFAULT_CALIBRATE_COUNT  # noqa: PLC0415
-    from vtscore.training.thresholds.conformal import _split_train_counts  # noqa: PLC0415
+    from vtscore.training.thresholds.fold_orderings import _split_train_counts  # noqa: PLC0415
     from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: PLC0415
 
     n = n_good + n_bad

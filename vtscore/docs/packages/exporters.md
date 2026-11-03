@@ -165,7 +165,7 @@ A run with `--resume` writes through `export_cli_streaming_resumable()`
 instead, one list of hits per chunk plus a `StreamResume` naming where to
 pick up and how to commit progress, so an interrupted run can continue
 after its last completed chunk; `server_json_file` and `server_csv_file`
-implement it (with `vtscore.io.resumable_write_stream` and
+implement it (with `vtscore.utils.io.resumable_write_stream` and
 `commit_write_stream`), and `supports_resumable_streaming` is derived from
 overriding it. Neither is a payload kind. Every built-in that delivers a scored run streams
 both ways,
@@ -300,7 +300,7 @@ It carries the full walkthrough - a worked third-party exporter, the
 payload-method split, template variables, URL and server-path
 validation, entry-point packaging, and the testing pattern - and it is
 the copy that stays current, because
-`scripts/check-extension-docs.py` holds its contract table to the
+`scripts/gates/check-extension-docs.py` holds its contract table to the
 members `ResultsExporter` actually defines.
 
 Only two things are specific to adding an exporter *to this package*
@@ -311,7 +311,7 @@ rather than shipping one from your own distribution:
   so there is no registration list to edit and no entry point to
   declare - the entry-point route in the guide is for out-of-tree
   distributions.
-- Write files through `vtscore.io.atomic_write_bytes` /
+- Write files through `vtscore.utils.io.atomic_write_bytes` /
   `atomic_write_text` - or `atomic_write_stream` when the exporter
   streams its rows - rather than hand-rolling the tmp-file +
   `os.replace` ritual, and default any path field under

@@ -113,7 +113,7 @@ problem and a mean hides it:
 | `clip_l` / whole image | 0.03 | 0.27 | 0.59 | 0.85 |
 | `clip` / whole image | 0.07 | 0.31 | 0.64 | 1.02 |
 
-![how the detector improves with clicking](figures/learning_cost.png)
+![how the detector improves with clicking](figures/learning_cost.webp)
 
 *Mean over all 720 runs per column, ±SE shaded, endpoints labelled. The dot at
 click 0 is that column's own free text sort — see the next section. `siglip`'s
@@ -121,8 +121,8 @@ dot and the pair's sit on top of each other because they are the same sort.*
 
 Averages hide shape, so the same data one line per run, and as a distribution:
 
-![every run separately](figures/cost_vs_votes_per_run.png)
-![the shape a mean hides](figures/cost_ecdf.png)
+![every run separately](figures/cost_vs_votes_per_run.webp)
+![the shape a mean hides](figures/cost_ecdf.webp)
 
 ### Where the cost lives
 
@@ -144,7 +144,7 @@ separated almost entirely by their `oracle_cost` — the spread there is 0.15 to
 Whatever a user experiences as the difference between these five configurations
 is the order the items come back in, not where the cut lands.
 
-![what the cost is made of](figures/cost_composition.png)
+![what the cost is made of](figures/cost_composition.webp)
 
 A caution about that figure's two upper blocks. `regret` splits into
 `rule_inefficiency` and `calibration_shift`, and on this grid the first is
@@ -201,7 +201,7 @@ Paired within `(class, seed)` over 240 pairs, so the only thing differing inside
 a pair is the size of the thing being looked for. Every difference is many times
 its standard error, and the ordering holds in all five columns.
 
-![cost by band, per column](figures/cost_vs_votes.png)
+![cost by band, per column](figures/cost_vs_votes.webp)
 
 **Small targets cost about four times what large ones do**, and the penalty is
 again in the ranking: for `siglip`, `oracle_cost` runs 0.36 → 0.24 → 0.08 across
@@ -213,7 +213,7 @@ medium band.
 
 Which classes carry it:
 
-![which classes carry the size penalty](figures/size_penalty_per_class.png)
+![which classes carry the size penalty](figures/size_penalty_per_class.webp)
 
 ## Which class, not just which size
 
@@ -307,7 +307,7 @@ median cost ≥ 0.9, and zero are hard for one column but not others. The worst
 per-cell rates are `knife@small` and `umbrella@small` on `clip`, at 3 stuck runs
 in 20.
 
-![per-cell stuck rate](figures/stuck_rate_per_cell.png)
+![per-cell stuck rate](figures/stuck_rate_per_cell.webp)
 
 The columns do, however, fail the *same* categories. Ranking each column's
 categories by its worst-decile rate, `siglip`, `siglip2_l` and the pair agree at

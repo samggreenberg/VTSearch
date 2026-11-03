@@ -1,0 +1,805 @@
+"""Parity tests for the eval harness's port of the app's Autopilot flow.
+
+These pin :mod:`vtscore.eval.autopilot_flow` against the two sources it ports —
+``AutopilotStateService.checkPhaseTransition`` (TypeScript, so it cannot be
+imported) and the indicator rules in
+:mod:`vtscore.detectors.labeling_progress`.  The constants are asserted
+explicitly rather than read from the module, so a drift in either direction
+fails here instead of silently changing what every future study measures.
+
+Background: the harness used to train from the first ``(good, bad)`` pair and
+interleave Hard/New on step parity, neither of which the app does.  That made
+issue #2788's cold-start degenerate thresholds look like a user-facing bug when
+they were an artifact of a flow no user takes.
+"""
+
+from typing import Any
+import math
+
+import numpy as np
+import pytest
+
+from vtscore.detectors.cost_trend import rising_status_from_scores
+from vtscore.eval.al_strategies import ALContext, select_next
+from vtscore.eval.autopilot_flow import (
+    BAD_TARGET,
+    GOOD_TARGET,
+    MIN_PER_CLASS,
+    MORE_DRY_RUN,
+    MORE_TARGET,
+    SMART_FLAT_THRESHOLD,
+    SMART_SLOPE_T,
+    SPAN_GREEN_ON,
+    SPAN_YELLOW,
+    STABLE_MAX_THRESHOLD,
+    STABLE_RATE_THRESHOLD,
+    STOP_CAP,
+    AutopilotFlow,
+    capped_in_opening,
+    Status,
+    app_has_detector,
+    next_phase,
+    smart_status,
+    span_status,
+    stable_status,
+)
+
+
+#: A real plateaued window from the #3832 dice reproduction; see
+#: ``tests_lib/detectors/test_cost_trend_rule.py``.
+PLATEAU_WINDOW = [0.861, 0.832, 0.861, 0.861, 0.861, 0.887, 0.755, 0.669, 0.699, 0.857]
+#: The same plateau as F-beta points, Smart's since #5134: the cost's mirror around its mean.
+PLATEAU_FBETAS = [round(2 * sum(PLATEAU_WINDOW) / len(PLATEAU_WINDOW) - c, 3) for c in PLATEAU_WINDOW]
+
+
+def _sim_clips(n=160, dim=16):
+    """A small, well-separated two-class collection for end-to-end runs."""
+    rng = np.random.default_rng(0)
+    clips = {}
+    for i in range(n):
+        pos = i % 4 == 0
+        center = np.ones(dim, np.float32) if pos else -np.ones(dim, np.float32)
+        clips[i] = {
+            "embeddings": {"e": center + rng.standard_normal(dim).astype(np.float32) * 1.5},
+            "embedder_names": ["e"],
+            "category": "cat" if pos else "other",
+        }
+    return clips
+
+
+def _fidelity_rows():
+    """One faithful-flow trajectory, shared by the integration assertions."""
+    from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+    clips = _sim_clips()
+    seed_scores = {i: float(np.mean(clips[i]["embeddings"]["e"])) for i in clips}
+    return simulate_voting_iterations(
+        clips,
+        "cat",
+        seed=1,
+        # Long enough to get past the #4282 walk into a learned phase.
+        max_steps=45,
+        atlas_min_node_size=5,
+        seed_scores=seed_scores,
+    )
+
+
+@pytest.fixture(scope="module")
+def rows():
+    """One faithful-flow trajectory, computed once for the whole module."""
+    return _fidelity_rows()
+
+
+def _phase(
+    good: int,
+    bad: int,
+    *,
+    smart: Status = "red",
+    stable: Status = "red",
+    span: Status = "red",
+    remaining: float = 1000,
+    more_done: bool = False,
+    more_target: int = MORE_TARGET,
+) -> str:
+    return next_phase(
+        good,
+        bad,
+        remaining_unlabeled=remaining,
+        smart=smart,
+        stable=stable,
+        span=span,
+        more_done=more_done,
+        more_target=more_target,
+    )
+
+
+#: A More walk as #4282 shipped it (20 Goods): off on photos since #4740, but the
+#: walk's own rules still run where a target is set, and a document's walk (#4488)
+#: shares its run-of-misses machinery.
+WALK = 20
+
+
+class TestPortedConstants:
+    """The app's numbers, asserted literally so a drift fails loudly."""
+
+    def test_vote_targets_match_autopilot_initial_state(self):
+        # frontend INITIAL_STATE: goodToStart 3, badToStart 4, moreToStart 0
+        # (the photo walk is off since #4740), moreDryRun 16 (a document's walk).
+        assert (GOOD_TARGET, BAD_TARGET) == (3, 4)
+        assert (MORE_TARGET, MORE_DRY_RUN) == (0, 16)
+
+    def test_stop_cap_matches_the_app(self):
+        # frontend STOP_CAP_VOTES (#4903): Done at 200 votes whatever the lights and the level.
+        assert STOP_CAP == 200
+
+    def test_indicator_gates_match_labeling_progress(self):
+        # _compute_smart_status / _compute_stable_status: "Need at least 5 good
+        # and 5 bad"; flat threshold -0.015 and a slope worth 2 standard errors
+        # (see vtscore.detectors.cost_trend); stable rate/max 0.005 / 0.01 (of
+        # the whole pool, confident flips only - see vtscore.detectors.stability).
+        # Both rules are now called by the app as well as re-exported here.
+        assert MIN_PER_CLASS == 5
+        assert SMART_FLAT_THRESHOLD == -0.015
+        assert SMART_SLOPE_T == 2.0
+        assert STABLE_RATE_THRESHOLD == 0.005
+        assert STABLE_MAX_THRESHOLD == 0.01
+        assert SPAN_YELLOW == 10
+
+    def test_quorum_always_clears_the_calibrator_fold_split_guard(self):
+        """The reason #2788's cold start is not an Autopilot-path problem.
+
+        ``compute_fold_orderings`` needs >=4 votes and >=2 per class before it
+        can form a stratified split; below that it returns the flat 0.5
+        ``too_few_default``.  Autopilot's first learned sort happens only once
+        both targets are met, which clears both bounds by construction.
+        """
+        assert GOOD_TARGET + BAD_TARGET >= 4
+        assert min(GOOD_TARGET, BAD_TARGET) >= 2
+
+
+class TestPhaseMachine:
+    def test_good_phase_until_the_good_target(self):
+        assert _phase(0, 0) == "good"
+        assert _phase(GOOD_TARGET - 1, 0) == "good"
+
+    def test_bad_phase_until_the_bad_target(self):
+        assert _phase(GOOD_TARGET, 0) == "bad"
+        assert _phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
+
+    def test_photos_go_from_bad_straight_to_hard(self):
+        """#4740: the default photo opening has no More walk."""
+        assert _phase(GOOD_TARGET, BAD_TARGET) == "hard"
+
+    def test_a_walk_follows_the_quorum_where_one_is_set(self):
+        """#4282's walk: back to the top of the seed sort until its Good target."""
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_target=WALK) == "more"
+        assert _phase(WALK - 1, BAD_TARGET, more_target=WALK) == "more"
+
+    def test_hard_once_the_walk_meets_its_target(self):
+        assert _phase(WALK, BAD_TARGET, more_target=WALK) == "hard"
+
+    def test_hard_once_the_walk_has_ended(self):
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_done=True) == "hard"
+
+    def test_the_walk_target_is_capped_by_what_the_collection_can_supply(self):
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=2, more_target=WALK) == "more"
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=0, more_target=WALK) == "exhausted"
+
+    def test_new_only_once_smart_and_stable_are_green(self):
+        """The app switches to diversity on the indicators, never on parity."""
+        assert _phase(9, 9, smart="green", stable="yellow", more_done=True) == "hard"
+        assert _phase(9, 9, smart="yellow", stable="green", more_done=True) == "hard"
+        assert _phase(9, 9, smart="green", stable="green", more_done=True) == "new"
+
+    def test_done_when_all_three_are_green(self):
+        assert _phase(9, 9, smart="green", stable="green", span="green", more_done=True) == "done"
+
+    def test_all_green_reaches_the_check_before_done_until_it_has_closed(self):
+        """The app's ``doneChecked``: all green reads ``spot`` until the run's check before Done has closed."""
+        green = {"smart": "green", "stable": "green", "span": "green", "more_done": True, "remaining_unlabeled": 1000}
+        assert next_phase(9, 9, done_checked=False, **green) == "spot"
+        assert next_phase(9, 9, done_checked=True, **green) == "done"
+        # Nothing left unlabeled leaves nothing to check.
+        assert next_phase(9, 9, done_checked=False, **{**green, "remaining_unlabeled": 0}) == "done"
+
+    def test_a_running_check_holds_the_phase_at_spot(self):
+        assert (
+            next_phase(9, 9, remaining_unlabeled=1000, smart="red", stable="red", span="red", checking=True) == "spot"
+        )
+
+    def test_exhausted_when_nothing_left_and_not_all_green(self):
+        assert _phase(9, 9, remaining=0) == "exhausted"
+        # All-green still wins over exhausted, as in the app's branch order.
+        assert _phase(9, 9, smart="green", stable="green", span="green", remaining=0) == "done"
+
+    def test_targets_are_capped_by_what_the_collection_can_supply(self):
+        """A tiny collection must not strand the flow in an early phase.
+
+        With one good vote and nothing left to label, the 3-good / 4-bad
+        targets are both unreachable.  Uncapped they would pin the phase at
+        ``good`` forever; capped, the flow advances and lands in the terminal
+        ``exhausted`` state.
+        """
+        assert _phase(1, 0, remaining=0) == "exhausted"
+        # Same counts, but with items still available the targets bind normally.
+        assert _phase(1, 0, remaining=100) == "good"
+
+    def test_unknown_collection_size_leaves_targets_uncapped(self):
+        assert _phase(0, 0, remaining=math.inf) == "good"
+
+    def test_phase_can_regress_when_votes_are_removed(self):
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_done=True) == "hard"
+        assert _phase(GOOD_TARGET - 1, BAD_TARGET, more_done=True) == "good"
+
+
+class TestDetectorVisibility:
+    def test_no_detector_before_the_first_learned_sort(self):
+        assert not app_has_detector("good")
+        assert not app_has_detector("bad")
+
+    def test_detector_from_the_hard_phase_on(self):
+        assert app_has_detector("hard")
+        assert app_has_detector("new")
+        assert app_has_detector("spot")
+        assert app_has_detector("done")
+
+
+class TestSmartStatus:
+    """The wrapper only; the rule is pinned in ``test_cost_trend_rule.py`` and ``test_smart_signal_5134.py``.
+
+    Since #5134 the window is each model's best F-beta, green once it stops rising.
+    """
+
+    def test_red_below_five_per_class(self):
+        assert smart_status([0.3, 0.4, 0.5], MIN_PER_CLASS - 1, 9) == "red"
+        assert smart_status([0.3, 0.4, 0.5], 9, MIN_PER_CLASS - 1) == "red"
+
+    def test_yellow_without_enough_history(self):
+        assert smart_status([0.4, 0.5], 9, 9) == "yellow"
+
+    def test_yellow_while_fbeta_is_still_rising(self):
+        assert smart_status([0.3, 0.5, 0.7, 0.9], 9, 9) == "yellow"
+
+    def test_green_once_fbeta_levels_off(self):
+        assert smart_status([0.70, 0.70, 0.70, 0.70], 9, 9) == "green"
+
+    def test_green_when_fbeta_is_falling(self):
+        assert smart_status([0.5, 0.4, 0.3, 0.2], 9, 9) == "green"
+
+    def test_it_is_the_shared_rule_and_not_a_copy_of_it(self):
+        """Same inputs, same light as ``/api/labeling-status`` shows the user."""
+        for fbetas in ([0.3, 0.5, 0.7, 0.9], [0.7] * 6, PLATEAU_FBETAS):
+            assert smart_status(fbetas, 9, 9) == rising_status_from_scores(fbetas, 9, 9)["status"]
+
+    def test_a_noisy_plateau_does_not_hold_the_simulated_user_in_hard(self):
+        """The #3832 flap, at the level the harness reads it."""
+        assert smart_status(PLATEAU_FBETAS, 9, 9) == "green"
+
+
+def _entry(flips: int, confident: int | None = None, *, unlabeled: int = 500, pool: int = 1000) -> dict:
+    """One stability record; confident flips default to all of them."""
+    return {
+        "num_flips": flips,
+        "num_confident_flips": flips if confident is None else confident,
+        "num_unlabeled": unlabeled,
+        "num_pool": pool,
+    }
+
+
+class TestStableStatus:
+    """The light reads the shared rule; these pin its shape, not the rule
+    (``tests_lib/detectors/test_stability_rule.py`` does that)."""
+
+    def test_red_below_five_per_class(self):
+        entries = [_entry(0)] * 6
+        assert stable_status(entries, MIN_PER_CLASS - 1, 9) == "red"
+
+    def test_yellow_without_enough_entries(self):
+        entries = [_entry(0)] * 4
+        assert stable_status(entries, 9, 9) == "yellow"
+
+    def test_green_once_predictions_settle(self):
+        entries = [_entry(0)] * 6
+        assert stable_status(entries, 9, 9) == "green"
+
+    def test_yellow_while_confident_predictions_still_flip(self):
+        entries = [_entry(50)] * 6
+        assert stable_status(entries, 9, 9) == "yellow"
+
+    def test_a_single_spike_blocks_green(self):
+        """``max`` is a separate gate from the average."""
+        entries = [_entry(0)] * 5
+        entries.append(_entry(20))  # 2% of the pool > 1% max
+        assert stable_status(entries, 9, 9) == "yellow"
+
+    def test_in_band_flips_do_not_block_green(self):
+        """Boundary wobble - flips of items inside the ambiguity band - is the
+        #3831 case: it must not hold a run in ``hard`` forever."""
+        entries = [_entry(50, confident=0)] * 6
+        assert stable_status(entries, 9, 9) == "green"
+
+    def test_rates_are_over_the_pool_not_the_remainder(self):
+        """One flip among the last few unlabeled items is a tiny fraction of the
+        pool, not a 25% spike."""
+        entries = [_entry(0, unlabeled=4)] * 5 + [_entry(1, unlabeled=4)]
+        assert stable_status(entries, 9, 9) == "green"
+
+
+class TestSpanStatus:
+    def test_thresholds(self):
+        assert span_status(0, 100, SPAN_GREEN_ON) == "red"
+        assert span_status(SPAN_YELLOW - 1, 100, SPAN_GREEN_ON) == "red"
+        assert span_status(SPAN_YELLOW, 100, SPAN_GREEN_ON) == "yellow"
+        assert span_status(40, 100, SPAN_GREEN_ON) == "green"
+
+    def test_the_default_goal_is_the_diversity_step_off(self):
+        """#5473: the app's goal is 0, so Span is green before any atlas node carries evidence."""
+        assert span_status(0, 100) == "green"
+
+    def test_green_target_is_capped_at_the_tree_size(self):
+        """A tree smaller than the goal must still be able to go green."""
+        assert span_status(5, 5) == "green"
+
+    def test_degenerate_tree_is_green(self):
+        assert span_status(0, 0) == "green"
+
+
+class TestAutopilotFlow:
+    def test_starts_in_the_good_phase(self):
+        assert AutopilotFlow().phase == "good"
+
+    def test_advances_through_the_initial_phases(self):
+        flow = AutopilotFlow()
+        assert flow.update(GOOD_TARGET, 0, 500, None) == "bad"
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "hard"
+
+    def _in_walk(self) -> AutopilotFlow:
+        flow = AutopilotFlow(more_target=WALK)
+        flow.update(GOOD_TARGET, 0, 500, None)
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+        return flow
+
+    def test_the_walk_runs_dry_after_its_run_of_misses(self):
+        flow = self._in_walk()
+        bad = BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(GOOD_TARGET, bad, 500, None) == "more"
+        assert flow.update(GOOD_TARGET, bad + 1, 500, None) == "hard"
+        assert flow.more_done
+
+    def test_a_hit_restarts_the_run_of_misses(self):
+        flow = self._in_walk()
+        good, bad = GOOD_TARGET, BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            flow.update(good, bad, 500, None)
+        good += 1
+        assert flow.update(good, bad, 500, None) == "more"
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(good, bad, 500, None) == "more"
+
+    def test_the_walk_ends_at_its_target(self):
+        flow = self._in_walk()
+        assert flow.update(WALK, BAD_TARGET, 500, None) == "hard"
+
+    def test_the_walk_never_resumes(self):
+        """Once it has ended the walk is spent, as a schedule round is."""
+        flow = self._in_walk()
+        flow.update(WALK, BAD_TARGET, 500, None)
+        assert flow.update(WALK - 1, BAD_TARGET, 500, None) == "hard"
+
+    def test_only_votes_cast_in_the_walk_count(self):
+        """The four Bads of the Bad phase are not walk misses."""
+        flow = self._in_walk()
+        assert flow.more_misses == 0
+
+    def test_records_flip_counts_between_consecutive_steps(self):
+        flow = AutopilotFlow()
+        flow.record_step([0.4], {1: 0.9, 2: 0.1, 3: 0.9}, 0.5)
+        assert flow.stability == []  # nothing to compare the first step against
+        flow.record_step([0.4, 0.3], {1: 0.1, 2: 0.1, 3: 0.9}, 0.5, num_pool=10)  # id 1 flipped, clear of the cut
+        assert flow.stability == [{"num_flips": 1, "num_confident_flips": 1, "num_unlabeled": 3, "num_pool": 10}]
+
+    def test_pool_defaults_to_the_scored_ids(self):
+        flow = AutopilotFlow()
+        flow.record_step(None, {1: 0.9, 2: 0.1}, 0.5)
+        flow.record_step(None, {1: 0.9, 2: 0.1}, 0.5)
+        assert flow.stability[-1]["num_pool"] == 2
+
+    def test_a_threshold_is_required_with_scores(self):
+        with pytest.raises(ValueError):
+            AutopilotFlow().record_step(None, {1: 0.9})
+
+    def test_ignores_steps_with_no_model(self):
+        flow = AutopilotFlow()
+        flow.record_step(None, None)
+        assert flow.recent_error_costs == []
+        assert flow.stability == []
+
+    def test_smart_window_is_replaced_not_accumulated(self):
+        """Each step re-scores the whole window; points must never pile up.
+
+        The app's ``_eval_cached_models`` returns one point per *cached model*
+        against the current labelset, so a step's window is the new truth about
+        every model in it - appending would regress over stale (model_t,
+        labelset_t) pairs and confound model change with labelset growth
+        (issue #2923).  So for the app's F-beta window (#5134) and the ``cost``
+        arm's alike.
+        """
+        flow = AutopilotFlow()
+        flow.record_step([0.5, 0.4, 0.3], None, windows={"fbeta_best": [0.5, 0.6, 0.7]})
+        assert flow.recent_error_costs == [0.5, 0.4, 0.3]
+        assert flow.smart_reading("fbeta_best") == [0.5, 0.6, 0.7]
+        # Re-scoring the same three models against a grown labelset moved every
+        # point, and added the fourth model's.
+        flow.record_step([0.44, 0.36, 0.28, 0.26], None, windows={"fbeta_best": [0.56, 0.64, 0.72, 0.74]})
+        assert flow.recent_error_costs == [0.44, 0.36, 0.28, 0.26]
+        assert flow.smart_reading("fbeta_best") == [0.56, 0.64, 0.72, 0.74]
+
+    def test_empty_window_leaves_smart_short_of_points(self):
+        """No usable eval set reads as "not enough points", as in the app."""
+        flow = AutopilotFlow()
+        flow.record_step(None, None, windows={"fbeta_best": [0.7, 0.7, 0.7]})
+        flow.record_step(None, None, windows={"fbeta_best": []})
+        assert flow.smart_reading("fbeta_best") == []
+        assert smart_status(flow.smart_reading("fbeta_best"), 9, 9) == "yellow"
+
+    def test_span_drives_the_new_to_spot_transition(self):
+        """All green reaches the check before Done first: the app checks the line, then reports Done."""
+        flow = AutopilotFlow(span_green=SPAN_GREEN_ON)
+        flow.more_done = True
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
+        flow.stability = [_entry(0)] * 6
+        assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
+        assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "spot"
+
+    def _all_green(self, **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(**kw)
+        flow.more_done = True
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
+        flow.stability = [_entry(0)] * 6
+        flow.update(9, 9, 500, {"level": 40, "depth": 100})
+        return flow
+
+    def test_the_check_before_done_runs_once_then_done(self):
+        flow = self._all_green()
+        assert flow.phase == "spot" and flow.spot_check is None
+        assert flow.begin_spot_check("done") == "spot"
+        # Its rounds are votes; the phase holds at spot while it runs.
+        assert flow.update(12, 11, 495, {"level": 40, "depth": 100}) == "spot"
+        assert flow.end_spot_check() == "done"
+        assert flow.done_checked
+        # A later return of every light to green does not check again.
+        flow.smart_windows = {"fbeta_best": [0.2, 0.5, 0.7, 0.8]}
+        assert flow.update(12, 12, 494, {"level": 40, "depth": 100}) != "spot"
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
+        assert flow.update(12, 13, 493, {"level": 40, "depth": 100}) == "done"
+
+    def test_a_skipped_check_goes_straight_on_to_done(self):
+        flow = self._all_green()
+        assert flow.skip_done_check() == "done"
+        assert flow.done_checked and flow.spot_check is None
+
+    def test_a_weak_check_holds_spot_while_it_runs_and_latches_nothing(self):
+        flow = AutopilotFlow()
+        flow.update(GOOD_TARGET, BAD_TARGET, 500, None)
+        assert flow.begin_spot_check("weak") == "spot"
+        assert flow.update(GOOD_TARGET + 2, BAD_TARGET + 3, 495, None) == "spot"
+        assert flow.end_spot_check() == "hard"
+        assert not flow.done_checked
+
+    def test_the_arm_without_the_check_reads_all_green_as_done(self):
+        assert self._all_green(done_check=False).phase == "done"
+
+    def test_a_check_kind_is_named(self):
+        with pytest.raises(ValueError, match="kind"):
+            AutopilotFlow().begin_spot_check("whenever")
+
+
+class TestStopRules:
+    """#4878's arms: what tells the user they can stop.  ``"lights"`` is the app and must stay byte-identical."""
+
+    GREEN = {"level": 40, "depth": 100}
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str, *, smart_flat: bool = True) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, done_check=False, span_green=SPAN_GREEN_ON)
+        flow.more_done = True
+        flow.smart_windows = {"fbeta_best": [0.7] * 4 if smart_flat else [0.2, 0.4, 0.6, 0.9]}
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize(
+        ("rule", "level_met", "span", "want"),
+        [
+            # The app: the level is not read.
+            ("lights", True, SHORT, "new"),
+            ("lights", False, GREEN, "done"),
+            # The level alone: it stops whatever the lights, and all green without it is Hard, not Done.
+            ("level", True, SHORT, "done"),
+            ("level", False, GREEN, "hard"),
+            ("level", False, SHORT, "new"),
+            # Both: all green waits for the level.
+            ("lights+level", False, GREEN, "hard"),
+            ("lights+level", True, GREEN, "done"),
+            ("lights+level", True, SHORT, "new"),
+            # Either: the level can stop a session the lights have not.
+            ("lights|level", True, SHORT, "done"),
+            ("lights|level", False, GREEN, "done"),
+            ("lights|level", False, SHORT, "new"),
+        ],
+    )
+    def test_each_rule_reads_the_lights_and_the_level_as_named(self, rule, level_met, span, want):
+        assert self._flow(rule).update(9, 9, 500, span, level_met=level_met) == want
+
+    def test_the_lights_are_recorded_as_computed_whatever_the_rule(self):
+        flow = self._flow("level")
+        flow.update(9, 9, 500, self.GREEN, level_met=False)
+        assert (flow.smart, flow.stable, flow.span) == ("green", "green", "green") and flow.phase == "hard"
+
+    def test_the_level_stops_hard_too_and_runs_the_check_before_done(self):
+        flow = AutopilotFlow(stop_rule="level")
+        flow.more_done = True
+        flow.smart_windows = {"fbeta_best": [0.2, 0.4, 0.6, 0.9]}
+        flow.stability = [_entry(0)] * 6
+        assert flow.update(9, 9, 500, self.SHORT, level_met=False) == "hard"
+        assert flow.update(9, 10, 499, self.SHORT, level_met=True) == "spot"
+
+    def test_the_opening_never_reads_the_level(self):
+        flow = AutopilotFlow(stop_rule="level")
+        assert flow.update(GOOD_TARGET, 0, 500, None, level_met=True) == "bad"
+
+    def test_a_rule_is_named(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            AutopilotFlow(stop_rule="vibes")
+
+    def test_the_app_s_rule_is_lights_or_level(self):
+        """Since #4878 the app stops on every light green, or on the line's level."""
+        assert AutopilotFlow().stop_rule == "lights|level"
+        flow = self._flow("lights|level")
+        assert flow.update(9, 9, 500, self.SHORT) == "new", "without the level read it is the lights alone"
+        assert flow.update(9, 9, 500, self.SHORT, level_met=True) == "done"
+
+
+class TestStopCap:
+    """#4903: whatever the rule, a session that holds ``STOP_CAP`` votes goes to the check before Done and to Done."""
+
+    SHORT = {"level": 0, "depth": 100}
+
+    def _flow(self, rule: str = "lights|level", **kw) -> AutopilotFlow:
+        flow = AutopilotFlow(stop_rule=rule, **kw)
+        flow.more_done = True
+        flow.smart_windows = {"fbeta_best": [0.2, 0.4, 0.6, 0.9]}
+        flow.stability = [_entry(0)] * 6
+        return flow
+
+    @pytest.mark.parametrize("rule", ["lights|level", "lights", "level", "lights+level"])
+    def test_every_rule_stops_at_the_cap(self, rule):
+        good = STOP_CAP // 2
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good - 1, 500, self.SHORT) == "hard"
+        assert self._flow(rule, done_check=False).update(good, STOP_CAP - good, 500, self.SHORT) == "done"
+
+    def test_the_cap_runs_the_check_before_done(self):
+        flow = self._flow()
+        assert flow.update(100, STOP_CAP - 100, 500, self.SHORT) == "spot"
+        assert flow.begin_spot_check("done") == "spot"
+        assert flow.end_spot_check() == "done"
+
+    def test_no_cap_is_an_arm(self):
+        assert self._flow(stop_cap=None, done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+        assert self._flow(stop_cap=40, done_check=False).update(20, 20, 500, self.SHORT) == "done"
+
+    def test_smart_gate_never_reads_no_cap(self):
+        """#4359's bound holds the session in Hard to the end of the run, cap or no cap."""
+        assert self._flow(smart_gate="never", done_check=False).update(300, 300, 500, self.SHORT) == "hard"
+
+    def test_the_cap_is_an_integer(self):
+        bads: tuple[Any, ...] = (0, -1, 2.5, True)
+        for bad in bads:
+            with pytest.raises(ValueError, match="stop_cap"):
+                AutopilotFlow(stop_cap=bad)
+
+    def test_the_app_s_cap(self):
+        assert AutopilotFlow().stop_cap == STOP_CAP
+
+    def test_a_session_still_in_its_opening_is_capped_on_screen_only(self):
+        """The app's cappedInOpening: the phase, and so the picks, stay the opening's."""
+        flow = AutopilotFlow()
+        assert flow.update(0, STOP_CAP, 500, None) == "good"
+        assert capped_in_opening(flow.phase, 0, STOP_CAP)
+        assert not capped_in_opening(flow.phase, 0, STOP_CAP - 1)
+        assert not capped_in_opening("hard", 0, STOP_CAP), "past the opening the cap is Done's"
+        assert not capped_in_opening("good", 0, STOP_CAP, stop_cap=None)
+
+
+def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:
+    return next_phase(
+        good,
+        bad,
+        remaining_unlabeled=remaining,
+        smart=lights,
+        stable=lights,
+        span=lights,
+        dry_run_stop=True,
+        ran_dry=ran_dry,
+    )
+
+
+class TestDocumentStop:
+    """#4488: a document dataset stops on the walk's dry run, not the lights."""
+
+    def test_the_opening_is_unchanged(self):
+        assert _doc_phase(GOOD_TARGET - 1, 0) == "good"
+        assert _doc_phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
+
+    def test_the_walk_has_no_good_target(self):
+        assert _doc_phase(WALK + 50, BAD_TARGET) == "more"
+
+    def test_running_dry_is_done(self):
+        assert _doc_phase(GOOD_TARGET, BAD_TARGET + MORE_DRY_RUN, ran_dry=True) == "done"
+
+    def test_green_lights_do_not_end_the_walk(self):
+        assert _doc_phase(9, 9, lights="green") == "more"
+
+    def test_exhausted_when_nothing_is_left_before_running_dry(self):
+        assert _doc_phase(9, 9, remaining=0) == "exhausted"
+
+    def _in_walk(self) -> AutopilotFlow:
+        flow = AutopilotFlow(dry_run_stop=True)
+        flow.update(GOOD_TARGET, 0, 500, None)
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+        return flow
+
+    def test_the_flow_runs_dry_into_done(self):
+        flow = self._in_walk()
+        bad = BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(GOOD_TARGET, bad, 500, None) == "more"
+        assert flow.update(GOOD_TARGET, bad + 1, 500, None) == "done"
+
+    def test_the_flow_walks_past_the_good_target(self):
+        flow = self._in_walk()
+        assert flow.update(WALK + 5, BAD_TARGET, 500, None) == "more"
+
+    def test_the_walk_counts_after_more_done_latched(self):
+        """Retrain mode latches ``more_done``; on documents the walk still runs, and still stops."""
+        flow = self._in_walk()
+        flow.more_done = True
+        bad = BAD_TARGET
+        phases = []
+        for _ in range(MORE_DRY_RUN):
+            bad += 1
+            phases.append(flow.update(GOOD_TARGET, bad, 500, None))
+        assert phases == ["more"] * (MORE_DRY_RUN - 1) + ["done"]
+
+
+class TestSelectorPhaseParity:
+    """The selector's picks must match the app's Sort + Select pairing."""
+
+    @staticmethod
+    def _ctx(pool, *, phase, scores=None, seed_scores=None, threshold=0.5, model=None):
+        ids = list(pool)
+        return ALContext(
+            pool_ids=ids,
+            embeddings={i: np.zeros(4, np.float32) for i in ids},
+            labeled={},
+            scores=scores or {},
+            model=model,
+            threshold=threshold,
+            atlas=None,
+            rng=np.random.RandomState(0),
+            pool_labels=None,
+            seed_scores=seed_scores,
+            phase=phase,
+        )
+
+    def test_good_phase_takes_the_top_of_the_text_sort(self):
+        seed = {1: 0.1, 2: 0.9, 3: 0.5}
+        ctx = self._ctx([1, 2, 3], phase="good", seed_scores=seed)
+        assert select_next("autopilot", ctx) == 2
+
+    def test_bad_phase_never_consults_the_detector(self):
+        """The app is still on the text sort here, so a model must be ignored.
+
+        This is the divergence behind issue #2788: the old harness trained at
+        3 good + 1 bad and ranked bads by that model, a state the app never
+        reaches.
+        """
+        seed = {i: float(i) for i in range(1, 11)}
+        # A model that would rank id 10 lowest; the faithful pick must not use it.
+        scores = {i: (0.0 if i == 10 else 1.0) for i in range(1, 11)}
+        ctx = self._ctx(list(range(1, 11)), phase="bad", seed_scores=seed, scores=scores, model=object())
+        assert select_next("autopilot", ctx) != 10
+
+    def test_bad_phase_picks_the_middle_of_the_text_sort_not_the_bottom(self):
+        """Select ``hard`` on a text sort lands at the cutoff, not the tail."""
+        # Two well-separated clusters so the GMM cut falls between them; the
+        # pick should sit at that seam rather than at the lowest-scoring item.
+        seed = {i: 0.0 + 0.01 * i for i in range(10)}
+        seed.update({i: 1.0 + 0.01 * i for i in range(10, 20)})
+        ctx = self._ctx(list(range(20)), phase="bad", seed_scores=seed)
+        pick = select_next("autopilot", ctx)
+        assert pick not in (0, 19), "picked an extreme of the ranking, not the cutoff"
+
+    def test_hard_phase_picks_by_rank_not_by_score_distance(self):
+        """The app measures distance in rank space; scores cluster unevenly.
+
+        Here id 3 is nearest the threshold in raw score, but the ranked
+        positions put id 2 adjacent to the cutoff.  A score-space ``argmin``
+        would pick 3; the app picks by index.
+        """
+        # Descending order: 1 (0.99), 2 (0.98), 3 (0.10), 4 (0.01)
+        scores = {1: 0.99, 2: 0.98, 3: 0.10, 4: 0.01}
+        ctx = self._ctx([1, 2, 3, 4], phase="hard", scores=scores, threshold=0.5, model=object())
+        # threshold_index = first score <= 0.5 -> index 2 (id 3).
+        # Nearest unlabeled by index is id 3 itself, so make it labeled-out by
+        # removing it from the pool: then ids 2 and 4 tie at distance 1 and the
+        # first in ranked order (id 2) wins.
+        ctx.pool_ids = [1, 2, 4]
+        assert select_next("autopilot", ctx) == 2
+
+    def test_legacy_mode_is_unchanged_when_no_phase_is_supplied(self):
+        """``phase=None`` must keep the pre-alignment behaviour intact."""
+        seed = {i: float(i) for i in range(1, 6)}
+        ctx = ALContext(
+            pool_ids=[1, 2, 3, 4, 5],
+            embeddings={i: np.zeros(4, np.float32) for i in range(1, 6)},
+            labeled={100: 1.0, 101: 1.0, 102: 1.0},  # 3 goods -> legacy bad phase
+            scores={},
+            model=None,
+            threshold=0.5,
+            atlas=None,
+            rng=np.random.RandomState(0),
+            pool_labels=None,
+            seed_scores=seed,
+            phase=None,
+        )
+        # Legacy bad phase takes the *bottom* of the text ranking.
+        assert select_next("autopilot", ctx) == 1
+
+
+class TestHarnessIntegration:
+    """End-to-end: the simulated trajectory visits the app's trained states."""
+
+    def test_no_user_visible_threshold_before_quorum(self, rows):
+        for r in rows:
+            if r["app_trained"]:
+                assert r["n_good"] >= GOOD_TARGET and r["n_bad"] >= BAD_TARGET
+
+    def test_the_first_user_visible_step_can_be_calibrated(self, rows):
+        """Every app-visible step clears the fold-split guard, so the flat 0.5
+        ``too_few_default`` cut cannot arise on the Autopilot path."""
+        trained = [r for r in rows if r["app_trained"]]
+        assert trained, "the run never reached a trained phase"
+        first = trained[0]
+        assert first["n_good"] + first["n_bad"] >= 4
+        assert min(first["n_good"], first["n_bad"]) >= 2
+
+    def test_metrics_are_still_recorded_before_quorum(self, rows):
+        """Fidelity changes the vote order, not the measurement coverage."""
+        pre = [r for r in rows if not r["app_trained"]]
+        assert pre, "expected pre-quorum steps to still be measured"
+        assert all(r["cost"] is not None for r in pre)
+
+    def test_legacy_mode_trains_from_the_first_vote_pair(self):
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        clips = _sim_clips()
+        seed_scores = {i: float(np.mean(clips[i]["embeddings"]["e"])) for i in clips}
+        rows = simulate_voting_iterations(
+            clips,
+            "cat",
+            seed=1,
+            max_steps=8,
+            atlas_min_node_size=5,
+            seed_scores=seed_scores,
+            autopilot_fidelity=False,
+            # The subject is when the Train side first trains; under the label
+            # quota (#4643) a row also exists at the first Good, with no Bad.
+            label_quota=False,
+        )
+        assert rows[0]["app_trained"] == 1
+        assert min(rows[0]["n_good"], rows[0]["n_bad"]) == 1

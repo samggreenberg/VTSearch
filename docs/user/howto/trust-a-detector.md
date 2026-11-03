@@ -82,8 +82,19 @@ The first check also runs earlier, on its own: the moment you pick a detector
 and a dataset, before you test anything. When its verdict is *likely domain
 shift*, a warning says so ("**31%** of this dataset looks atypical vs
 **drawings**: likely domain shift"), and its **Tune it** button opens this
-pane. It warns once for each detector and dataset, and only when the dataset
-the detector learned from is loaded.
+pane. It warns once for each detector and dataset.
+
+**Find** and **AutoFind** run the same check for every detector they run,
+since that is where you lean on the detector's calls without checking them.
+The **Find Results** dialog shows the warning under its summary, an AutoFind's
+finished notice turns to a warning naming the detector, and the results it
+exports carry the figure: the email exporter prints it under each detector
+and adds "(domain warning)" to the subject.
+
+The dataset the detector learned from need not be loaded. Once you have
+trained or tuned the detector there, it remembers that dataset, and the check
+reads it from disk when it is not loaded, so a run after a restart, or an
+AutoFind on a dataset you just imported, still warns.
 
 The verdict after each figure (*largely in-domain* or *likely domain shift*;
 *as well covered as its training data* or *often calling without support*) is

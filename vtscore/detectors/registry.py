@@ -25,7 +25,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from vtscore.config import DATA_DIR
-from vtscore.io import atomic_write_json, file_lock
+from vtscore.utils.io import atomic_write_json, file_lock
 from vtscore.security.readers import ReadersUpdate
 
 logger = logging.getLogger(__name__)

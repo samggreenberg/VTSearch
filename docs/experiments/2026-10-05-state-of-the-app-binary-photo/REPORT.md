@@ -67,7 +67,7 @@ typed query's set):
 | 1 | 0.36 | 0.41 | 0.49 | **0.51** | 43 / 43 | 7% / 5% |
 | 4 | 0.46 | 0.48 | 0.56 | **0.59** | 85 / 83 | 30% / 29% |
 
-![The objective over clicks, per preset](figures/objective_at_own_beta.png)
+![The objective over clicks, per preset](figures/objective_at_own_beta.webp)
 
 1. **The presets return what they promise.** After the check:
    - the 1/4 preset returns a median of 20 images at precision 0.71 and recall 0.37;
@@ -94,7 +94,7 @@ Per preset, the returned set's precision against its recall from the typed query
 clicks to after the check (#4519; means over all 1,440 runs, a session still in the opening or one that never
 trained counted at the typed query's set, #4605 and #4631; the returned size a median):
 
-![Precision against recall through the session, per preset](figures/precision_recall_path.png)
+![Precision against recall through the session, per preset](figures/precision_recall_path.webp)
 
 | preset | point | precision | recall | F-beta | returned, median |
 |---:|---|---:|---:|---:|---:|
@@ -126,7 +126,7 @@ path is `precision_recall_path.csv`.
 
 ### The returned set, one rule per row
 
-![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
+![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.webp)
 
 "App line" is what each sort's own line returns: the text sort's blind GMM cut, the detector's labels line, and
 for the full-label ceiling Find's labels line from every training label (#4486). "Top-K" is set-constant at the
@@ -158,7 +158,7 @@ The ranking barely depends on the preset (the beta-1 sessions):
 | **AP** | 0.42 | 0.40 | 0.44 | **0.52** | 0.55 |
 | **Goods found** | — | 11 | 15 | **21** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
 150 clicks close about three quarters of the gap from the typed query to full labels. AP still dips as sessions
 leave the opening (0.42 → 0.40 at click 25, when 29% have handed over, #4384) and is back above the text level
@@ -173,7 +173,7 @@ mean. The 1,195 runs with a row at both clicks rose from 0.584 to 0.589. The vie
 scored value through those clicks, and the committed page was re-encoded that way; `viewer_survivors.csv` holds
 the line before and after, with the run count per click.
 
-![The viewer's line before and after the carry, with the runs in it](figures/viewer_survivors.png)
+![The viewer's line before and after the carry, with the runs in it](figures/viewer_survivors.webp)
 
 **Against the last review (#4474, 2026-10-04), one note.** On the scoring both reviews used then (the opening's
 own detectors, before #4605), the objective at click 25 rose from 0.42/0.29/0.35 to 0.43/0.34/0.42, the work of
@@ -212,7 +212,7 @@ in `new` or `done`. Priced against the same sessions without it (#4496, round 2)
 | medium (49) | 0.49 | 41 | 0.38 | 0.50 | 0.51 | 22 |
 | small (46) | 0.26 | 35 | 0.16 | 0.24 | 0.30 | 11 |
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 **Well:** sports equipment and other things a scene is *about* (beta 1, every run, objective after the check):
 
@@ -279,7 +279,7 @@ The mean is +0.10 AP (0.42 → 0.52). Person gains the most, +0.34 (0.10 → 0.4
 clicks rescue it. Skis gains +0.30, dog +0.24 and sink +0.23. Chair loses 0.01. Bag or luggage, bench and
 parking meter gain at most 0.02: for these, typing the query is as good as clicking.
 
-![Mean Goods found over clicks](figures/goods_over_clicks.png)
+![Mean Goods found over clicks](figures/goods_over_clicks.webp)
 
 Harvest is front-loaded: 11 of the 21 Goods arrive in the first 25 clicks.
 

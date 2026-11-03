@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-13-vg-silence-3696.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/silence_rate.json": {
+     "bytes": 20796,
+     "oid": "7012db5671736c35dfb887f25d5df4a4d8256568"
+    }
+   }
+  }
+ ]
+}

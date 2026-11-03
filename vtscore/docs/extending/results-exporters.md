@@ -100,22 +100,42 @@ deliver an empty export.
             "detector_name": "...",
             "threshold": 0.5,
             "balance": {...},  # may be absent or None
-            "total_hits": 15,  # positives only
+            "total_hits": 15,  # len(hits)
             "hits": [
                 {"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "..."},  # + more keys
                 ...,
             ],
             "negative_hits": [...],
+            "training_domain": {...},  # app runs only; may be absent or None
         },
         # ... one entry per detector run
     },
     "missing_detectors": [...],
+    "selected_columns": ["origin_name", "score", "detector"],  # Find Results dialog only
 }
 ```
 
-Each hit is built by `vtscore.utils.hits.build_media_hit`; the
+Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
+
+`training_domain` is the check behind the app's domain warning: how much of
+the scored dataset looks unlike the dataset the detector was trained on. Its
+`domain_shift` holds `frac_atypical` (the share, 0-1) and `shifted` (the
+verdict), or is `None` when there was nothing to compare, with `reason`
+saying why. A message or report can print the figure, as the email exporter
+does ("68% of this dataset looks atypical vs photos: likely domain shift");
+a tabular exporter can ignore it. The app sets it on every Find and AutoFind
+run; the CLI does not.
+
+`selected_columns` is the user's column choice from the Find Results
+dialog, in order. It names a hit's own keys, keys of its
+`custom_metadata`, and the detector result's `detector` / `threshold`;
+`vtscore.exporters.base.hit_column_value(detector_result, hit, column)`
+resolves each one, so a tabular exporter honours it with one call per
+cell. A delivery exporter that sends whole hits may ignore it. It is
+absent on every other path (the CLI, a background AutoFind's
+auto-export), where a fixed column set is the right answer.
 
 **Label exports** (from the label-export modal with `enrich=true`):
 
@@ -129,10 +149,17 @@ Each hit is built by `vtscore.utils.hits.build_media_hit`; the
 }
 ```
 
-Note that a scored run carries `negative_hits` alongside `hits`, and
-every built-in exporter ignores it: an export is conventionally the
-items the detector *found*. The key is there if you want the
-below-threshold items.
+**Export `hits`; treat `negative_hits` as informational.** `hits` is
+the set the export is for, and whoever built the payload has already
+chosen which side of the threshold goes into it: the Find Results
+dialog's Good / Bad / Both moves the side it lists into `hits` (and
+empties `negative_hits`), while a run with nobody to ask (CLI
+`--autodetect`, a background AutoFind) sends the above-threshold side.
+When `hits` holds both sides, every hit carries a `"label"` of
+`"good"` or `"bad"`, the same key a streamed run's records carry; if
+you write a row per hit, keep it. Do not export `negative_hits` too:
+that overrides the choice, sending below-threshold items from a CLI
+run that never asked for them.
 
 The standard idiom is one method per kind, sharing whatever delivery
 code they have in common:
@@ -199,6 +226,13 @@ the detector's real name instead of the raw placeholder - visible and
 editable before the user hits Export. Resolving the active detector
 inside your export method instead gets you an empty box in the UI and
 a value that appears out of nowhere on submit.
+
+**Which detector `{detector_name}` names.** The one the export belongs
+to. From the app's Find and Train views that is the active detector; from
+a Dashboard row's Export labels it is the row's detector, which need not
+be loaded or active. The export route makes that detector the active
+context for the whole run, field validation and your export method alike,
+so even a body that reads `get_active_detector_context()` sees it.
 
 ## Server-path and URL validation
 
@@ -325,8 +359,14 @@ lazy iterator:
 | `--stream-results` | `export_cli_streaming(header, records, field_values)` | `(detector_name, hit)` tuples: each hit as in `export_find_results`, plus a `"label"` |
 | `--stream-results --as-labelset` | `export_labelset_streaming(header, elements, field_values)` | label entries: `LabeledElement` dicts, each with a `"detector"` key |
 
+The records arrive in chunk order, each chunk's sorted. With `--max-results N`
+(#5279) the header carries `"max_results": N` and they arrive only once the
+last chunk is scored: each detector's best N, detector by detector, sorted by
+score. Either way an exporter that writes what it is given in the order it is
+given needs nothing more.
+
 Write each record as it arrives; never collect them. A file exporter writes
-through `vtscore.io.atomic_write_stream`, and a delivery exporter (a POST, an
+through `vtscore.utils.io.atomic_write_stream`, and a delivery exporter (a POST, an
 email) groups the stream with `iter_stream_batches(items, batch_size)` from
 `vtscore.exporters.base`, after `resolve_stream_batch_size` has coerced its
 `batch_size` field.
@@ -364,9 +404,9 @@ exporter to read it; the exporter's side is three rules:
 - After each chunk is durable, call `resume.commit(position)`. Never commit a
   chunk only partly written.
 
-For a text file, `vtscore.io.resumable_write_stream(path, position)` opens the
+For a text file, `vtscore.utils.io.resumable_write_stream(path, position)` opens the
 file (truncating a fresh one, or cutting a resumed one back to `position`) and
-`vtscore.io.commit_write_stream(f)` flushes, `fsync`s and returns the byte
+`vtscore.utils.io.commit_write_stream(f)` flushes, `fsync`s and returns the byte
 offset to commit. The built-in `server_json_file` and `server_csv_file` are
 both under thirty lines on top of them. Write in place, not through
 `atomic_write_stream`: an atomic stream leaves nothing behind to resume.
@@ -488,14 +528,14 @@ scored run, which this one refuses with `UnsupportedPayloadError`.
 
 ## Testing pattern
 
-Library-tier exporter tests belong in `tests_lib/io/`. The autouse
+Library-tier exporter tests belong in `tests_lib/exporters/`. The autouse
 fixtures (see [`tests_lib/conftest.py`](../../../tests_lib/conftest.py))
 reset library-tier global state and stub embedders; `_allow_test_tmp_paths`
 widens path validation so `validate_server_filepath` accepts the test
 tmp directory.
 
 ```python
-# tests_lib/io/test_signed_webhook_exporter.py
+# tests_lib/exporters/test_signed_webhook_exporter.py
 import hashlib
 import hmac
 import json
@@ -561,7 +601,7 @@ class TestSignedWebhookExport:
             exp.export_find_results({"media_type": "audio", "results": {}}, {})
 ```
 
-See [`tests_lib/io/test_importers.py`](../../../tests_lib/io/test_importers.py)
+See [`tests_lib/datasets/test_importers.py`](../../../tests_lib/datasets/test_importers.py)
 for the general I/O-plugin test pattern and the existing
 [`vtscore/exporters/webhook/__init__.py`](../../exporters/webhook/__init__.py)
 + its app-tier tests for a real working webhook exporter.

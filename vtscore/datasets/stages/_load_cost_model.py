@@ -41,7 +41,7 @@ from vtscore.timing.profile import normalize_device as _normalize_device
 # ``device`` is "cpu", "cuda", or "cuda+cuml"; ``embedder`` is the encoder
 # name (empty for convert-out media like document, which embed via a
 # converter target). The "cuda+cuml" variant covers GPU hosts where cuML
-# serves the coverage-atlas k-means / UMAP (see ``vtscore/gpu_backends.py``)
+# serves the coverage-atlas k-means / UMAP (see ``vtscore/config/gpu_backends.py``)
 # — that moves the dominant finalize work to the GPU, so the finalize
 # coefficients differ materially from the CPU-clustering "cuda" rows. Lookup
 # tries the variant matching the live cuML state first and falls back to the

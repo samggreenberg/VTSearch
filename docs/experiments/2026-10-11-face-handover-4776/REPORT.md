@@ -41,7 +41,7 @@ the F-beta dip is gone. On COCO Better's Binary opening (the guard) it gains a l
 
 **Recommendation: ship the head started from the centroid as the trained head; keep today's hand-over at the quota.** It wins on both benches and every preset, and it needs no rule. The build is #4785: production fits, the eval harness's default head, and a pricing of the region path, which this study did not run. The β 4 line at the first trained click, which the arm only halves, is #4786.
 
-![What a Find returns at every vote on faces](fig_find_by_vote.png)
+![What a Find returns at every vote on faces](fig_find_by_vote.webp)
 
 *Figure 1. What a Find returns at every vote on FHIBE's face crops (1024 px, 562 people): F-beta of
 the withheld half at the set's own β. Today (blue) dips at the hand-over (vote 7 from one photo, 8
@@ -233,14 +233,14 @@ today's head:
 The AP dip is 84–92% gone. What is left of the F-beta dip at β 4 (−0.09 / −0.15) is the labels
 line keeping too many at the hand-over. At vote 8 it keeps a median of 4–5 faces, against today's 5–16.
 
-![AP at every vote](fig_ap_by_vote.png)
+![AP at every vote](fig_ap_by_vote.webp)
 
 *Figure 2. AP of the withheld half at every vote, β 1: today's head, the Goods' centroid (kept past
 the quota), and the arm's head. The arm's sessions are its own, paired with today's.*
 
 ## The COCO guard
 
-![What a Find returns at every vote on COCO](fig_coco_guard.png)
+![What a Find returns at every vote on COCO](fig_coco_guard.webp)
 
 *Figure 3. What a Find returns at every vote on COCO Better's Binary Photo opening (720 runs a preset, every run counted), the same four as Figure 1.*
 

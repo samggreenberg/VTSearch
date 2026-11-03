@@ -10,17 +10,27 @@ it with whatever dataset is active, and the rehydrate in
 The labelset carries the answer instead.  Each Good / Bad element names its
 media by origin and MD5, so the loaded dataset holding most of those media is
 the one the votes were cast on.  That holds for a detector loaded from disk as
-much as for one trained in this session, and it persists nothing.
+much as for one trained in this session.
+
+Only while that dataset is loaded, though, so the detector also records it
+(#5501): :data:`TRAINING_DATASET_KEY` names the dataset and how many of the
+labels it held, written with the Evidence baseline whenever one is drawn there
+(:mod:`vtscore.detectors.evidence_baseline`).  A pointer and a count, never a
+vector, so the no-persisted-vectors rule is untouched; the check that reads it
+fetches the dataset's own vectors from its saved file.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from vtscore.datasets.labelset import LabelSet
     from vtscore.state.core import DatasetContext
+
+#: The detector JSON key its training dataset is recorded under (#5501).
+TRAINING_DATASET_KEY = "training_dataset"
 
 
 def count_labels_held(labelset: LabelSet, ctx: DatasetContext) -> int:
@@ -75,3 +85,26 @@ def infer_training_dataset(counts: Mapping[str, int], *, prefer: str = "") -> st
     if counts.get(prefer, 0) == best:
         return prefer
     return min(dataset_id for dataset_id, n in counts.items() if n == best)
+
+
+def training_dataset_record(dataset_id: str, dataset_name: str, labels_held: int) -> dict[str, Any]:
+    """The :data:`TRAINING_DATASET_KEY` entry naming *dataset_id* as the dataset holding *labels_held* of the labels."""
+    return {"dataset_id": str(dataset_id), "dataset_name": str(dataset_name or ""), "labels_held": int(labels_held)}
+
+
+def recorded_training_dataset(detector_data: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The training dataset recorded on *detector_data* (:func:`training_dataset_record`), or ``None``.
+
+    ``None`` too for an entry that names no dataset or holds no label, so a
+    reader never has to second-guess what it gets back.
+    """
+    entry = (detector_data or {}).get(TRAINING_DATASET_KEY)
+    if not isinstance(entry, Mapping) or not entry.get("dataset_id"):
+        return None
+    try:
+        held = int(entry.get("labels_held", 0))
+    except (TypeError, ValueError):
+        return None
+    if held <= 0:
+        return None
+    return training_dataset_record(str(entry["dataset_id"]), str(entry.get("dataset_name") or ""), held)

@@ -1,0 +1,103 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-06-cost-fbeta-rescore-4582.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/curves_3287.csv": {
+     "bytes": 36887,
+     "oid": "e38f82a5f5078673388311d3458236723d5483c5"
+    },
+    "tables/curves_3314.csv": {
+     "bytes": 43370,
+     "oid": "f6c8396e8a65471165a2e9e78dc11a474a4c7489"
+    },
+    "tables/curves_3826ab.csv": {
+     "bytes": 39742,
+     "oid": "270ef95ebfe4d98bdb46969ddc392afc8ebed48e"
+    },
+    "tables/curves_4114.csv": {
+     "bytes": 24030,
+     "oid": "872f59060da8c148a0f3cc7d206efbb5de8427c2"
+    },
+    "tables/curves_4184.csv": {
+     "bytes": 54962,
+     "oid": "fa07ddbfdab64c224d379479b726005f1c336485"
+    },
+    "tables/curves_4219.csv": {
+     "bytes": 24032,
+     "oid": "ea6a105b2cb5ced34ec2f9940b7c9e3e3406bcdc"
+    },
+    "tables/curves_4219r.csv": {
+     "bytes": 16110,
+     "oid": "2f11300cf6868eed0efc13dd4472b189c16c4092"
+    },
+    "tables/levels_3287.csv": {
+     "bytes": 3653,
+     "oid": "fc766c0a8115b4de4845ef935ca7123266a8825e"
+    },
+    "tables/levels_3314.csv": {
+     "bytes": 4250,
+     "oid": "abe973fa2cc1199a028a6a593a5c5b4a15bc58cd"
+    },
+    "tables/levels_3826ab.csv": {
+     "bytes": 1378,
+     "oid": "d74066469f632dfcd3f11adc563f1617a712fc3c"
+    },
+    "tables/levels_4114.csv": {
+     "bytes": 617,
+     "oid": "ff96be0537d2152e32daf8dcc514e815f519c907"
+    },
+    "tables/levels_4184.csv": {
+     "bytes": 2887,
+     "oid": "e6ff866ab5d1e01bdfe6ce2d334878f02eb4369b"
+    },
+    "tables/levels_4219.csv": {
+     "bytes": 615,
+     "oid": "1baab38a7a879feb48f9d43f78a6cee375f8ec7d"
+    },
+    "tables/levels_4219r.csv": {
+     "bytes": 426,
+     "oid": "d47b8fb0bca3fd530fbe61fc32e1c956a051613d"
+    },
+    "tables/paired.csv": {
+     "bytes": 125084,
+     "oid": "f0b16fbfa9a584512b6f8fd6c1ae2a029cb54164"
+    },
+    "tables/provenance.json": {
+     "bytes": 4709,
+     "oid": "d2144ec8a441bd7e7ded27456e95c76d33510a67"
+    },
+    "tables/runs_3287.csv": {
+     "bytes": 137431,
+     "oid": "ff4f807356b702ac2c254e66270f287ca2f9335e"
+    },
+    "tables/runs_3314.csv": {
+     "bytes": 82866,
+     "oid": "44307d0d51de0ccfd69eab52c170e063baa8067c"
+    },
+    "tables/runs_3826ab.csv": {
+     "bytes": 15255,
+     "oid": "1c53af18a548954c720613af43d16c73eed0faa9"
+    },
+    "tables/runs_4114.csv": {
+     "bytes": 196086,
+     "oid": "3802e37fed0ebdcba9b49c71e4e8054d8ff8d2f8"
+    },
+    "tables/runs_4184.csv": {
+     "bytes": 503900,
+     "oid": "c25ea7580858374f6051a8a6f1c3b854eee74bfe"
+    },
+    "tables/runs_4219.csv": {
+     "bytes": 195872,
+     "oid": "a2c478b79b3a5605030f6a757e010bd9bd0c1d78"
+    },
+    "tables/runs_4219r.csv": {
+     "bytes": 28857,
+     "oid": "d10bba01118d41c0fda2eba52de2c052b5e20928"
+    }
+   }
+  }
+ ]
+}

@@ -214,7 +214,7 @@ def _run_cell(path: Path, cut_rows: list, fit_rows: list, trace_rows: list, trac
         gmm_fit_array,
         scored_ordering,
     )
-    from vtscore.utils.scores import scored_only
+    from vtscore.training.thresholds.knobs import scored_only
 
     z = np.load(path)
     meta = _meta(z)

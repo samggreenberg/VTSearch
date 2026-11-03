@@ -17,7 +17,7 @@ from unittest.mock import patch
 import numpy as np
 
 from vtscore.concurrency.progress import LoadingTasksTracker
-from vtscore.datasets.load_pipeline import _parse_bool
+from vtscore.datasets.load_workers import _parse_bool
 from vtscore.datasets.stages.projection import _build_projection_stage
 from vtscore.projection import Projection
 from vtscore.state.core import DatasetContext

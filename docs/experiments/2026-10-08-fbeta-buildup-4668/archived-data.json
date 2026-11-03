@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-08-fbeta-buildup-4668.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/average_precision_vs_clicks.png": {
+     "bytes": 103169,
+     "oid": "ee9c53bdc3affcaf72b4844ced6347fb75de9d36"
+    },
+    "paired.csv": {
+     "bytes": 22004,
+     "oid": "2448ef7745222e724a92b4ed258852905a5eeb89"
+    },
+    "provenance.json": {
+     "bytes": 5637,
+     "oid": "7bfc777e7904610e0890f76a11157e222fefa6dc"
+    },
+    "returned.csv": {
+     "bytes": 4197,
+     "oid": "a2f006615946811035de854cd8faff00ed51596c"
+    }
+   }
+  }
+ ]
+}

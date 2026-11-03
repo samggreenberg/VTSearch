@@ -30,7 +30,7 @@ wiring (routes, the SPA's forms and pickers, settings sync, auth) lives
 only here. Each side keeps its own contract table per ABC.
 
 Where the two overlap, they describe one class, so they can contradict
-each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)
+each other. `scripts/gates/check-extension-docs.py` (a `./run-tests.sh` gate)
 holds them to the code: every member either set names in a contract table
 must exist, and neither may present a public wrapper as the override point
 when the class defines an `_impl` hook behind it. When you change a plugin
@@ -133,11 +133,11 @@ filesystem-hygiene check, not an authentication one.
 
 1. `set_login_provider(provider)` is called once at startup. The built-in
    providers are selected by `python app.py --login trivial|api_key`
-   (`_run_server` in `vtsearch/cli_main.py`); a custom provider must be
+   (`_run_server` in `vtsearch/cli/main.py`); a custom provider must be
    activated the same way — add a branch there, or call
    `set_login_provider()` from your own startup code before the server
    starts serving.
-2. The `before_request` middleware (`vtsearch/hooks.py`) calls
+2. The `before_request` middleware (`vtsearch/runtime/request_hooks.py`) calls
    `provider.get_user(request)` and stores the result in `g.user`; when the
    provider's `enforce_auth()` is true it also 401s unauthenticated `/api/*`
    requests (only `/api/auth/status`, `/api/auth/login` and
@@ -178,7 +178,11 @@ def notify(event: DatasetImported) -> None:
         return
     address = address_for(event.user)  # VTSearch stores no email addresses
     if event.outcome == SUCCEEDED:
-        send(address, f"{event.name} is ready: {event.n_media} {event.media_type} items")
+        lines = [f"{event.name} is ready: {event.n_media} {event.media_type} items"]
+        for group in event.dropped:  # the items left out, grouped by why
+            lines.append(f"{group['count']} left out: {group['reason']}")
+            lines.extend(f"  {item}" for item in group["items"])
+        send(address, "\n".join(lines))
     elif event.outcome == FAILED:
         send(address, f"Importing {event.name} failed: {event.error}")
 ```
@@ -198,6 +202,9 @@ The event is a frozen `DatasetImported`:
 | `user` | The VTSearch username that started the import. |
 | `media_type` | `"image"`, `"audio"`, …; empty if a failure came before the type was known. |
 | `n_media` | Items in the saved dataset; `0` on failure. |
+| `n_imported` | Items the import brought in, before any were left out: `n_media`, plus `n_dropped`, plus any merged into another as a duplicate. `0` on failure. |
+| `n_dropped` | Items left out because an embedder could not read them (a file labelled as a supported type that is really something else, say); `0` when none were, and on failure. |
+| `dropped` | Those items grouped by reason, commonest first: `{"reason", "count", "items"}` dicts, the list the dataset's Stats window shows (a copy). `items` names each item the way the user would look for it: its `origin_name`, which an importer can set to its own record id, else its file name, plus the span for a clip. At most 1,000 names across the groups (`vtscore.datasets.stages.finalize.MAX_RECORDED_DROPS`); `count` stays exact past that. Empty when nothing was dropped, and on failure. |
 | `origin` | The importer and parameters the dataset was built from (a copy). |
 | `error` | The message the user was shown; empty on success. |
 | `notify` | `False` when the user turned off import alerts; `True` otherwise. |
@@ -234,8 +241,8 @@ installs none of that variable's hooks. The startup log lists the hooks
 in force. There is deliberately no settings-file key for this: a
 settings file that could name code to run would let anyone who can
 import settings run code on the server. The wiring is
-`vtsearch/import_hooks.py`; the pipeline side is the `on_finished`
-callback in `vtscore/datasets/load_pipeline.py`.
+`vtsearch/runtime/import_hooks.py`; the pipeline side is the `on_finished`
+callback in `vtscore/datasets/load_origin.py`.
 
 ---
 
@@ -268,7 +275,7 @@ images) and do **not** flow through pyproject.
 To let `docker/Dockerfile.labbench` build another media type, add a
 `requirements/labbench-<type>.txt` (`-r labbench.txt` plus that type's
 dependencies) and an entry for the type in `HIDDEN_BY_TYPE` in
-`scripts/seed_labbench_settings.py`, naming any plugin the slim file leaves
+`scripts/install/seed_labbench_settings.py`, naming any plugin the slim file leaves
 without its dependencies. `tests_lib/meta/test_dockerfile_labbench.py` checks
 that the two agree. The all-types build (no `MEDIA_TYPE`) picks the new type up
 from its requirements file, with no edit to the Dockerfile.
@@ -414,7 +421,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Declare `embedding_dim` (and `model_id` when there is a downloadable checkpoint)
 - [ ] Leave `description_wrappers` empty unless you have *measured* that a prompt ensemble beats the typed query on your checkpoint (see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder))
 - [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; an `embedder_<name>/` sub-package and symlinked files/directories are supported too)
-- [ ] Run `python scripts/gen-docs-inventories.py` and commit the regenerated embedder tables
+- [ ] Run `python scripts/gates/gen-docs-inventories.py` and commit the regenerated embedder tables
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist
@@ -464,4 +471,4 @@ See [Authentication Providers](#authentication-providers) above.
 - [ ] Override `login_required()` if the frontend should show a login screen
 - [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
 - [ ] Screen any client-supplied username with `is_safe_username()`
-- [ ] Activate it with `set_login_provider(MyProvider())` at startup (a new `--login` branch in `_run_server`, `vtsearch/cli_main.py`, or your own startup code)
+- [ ] Activate it with `set_login_provider(MyProvider())` at startup (a new `--login` branch in `_run_server`, `vtsearch/cli/main.py`, or your own startup code)

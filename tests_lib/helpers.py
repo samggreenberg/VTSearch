@@ -238,6 +238,35 @@ def wire_mock_progress_scope(emb):
     return emb
 
 
+def register_declining_embedder(monkeypatch, name: str, media_type: str, decline: set[str]):
+    """Register a ``MagicMock`` embedder as *name* that reads no media named in *decline*.
+
+    Stands in for an embedder plugin meeting files it cannot decode, so a load
+    really drops those items (by ``origin_name``) and embeds the rest.  The
+    registration is undone with *monkeypatch*.  Returns the embedder.
+    """
+    import unittest.mock as mock  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore import media  # noqa: PLC0415
+
+    emb = mock.MagicMock()
+    emb.name = name
+    emb.display_name = name.upper()
+    emb.media_type_id = media_type
+    emb._model = True
+    emb.supports_text = False
+    emb.supports_patch_regions = False
+    emb.supports_geometric_verification = False
+    emb.embedding_dim = None
+    emb.embed_media_bulk.side_effect = lambda medias: [
+        None if m.get("origin_name") in decline else np.ones(8, dtype=np.float32) for m in medias
+    ]
+    monkeypatch.setitem(media._embedder_registry, name, emb)
+    return emb
+
+
 # ---------------------------------------------------------------------------
 # Progress helpers
 # ---------------------------------------------------------------------------

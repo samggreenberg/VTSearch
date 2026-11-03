@@ -45,7 +45,7 @@ that aimed at 1/4, and so on.
 | 1 | 0.29 | 0.42 | 0.48 | 0.49 | **0.52** | 47 | 6% |
 | 4 | 0.35 | 0.49 | 0.56 | 0.56 | **0.60** | 80 | 26% |
 
-![The objective over clicks, per preset](figures/objective_at_own_beta.png)
+![The objective over clicks, per preset](figures/objective_at_own_beta.webp)
 
 1. **The presets return what they promise.** After the check, the 1/4 preset
    returns a median of 26 images at precision 0.70 and recall 0.40. The
@@ -86,7 +86,7 @@ that aimed at 1/4, and so on.
    150 and on Find corpora, never on the early session. The ranking's own
    dip is #4384.
 
-![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
+![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.webp)
 
 **The returned set, one rule per row.** "App line" is what each sort's own
 line in the app returns: the text sort's blind GMM cut, the detector's labels
@@ -128,7 +128,7 @@ underestimate the negatives' upper tail and the cut runs deep.
 | **AP** | 0.42 | 0.35 | 0.43 | **0.51** | 0.55 |
 | **Goods found** | — | 11 | 14 | **20** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
 150 clicks close about two thirds of the gap from the typed query to full
 labels, as in the 2026-10-01 review. The line changed tonight; the ranking did
@@ -165,7 +165,7 @@ understating the range.
 | medium (49) | 0.48 | 44 | 0.38 | 0.48 | 0.51 | 20 |
 | small (46) | 0.28 | 47 | 0.16 | 0.24 | 0.31 | 9.7 |
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 **Well:** sports equipment and other things a scene is *about* (beta 1, trained
 runs, objective after the check):
@@ -238,7 +238,7 @@ the typed query ranks it badly and clicks rescue it. Skis gains +0.30 and sink
 +0.21. Chair loses 0.02. Bench, bag or luggage, parking meter and dining table
 gain at most 0.02: for these, typing the query is as good as clicking.
 
-![Mean Goods found over clicks](figures/goods_over_clicks.png)
+![Mean Goods found over clicks](figures/goods_over_clicks.webp)
 
 Harvest is front-loaded: 11 of the 20 Goods arrive in the first 25 clicks.
 

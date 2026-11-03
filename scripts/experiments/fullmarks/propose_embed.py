@@ -133,7 +133,7 @@ class _TileSet:
 def siglip_tiles(corpus: Path, out: Path, workers: int, limit: int = 0) -> dict[str, list]:
     import torch  # noqa: PLC0415
 
-    from vtscore.media.image.embedder_siglip import EMBEDDER  # noqa: PLC0415
+    from vtscore.media.image.embedders.embedder_siglip import EMBEDDER  # noqa: PLC0415
 
     all_pages = {p.page_id: p for p in read_manifest(corpus / "corpus.jsonl")}
     anchors = sorted((p for p in all_pages.values() if p.source in ANCHOR_SOURCES), key=lambda p: p.page_id)
@@ -264,7 +264,7 @@ def match_grid(page_feats, query_feats):
 def dinov3_patches(corpus: Path, out: Path, workers: int, limit: int = 0) -> dict[str, list]:
     import torch  # noqa: PLC0415
 
-    from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder  # noqa: PLC0415
+    from vtscore.media.image.embedders.embedder_dinov3_single import ImageDinov3SingleEmbedder  # noqa: PLC0415
 
     all_pages = {p.page_id: p for p in read_manifest(corpus / "corpus.jsonl")}
     anchors = sorted((p for p in all_pages.values() if p.source in ANCHOR_SOURCES), key=lambda p: p.page_id)

@@ -51,7 +51,7 @@ and never feeds one back into a trajectory: it delegates every fit to the app's
 own :func:`~vtscore.training.thresholds.fit_score_gmm` /
 :func:`~vtscore.training.thresholds.anchored_gmm_fit` rather than re-deriving
 one, so there is no app surface mirrored here and nothing for
-``scripts/check-eval-app-sync.py`` to pin.
+``scripts/gates/check-eval-app-sync.py`` to pin.
 """
 
 from __future__ import annotations

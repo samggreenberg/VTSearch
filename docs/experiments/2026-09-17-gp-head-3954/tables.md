@@ -397,8 +397,8 @@
 
 ### Figures
 
-- `figures/cost_vs_clicks.png`
-- `figures/cost_vs_clicks_runs__caltech101_m.png`
+- `figures/cost_vs_clicks.webp`
+- `figures/cost_vs_clicks_runs__caltech101_m.webp`
 - `figures/average_precision_vs_clicks.png`
 - `figures/average_precision_vs_clicks_runs__caltech101_m.png`
 

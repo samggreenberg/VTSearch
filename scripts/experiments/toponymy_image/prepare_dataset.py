@@ -70,7 +70,7 @@ def discover_categories(source: str) -> list[str]:
         return sorted(_stanford_dogs_by_breed())
     if source == "enrico":
         from vtscore.config import DATA_DIR
-        from vtscore.media.image._demo_categories import ENRICO_CATEGORIES
+        from vtscore.media.image.demo._demo_categories import ENRICO_CATEGORIES
 
         # NOTE: found during this study — the Aalto server 404s on
         # design_topics.csv (URL rot); the Enrico GitHub repo still serves
@@ -208,7 +208,7 @@ def prepare_rvl_cdip(args) -> None:
 
     from vtscore import media as media_registry
     from vtscore.media.embedder import media_from_path
-    from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES
+    from vtscore.media.image.demo._demo_categories import RVL_CDIP_CATEGORIES
 
     timings: dict = {}
     pq_dir = common.WORK / "rvl_parquet"
@@ -283,7 +283,7 @@ def prepare_enrico(args) -> None:
     from vtscore import media as media_registry
     from vtscore.config import DATA_DIR
     from vtscore.media.embedder import media_from_path
-    from vtscore.media.image._demo_categories import ENRICO_CATEGORIES
+    from vtscore.media.image.demo._demo_categories import ENRICO_CATEGORIES
 
     timings: dict = {}
     with common.timed("download", timings):

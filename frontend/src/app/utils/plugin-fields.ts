@@ -66,7 +66,7 @@ function submittedToken(field: ConditionalField, values: FieldValues): string {
 
 /** Whether every entry of *field*'s `visible_when` matches *values*.
  *
- *  The TypeScript twin of `_condition_holds` in `vtscore/plugins/__init__.py`
+ *  The TypeScript twin of `_condition_holds` in `vtscore/plugins/field.py`
  *  and it must agree with it, rule for rule: a key naming no field is
  *  ignored, a controller that is itself switched off counts as its default,
  *  and a cycle stops at the field it re-enters, which counts as active. */

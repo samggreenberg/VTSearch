@@ -20,29 +20,42 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/base.py` | The `MediaType` ABC |
 | `vtscore/media/embedder.py` | The `MediaEmbedder` ABC and its capability flags |
 | `vtscore/media/load_progress.py` | Model-load progress interception (tqdm, weight tensors) and resilient HF fetching |
-| `vtscore/media/torch_ops.py` | Torch tensor/device adapters shared by every embedder |
-| `vtscore/media/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
-| `vtscore/media/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
 | `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
 | `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
-| `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
-| `vtscore/media/clip_recipe.py` | Parse the `origin.params` clip dialects, shared by both replay paths |
 | `vtscore/media/provenance.py` | Human-readable provenance for converter- and clipper-derived media |
-| `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
-| `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
-| `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
-| `vtscore/media/structural_tiles.py` | Tiled VLAD: the structural Stage 1 for document pages |
 | `vtscore/media/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
-| `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
+
+**Shared sub-packages** - grouped by concern; like the modules above, they
+are not media types and register nothing.
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/media/clipping/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
+| `vtscore/media/clipping/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
+| `vtscore/media/clipping/lazy_clip.py` | Derive a clip's bytes from its source on demand |
+| `vtscore/media/clipping/clip_recipe.py` | Parse the `origin.params` clip dialects, shared by both replay paths |
+| `vtscore/media/structural/__init__.py` | Structural (instance-matching) features and geometric verification (`vtscore.media.structural`) |
+| `vtscore/media/structural/structural_geometry.py` | Parametrised geometric verification models |
+| `vtscore/media/structural/structural_splg.py` | SuperPoint + LightGlue structural backend |
+| `vtscore/media/structural/structural_tiles.py` | Tiled VLAD: the structural Stage 1 for document pages |
+| `vtscore/media/torch_utils/torch_ops.py` | Torch tensor/device adapters shared by every embedder |
+| `vtscore/media/torch_utils/torch_setup.py` | Runtime setup for embedder code: torch's thread count, and the stat-free `packages_distributions` seed |
+
+These modules sat at the package root until #5401; the old dotted paths
+(`vtscore.media.clipper`, `vtscore.media.torch_setup`,
+`vtscore.media.image.embedder_siglip`, …) still import, with a
+`DeprecationWarning`, through the `_MOVED_MODULES` table in
+`vtscore/media/__init__.py`.
 
 **Media types** - one self-registering sub-package each. Every one holds a
 `media_type.py` (the `MediaType`), plus whichever of `clipper.py`,
-`cleaner.py`, `decode.py` and `embedder_*.py` modules it needs.
+`cleaner.py`, `decode.py` and `embedder_*.py` modules it needs (`image/` keeps
+its many embedders in an `embedders/` sub-package, which discovery scans too).
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
 | `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, synthetic audio generator |
-| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, demo sources |
+| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant), all under `embedders/` with their shared bases | clipper, cleaner, decode, edge trim, thumbnail, demo sources and categories (`demo/`) |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
 | `vtscore/media/document/` | none - a *convert-out* half type (converted to image or text before embedding) | clipper |
@@ -120,7 +133,7 @@ media type may have zero, one, or many embedders.
 
 `_resolve_media_bytes(media)` / `_resolve_media_string(media)` read content
 in this order: `media_bytes` / `media_string` in memory → a lazy-clip recipe
-in `origin.params` (see `vtscore/media/lazy_clip.py`) → an archive member →
+in `origin.params` (see `vtscore/media/clipping/lazy_clip.py`) → an archive member →
 `media_path` on disk → `media_url` (fetched through the SSRF guard);
 `_resolve_media_string` skips the lazy-clip and archive-member steps. So
 implementations transparently handle in-memory, thin, derived and
@@ -145,7 +158,7 @@ L2-normalisation, progress); **subclasses override the `_…_impl` hooks**.
 | `_embed_media_bulk_impl(medias)` | optional | Batched forward; default loops `embed_media` |
 | `_patch_forward_impl(media)` / `_patch_forward_bulk_impl` | patch embedders | Return a `vtscore.media.patch_embed.PatchEmbedOutput` (CLS vector, `(H, W, D)` patch grid, saliency) |
 | `_local_features_forward_impl(media)` / `…_bulk_impl` | structural embedders | Return structural features for geometric verification |
-| `supports_tiled_stage1` / `tile_vectors_forward_bulk(medias)` | document structural embedders | Derive `media["tile_vectors"]` (`vtscore.media.structural_tiles.TileVectors`) from the stored local features at load, for the tiled Stage 1 (#3928). Needs the cached projection (`fit_tile_projection.py`), and warns when it is missing |
+| `supports_tiled_stage1` / `tile_vectors_forward_bulk(medias)` | document structural embedders | Derive `media["tile_vectors"]` (`vtscore.media.structural.structural_tiles.TileVectors`) from the stored local features at load, for the tiled Stage 1 (#3928). Needs the cached projection (`fit_tile_projection.py`), and warns when it is missing |
 | `description_wrappers` | optional | Prompts used by `embed_text_enriched`; `[]` (default) makes it plain `embed_text` |
 | `loaded_backbone()` | optional | `(model, processor)` for the raw backbone; default reads `_model` / `_processor` |
 
@@ -188,7 +201,7 @@ Shared building blocks are **re-exported from `vtscore.media.embedder`**
 | `intercept_tqdm_progress(callback)` | `load_progress.py` | Forward HF tqdm bars to a progress callback. |
 | `intercept_weight_loading_progress(callback, label=...)` | `load_progress.py` | Tensor-level progress for weight loading. |
 | `timed_progress(on_progress, status, message, ...)` | `load_progress.py` | Append an elapsed `(Ns)` to a long-running progress message. |
-| `extract_tensor`, `to_compute_device`, `to_model_inputs`, `to_float32`, `embed_autocast` | `torch_ops.py` | Torch tensor / device adapters. |
+| `extract_tensor`, `to_compute_device`, `to_model_inputs`, `to_float32`, `embed_autocast` | `torch_utils/torch_ops.py` | Torch tensor / device adapters. |
 
 Image embedders additionally share `vtscore/media/image/_image_bulk.py`,
 which decodes each batch on a thread pool **one batch ahead** of the
@@ -198,7 +211,7 @@ for sizing.
 
 ### `MediaClipper` - split one media into sub-medias of the same type
 
-`vtscore/media/clipper.py::MediaClipper`: given one media dict, return one
+`vtscore/media/clipping/clipper.py::MediaClipper`: given one media dict, return one
 or more media dicts of the **same** type (tile audio into windows, split a
 paragraph into sentences, crop an image). Every produced sub-media is what
 gets embedded and labelled. Abstract members: `name`, `media_type`,
@@ -226,7 +239,7 @@ helpers (`clip_with_bounds`, `validate_tiling_params`, `tile_starts`,
 
 ### `MediaCleaner` - 1 → 1 cleanup before embedding
 
-`vtscore/media/cleaner.py::MediaCleaner` subclasses `MediaClipper`.
+`vtscore/media/clipping/cleaner.py::MediaCleaner` subclasses `MediaClipper`.
 Implement `clean(media) -> dict` (return the media unchanged when there is
 nothing to do; a cleaner never aborts a load); `clip` wraps it as a
 single-output chain step. `default_enabled` (default `False`) sets whether
@@ -358,10 +371,32 @@ import.
 - **`supports_patch_regions = True` is a promise.** The ABC's
   `_patch_forward_impl` returns `None`; if you set the flag without
   overriding it, the loader stores empty region data.
-- **Torch threading.** `vtscore/media/torch_setup.py::ensure_torch_configured`
+- **Torch threading.** `vtscore/media/torch_utils/torch_setup.py::ensure_torch_configured`
   applies `vtscore.config.TORCH_THREADS` (env `$VTSEARCH_TORCH_THREADS`,
   default `1`) once, if torch is already imported. `embedder_load_setup`
   calls it for you.
+
+## Stat-free package metadata
+
+In `vtscore/media/torch_utils/torch_setup.py` (`vtscore.utils.import_metadata` until #5399,
+now a deprecated alias for that module), beside `ensure_torch_configured`: both
+are runtime setup the embedding loader does before it touches a model.
+
+```python
+def fast_packages_distributions() -> Mapping[str, list[str]]: ...
+def seed_packages_distributions() -> bool: ...
+```
+
+`transformers` calls `importlib.metadata.packages_distributions()` at
+module import time, and the stdlib implementation `stat()`s every file
+recorded by every installed distribution - tens of thousands of calls,
+which on an NFS-mounted venv can stall startup for minutes.
+`fast_packages_distributions` builds the same mapping from each
+distribution's `top_level.txt` (falling back to parsing `RECORD` as text)
+without touching the recorded files. `seed_packages_distributions()`
+installs it over the stdlib function; call it once, early, **before
+anything imports `transformers`**. It is idempotent and best-effort
+(returns `False` when the swap could not be made).
 
 ---
 

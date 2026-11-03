@@ -11,8 +11,8 @@ repo built and checked?" would.
 They live under ``tests_lib/`` rather than a third top-level tree because they
 satisfy the library tier's contract trivially - they import no ``vtsearch``
 module, so ``./run-tests.sh vtscore-clean`` keeps proving it - and because the
-group system already keys off the folder name, which is what actually makes
-them findable and skippable (``./run-tests.sh meta``).
+group system already maps this folder to a group of its own, which is what
+actually makes them findable and skippable (``./run-tests.sh meta``).
 
 What they are *not* is ``core``.  They silted into that group because it was
 the nearest folder, and ``./run-tests.sh core`` - the fast inner loop for

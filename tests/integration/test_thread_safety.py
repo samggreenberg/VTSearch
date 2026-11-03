@@ -28,8 +28,9 @@ from vtsearch.state import (
 import vtsearch.state as _state
 import vtscore.state.core as _core
 import vtsearch.settings as _settings_mod
-import vtsearch.settings_store as _settings_store_mod
+import vtsearch.settings.store as _settings_store_mod
 import vtscore.detectors.labeling_progress as _progress_mod
+from vtsearch.settings import tiers as settings_tiers
 
 
 class TestStateLock:
@@ -302,12 +303,12 @@ class TestSettingsLock:
     """Verify that _settings_lock exists and is an RLock."""
 
     def test_lock_is_rlock(self):
-        assert isinstance(_settings_mod._settings_lock, type(threading.RLock()))
+        assert isinstance(settings_tiers._settings_lock, type(threading.RLock()))
 
     def test_lock_is_reentrant(self):
         """RLock should allow the same thread to acquire it multiple times."""
-        with _settings_mod._settings_lock:
-            with _settings_mod._settings_lock:
+        with settings_tiers._settings_lock:
+            with settings_tiers._settings_lock:
                 pass  # should not deadlock
 
 
@@ -403,7 +404,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
             # unexpected goes wrong; the test releases this in <1s.
             unblock.wait(timeout=30)
 
-        monkeypatch.setattr(_settings_mod, "_sync_to_source", slow_sync)
+        monkeypatch.setattr(settings_tiers, "_sync_to_source", slow_sync)
 
         errors: list[BaseException] = []
         reader_done = threading.Event()
@@ -560,10 +561,10 @@ def _settings_lock_free_for_other_threads(timeout: float = 3.0) -> bool:
     result: list[bool] = []
 
     def probe():
-        got = _settings_mod._settings_lock.acquire(timeout=timeout)
+        got = settings_tiers._settings_lock.acquire(timeout=timeout)
         result.append(got)
         if got:
-            _settings_mod._settings_lock.release()
+            settings_tiers._settings_lock.release()
 
     t = threading.Thread(target=probe, daemon=True)
     t.start()
@@ -678,8 +679,8 @@ class TestGettersDoNotHoldSettingsLockAcrossFileIO:
             # Force a real sync-from-source pass on the next read: drop the
             # in-memory sync state *and* the on-disk dedup marker (which would
             # otherwise let ``_adopt_sync_marker_if_current`` skip the load).
-            _settings_mod._sync_state.pop("default", None)
-            _settings_store_mod._sync_marker_path(_settings_mod._user_settings_path("default")).unlink(missing_ok=True)
+            settings_tiers._sync_state.pop("default", None)
+            _settings_store_mod._sync_marker_path(settings_tiers._user_settings_path("default")).unlink(missing_ok=True)
 
             _settings_mod.get_theme()
 

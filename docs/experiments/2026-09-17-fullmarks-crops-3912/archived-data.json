@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-fullmarks-crops-3912.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/diag_crop_page.json": {
+     "bytes": 11498,
+     "oid": "404a2d7d4e62958dacc418eb78cf7824c706aea7"
+    },
+    "measurements/diag_scale_floor.json": {
+     "bytes": 92203,
+     "oid": "3f1c21e67ea12b4f4bb84a9ca7ae5fa299765d96"
+    }
+   }
+  }
+ ]
+}

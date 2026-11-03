@@ -184,7 +184,7 @@
 // importer) rather than a Good exemplar the user picked by hand.
 .example-seed-badge {
   flex: 0 0 auto;
-  padding: 0.1rem 0.4rem;
+  padding: var(--space-2xs) var(--space-sm);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
@@ -333,7 +333,8 @@
 
 // License-notice chip for the Detector Embedder picker, shown when the chosen
 // embedder carries a restrictive licence. Mirrors the import-advanced chip.
-.license-warning {
+.license-warning,
+.hard-view-warning {
   margin-top: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-md);

@@ -156,8 +156,12 @@ def _umap_layout(
     min_dist: float,
     random_state: int | None,
     on_heartbeat: Callable[[int], None],
+    n_components: int = 2,
 ) -> np.ndarray:
     """Run UMAP on *mat*, ticking ``on_heartbeat(elapsed_seconds)`` while it runs.
+
+    Returns ``(N, n_components)`` coordinates: 2 for the Browse layout, 1 for
+    :mod:`vtscore.projection.similarity_order`.
 
     UMAP's ``fit_transform`` is a single blocking call with no per-epoch hook,
     so it runs on a worker thread and the caller's thread emits an
@@ -168,9 +172,9 @@ def _umap_layout(
     ``cuml.manifold.UMAP`` (~20-100x faster on large sets); otherwise it is the
     CPU ``umap-learn`` reducer.  A cuML failure (including an nvrtc compile error
     that only surfaces inside the fit) transparently degrades to the CPU reducer.
-    See :mod:`vtscore.gpu_backends`.
+    See :mod:`vtscore.config.gpu_backends`.
     """
-    from vtscore.gpu_backends import umap_fit_transform
+    from vtscore.config.gpu_backends import umap_fit_transform
 
     fit_result: list[np.ndarray] = []
     fit_error: list[Exception] = []
@@ -180,7 +184,7 @@ def _umap_layout(
             fit_result.append(
                 umap_fit_transform(
                     mat,
-                    n_components=2,
+                    n_components=n_components,
                     n_neighbors=min(n_neighbors, mat.shape[0] - 1),
                     min_dist=min_dist,
                     metric="euclidean",

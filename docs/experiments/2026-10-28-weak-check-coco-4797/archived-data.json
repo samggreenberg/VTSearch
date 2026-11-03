@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-28-weak-check-coco-4797.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/weak_4797_curves.csv": {
+     "bytes": 37682,
+     "oid": "90856042870c7219fb3171d5d18a6664e7366c78"
+    },
+    "tables/weak_4797_per_run.csv": {
+     "bytes": 169218,
+     "oid": "65bc254a22421c44983ed4df24310d8b3010403d"
+    },
+    "tables/weak_4797_splits.csv": {
+     "bytes": 4613,
+     "oid": "9bf814ed61dfa437e23f4d433cb19760c14414d6"
+    },
+    "tables/weak_4797_summary.csv": {
+     "bytes": 1105,
+     "oid": "01c196a16afb237fc3c9216cea68659f3eb80fa3"
+    }
+   }
+  }
+ ]
+}

@@ -10,7 +10,7 @@ another without knowing anything about the backend behind it.
 
 :func:`_style_train_and_calibrate` is the **production-faithful** trainer and is
 pinned against ``vtscore.detectors.training.train_and_threshold`` by
-`scripts/check-eval-app-sync.py`; it and :func:`_app_train_and_calibrate` are the
+`scripts/gates/check-eval-app-sync.py`; it and :func:`_app_train_and_calibrate` are the
 two halves of the app-pipeline arm (:data:`~vtscore.eval.step_model.APP_TRAINER`
 - style-aware and single-vector respectively), while
 :func:`_svm_train_and_calibrate` runs a standalone estimator instead.  See the
@@ -753,7 +753,7 @@ def _style_train_and_calibrate(
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
 
-    from vtscore.detectors.training import _flood_context  # noqa: PLC0415
+    from vtscore.detectors.training_calibration import _flood_context  # noqa: PLC0415
 
     X_list: list[np.ndarray] = []
     y_list: list[float] = []

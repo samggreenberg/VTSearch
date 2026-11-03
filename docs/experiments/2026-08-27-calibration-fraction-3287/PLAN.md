@@ -130,7 +130,7 @@ Outcomes, both of which are results:
   currently an unmeasured constant on the shipped threshold path.
 - **A per-mode default**, alongside `PRODUCTION_SCHEDULE_BY_MODE`. If that
   lands, the eval default arm has to move with it (`docs/EVAL.md`, "The Eval
-  Default Arm IS the App") and `scripts/check-eval-app-sync.py` gains a
+  Default Arm IS the App") and `scripts/gates/check-eval-app-sync.py` gains a
   `default`-kind mirror — there is currently no mirror watching this constant.
 
 ## Running it

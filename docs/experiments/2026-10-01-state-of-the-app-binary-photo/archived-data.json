@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-state-of-the-app-binary-photo.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "why/why.csv": {
+     "bytes": 1190,
+     "oid": "c344bc17369c6cda2799ad2fec70a8a89498cf17"
+    }
+   }
+  }
+ ]
+}

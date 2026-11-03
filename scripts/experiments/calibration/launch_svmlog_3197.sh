@@ -90,7 +90,7 @@ require_jobid() {
 
 activate_venv() {
   # shellcheck disable=SC1091
-  source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/gridenv.sh" >&2; exit 1; }
+  source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/scripts/grid/gridenv.sh" >&2; exit 1; }
 }
 
 link_prepare() {
@@ -151,7 +151,7 @@ case "$MODE" in
     mkdir -p "$BASE/logs"
     D=$(sbatch --parsable --job-name=svmlog-datadir --mem=16G --cpus-per-task=1 --time=0:30:00 \
       --partition=cpu --output="$BASE/logs/datadir-%j.out" \
-      --wrap="source $WT/gridenv.sh && python $WT/scripts/experiments/svm_vs_logistic/make_datadir.py --out $DATADIR")
+      --wrap="source $WT/scripts/grid/gridenv.sh && python $WT/scripts/experiments/svm_vs_logistic/make_datadir.py --out $DATADIR")
     require_jobid "$D" "datadir"
     echo "datadir job: $D"
     ;;
@@ -161,7 +161,7 @@ case "$MODE" in
     ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
     P=$(sbatch --parsable --job-name=svmlog-prep --mem=24G --cpus-per-task=2 --time=1:30:00 \
       --partition=cpu --export=ALL --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P -> $BASE/prepare/logs/prepare-$P.out"
     ;;
@@ -195,7 +195,7 @@ PYLIST
     ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
     S=$(sbatch --parsable --job-name=svmlog-size --mem="$CALIB_MEM" --cpus-per-task=1 --time="$CALIB_TIME" \
       --partition=cpu --export=ALL --output="$BASE/sizing/logs/size-$ARM-$IDX-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (arm $ARM, cell $IDX)"
     ;;

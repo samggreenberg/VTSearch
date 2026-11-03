@@ -60,7 +60,7 @@ mkdir -p "$CALIB_EXP"
 if [[ "${1:-}" == prepare ]]; then
   # The natural shares come from the corpus, not the cell pickle, whose bands
   # all hold the same number of positives by construction.
-  ( source "$WT/gridenv.sh" && source "$WT/scripts/experiments/pile/pile_env.sh" &&
+  ( source "$WT/scripts/grid/gridenv.sh" && source "$WT/scripts/experiments/pile/pile_env.sh" &&
     cd "$WT/scripts/experiments/pile" &&
     python coco_better_export.py --mix-census --mix-census-json "$CALIB_MIX_SHARES" )
 fi

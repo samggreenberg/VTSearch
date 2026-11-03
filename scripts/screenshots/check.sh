@@ -37,6 +37,18 @@
 # measured. What a render elsewhere cannot match is what the app computes there:
 # the Browse map's layout and the odd score or percentage move with the CPU's
 # floating point. Emoji, too: each platform draws its own.
+#
+# So the shots name what the app computes there (`computed` in the manifest:
+# the Browse map, the training-domain percentages, the pictures a ranking
+# serves), the render writes where it lies beside each shot, and those boxes
+# are blanked in the render and the baseline alike before they are compared
+# (#5378). A shot with a region masked says so ("masked"), and
+#
+#   SHOT_MASK=0  compares the masked regions too: on the container, whose
+#                floating point made the baselines, they still match, and a
+#                ranking or layout change inside them shows.
+#
+# Without ImageMagick nothing is masked, as nothing is tolerated.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -44,12 +56,17 @@ BASELINE="../../docs/user/assets"
 SHOT_FUZZ="${SHOT_FUZZ:-5}"
 SHOT_FUZZ="${SHOT_FUZZ%\%}"
 SHOT_MAX_PX="${SHOT_MAX_PX:-150}"
+SHOT_MASK="${SHOT_MASK:-1}"
 if [[ ! "$SHOT_FUZZ" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
     echo "SHOT_FUZZ must be a percentage, like 5 or 2.5; got '$SHOT_FUZZ'" >&2
     exit 2
 fi
 if [[ ! "$SHOT_MAX_PX" =~ ^[0-9]+$ ]]; then
     echo "SHOT_MAX_PX must be a whole number of pixels; got '$SHOT_MAX_PX'" >&2
+    exit 2
+fi
+if [[ "$SHOT_MASK" != 0 && "$SHOT_MASK" != 1 ]]; then
+    echo "SHOT_MASK must be 1 (blank the computed regions) or 0; got '$SHOT_MASK'" >&2
     exit 2
 fi
 
@@ -72,7 +89,7 @@ echo "Rendering to $TMP …"
 OUT_DIR="$TMP" ./refresh.sh "$@"
 
 if [[ -n "$im" ]]; then
-    echo "Comparing with ImageMagick: SHOT_FUZZ=$SHOT_FUZZ%, SHOT_MAX_PX=$SHOT_MAX_PX"
+    echo "Comparing with ImageMagick: SHOT_FUZZ=$SHOT_FUZZ%, SHOT_MAX_PX=$SHOT_MAX_PX, SHOT_MASK=$SHOT_MASK"
 else
     echo "ImageMagick not found: comparing bytes, so SHOT_FUZZ and SHOT_MAX_PX do not apply."
 fi
@@ -80,6 +97,7 @@ fi
 drift=0
 checked=0
 near=0
+masked=0
 shopt -s nullglob
 for new in "$TMP"/*.webp; do
     name="$(basename "$new")"
@@ -114,8 +132,26 @@ for new in "$TMP"/*.webp; do
     # Anything other than a number is an error message, and a shot that could
     # not be compared is not a match.
     if [[ "$im" == magick ]]; then count=(magick); else count=(convert); fi
+    # Blank the shot's computed regions, as the render boxed them, in both.
+    # The draw goes in a lossless PNG, so the two blanks are the same pixels.
+    a="$base" b="$new" note=""
+    boxes="$TMP/${name%.webp}.computed"
+    if [[ "$SHOT_MASK" == 1 && -s "$boxes" ]]; then
+        draw=()
+        while read -r box; do
+            [[ "$box" =~ ^[0-9]+,[0-9]+\ [0-9]+,[0-9]+$ ]] || continue
+            draw+=(-draw "rectangle $box")
+        done <"$boxes"
+        if [[ ${#draw[@]} -gt 0 ]]; then
+            a="$TMP/mask-base.png" b="$TMP/mask-new.png"
+            "${count[@]}" "$base" -alpha off -fill black "${draw[@]}" "$a"
+            "${count[@]}" "$new" -alpha off -fill black "${draw[@]}" "$b"
+            note=", computed regions masked: $((${#draw[@]} / 2))"
+            masked=$((masked + 1))
+        fi
+    fi
     out=$(im_run compare -fuzz "$SHOT_FUZZ%" -alpha off -compose src \
-        -highlight-color white -lowlight-color black "$base" "$new" png:- 2>/dev/null \
+        -highlight-color white -lowlight-color black "$a" "$b" png:- 2>/dev/null \
         | "${count[@]}" png:- -alpha off -format '%[fx:round(mean*w*h)]' info: 2>&1) || true
     px="${out%% *}"
     if [[ ! "$px" =~ ^[0-9]+$ ]]; then
@@ -125,11 +161,13 @@ for new in "$TMP"/*.webp; do
     fi
     px=$(LC_ALL=C awk -v n="$px" 'BEGIN { printf "%.0f", n }')
     if [[ "$px" -gt "$SHOT_MAX_PX" ]]; then
-        echo "DRIFT: $name ($px px differ)"
+        echo "DRIFT: $name ($px px differ$note)"
         drift=1
     elif [[ "$px" -gt 0 ]]; then
-        echo "near:  $name ($px px differ)"
+        echo "near:  $name ($px px differ$note)"
         near=$((near + 1))
+    elif [[ -n "$note" ]]; then
+        echo "masked: $name (${note#, })"
     fi
 done
 
@@ -138,8 +176,7 @@ if [[ "$drift" -ne 0 ]]; then
     echo "Screenshots drifted from baselines. Review, then run refresh.sh to update."
     exit 1
 fi
-if [[ "$near" -gt 0 ]]; then
-    echo "check.sh OK: all $checked screenshots match the committed baselines ($near within SHOT_MAX_PX)."
-else
-    echo "check.sh OK: all $checked screenshots match the committed baselines."
-fi
+summary="all $checked screenshots match the committed baselines"
+if [[ "$near" -gt 0 ]]; then summary+=" ($near within SHOT_MAX_PX)"; fi
+if [[ "$masked" -gt 0 ]]; then summary+=", $masked with computed regions masked (SHOT_MASK=0 compares them)"; fi
+echo "check.sh OK: $summary."

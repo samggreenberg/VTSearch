@@ -47,7 +47,7 @@ submit_arm() {  # $1=name $2=exp dir $3=safe_thresholds flag
   sbatch --parsable --job-name="ab-$1" --array=0-$((N-1))%$CONC \
     "${GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
     --export=ALL --output="$LOGS/cells-$1-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $SHARED && export CALIB_EXP=$2 CALIB_RESULTS=$2/results CALIB_SAFE_THRESHOLDS=$3 && cd $HERE && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $SHARED && export CALIB_EXP=$2 CALIB_RESULTS=$2/results CALIB_SAFE_THRESHOLDS=$3 && cd $HERE && python run_cells.py"
 }
 
 ON_JOB=$(submit_arm on "$ON_EXP" 1)
@@ -58,13 +58,13 @@ echo "safe-OFF cells array: $OFF_JOB"
 # Within-run GMM variant contrasts (#2799 as pre-registered) on the ON arm.
 A1=$(sbatch --parsable --dependency=afterany:$ON_JOB --job-name=ab-an-safe --mem=16G \
   --cpus-per-task=4 --time=0:40:00 --partition=cpu --export=ALL --output="$LOGS/analyze-safe-%j.out" \
-  --wrap="source $WT/gridenv.sh && $SHARED && export CALIB_EXP=$ON_EXP CALIB_RESULTS=$ON_RES && cd $HERE && python analyze_safe.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $SHARED && export CALIB_EXP=$ON_EXP CALIB_RESULTS=$ON_RES && cd $HERE && python analyze_safe.py")
 echo "analyze_safe (ON):    $A1"
 
 # The ship decision: ON vs OFF, paired per cell.
 A2=$(sbatch --parsable --dependency=afterany:$ON_JOB:$OFF_JOB --job-name=ab-an-ab --mem=16G \
   --cpus-per-task=4 --time=0:40:00 --partition=cpu --export=ALL --output="$LOGS/analyze-ab-%j.out" \
-  --wrap="source $WT/gridenv.sh && $SHARED && export CALIB_EXP=$ON_EXP CALIB_RESULTS=$ON_RES CALIB_AB_ON=$ON_RES CALIB_AB_OFF=$OFF_RES && cd $HERE && python analyze_ab.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $SHARED && export CALIB_EXP=$ON_EXP CALIB_RESULTS=$ON_RES CALIB_AB_ON=$ON_RES CALIB_AB_OFF=$OFF_RES && cd $HERE && python analyze_ab.py")
 echo "analyze_ab (ON/OFF):  $A2"
 
 echo "$ON_JOB $OFF_JOB" > "$LOGS/.ab_jobids"

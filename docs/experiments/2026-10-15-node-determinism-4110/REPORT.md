@@ -114,7 +114,7 @@ pair below; it feeds no decision.
 
 ## The cells, end to end
 
-![Share of cells in each verdict, per pair of arms](figures/verdicts.png)
+![Share of cells in each verdict, per pair of arms](figures/verdicts.webp)
 
 | pair | question | cells | identical | diagnostics only | threshold | objective | other picks |
 |---|---|---|---|---|---|---|---|
@@ -147,7 +147,7 @@ Both cells end on the same F-beta. Across the 72 cells, the mean paired F-beta g
 a vote, and 0 at the last vote.
 
 ![Paired gap at every vote, Intel minus AMD: #3840 in September (cost), today's dev and today's dev pinned
-(F-beta). Grey: one cell each; blue: the mean](figures/fbeta_gap.png)
+(F-beta). Grey: one cell each; blue: the mean](figures/fbeta_gap.webp)
 
 **A session can still part on a last bit, and one did.** Switching the pins on is itself a last-bit change,
 and it sent one of 72 cells down another path on both node types. Both unpinned runs (Intel and AMD) took one
@@ -183,7 +183,7 @@ within 150 votes. That is a different grid and commit, so the two rates do not c
 Each row takes the pin that reaches it: the numpy rows the numpy pin, the head, GEMM and encoder rows
 `MKL_CBWR=COMPATIBLE`, and the text tower all three. A range is two runs of the same probe.
 
-![Wall minutes a cell, per arm](figures/cell_seconds.png)
+![Wall minutes a cell, per arm](figures/cell_seconds.webp)
 
 Cell for cell, the pinned arm took a median 3% longer than the unpinned one on the Xeons (4.2 against 4.1
 minutes) and 1% less on the EPYCs (3.1 against 3.2). The same arm run twice on the EPYCs moved by a median

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-19-evidence-chip-5089.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "shares.csv": {
+     "bytes": 5079,
+     "oid": "c78dd7b42dcbe3f89d250d07a17161b91de00158"
+    }
+   }
+  }
+ ]
+}

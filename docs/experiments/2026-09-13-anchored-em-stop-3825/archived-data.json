@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-13-anchored-em-stop-3825.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/bench_by_n.csv": {
+     "bytes": 6036,
+     "oid": "56a69a60ee62f6f331affcf2aefcb7e56ae4fccb"
+    },
+    "agg/fits_by_arm.csv": {
+     "bytes": 2427,
+     "oid": "1a11863f50009a199e852d757120ef2a9f349508"
+    },
+    "agg/gate_by_arm.csv": {
+     "bytes": 2616,
+     "oid": "cf4ed765aefc4937f0bff04a70970bb24fc8b8f3"
+    },
+    "agg/gate_by_env.csv": {
+     "bytes": 10866,
+     "oid": "9214e459636f247a1d54790d662254c294bba046"
+    },
+    "agg/gate_by_inclusion.csv": {
+     "bytes": 2979,
+     "oid": "3ddeaa22197d04048e57447d47eea8c472953666"
+    },
+    "agg/incumbent.csv": {
+     "bytes": 1162,
+     "oid": "1152fd8952f98465ee7cfda24f69b813e0c95ff7"
+    },
+    "agg/monotonicity.csv": {
+     "bytes": 193,
+     "oid": "70a75a8c28892b0c65375e97345920a1b4836036"
+    }
+   }
+  }
+ ]
+}

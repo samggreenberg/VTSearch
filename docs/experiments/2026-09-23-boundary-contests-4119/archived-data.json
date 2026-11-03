@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-23-boundary-contests-4119.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/bags.json": {
+     "bytes": 2225,
+     "oid": "710a8aba814248b1ef74c0254ac7b43c8a965ebd"
+    },
+    "measurements/cartruck.json": {
+     "bytes": 2183,
+     "oid": "c7764024c4fa929edcb1a3a3641d792298bddea4"
+    },
+    "measurements/plants.json": {
+     "bytes": 1248,
+     "oid": "d2c5367d1844f7a28e645af2c6d20e0a9fc251d5"
+    },
+    "measurements/snow.json": {
+     "bytes": 475,
+     "oid": "9a8ea5b915d8f451ff57aa1c52199c30ab39b9c0"
+    }
+   }
+  }
+ ]
+}

@@ -250,7 +250,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=f3115-prep --mem=24G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$LOGS/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $LOGS/prepare-$P.out"
     ;;
@@ -272,7 +272,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=f3115-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$LOGS/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX)  ->  $LOGS/size-$S.out   cells -> $SIZING"
     ;;
@@ -296,8 +296,8 @@ case "$MODE" in
     # this is preflight reporting `ok` without having looked (#2905).  Activate
     # the venv first so the checks actually run.
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
     if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
       # No `--diverges`: this run pins nothing off-production.  The combine rule

@@ -17,7 +17,7 @@ NPY="AVX512F AVX512_SKX"
 body() {
   cat <<BODY
 set -uo pipefail
-source $VTS_REPO/gridenv.sh >/dev/null 2>&1
+source $VTS_REPO/scripts/grid/gridenv.sh >/dev/null 2>&1
 source $VTS_REPO/scripts/experiments/pile/pile_env.sh
 unset NPY_DISABLE_CPU_FEATURES MKL_CBWR ATEN_CPU_CAPABILITY
 export VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR HF_HOME CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
@@ -48,7 +48,7 @@ case "${1:-}" in
     done
     ;;
   collate)
-    source "$VTS_REPO/gridenv.sh" >/dev/null 2>&1
+    source "$VTS_REPO/scripts/grid/gridenv.sh" >/dev/null 2>&1
     python "$HERE/collate_probes.py" --probes "$PROBE_DIR" --out "$PROBE_DIR/tables"
     ;;
   *)

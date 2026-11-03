@@ -54,7 +54,7 @@ By difficulty quartile, binary, mean over clicks 1–150 ([`strata/binary_quarti
 
 The #4114 "small band" effect is a difficulty effect: small objects are mostly hard categories. On hard categories the logistic head wins by a lot. On easy ones, which the SVM already ranks well, it gives up about 0.01 AP at the top of the list, and the cost loss is just under 2 SE. In binary voting that trade still comes out well ahead overall.
 
-![binary paired difference by band](figures/paired_delta_by_band.png)
+![binary paired difference by band](figures/paired_delta_by_band.webp)
 
 *Binary. Orange is logistic and purple the C = 0.1 SVM, both minus the shipped SVM, ±2 SE clustered on category. On cost the C = 0.1 SVM is above zero in medium and large, where its cut gives the ranking back. The logistic head is below zero in small and medium, and within about 0.01 of zero in large.*
 
@@ -74,7 +74,7 @@ lrconv − svm at each Inclusion stop, binary ([`cutincl/cutincl_paired.csv`](cu
 
 (The k = 0 row is over the re-cut rows, which cover slightly fewer steps than the base rows, so it reads −0.0077 where §1 reads −0.0099.)
 
-![cost by inclusion stop](cutincl/cutincl_by_stop.png)
+![cost by inclusion stop](cutincl/cutincl_by_stop.webp)
 
 *Left: every head's cost at the shipped cut (solid) and at the best cut the test labels allow (dashed), log scale. Right: paired difference from the shipped SVM, cost (solid) and regret (dotted), ±2 SE, on a symmetric-log axis.*
 
@@ -103,7 +103,7 @@ Under region voting the logistic head still ranks better on hard categories, by 
 
 As Bad votes accumulate, the logistic head's acquisition cut drifts down (0.47 → 0.34, against the SVM's 0.50 → 0.42). It admits more of the pool, so the borderline items Autopilot asks about sit among negatives. By the last 50 clicks the user is shown a Good a third as often (2.4% against 7.1%). That is the region-flooding prediction: each Bad image contributes ~200 correlated region rows, mostly easy negatives, and a loss that counts every row pulls the scores of everything down. The per-bag weights balance the classes' total weight, but not how that weight is spread. The hinge ignores rows it already classifies well, so the SVM's scores do not drift.
 
-![region paired difference by band](figures_region/paired_delta_by_band.png)
+![region paired difference by band](figures_region/paired_delta_by_band.webp)
 
 *Region voting, lrconv − svm by band (the grid's strata are hard/easy; band is shown because it is the axis `figures_4114.py` draws). Large objects, mostly easy categories, are worse on cost and AP from click ~15 onward, and on ranking too.*
 

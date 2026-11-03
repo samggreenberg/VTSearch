@@ -32,7 +32,7 @@ arms that passed at tier `s`.
 
 Max over templates holds at tier `m`: +0.12 over the exemplar at 10 votes.
 
-![Vote curves](figures/vote_curves.png)
+![Vote curves](figures/vote_curves.webp)
 
 ## Setup
 
@@ -126,7 +126,7 @@ Paired against max-over-templates at 10 shared votes, over 29 classes (bootstrap
 | match-stat MLP | −0.18 | [−0.29, −0.08] |
 | SigLIP SVM → SIFT | −0.27 | [−0.42, −0.14] |
 
-![Per-class differences at 10 votes](figures/paired_v10.png)
+![Per-class differences at 10 votes](figures/paired_v10.webp)
 
 The same tables for the 27 classes v4.3 had are in the
 [summary](measurements/tier-s/summary.md). The nine classes v5.0 added are easy
@@ -198,7 +198,7 @@ ruled form box printed in Helvetica:
 
 | the query crop | a Good page's box, as a template |
 |---|---|
-| ![query](examples/q213.png) | ![box](examples/box227.png) |
+| ![query](examples/q213.webp) | ![box](examples/box227.webp) |
 
 The query crop is a good template: its strongest negative has 17 inliers. The
 same mark cut from a Good page's own features matches unrelated typed pages
@@ -290,7 +290,7 @@ Paired against max-over-templates, bootstrap 95% interval over classes:
 
 | the query crop | the Bad page's letterhead |
 |---|---|
-| ![RJR](examples/q_aeq93.png) | ![RJR CONFIDENTIAL](examples/idr55d00_head.png) |
+| ![RJR](examples/q_aeq93.webp) | ![RJR CONFIDENTIAL](examples/idr55d00_head.webp) |
 
 That page's "RJR CONFIDENTIAL" lockup contains the RJR letters. The completeness
 review ruled it *not* an instance of this class, and it is a correct Bad under

@@ -48,7 +48,7 @@ trains shows the typed query's set throughout.
 
 ## Result
 
-![F1 over clicks per arm, and the paired gain over Autopilot as shipped](figures/band_over_clicks.png)
+![F1 over clicks per arm, and the paired gain over Autopilot as shipped](figures/band_over_clicks.webp)
 
 *Left: mean F1 of the returned set over clicks. The circles are Autopilot as shipped after the check where the user
 stops. Right: each mix's paired gain over Autopilot as shipped.*

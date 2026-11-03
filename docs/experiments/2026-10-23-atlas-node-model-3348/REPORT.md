@@ -48,7 +48,7 @@ rule. [PREREG.md](PREREG.md) defines all of them.
 
 ## Where the defect lives
 
-![calibration axis](figures/calibration_axis.png)
+![calibration axis](figures/calibration_axis.webp)
 
 *Held-out share below 0.05 at the deepest calibrated node, per embedder. Hollow
 markers are leave-one-out calibration (the shipped scheme), filled markers are
@@ -74,7 +74,7 @@ The second row rules out the grid: exact ranks on the same LOO calibration are
 deepest node's bias. That matches #3329's B2: removing the averaging made KS
 worse.
 
-![dinov3_patch PIT](figures/pit_patch.png)
+![dinov3_patch PIT](figures/pit_patch.webp)
 
 *Empirical CDF of held-out in-domain p-values on `dinov3_patch`, one line per
 cell. A calibrated p-value lies on the dashed diagonal. The shipped model (red)
@@ -105,7 +105,7 @@ passers. Of the 21 that fail, 19 are LOO-calibrated or use the `mean`
 combiner, and the other two are `vmf`/`mix` with split calibration and the
 `median` combiner, which fall short on the patch space. Full table: [`agg/tables.md`](agg/tables.md).*
 
-![separation](figures/separation.png)
+![separation](figures/separation.webp)
 
 None of the seven passers fires on any own-holdout pair or on either
 same-source pair (`coco_val` ↔ `coco_better`), on any embedder. The shipped

@@ -391,7 +391,7 @@ print(pathlib.Path(vtscore.__file__).resolve())
 PY
 )
   if [[ -z "$RESOLVED" ]]; then
-    say_fail "could not resolve 'import vtscore' - is the venv active (source gridenv.sh)?"
+    say_fail "could not resolve 'import vtscore' - is the venv active (source scripts/grid/gridenv.sh)?"
     PY_USABLE=0
   else
     REPO_REAL=$(cd "$REPO" && pwd -P)
@@ -400,7 +400,7 @@ PY
       *)
         say_fail "import vtscore resolves to $RESOLVED"
         echo "        -> that is NOT $REPO_REAL; the jobs would measure another checkout"
-        echo "        -> source this worktree's gridenv.sh (it creates .shadow and pins VTS_REPO)"
+        echo "        -> source this worktree's scripts/grid/gridenv.sh (it creates .shadow and pins VTS_REPO)"
         ;;
     esac
   fi

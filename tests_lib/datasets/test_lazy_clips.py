@@ -21,7 +21,13 @@ import pytest
 from vtscore.datasets.clipper_chain import _content_hash
 from vtscore.datasets.stages import clipper as clipper_stage
 from vtscore.media.audio.wav import wav_slice
-from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, embed_view, lazy_clip_bytes, recipe_is_exclusive
+from vtscore.media.clipping.lazy_clip import (
+    _ByteBoundedLRU,
+    clip_recipe,
+    embed_view,
+    lazy_clip_bytes,
+    recipe_is_exclusive,
+)
 
 from tests_lib.helpers import make_png_bytes, make_wav_bytes
 

@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-26-imagekit-face-bench-5321.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "gaps.csv": {
+     "bytes": 4369,
+     "oid": "208447bfc2decfa58e19b9e415b236d6e894212e"
+    },
+    "paired.csv": {
+     "bytes": 2531,
+     "oid": "f803d377a1b83b8f34cbb6f9728e2670711baf9a"
+    }
+   }
+  }
+ ]
+}

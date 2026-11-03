@@ -91,7 +91,7 @@ Beta = 0.5 and 2 tell the same story (`summary.csv`, the figure): `fb-walk`
 0.58–0.91 on corpora of 3,200 and up; `fb-gmm` 0.19–0.40 on the ×10 sparse
 corpora and 0.91–0.94 at 5%.
 
-![F-beta share by size, per world and beta](figures/fb_share_by_size.png)
+![F-beta share by size, per world and beta](figures/fb_share_by_size.webp)
 
 ### What each rule returns (beta = 1, count / oracle's count, votes)
 
@@ -104,7 +104,7 @@ corpora and 0.91–0.94 at 5%.
 | 5% | 1k | 39 / 52 | 51 / 52, 24 | 65 / 52, 42 | 59 / 52, 24 |
 | 5% | ×10 | 559 / 524 | 617 / 524, 43 | 594 / 524, 60 | 615 / 524, 39 |
 
-![Count returned against the oracle's](figures/count_vs_oracle.png)
+![Count returned against the oracle's](figures/count_vs_oracle.webp)
 
 - **The mixture alone over-returns where it over-counts.** Its total-positives
   estimate is 28× the truth on the 0.1% ×10 corpus (#3827), the F-beta

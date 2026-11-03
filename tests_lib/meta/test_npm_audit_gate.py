@@ -1,4 +1,4 @@
-"""The `npm audit` gate's waiver table: `scripts/npm-audit-gate.py` (#4447).
+"""The `npm audit` gate's waiver table: `scripts/gates/npm-audit-gate.py` (#4447).
 
 A waiver is a hole in a security gate, so what needs pinning is that the hole
 stays exactly one advisory wide and closes on its own: an unwaived advisory
@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "npm-audit-gate.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "npm-audit-gate.py"
 
 
 def _load_gate():

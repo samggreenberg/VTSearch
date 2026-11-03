@@ -12,7 +12,7 @@ directly on :mod:`vtscore.media`.
 Families are registered with :func:`register_plugin_family`.  Library
 families self-register at module import; app-only families
 (``settings_io/*``) are injected by the application layer via
-:mod:`vtsearch.shim` so this module stays free of app-tier imports (see
+:mod:`vtsearch.seam_wiring` so this module stays free of app-tier imports (see
 the Plugin discovery seam in ``../docs/architecture.md``).
 """
 
@@ -231,7 +231,7 @@ def _load_cleaners() -> Iterable[Any]:
 
 # App-only families (settings importers/exporters/sources) are NOT
 # registered here; the app installs them at startup via
-# :func:`vtsearch.shim.register_app_plugin_families`.
+# :func:`vtsearch.seam_wiring.register_app_plugin_families`.
 _LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
     FamilyProvider("importers", "Dataset importers", _load_importers),
     FamilyProvider("datasource_importers", "Datasource importers", _load_datasource_importers),

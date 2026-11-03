@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-provenance-4256.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "provenance.json": {
+     "bytes": 37,
+     "oid": "85af275f339d788781e98df0fbc00af4ef0f8284"
+    },
+    "provenance_by_band.csv": {
+     "bytes": 10007,
+     "oid": "ff408162ad84321f9f2beebf5a347719d392004c"
+    },
+    "provenance_by_t.csv": {
+     "bytes": 12441,
+     "oid": "4fe5fd6f8d57bc9ed2b0accb77bcde630c27f88c"
+    },
+    "provenance_rows.csv.gz": {
+     "bytes": 613609,
+     "oid": "b56dd10fcfed2385e08a1378d198458c2d1ea3d5"
+    },
+    "provenance_summary.csv": {
+     "bytes": 3269,
+     "oid": "48137e2b022db254f7d42e4eea12fc124229b4b7"
+    }
+   }
+  }
+ ]
+}

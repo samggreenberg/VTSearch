@@ -41,7 +41,7 @@ _ALWAYS_REQUIRED: frozenset[str] = frozenset(
         "tqdm",
         "scikit-learn",
         "torch",
-        # Browse canvas: vtscore.gpu_backends.umap_fit_transform falls back to
+        # Browse canvas: vtscore.config.gpu_backends.umap_fit_transform falls back to
         # the CPU umap-learn reducer whenever cuML is absent (always, in the
         # slim images).
         "umap-learn",

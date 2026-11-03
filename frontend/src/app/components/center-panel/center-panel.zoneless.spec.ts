@@ -433,6 +433,44 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
+   * #5502: Tune's test votes its picks on this same pane, but the votes are the
+   * test's: the host sends them, so the pane only swipes and emits, lights the
+   * buttons from the host's vote, keeps undo off and draws no region.
+   */
+  describe('with the votes the host\'s (#5502)', () => {
+    beforeEach(() => {
+      fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image' });
+      fixture.componentRef.setInput('hostVotes', true);
+      component.showAnimations.set(false);
+      TestBed.tick();
+    });
+
+    it('emits the vote and sends nothing of its own', () => {
+      let emitted: { id: number; vote: string } | undefined;
+      component.mediaVoted.subscribe((e: { id: number; vote: string }) => (emitted = e));
+      component.castVote('bad');
+      httpMock.expectNone('/api/medias/1/vote');
+      expect(emitted).toEqual({ id: 1, vote: 'bad' });
+      expect(component.voteState.badVotes.has(1)).toBe(false);
+      expect(component.isVoting()).toBe(false);
+    });
+
+    it("lights the host's vote, not the vote state's", () => {
+      vi.spyOn(component.voteState, 'effectiveGood').mockReturnValue(true);
+      expect(component.isGood).toBe(false);
+      fixture.componentRef.setInput('hostVote', 'bad');
+      expect(component.isBad).toBe(true);
+      expect(component.isGood).toBe(false);
+    });
+
+    it('offers no region to draw: a host-owned vote carries none', () => {
+      expect(component.regionDrawOffered).toBe(false);
+      fixture.componentRef.setInput('hostVotes', false);
+      expect(component.regionDrawOffered).toBe(true);
+    });
+  });
+
+  /**
    * The vote belongs to the item that was selected when the key was pressed.
    * Selection can move while the POST is in flight or during the 180ms swipe
    * animation (a click in the left list, hover-focus, a concurrent auto-advance),

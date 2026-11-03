@@ -154,7 +154,7 @@ was real and the extra iterations bought nothing. Here the loop looks flat for a
 long stretch **while it is still doing the work**, so the same rule at the same
 tolerance stops in a qualitatively different place.
 
-![Cost against fidelity, one point per arm; squares are the controls](figures/tradeoff.png)
+![Cost against fidelity, one point per arm; squares are the controls](figures/tradeoff.webp)
 
 *Every arm's refit speedup against how much haystack it moves at the 90th
 percentile. The two squares are the controls — the incumbent perturbed, not
@@ -244,7 +244,7 @@ Running the loop one iteration at a time on real folds and recording both:
 | anchored (weighted) — shipped | 1,989 | **0** | 0 of 8 |
 | free sample only | 2,410 | **883 (36.6%)** | 6 of 8 |
 
-![The two objectives over EM iterations on four real folds](figures/objective_trace.png)
+![The two objectives over EM iterations on four real folds](figures/objective_trace.webp)
 
 *Distance from each objective's own limit, per iteration, on four captured
 folds. The anchored objective descends smoothly; the free sample's is the ragged
@@ -297,7 +297,7 @@ exiting on `max_iter` deserved to be reported. `ll1e-8`'s moves are a different
 kind of thing: its p90 in every environment is one media in two thousand, i.e. a
 single order statistic, i.e. the granularity of the snap.
 
-![ECDF of the admitted-set move, per arm](figures/move_ecdf.png)
+![ECDF of the admitted-set move, per arm](figures/move_ecdf.webp)
 
 *How much of the haystack each rule moves, as a cumulative distribution — a
 median hides whether an arm is uniformly small or usually zero with a bad tail,
@@ -369,7 +369,7 @@ it stopped on, is what keeps the comparison from being a tautology.
 
 ## 4. What it costs
 
-![Iterations per arm, with the cap drawn](figures/iterations.png)
+![Iterations per arm, with the cap drawn](figures/iterations.webp)
 
 *The shipped rule's box sits against the 200 cap; a quarter of folds are on the
 line itself.*

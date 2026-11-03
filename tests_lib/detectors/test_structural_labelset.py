@@ -1,6 +1,6 @@
 """Tests for the structural Stage-2 re-rank on the saved-detector (labelset) path.
 
-Exercises ``vtscore.detectors.labelset_training``'s structural helpers: the
+Exercises ``vtscore.detectors.labelset_structural``'s helpers: the
 cross-dataset local-feature cache projection (:func:`_labelset_feature_snapshot`),
 the no-op gating of :func:`populate_label_local_features`, and the end-to-end
 :func:`maybe_labelset_structural_rerank` that lets a saved structural detector
@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
-from vtscore.detectors import labelset_training
+from vtscore.detectors import labelset_structural
 from vtscore.detectors.labelset_elements import stable_element_id
 from vtscore.media.structural import SiftMatcher, StructuralFeatures
 from vtscore.state.core import DetectorContext
@@ -84,7 +84,9 @@ class TestLabelsetFeatureSnapshot:
         det_ctx.label_local_features[stable_element_id(good_no_box)] = _feats(_textured_image(2), matcher=m)
         det_ctx.label_local_features[stable_element_id(bad)] = _feats(_textured_image(3), matcher=m)
 
-        feat_snap, good_votes, bad_votes, region_boxes = labelset_training._labelset_feature_snapshot(det_ctx, labelset)
+        feat_snap, good_votes, bad_votes, region_boxes = labelset_structural._labelset_feature_snapshot(
+            det_ctx, labelset
+        )
 
         assert set(good_votes) == {stable_element_id(good), stable_element_id(good_no_box)}
         assert set(bad_votes) == {stable_element_id(bad)}
@@ -101,7 +103,7 @@ class TestPopulateLabelLocalFeatures:
         """No active dataset (empty snap) -> no embedder -> nothing cached."""
         det_ctx = DetectorContext(detector_id="d", media_type="image")
         labelset = LabelSet(elements=[_element("g", "good")])
-        cached = labelset_training.populate_label_local_features(det_ctx, labelset, snap={})
+        cached = labelset_structural.populate_label_local_features(det_ctx, labelset, snap={})
         assert cached == 0
         assert dict(det_ctx.label_local_features) == {}
 
@@ -112,7 +114,7 @@ class TestMaybeLabelsetStructuralRerank:
         labelset = LabelSet(elements=[_element("g", "good")])
         snap = {1: {"embedding": np.zeros(8, dtype=np.float32)}}  # no local_features
         results = [{"id": 1, "score": 0.7}]
-        out, thresh = labelset_training.maybe_labelset_structural_rerank(det_ctx, labelset, results, 0.33, snap)
+        out, thresh = labelset_structural.maybe_labelset_structural_rerank(det_ctx, labelset, results, 0.33, snap)
         assert out == results
         assert thresh == 0.33
 
@@ -130,7 +132,7 @@ class TestMaybeLabelsetStructuralRerank:
         # in the loaded dataset) and skip the resolver-driven population pass.
         det_ctx.label_local_features[stable_element_id(good)] = _feats(base, matcher=m)
         det_ctx.label_local_features[stable_element_id(bad)] = _feats(_textured_image(41), matcher=m)
-        monkeypatch.setattr(labelset_training, "populate_label_local_features", lambda *a, **kw: 0)
+        monkeypatch.setattr(labelset_structural, "populate_label_local_features", lambda *a, **kw: 0)
         monkeypatch.setattr(
             "vtscore.training.structural_similarity._resolve_matcher",
             lambda _snap: m,
@@ -146,7 +148,7 @@ class TestMaybeLabelsetStructuralRerank:
             {"id": 10, "score": 0.94},  # high VLAD, unrelated
             {"id": 20, "score": 0.35},  # warp of the cross-dataset template
         ]
-        out, thresh = labelset_training.maybe_labelset_structural_rerank(det_ctx, labelset, results, 0.5, snap)
+        out, thresh = labelset_structural.maybe_labelset_structural_rerank(det_ctx, labelset, results, 0.5, snap)
 
         assert thresh == STRUCTURAL_DECISION_THRESHOLD
         assert out[0]["id"] == 20, "geometrically-verified item must lead"

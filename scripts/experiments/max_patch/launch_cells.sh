@@ -25,7 +25,7 @@ TIME="${MAXPATCH_TIME:-4:00:00}"
 CONC="${MAXPATCH_CONC:-8}"
 
 # Count cells from the prepared datasets.
-N=$(cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; \
+N=$(cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1; \
     MAXPATCH_EXP=$MAXPATCH_EXP python run_cells.py --print-cells 2>/dev/null | tail -1)
 if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
   echo "ERROR: could not determine cell count (got '$N'); is prepare done?" >&2
@@ -40,7 +40,7 @@ require_jobid() {
   fi
 }
 
-WRAP="source $WT/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP MAXPATCH_EMBEDDERS=$MAXPATCH_EMBEDDERS MAXPATCH_N_CATEGORIES=$MAXPATCH_N_CATEGORIES MAXPATCH_N_SEEDS=$MAXPATCH_N_SEEDS MAXPATCH_MAX_STEPS=$MAXPATCH_MAX_STEPS && cd $HERE"
+WRAP="source $WT/scripts/grid/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP MAXPATCH_EMBEDDERS=$MAXPATCH_EMBEDDERS MAXPATCH_N_CATEGORIES=$MAXPATCH_N_CATEGORIES MAXPATCH_N_SEEDS=$MAXPATCH_N_SEEDS MAXPATCH_MAX_STEPS=$MAXPATCH_MAX_STEPS && cd $HERE"
 
 B=$(sbatch --parsable --job-name=mp-cells --array=0-$((N-1))%$CONC \
   --gres="$GRES" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition=gpu \
@@ -54,7 +54,7 @@ echo "$B" > "$LOGS/.cells_jobid"
 S=$(sbatch --parsable --dependency=afterany:$B --job-name=mp-sum --mem=16G \
   --cpus-per-task=4 --time=0:30:00 --partition=gpu --gres=gpu:v100:1 \
   --export=ALL --output="$LOGS/summarize-%j.out" \
-  --wrap="source $WT/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP && cd $HERE && python analyze.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && export MAXPATCH_EXP=$MAXPATCH_EXP && cd $HERE && python analyze.py")
 require_jobid "$S" "summarize"
 echo "summarize: $S"
 echo "Report -> $MAXPATCH_EXP/results/REPORT.md"

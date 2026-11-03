@@ -51,7 +51,7 @@ result: #4220, comment of 2026-09-28.
 
 ## Trust follows the positives
 
-![Promises broken, of those made, against positives among the calibration votes](figures/trust_follows_positives.png)
+![Promises broken, of those made, against positives among the calibration votes](figures/trust_follows_positives.webp)
 
 X = 50%. Each point is the share of promises broken among the frames that made
 one. A frame that promises nothing can't break a promise, so it's left out.
@@ -89,7 +89,7 @@ ungated. With EM and the gate, it breaks 3% of the promises it makes
 
 ## Today's app almost never reaches the gate
 
-![Positives among the calibration votes by checkpoint](figures/calibration_positives.png)
+![Positives among the calibration votes by checkpoint](figures/calibration_positives.webp)
 
 | pool | calibration positives at vote 25 / 50 / 100 / 150 (mean) | frames with ≥10 at vote 150 |
 |---|---|---|

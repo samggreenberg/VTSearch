@@ -24,11 +24,11 @@ built for an interactive session (one detector, advancing one vote at a time).
 A simulation runs thousands of independent trajectories and already holds every
 per-step model it needs, so it feeds those inputs in directly.  The rules —
 every threshold and constant below — are copied verbatim, and
-``tests_lib/detectors/test_autopilot_flow.py`` pins them against the sources.
+``tests_lib/eval/test_autopilot_flow.py`` pins them against the sources.
 
 Because this is a copy, it can go stale silently: change a phase trigger in the
 app and the simulated user keeps taking the old route, so every study run after
-that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
+that measures a flow nobody takes.  ``scripts/gates/check-eval-app-sync.py`` — a
 ``./run-tests.sh`` gate — digests both sources and fails when either moves; see
 "The Eval Default Arm IS the App" in ``docs/EVAL.md``.
 
@@ -75,13 +75,16 @@ from vtscore.detectors.cost_trend import (
     smart_status_from_costs,
 )
 from vtscore.detectors.stability import (
+    HARD_DRY_RUN,
     MIN_PER_CLASS,
     STABLE_FALLING_RATIO,
     STABLE_MAX_THRESHOLD,
     STABLE_MIN_ENTRIES,
     STABLE_RATE_THRESHOLD,
     STABLE_WINDOW,
+    HardDryRun,
     ScoredSnapshot,
+    goods_minimum,
     stability_entry,
     stable_status_from_entries,
 )
@@ -129,6 +132,8 @@ MORE_DRY_RUN = 16
 # from ``vtscore.detectors.stability`` so a study naming a gate, or measuring
 # how far a run sat from one, has every threshold from one place.
 __all__ = [
+    "HARD_DRY_PHASES",
+    "HARD_DRY_RUN",
     "MIN_PER_CLASS",
     "SMART_FLAT_THRESHOLD",
     "SMART_MIN_POINTS",
@@ -143,12 +148,16 @@ __all__ = [
 ]
 
 # ``_compute_span_status``: yellow once this many atlas nodes carry evidence;
-# green at ``autopilot_goal_diversity`` (default 40), capped at the tree size.
+# green at ``autopilot_goal_diversity``, capped at the tree size.  The default
+# is 0 since #5473: Span reads green from the first vote and Autopilot skips its
+# Diversity (``new``) step.  ``SPAN_GREEN_ON`` is the goal with the step on, the
+# default before #5473.
 SPAN_YELLOW = 10
-SPAN_GREEN_DEFAULT = 40
+SPAN_GREEN_DEFAULT = 0
+SPAN_GREEN_ON = 40
 
 
-def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, Any]:
+def smart_detail(recent_fbetas: list[float], good: int, bad: int, min_good: int = MIN_PER_CLASS) -> dict[str, Any]:
     """The app's Smart sub-object, *whole*: the light and the numbers behind it.
 
     *recent_fbetas* are the last :data:`SMART_WINDOW` cached models' best
@@ -160,9 +169,10 @@ def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, A
 
     :func:`smart_status` keeps only ``status``.  This keeps ``slope`` and
     ``slope_t`` as well, which is what lets a study say how *close* a yellow was
-    to green rather than only that it was not green (issue #3560).
+    to green rather than only that it was not green (issue #3560).  *min_good*
+    is the Goods the light needs (:attr:`AutopilotFlow.min_good_now`, #5477).
     """
-    return rising_status_from_scores(recent_fbetas, good, bad)
+    return rising_status_from_scores(recent_fbetas, good, bad, min_good=min_good)
 
 
 def smart_status(recent_fbetas: list[float], good: int, bad: int) -> Status:
@@ -174,7 +184,9 @@ def smart_status(recent_fbetas: list[float], good: int, bad: int) -> Status:
     return smart_detail(recent_fbetas, good, bad)["status"]  # type: ignore[return-value]
 
 
-def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) -> dict[str, Any]:
+def stable_detail(
+    stability_entries: list[dict[str, Any]], good: int, bad: int, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The app's Stable sub-object, *whole*: the light and the numbers behind it.
 
     Each entry is one :func:`vtscore.detectors.stability.stability_entry`
@@ -186,9 +198,9 @@ def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) 
     :func:`stable_status` keeps only ``status``.  This keeps the three rates
     Stable's three gates turn on - the confident average and its worst step,
     and the two halves of the raw window - so a study can say which gate was
-    binding and by how much (issue #3560).
+    binding and by how much (issue #3560).  *min_good* as for :func:`smart_detail`.
     """
-    return stable_status_from_entries(stability_entries, good, bad)
+    return stable_status_from_entries(stability_entries, good, bad, min_good=min_good)
 
 
 def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:
@@ -223,9 +235,10 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
     nodes and *depth* its total node count (i.e.
     :meth:`CoverageAtlas.span_info`'s ``level`` / ``depth``).  A degenerate tree
     (no nodes) reads green, matching the app — there is no diversity left to
-    chase.
+    chase.  So does a goal of 0, the Diversity step off (#5473), with or without a
+    tree.
     """
-    if depth <= 0:
+    if depth <= 0 or green_at <= 0:
         return "green"
     green = span_target(depth, green_at)
     yellow = min(SPAN_YELLOW, green)
@@ -418,6 +431,12 @@ def next_phase(  # noqa: C901 - a line-for-line port of checkPhaseTransition, ke
 #: the user is still on the text/example sort (see the module docstring).
 TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "spot", "done", "exhausted"})
 
+#: The phases whose Bads count toward #5477's dry run (:data:`HARD_DRY_RUN`):
+#: the ones where Autopilot is still picking off a learned sort.  Past Done the
+#: app records a vote as list review, not Autopilot's, so ``done`` and
+#: ``exhausted`` do not count.
+HARD_DRY_PHASES: frozenset[str] = frozenset({"hard", "new", "spot"})
+
 
 #: The phase in which the app has told the user it is done: all three quality
 #: indicators are green, and the panel reads "All quality indicators are green.
@@ -473,7 +492,7 @@ def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
     #4220 estimate's evidence with the app's own
     :func:`~vtscore.datasets.vote_provenance.calibrates_precision` (#4245).
     Neither side builds that estimate any more, so no step records it, and
-    ``scripts/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
+    ``scripts/gates/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
     against the label view.  It still answers from that table, with a
     ``DeprecationWarning``, until the name is removed.  ``None`` outside the
     labelling phases.
@@ -574,9 +593,27 @@ class AutopilotFlow:
         stop_cap: int | None = STOP_CAP,
         smart_signal: str = APP_SMART_SIGNAL,
         record_readings: bool = False,
+        min_good: int = MIN_PER_CLASS,
+        hard_dry_run: int | None = HARD_DRY_RUN,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
+        #: The Goods Smart and Stable need before either leaves red (#5477):
+        #: :data:`MIN_PER_CLASS`, the app's, unless an arm lowers it.  The Bads'
+        #: minimum stays :data:`MIN_PER_CLASS`.
+        if isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS:
+            raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS}, got {min_good!r}")
+        self.min_good = min_good
+        #: #5477's dry run past the opening: once this many votes in a row in
+        #: :data:`HARD_DRY_PHASES` held no Good, the Goods minimum drops to the
+        #: Goods in hand - the target has shown what it can supply.  Latched.
+        #: The app's is :data:`HARD_DRY_RUN`; ``None`` never waives it.
+        if hard_dry_run is not None and (
+            isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 1
+        ):
+            raise ValueError(f"hard_dry_run must be an integer >= 1 or None, got {hard_dry_run!r}")
+        self.hard_dry_run = hard_dry_run
+        self.dry_run = HardDryRun(target=hard_dry_run)
         self.more_target = more_target
         self.more_dry_run = more_dry_run
         #: The Good walk's dry run (#4731, the app's ``moreDryRun``): the Good
@@ -807,19 +844,26 @@ class AutopilotFlow:
                 self.phase = self.startup.phase_name()  # type: ignore[assignment]
                 return self.phase
         else:
+            self._note_hard_vote(good_count, bad_count)
             self._note_more_vote(good_count, bad_count)
+        min_good = self.min_good_now(good_count)
         if self.smart_signal == "cost":
             # #5134's arm: the light before #5134, FPR + FNR going flat.
-            smart_d = smart_status_from_costs(self.recent_error_costs, good_count, bad_count)
+            smart_d = smart_status_from_costs(self.recent_error_costs, good_count, bad_count, min_good=min_good)
         else:
-            smart_d = smart_detail(self.smart_reading(self.smart_signal), good_count, bad_count)
-        stable_d = stable_detail(self.stability, good_count, bad_count)
+            smart_d = smart_detail(self.smart_reading(self.smart_signal), good_count, bad_count, min_good)
+        stable_d = stable_detail(self.stability, good_count, bad_count, min_good)
         smart: Status = smart_d["status"]
         self.smart_reading_columns = (
-            self._reading_columns(good_count, bad_count) if self.record_readings else reading_columns_nan()
+            self._reading_columns(good_count, bad_count, min_good) if self.record_readings else reading_columns_nan()
         )
         stable: Status = stable_d["status"]
-        sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
+        # No atlas reading is red, as in the app, unless the Diversity step is off (#5473).
+        sp: Status = (
+            span_status(int(span["level"]), int(span["depth"]), self.span_green)
+            if span is not None
+            else ("green" if self.span_green <= 0 else "red")
+        )
         self.smart, self.stable, self.span = smart, stable, sp
         self.span_level = int(span["level"]) if span is not None else -1
         self.span_depth = int(span["depth"]) if span is not None else -1
@@ -866,10 +910,19 @@ class AutopilotFlow:
             return list(self.smart_windows.get(name, []))
         return list(self.smart_histories.get(name, []))
 
-    def _reading_columns(self, good: int, bad: int) -> dict[str, float]:
+    @property
+    def hard_dry(self) -> bool:
+        """#5477's dry run past the opening has run its course (latched)."""
+        return self.dry_run.dry
+
+    def min_good_now(self, good_count: int) -> int:
+        """The Goods Smart and Stable need at this vote (#5477): :attr:`min_good`, or those in hand once dry."""
+        return min(self.min_good, goods_minimum(good_count, self.hard_dry))
+
+    def _reading_columns(self, good: int, bad: int, min_good: int = MIN_PER_CLASS) -> dict[str, float]:
         """Every reading's trend, as :data:`SMART_READING_PARTS` (#5134); NaN where the rule would not fit one."""
         out = reading_columns_nan()
-        if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+        if good < min_good or bad < MIN_PER_CLASS:
             return out
         for name in SMART_READINGS:
             window = [v for v in self.smart_reading(name) if math.isfinite(v)][-SMART_WINDOW:]
@@ -926,6 +979,18 @@ class AutopilotFlow:
         """The check before Done does not run (the app's ``skipDoneCheck``): latch it, and the phase goes on."""
         self.done_checked = True
         return self._derive() if self._last_args is not None else self.phase
+
+    def _note_hard_vote(self, good_count: int, bad_count: int) -> None:
+        """Fold the vote just cast into #5477's dry run past the opening, read off the counts as the walks are.
+
+        Called before :meth:`_note_more_vote`, which moves the counts on.  The
+        phase held here is the one the vote was cast in.
+        """
+        prev_good, prev_bad = self._counts
+        if good_count > prev_good:
+            self.dry_run.note("good", True)
+        elif bad_count > prev_bad:
+            self.dry_run.note("bad", self.phase in HARD_DRY_PHASES)
 
     def _note_more_vote(self, good_count: int, bad_count: int) -> None:
         """Fold the vote just cast into the ``more`` walk's run of misses.

@@ -10,7 +10,7 @@ different questions about the same knob.
 
 :func:`_cut_inclusion_arms` is pinned against
 ``vtscore.training.thresholds.fold_anchored_gmm_threshold`` by
-`scripts/check-eval-app-sync.py`.
+`scripts/gates/check-eval-app-sync.py`.
 """
 
 from __future__ import annotations

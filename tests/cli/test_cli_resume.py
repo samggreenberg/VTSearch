@@ -115,8 +115,6 @@ def head(monkeypatch) -> _Head:
     import torch
     from torch import nn
 
-    import vtscore.cli as cli_mod
-
     state = _Head()
 
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None, override_clipper=None):
@@ -129,7 +127,7 @@ def head(monkeypatch) -> _Head:
         mlp.eval()
         return {name: {"mlp": mlp, "threshold": state.threshold} for name in detector_names}
 
-    monkeypatch.setattr(cli_mod, "_load_and_train_detectors", _fake_load_and_train)
+    monkeypatch.setattr("vtscore.cli.detectors._load_and_train_detectors", _fake_load_and_train)
     return state
 
 
@@ -137,11 +135,11 @@ class _Interrupt:
     """Make the scorer raise ``KeyboardInterrupt`` on its *n*-th call (1-based), like a Ctrl-C."""
 
     def __init__(self, monkeypatch) -> None:
-        import vtscore.cli as cli_mod
+        import vtscore.cli.scoring as cli_scoring
 
         self.calls = 0
         self.at: int | None = None
-        real = cli_mod._score_medias_with_detectors
+        real = cli_scoring._score_medias_with_detectors
 
         def _score(*args: Any, **kwargs: Any):
             self.calls += 1
@@ -149,7 +147,9 @@ class _Interrupt:
                 raise KeyboardInterrupt
             return real(*args, **kwargs)
 
-        monkeypatch.setattr(cli_mod, "_score_medias_with_detectors", _score)
+        # Both streamed passes look the scorer up in their own module.
+        for caller in ("streaming", "resumable"):
+            monkeypatch.setattr(f"vtscore.cli.{caller}._score_medias_with_detectors", _score)
 
 
 @pytest.fixture
@@ -478,7 +478,7 @@ class TestResumeRefuses:
         assert "fewer than the" in _error(capsys)
 
     def test_a_second_run_on_the_same_output_at_once(self, run_setup, head, capsys):
-        from vtscore.cli_resume import exclusive_run
+        from vtscore.cli.resume import exclusive_run
 
         out = run_setup / "hits.ndjson"
         with exclusive_run(out), pytest.raises(SystemExit):
@@ -520,7 +520,8 @@ class TestResumeRefuses:
         ],
     )
     def test_a_run_it_cannot_make_resumable(self, tmp_path, kwargs, message):
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"), chunk_size=kwargs.pop("chunk_size", 2))
         options = {"stream_results": True, **kwargs}
@@ -528,7 +529,8 @@ class TestResumeRefuses:
             _run_source(spec, save_dataset=False, dry_run=True, resume=True, **options)
 
     def test_a_multi_dataset_run(self, tmp_path):
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
         from vtscore.datasets.importers.base import OutputSpec
 
         spec = _SourceSpec(
@@ -652,8 +654,7 @@ class TestResumeFromAnImporter:
         monkeypatch.setattr("vtscore.datasets.importers.get_importer", lambda _name: importer)
         embedded: list[int] = []
         monkeypatch.setattr(
-            cli_mod,
-            "_embed_loaded_medias",
+            "vtscore.cli.sources._embed_loaded_medias",
             lambda chunk: embedded.append(min(m["id"] for m in chunk.values())) or chunk,
         )
 
@@ -697,7 +698,6 @@ class _FolderRun:
     def __init__(self, tmp_path: Path, monkeypatch) -> None:
         import numpy as np
 
-        import vtscore.cli as cli_mod
         import vtscore.datasets.loader_folder as loader_folder
         from tests.helpers import make_wav_file
         from vtscore.embedding.media_vectors import set_media_embedding
@@ -726,7 +726,7 @@ class _FolderRun:
             return chunk
 
         monkeypatch.setattr(loader_folder, "_build_per_file_media", build)
-        monkeypatch.setattr(cli_mod, "_embed_loaded_medias", embed)
+        monkeypatch.setattr("vtscore.cli.sources._embed_loaded_medias", embed)
 
     def run(self, out: Path) -> None:
         from vtscore.cli import autodetect_importer_main_chunked

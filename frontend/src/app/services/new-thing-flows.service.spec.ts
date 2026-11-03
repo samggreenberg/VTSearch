@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
 import { NewThingFlowsService } from './new-thing-flows.service';
-import { DemoDatasetEntry } from '../generated/api-client/models/demo-dataset-entry';
 
 describe('NewThingFlowsService', () => {
   let service: NewThingFlowsService;
@@ -113,14 +112,6 @@ describe('NewThingFlowsService', () => {
     service.importStarted$.subscribe(fired);
     service.emitImportStarted();
     expect(fired).toHaveBeenCalledTimes(1);
-  });
-
-  it('emitDemoSelected fires demoSelected$ with the demo entry', () => {
-    const demo = { name: 'gtzan' } as DemoDatasetEntry;
-    const events: unknown[] = [];
-    service.demoSelected$.subscribe((e) => events.push(e));
-    service.emitDemoSelected(demo);
-    expect(events).toEqual([{ demo }]);
   });
 
   it('created$ is a plain Subject: late subscribers miss prior emissions', () => {

@@ -16,7 +16,7 @@ study, and the `grid-experiments` skill ties all three together:
 - **`LESSONS.md`** — the incident log: what broke on real studies, what it cost,
   and whether it is now prevented or still only advice. It indexes
   `lessons/`, one file per incident; when something breaks, add a file there and
-  re-run `python scripts/gen-docs-inventories.py`.
+  re-run `python scripts/gates/gen-docs-inventories.py`.
 
 ## 1. Right-size `--mem` (the #1 silent time-sink)
 
@@ -219,8 +219,9 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 ## 6. Environment gotchas
 
 - **libpython:** the venv's `python` fails to load `libpython3.12.so` on the login
-  node until you `module load python/3.12.3`. `source gridenv.sh` (repo root)
-  does that and activates the venv; source it before anything.
+  node until you `module load python/3.12.3`. `source scripts/grid/gridenv.sh`
+  (from the worktree root) does that and activates the venv; source it before
+  anything.
 - **Editable-finder shadow trap:** with multiple worktrees, a worktree's `app.py`
   can silently import the *other* checkout's package via the editable install.
   Pin the intended worktree with the shadow-module `PYTHONPATH` trick. A study's

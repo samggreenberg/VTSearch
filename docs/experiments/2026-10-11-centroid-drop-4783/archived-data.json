@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-centroid-drop-4783.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "exploration_summary.csv": {
+     "bytes": 19763,
+     "oid": "a5de9bb1afbe8f983ea4304c378f09f15310589e"
+    },
+    "labelled_summary.csv": {
+     "bytes": 2765,
+     "oid": "9cd01ffc469da35a87a629ede0dfce1bb08c2a77"
+    },
+    "summary.csv": {
+     "bytes": 28421,
+     "oid": "1139d0790948d9a8a1178d87aef19d0ff52c2387"
+    }
+   }
+  }
+ ]
+}

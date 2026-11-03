@@ -1,0 +1,67 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-20-widen-c-4056.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/purity54.json": {
+     "bytes": 109581,
+     "oid": "782ca636e67ee9e35f13013bd8a90e0f89c1f8d2"
+    },
+    "measurements/rebuild-siglip.json": {
+     "bytes": 31658,
+     "oid": "b09ec988163633dce93925281556880c0f24971b"
+    },
+    "measurements/rebuild-siglip2_l.json": {
+     "bytes": 31636,
+     "oid": "bc0d5937d91ef0a6fed9d47896876e84593c8607"
+    },
+    "measurements/roster-siglip.json": {
+     "bytes": 28840,
+     "oid": "59ea4f821e3ecc8670c3fdcd44bcc906395d190a"
+    },
+    "measurements/roster-siglip2_l.json": {
+     "bytes": 28776,
+     "oid": "5f5aebeb943c5c0bf4346d24392e14503f8bbda4"
+    },
+    "measurements/roster53-siglip.json": {
+     "bytes": 28747,
+     "oid": "60882a20501ddf0c3b39b73cd633d67942f27e2c"
+    },
+    "measurements/roster53-siglip2_l.json": {
+     "bytes": 28743,
+     "oid": "544fcf761eeb0f51034e369288cde6e18d57ce58"
+    },
+    "measurements/roster53.json": {
+     "bytes": 697,
+     "oid": "d24e2bf9b101207e38bad062e977caa6313331ff"
+    },
+    "measurements/supply53.json": {
+     "bytes": 7409,
+     "oid": "b4e20bbd1efdd8b6ed784fcec2f87be29bff0612"
+    },
+    "measurements/supply54.json": {
+     "bytes": 4466,
+     "oid": "4886f0d559777806caae3c6720896dbabc36d728"
+    },
+    "rulings/dining_table.json": {
+     "bytes": 10962,
+     "oid": "9387d28a21ee81a395d01fb582983c2f15d2439f"
+    },
+    "rulings/tv.json": {
+     "bytes": 10352,
+     "oid": "a0dea24540a65bb1731a20316db57b141b9c1d75"
+    },
+    "rulings/votes-dining_table.json": {
+     "bytes": 16694,
+     "oid": "a5ca33dd6240de583ee8bfb25288768568bc2b2c"
+    },
+    "rulings/votes-tv.json": {
+     "bytes": 12714,
+     "oid": "f632c0a24d3bc9aafce7596d224f210f54c21807"
+    }
+   }
+  }
+ ]
+}

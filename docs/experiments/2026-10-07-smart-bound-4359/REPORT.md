@@ -35,7 +35,7 @@ zero.
 | Hard picks per session | **+58** | **+55** | **+47** |
 | share of Hard picks that are Good | **0.20 vs 0.38** | **0.20 vs 0.38** | **0.21 vs 0.38** |
 
-![The objective over votes, today's app against a session that never leaves Hard](figures/curves.png)
+![The objective over votes, today's app against a session that never leaves Hard](figures/curves.webp)
 
 *The two curves are one line until Smart and Stable go green (votes 40–100), and stay within 0.012 of each other
 after it.*

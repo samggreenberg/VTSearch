@@ -223,7 +223,7 @@ class TestBackgroundImportMemoryError:
         mock_importer.run.side_effect = MemoryError("simulated")
 
         # Patch threading.Thread to run synchronously so we don't race
-        with mock.patch("vtscore.datasets.load_pipeline.threading") as mock_threading:
+        with mock.patch("vtscore.datasets.load_workers.threading") as mock_threading:
             captured_target = {}
 
             def fake_thread(target, daemon=True):
@@ -257,7 +257,7 @@ class TestBackgroundImportMemoryError:
                 side_effect=MemoryError("simulated"),
             ),
             mock.patch(
-                "vtscore.datasets.load_pipeline.threading.Thread",
+                "vtscore.datasets.load_workers.threading.Thread",
                 side_effect=sync_thread,
             ),
         ):

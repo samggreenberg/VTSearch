@@ -27,7 +27,7 @@ PINS=(
 body() {
   cat <<BODY
 set -uo pipefail
-source $VTS_REPO/gridenv.sh >/dev/null 2>&1
+source $VTS_REPO/scripts/grid/gridenv.sh >/dev/null 2>&1
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OPENBLAS_CORETYPE=Haswell PROBE_OUT=$PROBE_DIR
 mkdir -p $PROBE_DIR
 for d in $NP_DIR/np-*; do
@@ -46,7 +46,7 @@ BODY
 
 case "${1:-}" in
   install)
-    source "$VTS_REPO/gridenv.sh" >/dev/null 2>&1
+    source "$VTS_REPO/scripts/grid/gridenv.sh" >/dev/null 2>&1
     for v in "${VERSIONS[@]}"; do
       uv pip install -q --python "$(command -v python)" --target "$NP_DIR/np-${v//\*/x}" "numpy==$v"
     done

@@ -22,7 +22,7 @@ from __future__ import annotations
 # controller's ``sys.meta_path``, and this conftest is the first thing a
 # worker imports.  Installing the Flask blocker here is what makes
 # ``./run-tests.sh vtscore-clean`` actually cover the library code (the
-# controller-side install in ``scripts/check-vtscore-clean.py`` would
+# controller-side install in ``scripts/gates/check-vtscore-clean.py`` would
 # otherwise only see this file's own imports).  No-op unless the gate set
 # ``VTSEARCH_BLOCK_FLASK``.
 from tests_lib.flask_blocker import install_if_requested as _install_flask_blocker
@@ -71,14 +71,14 @@ from tests_shared.pass_cache import (  # noqa: E402
     note_worker_reused,
     record_pass_report,
 )
-from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit  # noqa: E402
+from tests_shared.pytest_plumbing import LIB_GROUPS, add_group_markers, print_summary_and_exit  # noqa: E402
 from tests_shared.xdist_plumbing import (  # noqa: E402
     make_crash_safe_scheduler,
     restore_xdist_group_suffix,
     set_worker_timeout_timer,
 )
 from tests_shared.state_reset import (  # noqa: E402
-    TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
+    TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/config/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
     no_face_models as _no_face_models,  # noqa: F401  (autouse fixture)
@@ -98,7 +98,7 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers, restore xdist's group suffix (#5356), then drop recorded passes."""
-    add_group_markers(items, root_dir_name="tests_lib")
+    add_group_markers(items, root_dir_name="tests_lib", groups=LIB_GROUPS)
     restore_xdist_group_suffix(config, items)
     deselect_cached_passes(config, items)
 
@@ -186,7 +186,7 @@ _test_medias_snapshot = {k: dict(v) for k, v in get_active_context().medias.item
 _patch_embed_audio.stop()
 
 # Record the host seams this conftest has just wired, so the per-test reset can
-# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+# put them back after a test installs its own (see :mod:`vtscore.host.seams`).
 capture_startup_host_seams()
 
 freeze_startup_heap()
@@ -292,7 +292,7 @@ def schedule_only(monkeypatch):
     F-beta argmax; on a fixture corpus of a few dozen synthetic items the
     argmax is whatever the fit says that day.  For tests whose subject is the
     cap, the walk or a carrier of the state, not the mixture - that rule is
-    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
+    pinned in ``tests_lib/training/test_balance.py``.  Both seams: the package
     name the app's local imports read, and the harness's module binding.
     """
     import vtscore.eval.voting_iterations as harness

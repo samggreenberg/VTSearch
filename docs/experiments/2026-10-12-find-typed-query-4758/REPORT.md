@@ -39,7 +39,7 @@ sessions, beta 1 only), the typed query's set also beats the centroid on the quo
 That run drew the centroid with #4732's line, not today's, and the owner chose not to re-run it. The
 line rules since #4732 moved COCO's Binary centroid by about 0.006 over votes 1–10 at beta 1, a tenth of this gap.
 
-![What Find returns under the quota, and the difference to today, at every vote](fig_find_typed_query.png)
+![What Find returns under the quota, and the difference to today, at every vote](fig_find_typed_query.webp)
 
 *Figure 1. COCO Better's Binary opening, rows beta ¼, 1 and 4. Left: F-beta at each vote over the runs
 whose Find gives the centroid there, the typed query's set (orange) and the centroid's (blue), with the

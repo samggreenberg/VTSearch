@@ -60,13 +60,13 @@ they define the library's interface boundary.
 
 | # | Seam | What used to leak | How the library decouples it |
 |---|------|-------------------|-----|
-| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`) plus the current-user resolver (`register_request_user_resolver`, backing `vtscore.state.current_user.get_current_user`); the Flask wiring lives in `vtsearch/shim/` and `vtsearch/auth/`. |
+| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`) plus the current-user resolver (`register_request_user_resolver`, backing `vtscore.state.current_user.get_current_user`); the Flask wiring lives in `vtsearch/seam_wiring.py` and `vtsearch/auth/`. |
 | 2 | **Settings** | Library code read `vtsearch.settings.get_*` directly | `CoreConfig` dataclass carries every knob library code consumes; `CoreConfig.from_settings()` is the bridge the app installs via `register_core_config_builder()`. |
 | 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
 | 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | `safe_pickle_load`'s allowlist admits only plain Python containers and numpy arrays, so no saved artefact can reference an app class. |
-| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
+| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` holds one folder per `vtscore` package, with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
 The one-way dependency is enforced by a test; see
@@ -168,7 +168,7 @@ names. It answers from the getter a host registered for that knob with
 `register_setting_getter()`, else that field of the `CoreConfig` a
 builder registered with `register_core_config_builder()` returns, else
 the field's default. In the VTSearch app the getters are installed by
-`register_app_setting_getters` in `vtsearch/shim/__init__.py`, one per
+`register_app_setting_getters` in `vtsearch/seam_wiring.py`, one per
 knob, each reading `vtsearch.settings` live for the current user - so a
 read costs the one setting it asks about, not a snapshot of all of them.
 
@@ -246,7 +246,7 @@ The library is designed to be used from multiple threads, with these
 ground rules:
 
 - **All mutable state is RLock-protected.** The single `_state_lock` in
-  `vtscore/state/core.py` covers `DatasetContext` and `DetectorContext`
+  `vtscore/state/primitives.py` covers `DatasetContext` and `DetectorContext`
   mutation. Using an RLock (not a plain Lock) lets one public function
   call another safely - for example `apply_label()` calls
   `add_label_to_history()` while holding the lock.
@@ -318,13 +318,9 @@ package has a guide in [`packages/`](README.md#package-reference).
 ```
 vtscore/
 ├── __init__.py                 # __version__ (manual semver)
-├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables
-├── cli.py / cli_pipeline.py / cli_progress.py   # autodetect CLI, YAML pipeline, text/NDJSON progress
-├── io.py                       # server-file JSON read + atomic-write helpers for plugins
-├── gpu_backends.py             # optional cuML routing
-├── single_instance.py          # the port lock
-├── host_seams.py               # snapshot/restore of every host hook (for tests)
-├── achievements_hooks.py       # no-op event hook the app fills in
+├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables, cuML routing
+├── cli/                        # autodetect CLI, one module per stage: entry points, YAML pipeline, text/NDJSON progress
+├── host/                       # the no-op achievement hook the app fills in; snapshot/restore of every host hook (for tests)
 ├── datasets/                   # origins, labelsets, loaders, registry, split, load pipeline
 │   ├── importers/              # DatasetImporter family (IMPORTER sentinel, one sub-package each)
 │   ├── sources/                # MediaSource family (SOURCE sentinel, one flat module each)
@@ -348,9 +344,9 @@ vtscore/
 ├── projection/                 # VTSBrowse UMAP layout, tile pyramid, signposts
 ├── timing/                     # per-step weights behind progress bars
 ├── sync/                       # SyncSource[L, S] ABC
-├── concurrency/                # namespace package: async jobs, memory budget, progress
+├── concurrency/                # namespace package: async jobs, memory budget, progress, the port lock
 ├── security/                   # namespace package: path / URL validation, safe pickle, login
-├── utils/                      # hit dicts, hashing, score sanitisation, synthetic media
+├── utils/                      # hit dicts, hashing, score sanitisation, plugin file I/O, synthetic media
 └── docs/                       # this directory
 ```
 
@@ -365,7 +361,7 @@ is the authority on where to import it from.
 
 | Package | How to import |
 |---------|---------------|
-| `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. |
+| `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. (`vtscore.gpu_backends` is a deprecated alias of `vtscore.config.gpu_backends`.) |
 | `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. Media sources: `vtscore.datasets.sources` (`MediaSource`, `MediaItem`, `get_source_for_origin`, `list_media_sources`; `FetchedItem` is in `vtscore.datasets.sources.base`). |
 | `vtscore.datasource_importers` | `DataSourceImporter`, `FetchedMediaItem`, `get_datasource_importer`, `list_datasource_importers`. |
 | `vtscore.seed_importers` | `SeedImporter`, `SeedMediaItem`, `get_seed_importer`, `list_seed_importers`. |
@@ -378,14 +374,15 @@ is the authority on where to import it from.
 | `vtscore.exporters` | `get_exporter`, `list_exporters`. |
 | `vtscore.labels` | **Empty `__init__` - no re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
 | `vtscore.plugins` | `PluginBase`, `PluginField`, `PluginRegistry`, `make_plugin_registry`, `FieldType`, `FieldOption`, `EntryPointTombstone`. Inventory: `vtscore.plugins.inventory`; normalisation: `vtscore.plugins.normalize`. |
-| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. `RequestMissingContextError` lives in `vtscore.state.core`; the current-user resolver in `vtscore.state.current_user`. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
+| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. `RequestMissingContextError` is imported from `vtscore.state.core`; the current-user resolver in `vtscore.state.current_user`. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
 | `vtscore.coverage` | `CoverageAtlas` and its constants. |
 | `vtscore.projection` / `vtscore.timing` | Both re-export their public surface from `__init__` (see [packages/projection.md](packages/projection.md), [packages/timing.md](packages/timing.md)). |
 | `vtscore.sync` | `SyncSource`. |
-| `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
+| `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`, `vtscore.concurrency.single_instance.acquire` (`vtscore.single_instance` is a deprecated alias of that last module). |
 | `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
-| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
-| `vtscore.cli` | Plain modules: `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`. |
+| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hashing`, `vtscore.utils.io`, `vtscore.utils.optional_deps`, `vtscore.utils.synthetic`. (`build_media_hit` and the score sentinel moved out in #5399: they are in `vtscore.datasets.labelset` and `vtscore.training.thresholds.knobs`. `vtscore.io` is a deprecated alias of `vtscore.utils.io`.) |
+| `vtscore.cli` | The entry points: `autodetect_main` and its three siblings, `import_labels_into_detector`, `DetectorNotFoundError`. The stages are submodules: `vtscore.cli.pipeline`, `vtscore.cli.progress`, `vtscore.cli.resume`, … (`vtscore.cli_pipeline`, `cli_progress` and `cli_resume` are deprecated aliases of the first three). |
+| `vtscore.host` | **`__init__` is a docstring only - no re-exports.** `vtscore.host.achievements.register_achievement_recorder` / `record_achievement`; `vtscore.host.seams.capture_host_seams` / `restore_host_seams` (`vtscore.achievements_hooks` and `vtscore.host_seams` are deprecated aliases of the two). |
 
 ## Dependency direction
 
@@ -396,9 +393,9 @@ never the reverse.
 ┌─────────────────────────────────────────────┐
 │  vtsearch/  (Flask app)                     │
 │  ├── routes/                                │
-│  ├── settings.py                            │
+│  ├── settings/                              │
 │  ├── auth/                                  │
-│  ├── shim/   ← installs hooks into vtscore  │
+│  ├── seam_wiring.py ← fills vtscore's seams │
 │  └── …                                      │
 └──────────────────┬──────────────────────────┘
                    │ imports
@@ -412,30 +409,30 @@ never the reverse.
 │  ├── datasource_importers / seed_importers  │
 │  ├── coverage / projection / timing         │
 │  ├── concurrency / security / utils         │
-│  └── cli / cli_pipeline / cli_progress      │
+│  └── cli / host                             │
 └─────────────────────────────────────────────┘
 ```
 
 The app uses six categories of hooks to inject app-side behaviour into
-the library without the library knowing (`vtscore/host_seams.py` keeps the
+the library without the library knowing (`vtscore/host/seams.py` keeps the
 complete list of host seams; `register_plugin_family` is deliberately not
 one of them, since the library registers its own families through it too):
 
 1. **Context resolvers** - `register_dataset_context_resolver`,
    `register_detector_context_resolver`, plus
    `register_request_context_predicate` (the "inside a request?" test the
-   request-missing sentinel needs). Wired in `vtsearch/shim/`.
+   request-missing sentinel needs). Wired in `vtsearch/seam_wiring.py`.
 2. **Setting getters** - `register_setting_getter`, one per knob, plus
    `register_settings_path_redirect` for the CLI's `--settings`. Map
    `vtsearch.settings` to the knobs `get_setting()` reads. Wired in
-   `vtsearch/shim/`. (A library-only consumer answers the same reads
+   `vtsearch/seam_wiring.py`. (A library-only consumer answers the same reads
    with a `register_core_config_builder` builder instead.)
 3. **Plugin families** - `register_plugin_family(provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
    `python app.py --list-plugins`) enumerate. The family key comes off
    the `FamilyProvider` object itself; there is no separate positional.
-   Wired in `vtsearch/shim/`.
+   Wired in `vtsearch/seam_wiring.py`.
 4. **Current-user resolver** - `register_request_user_resolver`. Tells
    `vtscore.state.current_user.get_current_user()` how to read the
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
@@ -447,16 +444,16 @@ one of them, since the library registers its own families through it too):
    [`packages/security.md`](packages/security.md)). Only the providers that
    read `flask.session` / request headers stay app-side in `vtsearch/auth/`.
 5. **Achievement recorders** -
-   `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
+   `vtscore.host.achievements.register_achievement_recorder(event, fn)`
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
    library raises. The counters are per-user settings state, so the
    recording itself lives in `vtsearch.achievements`. Wired in
-   `vtsearch/shim/`.
+   `vtsearch/seam_wiring.py`.
 6. **Setting persisters** - `vtscore.state.register_setting_persister(key, fn)`
    (the balance and the calibration knobs) and
    `vtscore.datasets.load_pipeline.register_last_embedder_persistence_hook(fn)`
    hand a preference the library changed back to the host to save. Wired in
-   `vtsearch/shim/`.
+   `vtsearch/seam_wiring.py`.
 
 If you're embedding `vtscore` in your own application, you'll typically
 install your own variants of the first two and the fourth -

@@ -7,7 +7,7 @@ import type { SelectMode, SortedItem } from '../services/sort-state.service';
  * round-trip (`GET /api/coverage-atlas/next`), so the rule reports that a
  * diversity probe is owed and the caller fires it. Keeping the request out
  * means the whole pick rule stays synchronous and pure — which is what makes
- * it unit-testable, and what lets `scripts/check-eval-app-sync.py` pin a
+ * it unit-testable, and what lets `scripts/gates/check-eval-app-sync.py` pin a
  * digest of the rule alone rather than of the component plumbing around it.
  */
 export type AutoSelectPick =
@@ -36,7 +36,7 @@ export interface AutoSelectInput {
  * it in `vtscore/eval/al_strategies.py` (`_hard_pick_by_index` for the `hard`
  * branch) so a simulated Autopilot user clicks the way a real one does. That
  * copy is pinned by the `autopilot.auto_select_next` mirror in
- * `scripts/check-eval-app-sync.py`: changing the rule here trips the gate and
+ * `scripts/gates/check-eval-app-sync.py`: changing the rule here trips the gate and
  * asks whoever changed it to port the change. Keep the two in step.
  *
  * The three modes:

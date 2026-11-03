@@ -21,7 +21,7 @@ from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtscore.datasets.registry import list_datasets
 from vtsearch.routes._http import format_mtime
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.ui import (
     BrowseMediaFilesQuerySchema,
     BrowseMediaFilesResponseSchema,
     BrowseMediaFilesSelectRequestSchema,

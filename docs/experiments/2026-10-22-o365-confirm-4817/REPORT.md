@@ -21,7 +21,7 @@ Nothing was tuned on `o365_better`, so this is the check the bench exists for.
 
 All 110 cells read the same to two figures (+0.017 / +0.011 / +0.0029; `tables/ab_summary_all110.csv`).
 
-![F-beta over clicks and the paired gain, o365_better, 107 paired cells](figures/ab_over_clicks.png)
+![F-beta over clicks and the paired gain, o365_better, 107 paired cells](figures/ab_over_clicks.webp)
 
 ## What it says
 

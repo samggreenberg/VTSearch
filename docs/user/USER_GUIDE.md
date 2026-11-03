@@ -613,7 +613,10 @@ is cut from, so that every face can show you its photo.
    picture of the face from your own computer works too, dropped on the box
    below; crop it to the face, since an uncropped photo is not searched for
    faces first.) Then vote as usual; every vote goes on a face, never a
-   photo.
+   photo. If the face you picked is turned away, covered or small, the
+   form says it is a *hard view*: a search started from it alone may miss
+   the person. You can still click **Create**, but adding a clearer face of
+   the same person first helps, and one clear face is enough.
 5. To see the whole photos, rank the faces (in Train's **Manual** tab,
    **Sort: Learned**; or Tune's **Review** tab) and switch **Show: Faces |
    Photos** to **Photos**: every photo with a matching face, the face
@@ -661,9 +664,18 @@ The run shows on the new dataset's Dashboard row while it works, and its
 calibrates and scores, and counts the labels and then the items it has
 scored, so it moves even when there is only one detector. When it finishes, a notice tells you how many hits
 it found; its **View Results** button opens the **Find Results**
-dialog, which lists every item each detector called Good (switch to
-**Bad** or **Both** to see the rest), copies the list to the clipboard,
-and **Export**s the listed rows to any exporter. A detector with too few
+dialog, which lists every item each detector called Good. The controls above
+the list change what it shows: **Good**, **Bad** or **Both**; **Sort by**
+**Score** (highest first, across every detector) or **Similarity**
+(look-alikes side by side, by a one-dimensional map of the whole dataset
+that VTSearch builds along with its Browse map, so a dataset you have not
+browsed yet takes a moment the first time); and **Columns**, a checkbox per
+column, including a **Thumbnail** of each item, whose size the two picture
+buttons set. Below the list, the tabs say where the listed rows go:
+**Clipboard** first, then each exporter, with whatever it needs filled in
+under its tab. **Export** sends the rows, in the ticked columns, to the open
+tab's destination, and **Export and Close** does the same and closes the
+dialog. A detector with too few
 labels for a trained one runs as its typed description, or as the Goods'
 centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
@@ -695,7 +707,7 @@ each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
 dialog is open announce themselves with a **View Results** notice
-instead, so none of them is lost. The dialog's **Browse** button opens
+instead, so none of them is lost. The **Browse** button under the list opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
 **&larr; Back to Find Results** there brings you back to the Dashboard with
@@ -703,6 +715,14 @@ the results open again. While the dialog is open, the server starts building
 the map of the Good results whenever it has nothing else to do, so Browse often
 opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
+
+Every Find and AutoFind also checks each detector against the dataset it was
+trained on. When the dataset it ran on looks unlike that one, the Find Results
+dialog says so under its summary ("68% of this dataset looks atypical vs
+**photos**: likely domain shift"), an AutoFind's notice turns to a warning
+naming the detector, and the exported results carry the figure. See
+[Decide how far to trust a detector](howto/trust-a-detector.md) for what to do
+about it.
 
 ### Pre-computed embeddings (.npz)
 
@@ -857,15 +877,24 @@ The phase panel labels them, in order:
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
-   and "stable" indicators in the status bar both turn green). If you
+   and "stable" indicators in the status bar both turn green). The two
+   indicators need 5 goods and 5 bads before they judge anything, but a
+   target with fewer than 5 to find (one person's face, often) does not
+   wait forever: once **16 borderline picks in a row were not good**,
+   they judge the detector on the goods you have. If you
    started from a typed description on photos, the ranking behind the
    item stays the description's until your 30th vote: the detector asks
    the questions, but its matches only beat the description's from about
    there.
-4. **Explore Diversity.** - Autopilot serves items from parts of the
-   dataset the detector hasn't seen yet, so your votes cover a broad
-   mix. This catches edge cases the previous phase missed. The phase
-   ends when this coverage hits your goal (default: 40).
+4. **Explore Diversity** (off by default). - Autopilot serves items from
+   parts of the dataset the detector hasn't seen yet, so your votes cover
+   a broad mix. The phase ends when this coverage hits your goal. The
+   goal is 0 by default, which skips the phase and leaves it off the
+   panel: measured on faces and photos, skipping it stops a session
+   about 20 votes sooner, with the same detector on faces and a slightly
+   weaker one on photos. Set **Goal
+   diversity** in Settings (40 was the old default) to turn it back on
+   for a model or collection where it helps.
 5. **Spot Check.** - With every quality light green, or once the
    detector expects an F-beta of at least 0.5 at your balance (its own
    estimate of how much of what it returns is right, and how much of what
@@ -897,8 +926,9 @@ yellow until the check ends. Hover the light for the details.
 
 When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
-trained: keep voting and it keeps improving (your next vote sends Toasty
-away), or click **Dashboard** to export it or run it over another dataset.
+trained: click **Dashboard** to export it or run it over another dataset.
+You can keep voting (your next vote sends Toasty away), but you don't need
+to.
 Nothing happens on its own, and the hint only appears for the run that
 trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
@@ -908,15 +938,13 @@ buttons: asking for your first vote, then, through the run that trains the
 detector, saying what the current phase is after and how many Goods or Bads
 it still needs. See [Toasty's hints](#toastys-hints).
 
-Once **Done!** is reached it stays checked, and a seventh step, **Keep
-Improving.**, takes over for as long as you keep labeling. It is
-optional. Its light shows whichever of the smart, stable and span
-indicators is furthest behind, and its line says what Autopilot is
-offering now. A new vote can knock an indicator off green for a while
-as the detector takes it in; Autopilot then goes back to borderline
-items (**Showing boundary items**) or a broad mix (**Showing diverse
-items**) until it recovers, but the panel does not drop back to Refine
-Boundary.
+Once **Done!** is reached it stays the current step, checked, for as
+long as you keep labeling: no step follows it. A new vote can knock an
+indicator off green for a while as the detector takes it in. If you vote
+on, Autopilot then offers borderline items or a broad mix until it
+recovers, but the panel does not drop back to Refine Boundary: the line
+under **Done!** reads **Detector trained**, where it otherwise says what
+reached Done.
 
 ### Document collections stop on a dry run
 
@@ -1023,7 +1051,7 @@ as they stood when the check started: of those, it counts the picks that
 fell among them. When it ends, Autopilot carries on, and the note under the
 Threshold, on the **Manual** tab, shows what it found:
 
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - when the check started the
   line kept 36 items you hadn't voted on; now, with the check's own picks
   voted and the line re-drawn, it keeps 30 more besides your votes. The range
@@ -1041,7 +1069,8 @@ most of the matches near the top, the items left there hold few of them, so
 the check before **Done!** can read low after a session that went well.
 
 **The likely range** says how much of the items the line kept, when the
-check started, is probably right. It comes from your picks alone, never from
+check started, is probably right. It reads as its centre and how far it
+reaches either way: *68 ± 13%* is roughly 55% to 80%. It comes from your picks alone, never from
 the detector's own guess: the picks that fell in each band's part of that
 set bound that part, exactly for its size (in a band of 8, 4 right of 5
 means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
@@ -1178,7 +1207,7 @@ note under the spectrum says what the line keeps:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
   on, besides your votes, and nothing has measured them yet.
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - a spot check has measured
   it; see [How close the line got](#how-close-the-line-got).
 - **12 pass the verification gate** - on a pattern-matching (**Structural**)
@@ -1452,9 +1481,14 @@ unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
 top of the list or the detector's own guess: the ranked list is cut into
 bands on either side of the line, and each round deals five pictures drawn at
-random from one band. A pick carries no rank and no score (that would be the
-ranking talking, not the sample), and the dots above it count only how many
-of the round are left. Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`); `↓` goes back a pick and takes its vote back.
+random from one band. The picks come one at a time in the centre, as in
+Train's Autopilot, with nothing over them to say they are a test: a pick
+carries no rank and no score (that would be the ranking talking, not the
+sample). Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`). To put a
+slip right, `↓` walks back through the picks you have voted, from any round
+and from the verdict at **Done!** too, each with its vote lit; vote it again
+to correct it, and `↑` takes you back to where you were. A correction moves
+the ranges at once; the rounds already dealt stay as they were.
 
 The phases, each with a light that climbs red, yellow, green as it nears its
 end, as Train's do:
@@ -1485,14 +1519,15 @@ Positives** to keep more, or train the detector further.
 The **Threshold** sits above the phases (and above the list on **Review**).
 It is frozen from the first round of picks until **Done!**, because moving
 the line would move the bands under the picks. The note under it reads this
-collection's result (*Tested · likely 70–85% right, about half of them found
+collection's result (*Tested · likely 78 ± 8% right, about half of them found
 (checked 32) · 64 kept*), or *Untested · top 64 kept*; it never shows the
 check Train ran, which measured the training collection and would read as
 this one's.
 
 ### The result
 
-The right pane shows the result as it forms:
+The right pane shows the result as it forms. Each range reads as its centre
+and how far it reaches either way (*78 ± 8%* is roughly 70% to 85%):
 
 - **Balance (F-beta)** - the one number that weighs the two kinds of mistake
   the way the Threshold does, with its likely range.
@@ -1513,8 +1548,11 @@ The right pane shows the result as it forms:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict takes the middle of the screen, where the picks
-were: it reads the ranges in a sentence, and offers three ways out, as Toasty
-does when Autopilot finishes in Train. If the result is out of date, or the
+were. It lays the ranges out as a form, one value to a row: **Line Keeps**
+(how many items the line keeps), **Fraction Correct** (the likely share of
+them that is right) and **Fraction Found** (the likely share of all the
+matches the line keeps; in words, for a detector with no class model). It
+then offers three ways out, as Toasty does when Autopilot finishes in Train. If the result is out of date, or the
 line has moved since the test, a note over the verdict says so. The right pane
 keeps the numbers behind it.
 
@@ -1534,7 +1572,7 @@ keeps the numbers behind it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/test-verdict.dark.webp" />
-  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
+  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
 </picture>
 
 **The verdict is kept on the detector.** Reaching Done saves it with the
@@ -1784,7 +1822,7 @@ with bulk-action and per-card controls.
     positives**, **Stats**, **Export labels**) stay available, and
     **Tune** and **Find** work as usual. Under each name is the latest
     [test verdict](#the-result) the detector keeps (*Tested on
-    drawings-new: likely 70-85% right, about half of them found (34
+    drawings-new: likely 78 ± 8% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
     since, or *Untested*: an AutoFind detector ships its matches
     unchecked, and this is what it was measured to ship.
@@ -1866,8 +1904,9 @@ time:
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, **Tune** or **Find** once the selected detector is trained, and
   **Find** alone when you have ticked several datasets or detectors. On the
-  dataset you trained the detector on, he asks you to select a different
-  dataset or detector instead: the detector has already seen those items.
+  dataset you trained the detector on, he looks surprised and asks you to
+  select a different dataset or detector instead: the detector has already
+  seen those items.
 
 While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add
@@ -1911,6 +1950,10 @@ banner's **Retry** button, over any dialog, and every other hint steps aside
 until the server answers again, since none of their steps could work without
 it. That hint has no hide boxes: nothing can be saved while the server is
 away.
+
+If a hint is in your way, drag Toasty or his bubble aside. The hint doesn't
+remember where you put it: the next one stands in its usual place. Point at
+Toasty and he pulls a face.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
@@ -2260,7 +2303,7 @@ not 1 + 2 + 4.
 ### The achievements
 
 <!-- BEGIN GENERATED: achievements -->
-<!-- Generated by scripts/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gen-docs-inventories.py -->
+<!-- Generated by scripts/gates/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gates/gen-docs-inventories.py -->
 
 | Achievement | What it counts | Bronze | Silver | Gold | Platinum |
 |---|---|---|---|---|---|

@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-rank-frames.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "rank_frames_0p1pct.csv.gz": {
+     "bytes": 110831,
+     "oid": "a7fb0c0ed1ea6d2907f1acc92a7e2f8678d582f5"
+    },
+    "rank_frames_0p44pct.csv.gz": {
+     "bytes": 265975,
+     "oid": "e39ba25b6ccc738c81d54d7cb9cd268ed543e190"
+    },
+    "rank_frames_5pct.csv.gz": {
+     "bytes": 194623,
+     "oid": "eaedfc33cf36bd76c5c5b2bda05cef2cad78f8ff"
+    }
+   }
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 """Regrouping an importer's ``(output, chunk)`` stream per dataset (#4707).
 
-``vtscore.cli._group_output_chunks`` turns the one stream the multi-output
+``vtscore.cli.sources._group_output_chunks`` turns the one stream the multi-output
 hooks yield into one lazy chunk iterator per output, so the CLI can score each
 dataset chunk by chunk without holding the others.  Pure: a fake stream in, the
 grouping out.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.cli import _group_output_chunks
+from vtscore.cli.sources import _group_output_chunks
 from vtscore.datasets.importers.base import OutputSpec
 
 

@@ -302,7 +302,7 @@ class TestSettingsAPI:
 
     def test_import_hooks_configured_is_published_read_only(self, client):
         """Whether the admin named hooks, never which (#5170); a PUT cannot set it."""
-        from vtsearch import import_hooks
+        from vtsearch.runtime import import_hooks
 
         assert client.get("/api/settings").get_json()["import_hooks_configured"] is False
         res = client.put("/api/settings", json={"import_hooks_configured": True})
@@ -492,6 +492,30 @@ class TestSettingsAPI:
 
     def test_update_grid_icon_size_popup_invalid(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_popup": {"audio": "TINY"}})
+        assert res.status_code == 400
+
+    def test_update_grid_icon_size_picker_per_type(self, client):
+        """New Detector's example picker sizes its grid apart from the panels and popup (#5465)."""
+        res = client.put("/api/settings", json={"grid_icon_size_picker": {"face": "xl", "image": "S"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_icon_size_picker"] == {"face": "XL", "image": "S"}
+        assert data["grid_icon_size_popup"].get("face") is None
+
+        assert client.get("/api/settings").get_json()["grid_icon_size_picker"]["face"] == "XL"
+
+    def test_update_grid_icon_size_results_per_type(self, client):
+        """The Find Results list's own size buttons (#5464): no other grid moves."""
+        res = client.put("/api/settings", json={"grid_icon_size_results": {"image": "l"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["grid_icon_size_results"] == {"image": "L"}
+        assert data["grid_icon_size_picker"].get("image") is None
+        assert client.get("/api/settings").get_json()["grid_icon_size_results"]["image"] == "L"
+        assert client.put("/api/settings", json={"grid_icon_size_results": {"image": "HUGE"}}).status_code == 400
+
+    def test_update_grid_icon_size_picker_invalid(self, client):
+        res = client.put("/api/settings", json={"grid_icon_size_picker": {"face": "HUGE"}})
         assert res.status_code == 400
 
     def test_update_popup_preview_size_per_type(self, client):
@@ -698,9 +722,9 @@ class TestSettingsAPI:
         assert res2.get_json()["autopilot_goal_diversity"] == 60
 
     def test_update_autopilot_goal_diversity_clamped(self, client):
-        res = client.put("/api/settings", json={"autopilot_goal_diversity": 0})
+        res = client.put("/api/settings", json={"autopilot_goal_diversity": -3})
         assert res.status_code == 200
-        assert res.get_json()["autopilot_goal_diversity"] == 1
+        assert res.get_json()["autopilot_goal_diversity"] == 0
 
     def test_update_autopilot_goal_diversity_invalid(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": "not a number"})
@@ -722,7 +746,7 @@ class TestSettingsAPI:
         assert data["autopilot_enabled"] is True
         assert data["autopilot_top_greens"] == 3
         assert data["autopilot_hard_reds"] == 4
-        assert data["autopilot_goal_diversity"] == 40
+        assert data["autopilot_goal_diversity"] == 0
 
     def test_get_defaults_excludes_directory_settings(self, client):
         res = client.get("/api/settings/defaults")

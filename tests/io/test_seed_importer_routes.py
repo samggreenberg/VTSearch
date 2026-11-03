@@ -75,7 +75,7 @@ class TestSeedImportersList:
 
     def test_hidden_plugins_filtered(self, client, stub_importer, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.settings.get_effective_hidden_plugins",
+            "vtsearch.settings.overrides.get_effective_hidden_plugins",
             lambda: {"seed_importers": {"stub_seeds"}},
         )
         resp = client.get("/api/seed-importers")

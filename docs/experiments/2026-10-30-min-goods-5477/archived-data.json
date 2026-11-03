@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-30-min-goods-5477.7cd503808bec.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/mingood_5477_curves.csv": {
+     "bytes": 247046,
+     "oid": "f7042c579c5a58448b40598fa4089b4b1fd73d30"
+    },
+    "tables/mingood_5477_per_run.csv": {
+     "bytes": 3002117,
+     "oid": "add94e4e1960db58d949eacebbe6aa7a660db03f"
+    },
+    "tables/mingood_5477_summary.csv": {
+     "bytes": 18072,
+     "oid": "b4b924b766a0d0c8ffe157a040a445dddc0a5817"
+    }
+   }
+  }
+ ]
+}

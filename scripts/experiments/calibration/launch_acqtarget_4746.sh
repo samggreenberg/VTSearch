@@ -154,7 +154,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name="acqt4746-size-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX, $ARM) -> $CALIB_EXP/logs/size-$S.out"
     ;;

@@ -38,7 +38,7 @@ after the check +0.12 (one photo) and +0.15 (four). It is a measuring instrument
 is non-commercial research, and its other costs are below, so whether the app should move to an
 ArcFace-class embedder is a follow-up (#4805).
 
-![The objective at every click, per pronoun, FaceNet and ArcFace](fig_curves.png)
+![The objective at every click, per pronoun, FaceNet and ArcFace](fig_curves.webp)
 
 *Figure 1. What the session shows at every click from one photo, she/her and he/him, ±1 SE (β 1,
 1024 px, 283 and 278 people). Click 0 is the example sort at its own line. With FaceNet the groups are
@@ -106,7 +106,7 @@ closest face that is not theirs (impostor). The margin is genuine minus impostor
 
 On the F and AP rows the SEs are 0.012–0.024 for FaceNet and 0.007–0.016 for ArcFace (`stages.csv`).
 
-![The gap at each stage of a session](fig_stages.png)
+![The gap at each stage of a session](fig_stages.webp)
 
 *Figure 2. she/her minus he/him at each stage, ±1 SE, from 1 and from 4 photos.*
 
@@ -160,7 +160,7 @@ session's outcome, with the pronoun, age and skin tone as terms (`regress.csv`).
 make-up are left out, because each is near zero for one pronoun and cannot be told apart from it. From four
 photos the pattern is the same (FaceNet −0.15 → −0.068 after the check, −0.080 → −0.024 in the ranking).
 
-![The ranking against how many hairstyles a person wears](fig_hairstyles.png)
+![The ranking against how many hairstyles a person wears](fig_hairstyles.webp)
 
 *Figure 3. The final ranking's F at the true count against the person's distinct hairstyles, per pronoun,
 from one photo; faint dots are people. Only 3 he/him people wear 4 or more.*
@@ -224,7 +224,7 @@ From four photos the objective's gap narrows by 0.12 ± 0.02.
 FaceNet's line misjudges how many faces to keep most where impostors sit closest to a person's own photos.
 That is everyone in FaceNet's thinnest margins, and she/her people are more of them.
 
-![What the line costs, against the margin](fig_line.png)
+![What the line costs, against the margin](fig_line.webp)
 
 *Figure 4. The line's cost (F at the line minus at the true count) by quintile of the person's static
 margin under that embedder, per pronoun, from one photo.*

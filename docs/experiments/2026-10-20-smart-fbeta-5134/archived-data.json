@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-20-smart-fbeta-5134.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/ab.csv": {
+     "bytes": 3094,
+     "oid": "092ef114fb4516be204d9dc63f34b501dd365d42"
+    },
+    "tables/checks.csv": {
+     "bytes": 75,
+     "oid": "092b5845cf3b43650f99ece60e49ea24c64eb939"
+    },
+    "tables/held_out.csv": {
+     "bytes": 3603,
+     "oid": "8dae616c796de533fe0c9166b278e1b51f9cf893"
+    },
+    "tables/rules.csv.gz": {
+     "bytes": 28896,
+     "oid": "15b9a05793f4d87dcd500d7979896599bfcc8287"
+    }
+   }
+  }
+ ]
+}

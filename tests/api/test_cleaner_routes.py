@@ -252,7 +252,7 @@ class TestVariantServing:
         """The variant view drops ``md5`` so an ETag-emitting route hashes the
         bytes it actually serves instead of labelling the original with the
         cleaned item's hash."""
-        from vtsearch.routes.media.list import _variant_media
+        from vtsearch.routes.media._serving import _variant_media
 
         media = medias[cleaned_text_media]
         with client.application.test_request_context(f"/api/medias/{media['id']}/text?variant=original"):
@@ -268,7 +268,7 @@ class TestVariantServing:
     def test_canonical_request_returns_the_live_media_dict(self, client, cleaned_image_media):
         """No copy on the default path, so request-time memoisation (thumbnail
         bytes, transcoded MP4) still lands on the loaded media."""
-        from vtsearch.routes.media.list import _variant_media
+        from vtsearch.routes.media._serving import _variant_media
 
         media = medias[cleaned_image_media[0]]
         with client.application.test_request_context(f"/api/medias/{media['id']}/image"):

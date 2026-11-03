@@ -5,3 +5,13 @@
   align-items: flex-end;
   flex-wrap: wrap;
 }
+
+// Level with the selects beside it: padded as tall as their text sits.
+.clipboard-header-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
+}

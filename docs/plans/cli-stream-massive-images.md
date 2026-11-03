@@ -1,6 +1,6 @@
 # CLI streaming for massive media sources
 
-**Status:** Lazy enumeration, streaming export, per-chunk embed and `--resume` are in place; remaining work is the open follow-ups below (global ordering, a faster resume for folders).
+**Status:** Lazy enumeration, streaming export, per-chunk embed and `--resume` are in place; remaining work is a faster resume for folders.
 
 **Parent:** [`scalability.md`](scalability.md) — the brainstorm that defines the
 `S#` IDs. This plan implements the CLI-specific pieces (S15 enumeration, S20
@@ -17,7 +17,6 @@ python app.py --autodetect --tempimport --importer server_folder --path /data/im
 
 <!-- item-sep -->
 
-- [ ] #5279 — Global ordering for streamed results (top-K heap or external merge-sort)
 
 <!-- item-sep -->
 

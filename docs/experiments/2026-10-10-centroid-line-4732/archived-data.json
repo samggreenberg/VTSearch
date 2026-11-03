@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-10-centroid-line-4732.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "count_vs_guarded.csv": {
+     "bytes": 2746,
+     "oid": "9caa587a2aced1cd6b3ca1eb60fe9cdf8c2e4e66"
+    },
+    "summary.csv": {
+     "bytes": 12631,
+     "oid": "87e9df1556c9c42c1ffdd3db30168af566a7fce5"
+    }
+   }
+  }
+ ]
+}

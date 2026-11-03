@@ -1,7 +1,7 @@
 """The tiled Stage 1 and the verification cache for structural document search (#3928).
 
 On a ``sift_vlad_doc`` dataset every page carries ``media["tile_vectors"]``
-(:mod:`vtscore.media.structural_tiles`). There, Stage 1 is not the detector
+(:mod:`vtscore.media.structural.structural_tiles`). There, Stage 1 is not the detector
 head's page-VLAD ranking. A page scores its best (query, tile) cosine, and the
 queries are:
 
@@ -362,7 +362,7 @@ def vote_queries(
     given, its query is that template's VLAD, so a stop-list that prunes the
     template prunes the query too (#4170 / #4180).
     """
-    from vtscore.media.structural_tiles import (  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import (  # noqa: PLC0415
         TileProjectionMissing,
         box_vlad,
         load_tile_projection,
@@ -411,7 +411,7 @@ def vote_queries(
 def example_queries(templates: Sequence[StructuralFeatures]) -> Optional[np.ndarray]:
     """Stage-1 queries from uploaded crops: each crop's VLAD, projected; ``None`` without a projection."""
     from vtscore.media.structural import aggregate_vlad, load_vlad_codebook  # noqa: PLC0415
-    from vtscore.media.structural_tiles import (  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import (  # noqa: PLC0415
         TileProjectionMissing,
         load_tile_projection,
         project_query,

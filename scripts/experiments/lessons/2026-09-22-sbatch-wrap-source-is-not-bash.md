@@ -11,8 +11,8 @@ because the only job that existed was the one that failed.
 
 **Cost:** ~3 h of wall clock on a contended cluster.
 
-**Fix:** give `--wrap` an absolute path (`. $WT/gridenv.sh`), as every
-`launch_*.sh` already does via `$WT/gridenv.sh`. And a launcher-as-a-job is a
+**Fix:** give `--wrap` an absolute path (`. $WT/scripts/grid/gridenv.sh`), as every
+`launch_*.sh` already does via `$WT/scripts/grid/gridenv.sh`. And a launcher-as-a-job is a
 "submission is not a launch" case: confirm the *array's* job id appears, not the
 wrapper's.
 

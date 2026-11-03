@@ -4,10 +4,10 @@ The projection is a calculated asset, so it is never committed; this script is
 how it is made (owner, 2026-09-30). It is deterministic:
 
 * **pages:** every ``len/400``-th page of the tier, in sorted id order
-  (:func:`~vtscore.media.structural_tiles.fit_sample_ids`);
+  (:func:`~vtscore.media.structural.structural_tiles.fit_sample_ids`);
 * **features:** SIFT at the document budget, stored the way the app stores them
   (``StructuralFeatures.compact``), so the fit sees what the app will tile;
-* **fit:** whitened PCA to :data:`~vtscore.media.structural_tiles.TILE_DIM`.
+* **fit:** whitened PCA to :data:`~vtscore.media.structural.structural_tiles.TILE_DIM`.
 
 Fit on **mark-sparse** document pages. #3928's M2 found that a fit on pages
 dense with the marks being searched costs those marks 0.17 of Stage-1 AP.
@@ -47,7 +47,7 @@ def _one_thread() -> None:
     """Pool workers tile the FIT layers with one BLAS thread each; the fit itself keeps every thread."""
     from threadpoolctl import threadpool_limits  # noqa: PLC0415
 
-    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+    import vtscore.media.structural.structural_tiles as st  # noqa: PLC0415
 
     threadpool_limits(1)
     st.TILE_LAYERS = st.FIT_LAYERS  # the projection is fit on these, whatever the app applies it to
@@ -56,7 +56,7 @@ def _one_thread() -> None:
 def _tiles(path: str) -> np.ndarray:
     from eval_splg_rank import _gray  # noqa: PLC0415
     from vtscore.media.structural import DOCUMENT_MAX_FEATURES, SiftMatcher  # noqa: PLC0415
-    from vtscore.media.structural_tiles import raw_tiles  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import raw_tiles  # noqa: PLC0415
 
     feats = SiftMatcher().detect_and_describe(_gray(path), max_features=DOCUMENT_MAX_FEATURES).compact()
     return raw_tiles(feats)[0]
@@ -65,7 +65,7 @@ def _tiles(path: str) -> np.ndarray:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS  # noqa: PLC0415
     from vtscore.media.structural import DOCUMENT_MAX_FEATURES  # noqa: PLC0415
-    from vtscore.media.structural_tiles import (  # noqa: PLC0415
+    from vtscore.media.structural.structural_tiles import (  # noqa: PLC0415
         FIT_SAMPLE_PAGES,
         FIT_LAYERS,
         TILE_DIM,

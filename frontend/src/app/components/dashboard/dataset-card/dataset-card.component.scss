@@ -66,6 +66,15 @@ td {
   font-size: var(--font-md);
 }
 
+// The Items cell's "N dropped" badge (#3798): a `.badge-warning` pill that is
+// also a button, so it drops the button chrome and keeps the pill's.
+.dropped-badge {
+  margin-left: var(--space-sm);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .type-cell {
   display: inline-flex;
   align-items: center;

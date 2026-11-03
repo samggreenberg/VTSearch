@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.media.audio.wav import AudioDecodeError, wav_duration, wav_slice
-from vtscore.media.clipper import (
+from vtscore.media.clipping.clipper import (
     DefaultClipper,
     MediaClipper,
     clip_with_bounds,
@@ -34,7 +34,7 @@ def _emit_wav_segments(
     Shared by every audio clipper that emits real audio (tiling, silence,
     speech activity, single-range crop): each clip carries the sliced bytes,
     the refreshed ``file_size``, and the standard clip-bound fields stamped
-    by :func:`~vtscore.media.clipper.clip_with_bounds`.
+    by :func:`~vtscore.media.clipping.clipper.clip_with_bounds`.
     """
     results: list[dict[str, Any]] = []
     for idx, (t0, t1) in enumerate(segments):

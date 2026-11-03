@@ -50,7 +50,7 @@ report recommended); reads #4216's starved hunts too.
 
 ## Results
 
-![AP gain over g3 at vote 150 per arm and pool, with the share of sessions left with no detector](figures/ap_gain.png)
+![AP gain over g3 at vote 150 per arm and pool, with the share of sessions left with no detector](figures/ap_gain.webp)
 
 Vote 150, all 720 cells per arm, paired against g3:
 
@@ -93,7 +93,7 @@ across the pools. `g3, g20+dry1/8` scores +0.039 and misses the one-SE tie by
 
 ### The early cost
 
-![AP gain over g3 by votes, for g6 and the floored dry stop, in both pools](figures/ap_by_votes.png)
+![AP gain over g3 by votes, for g6 and the floored dry stop, in both pools](figures/ap_by_votes.webp)
 
 | votes | 0.44%: g6 | 0.44%: g3, g20+dry1/16 | 0.1%: g6 | 0.1%: g3, g20+dry1/16 |
 |---|---|---|---|---|

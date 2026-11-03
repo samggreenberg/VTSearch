@@ -18,8 +18,9 @@ from __future__ import annotations
 import json
 
 from vtsearch import settings as settings_mod
-from vtsearch import settings_store as settings_store_mod
+from vtsearch.settings import store as settings_store_mod
 from vtsearch.auth import set_thread_user
+from vtsearch.settings import tiers as settings_tiers
 
 
 class TestTierRouting:
@@ -113,7 +114,7 @@ class TestUnmigratedFiles:
         }
         server_path = tmp_path / "settings.json"
         server_path.write_text(json.dumps(legacy))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
@@ -142,7 +143,7 @@ class TestUnmigratedFiles:
 
         server_path = tmp_path / "settings.json"
         server_path.write_text(json.dumps({"autofind_detectors": ["Dog Barks"]}))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
@@ -161,7 +162,7 @@ class TestUnmigratedFiles:
 
         server_path = tmp_path / "settings.json"
         server_path.write_text(json.dumps({"autofind_detectors": "Dog Barks", "autofind_exporter": "json"}))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
@@ -187,7 +188,7 @@ class TestUnmigratedFiles:
         user_path = tmp_path / "users" / "default" / "user_settings.json"
         user_path.parent.mkdir(parents=True, exist_ok=True)
         user_path.write_text(json.dumps({"browse_signpost_vocab": {"image": ["stale"]}}))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
@@ -213,7 +214,7 @@ class TestUnmigratedFiles:
         user_path = tmp_path / "users" / "default" / "user_settings.json"
         user_path.parent.mkdir(parents=True, exist_ok=True)
         user_path.write_text(json.dumps({"show_animations": "True", "hand_added": 7}))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
@@ -236,7 +237,7 @@ class TestServerLoadCrossProcessLock:
     def _seed(self, tmp_path, monkeypatch):
         server_path = tmp_path / "settings.json"
         server_path.write_text(json.dumps({"saved_datasets_dir": "/tmp/legacy"}))
-        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        monkeypatch.setattr(settings_tiers, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         return server_path

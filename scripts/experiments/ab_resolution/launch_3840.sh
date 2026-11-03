@@ -65,7 +65,7 @@ frames)
   for spec in "${EXISTING[@]}" "${NEW[@]}"; do ARGS="$ARGS --grid $spec"; done
   J=$(sbatch --parsable --job-name=abres-3840-frames "${DEP_ARG[@]}" --partition=cpu --mem=48G --cpus-per-task=2 \
     --time=2:00:00 --output="$LOGS/frames-%j.out" \
-    --wrap="source $WT/gridenv.sh && cd $HERE && python frames_3840.py $ARGS --out $EXP/frames/steps.csv.gz")
+    --wrap="source $WT/scripts/grid/gridenv.sh && cd $HERE && python frames_3840.py $ARGS --out $EXP/frames/steps.csv.gz")
   [[ "$J" =~ ^[0-9]+$ ]] || { echo "frames SUBMIT FAILED" >&2; exit 1; }
   echo "frames -> job $J"
   ;;
@@ -75,7 +75,7 @@ analyse)
   [[ -n "${DEP:-}" ]] && DEP_ARG=(--dependency="$DEP")
   J=$(sbatch --parsable --job-name=abres-3840-analyse "${DEP_ARG[@]}" --partition=cpu --mem=16G --cpus-per-task=2 \
     --time=2:00:00 --output="$LOGS/analyse-%j.out" \
-    --wrap="source $WT/gridenv.sh && cd $HERE && python resolution_3840.py --steps $EXP/frames/steps.csv.gz --out $EXP/analysis && python figures_3840.py --analysis $EXP/analysis")
+    --wrap="source $WT/scripts/grid/gridenv.sh && cd $HERE && python resolution_3840.py --steps $EXP/frames/steps.csv.gz --out $EXP/analysis && python figures_3840.py --analysis $EXP/analysis")
   [[ "$J" =~ ^[0-9]+$ ]] || { echo "analyse SUBMIT FAILED" >&2; exit 1; }
   echo "analyse -> job $J"
   ;;
@@ -92,7 +92,7 @@ abfigures)
   source "$WT/scripts/experiments/pile/pile_env.sh"
   J=$(sbatch --parsable --job-name=abres-3840-abfig --partition=cpu --mem=24G --cpus-per-task=2 --time=3:00:00 \
     --output="$LOGS/abfig-%j.out" \
-    --wrap="source $WT/gridenv.sh && export VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME CALIB_RESULTS=$EXP/ab_baseline/results CALIB_DATASETS=visual_genome_m,caltech101_m,coco_val CALIB_VG_EMBEDDERS=siglip,dinov3_patch CALIB_CALTECH_EMBEDDERS=siglip,dinov3_patch CALIB_COCO_EMBEDDERS=siglip,dinov3_patch CALIB_PATCH_STYLES=whole_image,max_patch CALIB_CATEGORY_MODE=all CALIB_N_SEEDS=9 CALIB_CELL_ORDER=seed && cd $CALIB && python text_baseline.py --results $EXP/ab_baseline/results --out $EXP/analysis/text_baseline.csv && python curves.py --results $ARMS_ROOT --arms baseline,ll1e-8 --out $EXP/analysis/figures --baseline $EXP/analysis/text_baseline.csv && python viewer.py --results $ARMS_ROOT --arms baseline=baseline,ll1e-8=ll1e-8 --out $EXP/analysis/viewer.html --title 'The #3840 validation grid: parameter rule vs ll1e-8' --baseline $EXP/analysis/text_baseline.csv")
+    --wrap="source $WT/scripts/grid/gridenv.sh && export VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME CALIB_RESULTS=$EXP/ab_baseline/results CALIB_DATASETS=visual_genome_m,caltech101_m,coco_val CALIB_VG_EMBEDDERS=siglip,dinov3_patch CALIB_CALTECH_EMBEDDERS=siglip,dinov3_patch CALIB_COCO_EMBEDDERS=siglip,dinov3_patch CALIB_PATCH_STYLES=whole_image,max_patch CALIB_CATEGORY_MODE=all CALIB_N_SEEDS=9 CALIB_CELL_ORDER=seed && cd $CALIB && python text_baseline.py --results $EXP/ab_baseline/results --out $EXP/analysis/text_baseline.csv && python curves.py --results $ARMS_ROOT --arms baseline,ll1e-8 --out $EXP/analysis/figures --baseline $EXP/analysis/text_baseline.csv && python viewer.py --results $ARMS_ROOT --arms baseline=baseline,ll1e-8=ll1e-8 --out $EXP/analysis/viewer.html --title 'The #3840 validation grid: parameter rule vs ll1e-8' --baseline $EXP/analysis/text_baseline.csv")
   [[ "$J" =~ ^[0-9]+$ ]] || { echo "abfigures SUBMIT FAILED" >&2; exit 1; }
   echo "abfigures -> job $J"
   ;;

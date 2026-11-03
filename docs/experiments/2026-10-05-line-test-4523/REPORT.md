@@ -101,7 +101,7 @@ line. The column the plan proposes is **0.20 / 40**; cluster SEs are
 | documents | 1 | 0.81 | 0.92 | 0.92 | **0.88** | 0.88 | 0.81 | 0.81 |
 | documents | 4 | 0.90 | 0.98 | 1.00 | **0.96** | 0.96 | 0.85 | 0.85 |
 
-![Coverage of the precision range against its cost](figures/coverage_vs_picks.png)
+![Coverage of the precision range against its cost](figures/coverage_vs_picks.webp)
 
 *Each point is one grid point; the ring is 0.20 / 40. Coverage rises with
 picks within a world, but the worlds sit on separate levels: more picks do
@@ -116,7 +116,7 @@ phase ends on its width in 62–95% of sessions, on its budget in 0–20%
 (a censused line, exact by construction) in 1–34% (mostly at 0.1%, whose
 lines are smallest).
 
-![Picks to Done at the plan's budgets](figures/picks_by_world.png)
+![Picks to Done at the plan's budgets](figures/picks_by_world.webp)
 
 **Why 0.1% and beta 4 fall short, and why no budget fixes it.** The range
 misses *above* the truth: at 0.1% / beta 4, 25% of ranges have a lower end
@@ -172,7 +172,7 @@ truth in 82% of sessions (`toothbrush@medium` seed 1: true recall 0.51, range
 0.85–0.94, the model's tail 0.5 against 17 positives really there;
 `spoon@large` seed 1: true 0.42, range 1.00–1.00, tail 0.006 against 27).
 
-![The recall estimate against the truth](figures/recall_estimate.png)
+![The recall estimate against the truth](figures/recall_estimate.webp)
 
 **Walking deeper.** The other walks at 0.20 / 40 (`summary.csv`, the `walk`
 column; the first row of each world is the plan):
@@ -213,7 +213,7 @@ reach 0.5, else *ship* — the reading agrees with the truth's under the same
 rule in 82% / 70% / 52% of sessions at 0.44% (beta 1/4, 1, 4), 82% / 81% /
 40% at 0.1%, 87% / 80% / 89% at 5%, 98% / 90% / 92% on documents.
 
-![The verdict against the oracle](figures/verdicts.png)
+![The verdict against the oracle](figures/verdicts.webp)
 
 Where it disagrees it says *ship*: at beta 4 the truth would lean in 41–58%
 of sessions (the best edge is shallower than the line in 31% of them) and the
@@ -248,9 +248,9 @@ next run's replay is bit-exact.
 
 The training sessions behind the Test corpora are ordinary runs of the app;
 their cost over clicks and crossover against the typed query are in
-[`figures/cost_vs_clicks.png`](figures/cost_vs_clicks.png),
-[`figures/cost_vs_clicks_runs.png`](figures/cost_vs_clicks_runs.png) and
-[`figures/average_precision_vs_clicks.png`](figures/average_precision_vs_clicks.png)
+[`figures/cost_vs_clicks.webp`](figures/cost_vs_clicks.webp),
+[`figures/cost_vs_clicks_runs.webp`](figures/cost_vs_clicks_runs.webp) and
+[`figures/average_precision_vs_clicks.webp`](figures/average_precision_vs_clicks.webp)
 (beta 1; the 0.1% arm never beats its text sort on cost within 150 clicks,
 as #4222 found), and in the [viewer](viewer.html).
 

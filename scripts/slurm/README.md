@@ -275,7 +275,7 @@ Clusters usually have a communal large-dataset area on a big shared volume.
 Rather than every user downloading the multi-GB demo datasets into their own
 data dir (often on a small per-user quota), keep one shared cache there and
 symlink it into each data dir with
-[`scripts/link-demo-cache.sh`](../link-demo-cache.sh) — see
+[`scripts/data/link-demo-cache.sh`](../data/link-demo-cache.sh) — see
 [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 Demo sources may also already exist elsewhere on the cluster (other groups'
 dataset folders); anything matching the extraction layout can be copied
@@ -300,7 +300,10 @@ sbatch --job-name=suite-<n> --output=<logdir>/tests-%j.out \
 
 `sbatch` copies the script into slurmd's spool at submit time, so the running
 job is not affected by the checkout it performs, or by a later `git pull` of
-the `dev` checkout. Give the suite a worktree of its own (`git worktree add
+the `dev` checkout. The job then fetches and, if the submitted copy is not
+byte-for-byte `origin/dev`'s, runs `origin/dev`'s instead (#5484: the `dev`
+checkout once sat 791 commits behind, and its copy refused every current
+worktree). The log's `=== suite.sbatch` line says which copy ran. Give the suite a worktree of its own (`git worktree add
 --detach`): it moves that worktree's HEAD for the length of the job. Read the
 log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
 The job runs on a fresh `VTSEARCH_DATA_DIR` under `$TMPDIR` and removes it at

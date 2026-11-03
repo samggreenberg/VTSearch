@@ -28,7 +28,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
 WT="$(cd "$HERE/../../.." && pwd)"
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 DATE="${1:?usage: bash viewer_betas.sh <date> [<out>]}"

@@ -29,7 +29,7 @@ Three statistics agree on the same reading, and they are not redundant:
   carries 23,891 negatives against 16,535, 44% more, and AP falls mechanically
   when the haystack grows.
 
-![The pool really does empty, and it reaches the benchmark anyway](figures/widening-empties-the-pool.png)
+![The pool really does empty, and it reaches the benchmark anyway](figures/widening-empties-the-pool.webp)
 
 **What a reader should do with a published `coco_better` number:** nothing, for
 any conclusion that survives 0.03 AP, and re-read the cell against the current

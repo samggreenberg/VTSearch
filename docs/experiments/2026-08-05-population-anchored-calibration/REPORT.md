@@ -116,7 +116,7 @@ H3 ✓ vs x-cal, ✗ vs the incumbent · H4 ✓ on binary, ✓ from 51 votes on 
   > interior root is invariant to the mixture weights at every inclusion (it
   > reads them only through the out-of-interval continuation slope). Verified
   > numerically over `w_lo ∈ {0.5, 0.9, 0.99}` and pinned by
-  > `tests_lib/detectors/test_cut_inclusion_sweep.py::TestRateIsPriorFree`.
+  > `tests_lib/eval/test_cut_inclusion_sweep.py::TestRateIsPriorFree`.
   >
   > What actually separates the two rules at inclusion 0 is the **variance
   > asymmetry**: `rate` solves the equal-density crossing, which sits off the

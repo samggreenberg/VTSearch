@@ -49,7 +49,7 @@ more of them".
 
 ## The result
 
-![Per-class delta with 95% intervals](figures/delta-per-class.png)
+![Per-class delta with 95% intervals](figures/delta-per-class.webp)
 
 **19 of 25 classes find the cross-class admission harder** (interval excluding
 zero), **5 find the pool harder**, and `truck` is the single null at `-0.003`
@@ -64,7 +64,7 @@ zero), **5 find the pool harder**, and `truck` is the single null at `-0.003`
 The scatter shows why the spread matters: it is not a small wobble around one
 difficulty, it is a systematic tilt with classes on both sides of the diagonal.
 
-![The two strata against each other](figures/pool-vs-cross-auc.png)
+![The two strata against each other](figures/pool-vs-cross-auc.webp)
 
 ### The intervals needed pairing, not more data
 

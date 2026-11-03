@@ -8,7 +8,7 @@ own.
 
 import pytest
 
-from vtsearch import torch_threads
+from vtsearch.runtime import torch_threads
 
 
 class TestAllocatedCpus:

@@ -57,7 +57,7 @@ photos, cut by `CENTROID_LINE_RULE` (`count_gap_floor_skip25_b1`). The line keep
 median + 4 bulk spreads (1.4826 · MAD), less a Gaussian bulk's share there. That count assumes the bulk's
 upper tail is Gaussian. On imagekit's face cosines it is not.
 
-![The click-0 cosines above the bulk, one photo, 1024 px](fig_tail.png)
+![The click-0 cosines above the bulk, one photo, 1024 px](fig_tail.webp)
 
 *Figure 1. One photo, 1024 px, 562 sessions: unvoted media more than 2 bulk spreads above the median.
 Grey: everyone but the person. Blue: the person's other photos. Orange: a Gaussian bulk's share. Above
@@ -101,7 +101,7 @@ every bar and β (`click0.csv`), so the rule must stay off the photo path.
 
 ### Paired on the face bench
 
-![The paired sessions, votes 1–30](fig_curves.png)
+![The paired sessions, votes 1–30](fig_curves.webp)
 
 *Figure 2. The objective at every vote, 1024 px. The centroid's line is what Find shows until the head
 draws its first line: through vote 7 from four photos, and in some one-photo sessions to vote 23. From
@@ -122,7 +122,7 @@ Final AP, Goods found, the set at 50 votes and F after the check are identical b
 
 ### Who gains
 
-![Gains by pronoun](fig_pronoun.png)
+![Gains by pronoun](fig_pronoun.webp)
 
 *Figure 3. Left: the bar's gain at click 0, by pronoun (283 she/her, 278 he/him). Right: the gain a bar
 at z 5 would give Find's line at vote 50 (offline, below).*

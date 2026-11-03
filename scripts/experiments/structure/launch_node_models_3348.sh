@@ -16,7 +16,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- check what was submitted" >&2'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -57,7 +57,7 @@ prepare)
   # read whole: coco_better's 7.5 GB cell sets the memory.
   submit prepare --job-name=node3348-prep --array="0-$((i-1))%12" --mem=40G --cpus-per-task=2 \
     --time=1:00:00 --partition=cpu --export=ALL --output="$LOGS/prep-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && \
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && \
       L=\$(awk -F, -v i=\$SLURM_ARRAY_TASK_ID '\$1==i' $MATS/prep_map.csv) && test -n \"\$L\" && \
       python prepare_matrices_3348.py --dataset \$(cut -d, -f2 <<<\"\$L\") --embedder \$(cut -d, -f3 <<<\"\$L\") --out $MATS"
   ;;
@@ -70,7 +70,7 @@ run)
   [[ -f "$LOGS/.jobid_prepare" ]] && DEP=(--dependency="afterok:$(cat "$LOGS/.jobid_prepare")")
   submit run --job-name=node3348 --array="0-$((i-1))" "${DEP[@]}" --mem="$MEM" --cpus-per-task="$CPUS" \
     --time="$TIME" --partition=cpu --export=ALL --output="$LOGS/run-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && \
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && \
       L=\$(awk -F, -v i=\$SLURM_ARRAY_TASK_ID '\$1==i' $RESULTS/run_map.csv) && test -n \"\$L\" && \
       python run_node_models_3348.py --embedder \$(cut -d, -f2 <<<\"\$L\") --seed \$(cut -d, -f3 <<<\"\$L\") \
         --datasets $DATASETS --mats $MATS --out $RESULTS"

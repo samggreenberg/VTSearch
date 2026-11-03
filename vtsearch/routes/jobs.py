@@ -12,7 +12,7 @@ from __future__ import annotations
 from flask_smorest import Blueprint
 
 from vtscore.concurrency.async_jobs import list_active_pairs
-from vtsearch.hooks import state_sync_exempt
+from vtsearch.runtime.request_hooks import state_sync_exempt
 from vtsearch.schemas.jobs import ActiveJobsResponseSchema
 
 jobs_bp = Blueprint(

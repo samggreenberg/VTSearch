@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.training.thresholds import gmm as G
+from vtscore.training.thresholds import gmm_em as G
 from vtscore.training.thresholds.gmm import GmmFit1D
 
 #: An arm is ``name -> (fit callable, one-line description)``.  The callable
@@ -145,7 +145,7 @@ def _bindings() -> "list[tuple[Any, str]]":
 
     ``fit_score_gmm`` is imported by name in several modules and fetched off the
     package by the ones that import it inside a function, so swapping the
-    definition in :mod:`vtscore.training.thresholds.gmm` alone leaves half the
+    definition in :mod:`vtscore.training.thresholds.gmm_em` alone leaves half the
     call sites on the old fit - silently, and in the direction that makes an arm
     look like the baseline.  Collected by scanning the imported modules instead
     of by listing them, so a new call site cannot be forgotten here.

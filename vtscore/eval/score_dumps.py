@@ -28,7 +28,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from vtscore.io import atomic_write_stream
+from vtscore.utils.io import atomic_write_stream
 
 COLUMNS = (
     "media_id",
@@ -53,7 +53,7 @@ def write_prediction_dump(
     """Write one row per media in *ids* to *path* (created via a temp rename).
 
     *scores* and *labels* must be positionally aligned with *ids*; the write goes
-    through :func:`~vtscore.io.atomic_write_stream`, so a reader never sees a
+    through :func:`~vtscore.utils.io.atomic_write_stream`, so a reader never sees a
     half-written dump from a re-run in flight and two arms dumping the same path
     can't collide on the temp file.
     """

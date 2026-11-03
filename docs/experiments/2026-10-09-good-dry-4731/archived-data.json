@@ -1,0 +1,55 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-09-good-dry-4731.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "coco_guard.csv": {
+     "bytes": 1980,
+     "oid": "c2742f4efe68360fdf1f8f5b3fef51e79768d4cd"
+    },
+    "compare_binary_b025.csv": {
+     "bytes": 1211,
+     "oid": "b48a703e3d386a5e601c32410c1cd335929d2890"
+    },
+    "compare_binary_b1.csv": {
+     "bytes": 1220,
+     "oid": "3cc4d8b843989fc692c663f5ea9664df19ceb9c1"
+    },
+    "compare_binary_b4.csv": {
+     "bytes": 1217,
+     "oid": "5c5d7d021ee65274e4f300e9f124d5ad27155e44"
+    },
+    "compare_region_b1.csv": {
+     "bytes": 1190,
+     "oid": "5da95fcddd90ae4802041d7e5dc980b7e573b6d1"
+    },
+    "fhibe_dry_run_lengths.csv": {
+     "bytes": 1833,
+     "oid": "520684ee42b18a12a4591ea01ec0027c882625ec"
+    },
+    "fhibe_summary.csv": {
+     "bytes": 6101,
+     "oid": "58da0734aaab8f264a38cb00a9c8b10dd717d1f5"
+    },
+    "fhibe_summary_4743.csv": {
+     "bytes": 3538,
+     "oid": "c90aa75f9b17f9227b616cc9105bd95b39da3634"
+    },
+    "fig_coco_guard_binary_b025.png": {
+     "bytes": 84486,
+     "oid": "d1d9b3887f1a72bd451ffcde062b67c0786aba4f"
+    },
+    "fig_coco_guard_binary_b4.png": {
+     "bytes": 79331,
+     "oid": "9c72f45c990267b19a89717243153f71aa83bea9"
+    },
+    "fig_fhibe_curves_4743.png": {
+     "bytes": 212905,
+     "oid": "a7faead63b42cc21ae5ca31aff876250996198f6"
+    }
+   }
+  }
+ ]
+}

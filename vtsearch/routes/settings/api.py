@@ -25,7 +25,9 @@ from typing import Any, Callable
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import admin_overrides, import_hooks, settings
+from vtsearch import settings
+from vtsearch.settings import admin_overrides
+from vtsearch.runtime import import_hooks
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
@@ -83,7 +85,7 @@ def _with_effective(data: dict) -> dict:
     whether a restriction came from a CLI flag, an env var, or the settings
     file. The set is not spelled out: each knob declares its own
     ``effective_key`` (and any JSON coercion) in
-    :mod:`vtsearch.admin_overrides`, and this loops the registry, so a new
+    :mod:`vtsearch.settings.admin_overrides`, and this loops the registry, so a new
     override is surfaced without touching this route.
 
     Shared by the GET and PUT responses. Stale dict fields are coerced to
@@ -93,7 +95,7 @@ def _with_effective(data: dict) -> dict:
     _coerce_dict_fields(data)
     for override in admin_overrides.OVERRIDES.values():
         data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
-    # Not an admin override (see :mod:`vtsearch.import_hooks`), so set here:
+    # Not an admin override (see :mod:`vtsearch.runtime.import_hooks`), so set here:
     # only whether hooks exist, never what they are.
     data["import_hooks_configured"] = import_hooks.configured()
     return data
@@ -147,7 +149,7 @@ _CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 # pure cutoff knob, so its setter keeps the head and only re-derives the
 # threshold from the cached ranking (``recompute_detector_thresholds``). All
 # three persist back to :mod:`vtsearch.settings` through the shim's
-# setting-persister hook (:func:`vtsearch.shim.register_app_persistence_hooks`),
+# setting-persister hook (:func:`vtsearch.seam_wiring.register_app_persistence_hooks`),
 # which is why the state-tier setter is the whole write and no
 # ``settings.set_<key>`` call belongs beside it.
 #
@@ -160,7 +162,7 @@ _CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 #
 # Only this route dispatches here. A settings import or a settings-source sync
 # writes these keys through the plain setters and then hands the change to
-# loaded detectors itself (``settings._refresh_loaded_detectors``): ``set_beta``
+# loaded detectors itself (``settings.sync._refresh_loaded_detectors``): ``set_beta``
 # also makes the value the *active* detector's own balance, which is a balance
 # pick, and a bulk import of the user's settings is not one.
 _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
@@ -174,7 +176,7 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
 #: ``PUT /api/settings`` because they are persisted through other paths:
 #:
 #: * ``last_embedder_per_media_type`` - written by the load-pipeline
-#:   "last embedder" hook (see :mod:`vtsearch.shim`), keyed per media type,
+#:   "last embedder" hook (see :mod:`vtsearch.seam_wiring`), keyed per media type,
 #:   not by the settings form.
 #:
 #: (``dataset_max_age_days`` is a server-tier retention policy set via the

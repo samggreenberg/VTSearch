@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-27-face-value-5336.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ab.csv": {
+     "bytes": 4920,
+     "oid": "ce48ed85ef3551c1982874e45dc0b7e2922c4ac0"
+    },
+    "curves.csv": {
+     "bytes": 44361,
+     "oid": "0ea3f936860b57129b7a029a954ac24d1db35b40"
+    }
+   }
+  }
+ ]
+}

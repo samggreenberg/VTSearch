@@ -37,7 +37,9 @@
 # identity file, so every session pairs with the plain arm's by person, size, K and beta.
 #
 # CALIB_SPOT_CHECK (end | off) runs a study's arm without the app's weak-separation check (#4778);
-# `dirs` declares it to the preflight and `pack` pins it in every cell's environment.
+# `dirs` declares it to the preflight and `pack` pins it in every cell's environment. CALIB_MIN_GOOD and
+# CALIB_HARD_DRY_RUN (#5477's Goods minimum) likewise. CALIB_SPAN_GREEN (0 = no
+# Diversity step, #5473) likewise.
 #
 # SOTA_FACE_BETAS="1" runs fewer presets than the three (#4780). SOTA_FACE_BASE names the prepared
 # grids (<base>-k<K>) that `prepare` writes and `dirs` links, so an arm on other vectors under the same
@@ -158,7 +160,9 @@ pack)
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
       --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
-SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} && \
+SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-} \
+CALIB_MIN_GOOD=${CALIB_MIN_GOOD:-} CALIB_HARD_DRY_RUN=${CALIB_HARD_DRY_RUN:-} \
+SOTA_FACE_RUNNER=${SOTA_FACE_RUNNER:-} HARD_FACE_SWAP=${HARD_FACE_SWAP:-} && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }
     echo "pack $j -> job $J (claims from $(wc -l <"$shard") cells, $PAR at a time)"
@@ -171,16 +175,17 @@ cell)  # K BETA INDEX: one cell, in its run dir's environment (called by pack)
   fi
   run_env "$k" "$b"
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
-  source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+  source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
   dir="$RUNS/$FHIBE_RUN-k$k-b$(btag "$b")"
   cd "$HERE/../calibration"
-  python run_cells.py --index "$idx" >"$dir/logs/cell-$idx.out" 2>&1 || echo "FAILED k$k b$b $idx"
+  # SOTA_FACE_RUNNER: a study's own cell runner in place of run_cells.py (#5376's swapped examples).
+  python "${SOTA_FACE_RUNNER:-run_cells.py}" --index "$idx" >"$dir/logs/cell-$idx.out" 2>&1 || echo "FAILED k$k b$b $idx"
   ;;
 baseline)  # click 0: the example sort at K = 1 and 4, in the K=1 beta-1 run's environment
   run_env 1 1
   ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
-  source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+  source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
   eval "$ENVX"
   out="$RUNS/$SET-baseline"
   mkdir -p "$out" && chmod 700 "$out"

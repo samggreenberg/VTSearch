@@ -1,6 +1,8 @@
-// The dataset's items as a grid of square tiles, each one a button that picks
-// that item as New Detector's example (#5205). The host fills the picker view
-// below its Back button and the grid scrolls inside it.
+// The dataset's items as a virtual grid of square tiles, each one a button that
+// picks that item as New Detector's example (#5205, #5465). The host fills the
+// picker view below its Back button: the search + size toolbar on top, then the
+// grid, which scrolls inside a fixed-height viewport so its scrollbar is sized
+// for the whole list from the start.
 :host {
   display: flex;
   flex-direction: column;
@@ -9,23 +11,49 @@
   min-height: 0;
 }
 
-.pick-scroll {
+// Search box on the left, the shared thumbnail-size buttons pushed right.
+.pick-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.pick-search {
   flex: 1 1 auto;
-  min-height: 0;
-  max-height: 60vh;
-  overflow-y: auto;
+  min-width: 0;
+}
+
+// The search box gives way, never the buttons: a shrunk control overflows
+// its own box and gives the dialog a sideways scroll.
+.pick-size {
+  flex-shrink: 0;
+}
+
+// A CDK virtual viewport needs a definite height (it lays out with
+// `contain: strict`), so this one is fixed rather than sized to its content.
+.pick-scroll {
+  height: 60vh;
+  width: 100%;
   overflow-x: hidden;
 }
 
-.pick-grid {
+// One virtual item is one row of fixed-size tiles. The row's height is the
+// virtual stride (tile + gap), so the gap below each row is part of its slot.
+.pick-row {
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: var(--space-xs);
+  grid-template-columns: repeat(var(--pick-cols, 1), var(--pick-cell, 80px));
+  align-content: start;
+  // --space-xs (4px) is the GAP_PX the component counts columns with.
+  column-gap: var(--space-xs);
 }
 
 // One item. Square, so faces and image thumbnails line up in rows; the
-// accent ring on hover / focus says it is the one a click will take.
+// accent ring on hover / focus says it is the one a click will take. Until its
+// thumbnail loads (once the scroll rests on it) the tile is just its fill.
 .pick-tile {
+  box-sizing: border-box;
+  width: var(--pick-cell, 80px);
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -80,17 +108,4 @@
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.pick-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-md);
-  padding: var(--space-md) 0;
-}
-
-.pick-count {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }

@@ -13,7 +13,8 @@ Built-in media types, embedders, clippers, and cleaners are
   and exposes a module-level ``EMBEDDER`` sentinel - one embedder per
   module or sub-package.  Any ``embedder*.py`` file or ``embedder*/``
   directory with an ``__init__.py`` found inside a media-type package
-  is auto-loaded.
+  is auto-loaded, as is one found inside that package's ``embedders/``
+  container (where ``image/`` keeps its own).
 
 To add a new embedder, drop an ``embedder_<name>.py`` file - or an
 ``embedder_<name>/`` sub-package containing an ``__init__.py`` - into
@@ -34,6 +35,7 @@ Third-party or project-specific types can still be registered manually::
 from __future__ import annotations
 
 import importlib
+import importlib.abc
 import importlib.util
 import sys
 import warnings
@@ -45,8 +47,8 @@ from vtscore.media.base import (
     MediaType,
     ProgressCallback,
 )
-from vtscore.media.cleaner import MediaCleaner
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.cleaner import MediaCleaner
+from vtscore.media.clipping.clipper import MediaClipper
 from vtscore.media.embedder import MediaEmbedder
 
 # ------------------------------------------------------------------
@@ -334,8 +336,98 @@ def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
 
 
 # ------------------------------------------------------------------
+# Old module paths
+# ------------------------------------------------------------------
+
+#: Public modules that moved into sub-packages (#5401), old dotted path → new.
+#: :class:`_MovedModuleFinder` keeps extension code written against an old path
+#: importing, with a :class:`DeprecationWarning`.  The private (``_``-prefixed)
+#: modules that moved alongside them have no entry.
+_MOVED_MODULES: dict[str, str] = {
+    "vtscore.media.clipper": "vtscore.media.clipping.clipper",
+    "vtscore.media.cleaner": "vtscore.media.clipping.cleaner",
+    "vtscore.media.clip_recipe": "vtscore.media.clipping.clip_recipe",
+    "vtscore.media.lazy_clip": "vtscore.media.clipping.lazy_clip",
+    "vtscore.media.structural_geometry": "vtscore.media.structural.structural_geometry",
+    "vtscore.media.structural_splg": "vtscore.media.structural.structural_splg",
+    "vtscore.media.structural_tiles": "vtscore.media.structural.structural_tiles",
+    "vtscore.media.torch_ops": "vtscore.media.torch_utils.torch_ops",
+    "vtscore.media.torch_setup": "vtscore.media.torch_utils.torch_setup",
+    **{
+        f"vtscore.media.image.{stem}": f"vtscore.media.image.embedders.{stem}"
+        for stem in (
+            "embedder_clip",
+            "embedder_clip_l",
+            "embedder_dinov2_patch",
+            "embedder_dinov2_single",
+            "embedder_dinov3_patch",
+            "embedder_dinov3_single",
+            "embedder_embeddinggemma2",
+            "embedder_eupe_patch",
+            "embedder_eupe_single",
+            "embedder_sift_vlad",
+            "embedder_sift_vlad_doc",
+            "embedder_siglip",
+            "embedder_siglip2",
+            "embedder_siglip2_l",
+            "embedder_siglip_l",
+        )
+    },
+}
+
+
+class _MovedModuleFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Resolve an old :data:`_MOVED_MODULES` path to the module now at the new one.
+
+    Appended to :data:`sys.meta_path`, so it only answers for a name no real
+    file claims.  Loading swaps the placeholder out of :data:`sys.modules` for
+    the real module, so both names are one module object: nothing (an
+    ``EMBEDDER`` sentinel included) executes twice, and a ``mock.patch``
+    through the old path patches the module the code actually runs.
+    """
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname not in _MOVED_MODULES:
+            return None
+        return importlib.util.spec_from_loader(fullname, self)
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module):
+        new_name = _MOVED_MODULES[module.__name__]
+        warnings.warn(
+            f"{module.__name__} has moved to {new_name}; import it from there",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        sys.modules[module.__name__] = importlib.import_module(new_name)
+
+
+# Installed before discovery runs, so a symlinked-in plugin that imports an
+# old path while it is being discovered still resolves.
+sys.meta_path.append(_MovedModuleFinder())
+
+
+# ------------------------------------------------------------------
 # Auto-discover media types, embedders, clippers, and cleaners
 # ------------------------------------------------------------------
+
+
+def _load_symlinked_embedder(full_name: str, load_path: Path, is_package: bool):
+    """Load a symlinked embedder module or package from the file its link points at."""
+    resolved = load_path.resolve()
+    spec = importlib.util.spec_from_file_location(
+        full_name,
+        str(resolved),
+        submodule_search_locations=[str(resolved.parent)] if is_package else None,
+    )
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[full_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
@@ -348,11 +440,19 @@ def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
     :func:`importlib.util.spec_from_file_location` so that symlinks
     pointing outside the package are handled reliably (mirrors the same
     approach used by :class:`vtscore.plugins.PluginRegistry`).
+
+    The one exception is a sub-package named exactly ``embedders/``: it is a
+    *container* (``vtscore/media/image/embedders/`` holds the image embedders),
+    so it is scanned by these same rules instead of being loaded as one embedder.
     """
     for entry in sorted(media_type_dir.iterdir()):
         if entry.name.startswith((".", "_")):
             continue
         if not entry.name.startswith("embedder"):
+            continue
+
+        if entry.name == "embedders" and entry.is_dir() and (entry / "__init__.py").exists():
+            _discover_embedders_in(entry, f"{package_name}.embedders")
             continue
 
         # Flat module: embedder_<name>.py
@@ -373,17 +473,7 @@ def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
         full_name = f"{package_name}.{module_stem}"
         try:
             if entry.is_symlink():
-                resolved = load_path.resolve()
-                spec = importlib.util.spec_from_file_location(
-                    full_name,
-                    str(resolved),
-                    submodule_search_locations=[str(resolved.parent)] if is_package else None,
-                )
-                if spec is None or spec.loader is None:
-                    continue
-                mod = importlib.util.module_from_spec(spec)
-                sys.modules[full_name] = mod
-                spec.loader.exec_module(mod)
+                mod = _load_symlinked_embedder(full_name, load_path, is_package)
             else:
                 mod = importlib.import_module(full_name)
         except Exception as exc:  # pragma: no cover
@@ -408,8 +498,12 @@ def _discover_media_plugins() -> None:
     - ``CLEANERS``  - a list of :class:`MediaCleaner` instances.
 
     Embedders are auto-discovered per module: every ``embedder*.py`` file
-    inside a media-type sub-package is scanned for an ``EMBEDDER`` sentinel
-    (see :func:`_discover_embedders_in`).
+    inside a media-type sub-package (or its ``embedders/`` container) is
+    scanned for an ``EMBEDDER`` sentinel (see :func:`_discover_embedders_in`).
+
+    The shared, non-media-type sub-packages (``clipping/``, ``structural/``,
+    ``torch_utils/``) are imported by the same scan; they expose no sentinels,
+    so nothing registers.
 
     Symlinked directories are followed (``entry.is_dir()`` resolves
     symlinks), so an external media-type package can be symlinked into

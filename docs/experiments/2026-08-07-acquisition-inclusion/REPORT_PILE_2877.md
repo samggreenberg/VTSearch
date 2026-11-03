@@ -284,12 +284,12 @@ trajectory frame as the tables above. The per-mode set (`binary_*`, `region_*`)
 pools the two binary environments and is kept only for continuity with the
 analyzer's own output; **read the per-environment set.**
 
-![siglip × whole_image](figures/env_siglip_fig1_frontier.png)
-![pair × whole_image](figures/env_pair_wi_fig1_frontier.png)
-![pair × max_patch (region)](figures/env_pair_region_fig1_frontier.png)
-![siglip guardrails](figures/env_siglip_fig3_guardrails.png)
-![pair whole_image guardrails](figures/env_pair_wi_fig3_guardrails.png)
-![pair region guardrails](figures/env_pair_region_fig3_guardrails.png)
+![siglip × whole_image](figures/env_siglip_fig1_frontier.webp)
+![pair × whole_image](figures/env_pair_wi_fig1_frontier.webp)
+![pair × max_patch (region)](figures/env_pair_region_fig1_frontier.webp)
+![siglip guardrails](figures/env_siglip_fig3_guardrails.webp)
+![pair whole_image guardrails](figures/env_pair_wi_fig3_guardrails.webp)
+![pair region guardrails](figures/env_pair_region_fig3_guardrails.webp)
 
 ## What this run does not answer
 

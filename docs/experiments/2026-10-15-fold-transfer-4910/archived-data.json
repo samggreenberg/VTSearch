@@ -1,0 +1,67 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-15-fold-transfer-4910.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/closed_loop_binary.csv": {
+     "bytes": 2681,
+     "oid": "1de8800328296a765cf5cea7b00175c1df7cf19c"
+    },
+    "tables/counts_binary.json": {
+     "bytes": 138,
+     "oid": "24559f6e66b416fa62bfa930b7461654b3df0078"
+    },
+    "tables/counts_region.json": {
+     "bytes": 17,
+     "oid": "d805ca6a31fbc3404283d6b609caaab083ac3155"
+    },
+    "tables/curves_binary.csv": {
+     "bytes": 82702,
+     "oid": "1419e8c7a104873d61e9a465cbd074a57215d04b"
+    },
+    "tables/gate_binary.csv": {
+     "bytes": 1653,
+     "oid": "a4d4af301a484d595a223628ccfca53e83431c7f"
+    },
+    "tables/gate_by_click_binary.csv": {
+     "bytes": 1446,
+     "oid": "c6a489e89fee6b4436a23cb8e938ce117ea4e0b3"
+    },
+    "tables/gate_by_click_region.csv": {
+     "bytes": 704,
+     "oid": "3abcbeb95162bd6c9e1c254f4ec9e6f623b175d3"
+    },
+    "tables/gate_region.csv": {
+     "bytes": 807,
+     "oid": "9fc23d680e2c73c5db397dd6e883adce609626c4"
+    },
+    "tables/line_vs_truth_binary.csv": {
+     "bytes": 4273,
+     "oid": "5aef12803d880fc5f81818f84bdfd4bb30f7dbc6"
+    },
+    "tables/same_head_curve_binary.csv": {
+     "bytes": 22710,
+     "oid": "39fb72b5d52ffa761eaa78c365ee87f0e3d0513a"
+    },
+    "tables/same_head_curve_region.csv": {
+     "bytes": 8238,
+     "oid": "6404365ecebddfd549194e81ad8ed674b2f06c84"
+    },
+    "tables/saturation_binary.csv": {
+     "bytes": 2795,
+     "oid": "7a233bb5c93a4f4070db0db1386b5c3c6d0ab196"
+    },
+    "tables/saturation_region.csv": {
+     "bytes": 1030,
+     "oid": "c5159b6b4d549102e075cb774811d14da258e823"
+    },
+    "tables/set_size_vs_best_binary.csv": {
+     "bytes": 6057,
+     "oid": "8e0a8fb0120d7ec60983c07c5896b99ef491099c"
+    }
+   }
+  }
+ ]
+}

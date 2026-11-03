@@ -74,7 +74,7 @@ paired per-class difference against the 2 MP arm.
 | **0.5 MP** | 1,024 | 144 | 237 s | **0.69** | **+0.532 ± 0.074** (21 up, 1 down) |
 | 0.25 MP | 902 | 127 | 265 s | 0.45 | +0.294 ± 0.069 (19 up, 3 down) |
 
-![AP against cap, per budget](fig_cap_budget.png)
+![AP against cap, per budget](fig_cap_budget.webp)
 
 **Why the two rows disagree.** Above the optimum the cap is choosing *which* keypoints a
 page spends its budget on, and a smaller cap chooses better: at 1,024 the median page
@@ -104,7 +104,7 @@ median 2.3), budget 8,192, one child process per cap:
 | 1 MP | 240 ms | 356 ms | 476 ms | 0.73 GB |
 | 0.5 MP | 119 ms | 184 ms | 337 ms | 0.69 GB |
 
-![Detection cost and peak memory](fig_cost.png)
+![Detection cost and peak memory](fig_cost.webp)
 
 The median barely moves between native and 4 MP — half the corpus is under 2.3 MP, so
 most pages are untouched by either — and the whole cost of an uncapped run sits in the

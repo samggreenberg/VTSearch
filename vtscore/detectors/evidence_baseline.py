@@ -99,8 +99,19 @@ def stored_baseline(detector_data: Mapping[str, Any] | None, stamp: Mapping[str,
     return dict(baseline)
 
 
-def record_baseline(path: Path, baseline: Mapping[str, Any], *, det_ctx: "DetectorContext | None" = None) -> bool:
+def record_baseline(
+    path: Path,
+    baseline: Mapping[str, Any],
+    *,
+    det_ctx: "DetectorContext | None" = None,
+    training_dataset: Mapping[str, Any] | None = None,
+) -> bool:
     """Record *baseline* on the detector file at *path*, unless it already holds it; whether it wrote.
+
+    A baseline is only ever drawn on the detector's training dataset, so
+    *training_dataset* (:func:`~vtscore.detectors.training_domain.training_dataset_record`),
+    when given, is recorded in the same write: the pointer the overlap check
+    follows when that dataset is not loaded (#5501).
 
     The read-modify-write runs under ``label_sync_write_lock``, as every other
     detector-JSON writer's does, so a vote landing meanwhile is never lost.
@@ -114,12 +125,18 @@ def record_baseline(path: Path, baseline: Mapping[str, Any], *, det_ctx: "Detect
     from vtscore.detectors.dataset_sync import _repoint_labelset_cache  # noqa: PLC0415
     from vtscore.detectors.labelset_ops import label_sync_write_lock  # noqa: PLC0415
     from vtscore.detectors.store import _read_detector, _write_detector  # noqa: PLC0415
+    from vtscore.detectors.training_domain import TRAINING_DATASET_KEY  # noqa: PLC0415
 
     with label_sync_write_lock:
         data = _read_detector(path)
-        if data is None or data.get(EVIDENCE_BASELINE_KEY) == dict(baseline):
+        if data is None:
             return False
-        data[EVIDENCE_BASELINE_KEY] = dict(baseline)
+        updates: dict[str, Any] = {EVIDENCE_BASELINE_KEY: dict(baseline)}
+        if training_dataset is not None:
+            updates[TRAINING_DATASET_KEY] = dict(training_dataset)
+        if all(data.get(key) == value for key, value in updates.items()):
+            return False
+        data.update(updates)
         _write_detector(path, data)
     if det_ctx is not None:
         _repoint_labelset_cache(det_ctx, path)
@@ -167,7 +184,7 @@ def labelset_evidence(det_ctx: "DetectorContext", labelset: "LabelSet") -> tuple
     """The detector's labelled evidence as ``(Good rows, Bad rows)``, or ``None`` when no label has a vector.
 
     The rows its head trains on
-    (:func:`~vtscore.detectors.labelset_training.build_xy_from_labelset`): a
+    (:func:`~vtscore.detectors.labelset_matrix.build_xy_from_labelset`): a
     Good's one vector, a Bad's flooded image-level and patch negatives on a
     patch dataset, read from the label embeddings *det_ctx* holds in memory.
     """
@@ -225,7 +242,9 @@ class PendingDraw:
     *dataset* it scored, and *threshold* its line; *labelset* is the labels it
     trained on, whose vectors in *embedder* *det_ctx* holds.  *stamp*,
     *dataset_id* / *dataset_name* and *path* say what the baseline is recorded
-    as and where.  Nothing is computed until :meth:`draw`.
+    as and where, and *labels_held* how many of the labels *dataset* holds, for
+    the training-dataset pointer recorded with it (#5501).  Nothing is computed
+    until :meth:`draw`.
     """
 
     detector_id: str
@@ -240,6 +259,7 @@ class PendingDraw:
     results: Sequence[Mapping[str, Any]]
     threshold: float
     embedder: str | None
+    labels_held: int = 0
 
     def draw(self) -> dict[str, Any] | None:
         """The baseline, or ``None`` when the detector has moved on since: a vote, or its labels re-read in another space."""
@@ -312,8 +332,17 @@ def _take_locked(detector_id: str, pending: PendingDraw | None = None) -> Pendin
 def _land(pending: PendingDraw) -> bool:
     """Draw *pending* and record it; whether it wrote.  Its detector is marked in flight by the caller."""
     try:
+        from vtscore.detectors.training_domain import training_dataset_record  # noqa: PLC0415
+
         baseline = pending.draw()
-        return baseline is not None and record_baseline(pending.path, baseline, det_ctx=pending.det_ctx)
+        if baseline is None:
+            return False
+        training = (
+            training_dataset_record(pending.dataset_id, pending.dataset_name, pending.labels_held)
+            if pending.labels_held > 0
+            else None
+        )
+        return record_baseline(pending.path, baseline, det_ctx=pending.det_ctx, training_dataset=training)
     except Exception:  # noqa: BLE001 - a side channel: the next test on the training dataset draws it
         logger.exception("Failed to draw the Evidence baseline of detector %s", pending.detector_id)
         return False

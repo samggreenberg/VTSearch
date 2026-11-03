@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-27-size-vs-size-4160.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "harvest.csv": {
+     "bytes": 81033,
+     "oid": "292b2beae7df0046eafca8fb1332722b0c608504"
+    }
+   }
+  }
+ ]
+}

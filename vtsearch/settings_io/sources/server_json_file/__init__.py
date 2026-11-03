@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtscore.io import atomic_write_json, read_server_json
+from vtscore.utils.io import atomic_write_json, read_server_json
 from vtsearch.settings_io.sources.base import SettingsSource, PluginField
 
 

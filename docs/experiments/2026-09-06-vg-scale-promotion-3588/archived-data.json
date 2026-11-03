@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-06-vg-scale-promotion-3588.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/coverage.png": {
+     "bytes": 47696,
+     "oid": "eb13f3762f39f340735ec98b96b5bf604e991fce"
+    },
+    "figures/repairs.png": {
+     "bytes": 58634,
+     "oid": "5a337215e20d7e52b00fc76b7192f6bbf42890a9"
+    },
+    "figures/supply.png": {
+     "bytes": 95739,
+     "oid": "8b0edecfa469920f799778827f2f28acc939b604"
+    },
+    "measurements/negpool_supply25.json": {
+     "bytes": 669,
+     "oid": "3fbac49aba28a59f9b62a4e2303e6126b055a8e3"
+    },
+    "measurements/proposal.json": {
+     "bytes": 5828,
+     "oid": "bfa3353b400c3ad00b404b8c18f633267b6961df"
+    },
+    "measurements/supply25.json": {
+     "bytes": 2904,
+     "oid": "8c5d35109d630feb22083d35276948bce4135d4d"
+    },
+    "measurements/supply25_final.json": {
+     "bytes": 2907,
+     "oid": "7869ac7192eb95ec148cdccccb917c2a3be07c7f"
+    }
+   }
+  }
+ ]
+}

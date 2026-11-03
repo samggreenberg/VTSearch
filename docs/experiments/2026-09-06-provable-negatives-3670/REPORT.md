@@ -86,7 +86,7 @@ anything drawn from it:
 | …off-COCO, clean only by VG's silence | 40,470 |
 | designated today | 3,900 (45.0% COCO-scored) |
 
-![Supply by provenance](figures/supply.png)
+![Supply by provenance](figures/supply.webp)
 
 *The dashed lines are the old pool and #3670's. An all-provable 9,900 is not
 merely feasible, it draws on 3.4× what it needs — which is what makes the
@@ -131,7 +131,7 @@ fitted against, and score the *other* stratum at that threshold unchanged. A
 ratio of 1 means the composition buys nothing; #3667's cross-class shortcut
 measured 1.88 ± 0.19 on this scale and justified rebuilding eleven cells.
 
-![Both distortions on one scale](figures/distortion.png)
+![Both distortions on one scale](figures/distortion.webp)
 
 *Blue is the provenance shortcut an all-provable pool creates, read two ways
 per embedder; orange is the contamination a mixed pool keeps, with #3666's 95%
@@ -200,7 +200,7 @@ the ratio by 0.38.
 
 ### The artifact is per-class, and that is what breaks the argument
 
-![The contamination-free diagnostic, per class](figures/asymmetry.png)
+![The contamination-free diagnostic, per class](figures/asymmetry.webp)
 
 *`forward + reverse − 2` per class and per embedder; 0 is what pure
 contamination produces. Ordered by the mean over embedders. This is the panel
@@ -270,7 +270,7 @@ made the shipped dataset unbuildable, and reported it as a dict lookup.
 scores every other class's COCO-scored positives, so the negatives a detector
 faces are ~1,900 more than `SCALE_N_NEG`:
 
-![Designed against realised prevalence](figures/prevalence.png)
+![Designed against realised prevalence](figures/prevalence.webp)
 
 *Counted off `_evaluable` itself rather than a formula, over all 36 cells. k\*
 — the quantity the acquisition studies in this family actually read — is
@@ -316,7 +316,7 @@ direction the request pointed. But **quote 0.85%**, and see #3681.
 
 This is the real cost of `provable`, and it is large.
 
-![What each composition does to the review](figures/review-coverage.png)
+![What each composition does to the review](figures/review-coverage.webp)
 
 *Stacked by fate. The percentage above each bar is coverage of what that
 composition can hold — not of the whole review, which is what the `ineligible by

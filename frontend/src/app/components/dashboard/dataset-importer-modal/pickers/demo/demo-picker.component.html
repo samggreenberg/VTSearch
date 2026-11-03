@@ -61,6 +61,10 @@
       ></vt-multi-output-config>
     }
   </vt-import-advanced>
+
+  @if (submitError()) {
+    <p class="error-text">{{ submitError() }}</p>
+  }
 </div>
 
 <vt-clipper-chooser

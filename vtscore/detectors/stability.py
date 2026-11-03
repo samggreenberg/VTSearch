@@ -51,7 +51,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import numpy as np
 
@@ -60,6 +60,14 @@ Status = Literal["red", "yellow", "green"]
 #: Both Smart and Stable stay red until the labelset has this many of each
 #: class - below it there is no detector worth judging.
 MIN_PER_CLASS = 5
+
+#: Issue #5477: once this many votes in a row past the opening (Boundary,
+#: Diversity, or a spot check) held no Good, the target has shown what it can
+#: supply, and Smart and Stable need only the Goods in hand instead of
+#: :data:`MIN_PER_CLASS`.  Most faces have 3 or 4 Goods in reach, so before this
+#: 81-87% of FHIBE sessions were never told Done.  The same 16 as the Good
+#: walk's own dry run (``MORE_DRY_RUN``).  Latched for the session.
+HARD_DRY_RUN = 16
 
 #: How many stability entries the rule looks back over, and how many it needs
 #: before it will say anything but "not enough history".
@@ -82,6 +90,44 @@ STABLE_BAND_STD_FRACTION = 0.25
 #: averages below this fraction of the earlier half (and is not already under
 #: :data:`STABLE_RATE_THRESHOLD`).
 STABLE_FALLING_RATIO = 0.5
+
+
+def minimum_reason(good: int, bad: int, min_good: int = MIN_PER_CLASS) -> str:
+    """Why Smart or Stable is red below the per-class minimum: the counts it needs and has."""
+    return f"Need at least {min_good} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b."
+
+
+def goods_minimum(good: int, ran_dry: bool) -> int:
+    """The Goods Smart and Stable need: :data:`MIN_PER_CLASS`, or once the picks ran dry (#5477) the Goods in hand."""
+    return max(1, min(MIN_PER_CLASS, good)) if ran_dry else MIN_PER_CLASS
+
+
+@dataclass
+class HardDryRun:
+    """Issue #5477's run of votes past the opening with no Good, toward :data:`HARD_DRY_RUN`.
+
+    Fed one vote at a time, in order, by Autopilot's phase machine in the eval
+    harness and by the app's labeling status walking the label history, so the
+    two cannot count it differently.  Any Good resets the run; a Bad counts only
+    when *counts* (the vote was past the opening).  Once the run reaches
+    *target* it latches: :attr:`dry` stays true for the session.  A *target* of
+    ``None`` never runs dry.
+    """
+
+    target: Optional[int] = HARD_DRY_RUN
+    misses: int = 0
+    dry: bool = False
+
+    def note(self, label: str, counts: bool) -> None:
+        """Fold in one vote: *label* is ``"good"`` or ``"bad"`` (anything else is ignored)."""
+        if self.target is None or self.dry:
+            return
+        if label == "good":
+            self.misses = 0
+        elif label == "bad" and counts:
+            self.misses += 1
+            if self.misses >= self.target:
+                self.dry = True
 
 
 def ambiguity_band(scores: Iterable[float]) -> float:
@@ -163,7 +209,9 @@ def _rates(entries: Sequence[Mapping[str, Any]], key: str) -> list[float]:
     return [e[key] / e["num_pool"] if e["num_pool"] > 0 else 0.0 for e in entries]
 
 
-def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, bad: int) -> dict[str, Any]:
+def stable_status_from_entries(
+    entries: Sequence[Mapping[str, Any]], good: int, bad: int, *, min_good: int = MIN_PER_CLASS
+) -> dict[str, Any]:
     """The Stable indicator over a history of :func:`stability_entry` records.
 
     Returns the ``/api/labeling-status`` sub-object: ``status`` (red / yellow /
@@ -184,12 +232,13 @@ def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, 
     eval harness to record per step.  All five rates are rounded to six places
     rather than four: on a haystack of tens of thousands a single flip is finer
     than 1e-4, and these are reporting numbers that no rule reads back.
+
+    *min_good* is the Goods the light needs, :data:`MIN_PER_CLASS` unless a
+    caller lowers it for a target with fewer to find (issue #5477); the Bads'
+    minimum is always :data:`MIN_PER_CLASS`.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return {
-            "status": "red",
-            "reason": f"Need at least {MIN_PER_CLASS} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b.",
-        }
+    if good < min_good or bad < MIN_PER_CLASS:
+        return {"status": "red", "reason": minimum_reason(good, bad, min_good)}
     if len(entries) < STABLE_MIN_ENTRIES:
         return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
 

@@ -86,7 +86,7 @@ def _cuml_active() -> bool:
     the GPU, which materially changes the finalize phase's cost.
     """
     try:
-        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+        from vtscore.config.gpu_backends import cuml_enabled  # noqa: PLC0415
 
         return cuml_enabled()
     except Exception:

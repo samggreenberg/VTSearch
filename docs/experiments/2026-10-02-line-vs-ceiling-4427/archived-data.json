@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-02-line-vs-ceiling-4427.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/objective_beta0.5.png": {
+     "bytes": 65479,
+     "oid": "887e94e5ee6990ef87d7220baafc156ac60ae4ed"
+    },
+    "figures/objective_beta2.png": {
+     "bytes": 63969,
+     "oid": "29ac294c32fa77dfae211256e1f5f81466aa2c84"
+    },
+    "figures/objective_walk.png": {
+     "bytes": 56070,
+     "oid": "ea195623c04ae2b4b22b567f1985daa8587a37f9"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-05-line-test-4523.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "harness_check.json": {
+     "bytes": 7188,
+     "oid": "9595c6adfbbd9bf9709a826f9ca2ac53f021241a"
+    },
+    "pick.csv": {
+     "bytes": 2223,
+     "oid": "7136a74fcd489c242f6e999531ad36a2ab06680b"
+    },
+    "provenance.json": {
+     "bytes": 2294,
+     "oid": "fb15fd5bddeb228cc2d785dd9c3fceb0e0d3dd1d"
+    },
+    "summary.csv": {
+     "bytes": 142883,
+     "oid": "f3fcb8e346e46b4c9295caadfd999f62ca20db1e"
+    }
+   }
+  }
+ ]
+}

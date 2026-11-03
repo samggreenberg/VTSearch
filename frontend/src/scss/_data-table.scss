@@ -60,7 +60,7 @@
     position: sticky;
     top: 0;
     background: var(--bg-surface);
-    z-index: 1;
+    z-index: var(--z-base);
     color: var(--text-secondary);
     font-weight: var(--weight-medium);
     font-size: var(--font-xs);
@@ -126,7 +126,7 @@
     // grab zone straddles the divider symmetrically.
     //
     // Why on the *next* cell, leaking *left*? Each <th> is `position: sticky;
-    // z-index: 1` so it forms its own stacking context. Sibling stacking
+    // z-index: var(--z-base)` so it forms its own stacking context. Sibling stacking
     // contexts at equal z-index paint in DOM order, so the next cell paints
     // OVER the previous one. A handle that overflows from cell N to the right
     // gets covered by cell N+1's background; a handle that overflows from
@@ -141,7 +141,9 @@
       bottom: 0;
       width: 12px;
       cursor: col-resize;
-      z-index: 2;
+      // Local to the <th>'s own stacking context, where nothing else is
+      // positioned, so the base step lifts it over the cell's text.
+      z-index: var(--z-base);
 
       &::after {
         content: '';

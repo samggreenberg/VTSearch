@@ -39,7 +39,7 @@ to chain a stage behind a running one GRID-side.
 
 **`swap_fit` patches every binding, not the definition.** `fit_score_gmm` is
 imported by name in several modules and fetched off the package by the ones that
-import it inside a function, so replacing it in `thresholds.gmm` alone leaves
+import it inside a function, so replacing it in `thresholds.gmm_em` alone leaves
 half the call sites on the old fit — silently, and in the direction that makes
 an arm look like the baseline. `run_cells_arm_3585.py` asserts the swap took
 before spending an hour measuring the wrong arm.

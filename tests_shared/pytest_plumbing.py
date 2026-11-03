@@ -7,6 +7,9 @@ so each tier keeps a two-line ``pytest_collection_modifyitems`` /
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from pathlib import Path
+
 import pytest
 
 #: Directories under a test tree that are not test groups: no marker is added
@@ -14,22 +17,91 @@ import pytest
 #: :func:`add_group_markers`.
 NON_GROUP_DIRS = frozenset({"fixtures", "__pycache__"})
 
+#: ``tests_lib/`` mirrors ``vtscore``'s package layout (#5403), so there a
+#: folder names the package its tests cover rather than a group.  This maps each
+#: folder, as its path under ``tests_lib/`` (``""`` for the tree's root, which
+#: holds the tests of ``vtscore``'s top-level modules), to the
+#: ``./run-tests.sh`` group it runs under.  The folders that are not packages
+#: (``meta``, ``gpu``, ``integration``) and the top-level ``imagekit`` package
+#: are groups of their own.  ``tests_lib/meta/test_lib_layout.py`` checks the
+#: map against the tree and against ``vtscore/``.
+LIB_GROUPS: Mapping[str, str] = {
+    "": "core",
+    "cli": "cli",
+    "concurrency": "core",
+    "config": "core",
+    "converters": "converters",
+    "coverage": "sorting",
+    "datasets": "datasets",
+    "datasets/downloader": "downloads",
+    "datasource_importers": "io",
+    "detectors": "detectors",
+    "embedding": "core",
+    "eval": "detectors",
+    "exporters": "io",
+    "gpu": "gpu",
+    "imagekit": "imagekit",
+    "integration": "integration",
+    "labels": "io",
+    "media": "core",
+    "meta": "meta",
+    "plugins": "core",
+    "projection": "projection",
+    "security": "core",
+    "seed_importers": "io",
+    "state": "core",
+    "timing": "core",
+    "training": "sorting",
+    "utils": "core",
+}
 
-def add_group_markers(items, root_dir_name: str) -> None:
-    """Auto-assign group markers from each test file's parent directory.
 
-    Layout: ``<root_dir_name>/<group>/test_*.py``; the folder name IS the group,
-    so tests can be run by area (``pytest -m core``, ``pytest -m sorting``) and
-    a new file automatically inherits its group from where it lives.  That
-    kills the old registry-drift bug class, where a file added without an entry
-    in a hand-maintained ``_TEST_GROUPS`` map was silently excluded from
+def _folder_in_tree(item, root_dir_name: str) -> tuple[str, ...] | None:
+    """The parts of ``item``'s folder below ``<rootdir>/<root_dir_name>``, or None outside it."""
+    try:
+        return Path(item.path).parent.relative_to(item.config.rootpath / root_dir_name).parts
+    except ValueError:
+        return None
+
+
+def add_group_markers(items, root_dir_name: str, groups: Mapping[str, str] | None = None) -> None:
+    """Auto-assign group markers from where each test file lives.
+
+    Without ``groups`` (``tests/``) the layout is
+    ``<root_dir_name>/<group>/test_*.py``: the folder name IS the group, so
+    tests can be run by area (``pytest -m core``, ``pytest -m sorting``) and a
+    new file automatically inherits its group from where it lives.  That kills
+    the old registry-drift bug class, where a file added without an entry in a
+    hand-maintained ``_TEST_GROUPS`` map was silently excluded from
     ``./run-tests.sh <group>``.
+
+    With ``groups`` (``tests_lib/``, see :data:`LIB_GROUPS`) the folder's path
+    under the tree is looked up instead.  The map is keyed by folder, not by
+    file, so a new file still inherits its group from where it lives, and a
+    test in a folder the map lacks stops the run with a :class:`pytest.UsageError`
+    instead of silently joining no group.
+
+    Each conftest's hook is handed every collected item, both trees' alike, so
+    items outside ``<rootdir>/<root_dir_name>`` are left to the other call.
     """
-    skip = NON_GROUP_DIRS | {root_dir_name}
     for item in items:
-        parent = item.fspath.dirpath().basename
-        if parent and parent not in skip and not parent.startswith("_"):
-            item.add_marker(getattr(pytest.mark, parent))
+        parts = _folder_in_tree(item, root_dir_name)
+        if parts is None or (parts and (parts[0] in NON_GROUP_DIRS or parts[0].startswith("_"))):
+            continue
+        if groups is None:
+            if parts:
+                item.add_marker(getattr(pytest.mark, parts[-1]))
+            continue
+        folder = "/".join(parts)
+        group = groups.get(folder)
+        if group is None:
+            raise pytest.UsageError(
+                f"{root_dir_name}/{folder}/ holds tests but has no group in LIB_GROUPS "
+                f"(tests_shared/pytest_plumbing.py). {root_dir_name}/ mirrors vtscore's packages: "
+                f"move the test into the folder of the package it covers, or map the new folder "
+                f"to the ./run-tests.sh group it belongs to."
+            )
+        item.add_marker(getattr(pytest.mark, group))
 
 
 def print_summary_and_exit(config, exitstatus: int) -> None:

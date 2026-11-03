@@ -20,7 +20,7 @@ Counts are derived by the real loader's *collection* phase (download â†’ list â†
 per-category slice), which is what determines how many media end up in the
 dataset.  To (re)compute a dataset's count, download its source and run::
 
-    python scripts/compute_demo_counts.py <dataset_id> [<dataset_id> ...]
+    python scripts/data/compute_demo_counts.py <dataset_id> [<dataset_id> ...]
 
 The script prints ready-to-paste ``"id": count,`` lines; add them below.  Each
 source's four S/M/L/A variants share one category-size profile, so measuring a
@@ -28,7 +28,7 @@ source once yields all four counts.
 
 Measured entries
 ----------------
-All entries below were produced by ``scripts/compute_demo_counts.py`` against
+All entries below were produced by ``scripts/data/compute_demo_counts.py`` against
 the downloaded source (the collection phase with embedding stubbed), except
 Caltech-101 S/M which were confirmed against the cached ``.pkl`` files.  Each
 source's S/M/L slices partition its categories, so ``S + M + L == A`` holds as

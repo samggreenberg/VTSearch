@@ -21,7 +21,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- check what was submitted" >&2'
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 
@@ -50,7 +50,7 @@ DEPARG=()
 [[ -n "${DEP:-}" ]] && DEPARG=(--dependency="$DEP")
 
 envx() {  # $1 = results dir
-  echo "source $WT/gridenv.sh && source $WT/scripts/experiments/pile/pile_env.sh && export VTS_REPO=$WT" \
+  echo "source $WT/scripts/grid/gridenv.sh && source $WT/scripts/experiments/pile/pile_env.sh && export VTS_REPO=$WT" \
        "CALIB_EXP=$(dirname "$1") CALIB_RESULTS=$1 CALIB_DATASETS=$CALIB_DATASETS" \
        "CALIB_VG_EMBEDDERS=siglip CALIB_CALTECH_EMBEDDERS=siglip CALIB_COCO_EMBEDDERS=siglip" \
        "CALIB_PATCH_STYLES=whole_image CALIB_REQUIRE_SEED_QUERY=1 CALIB_REQUIRE_OPENING=text" \

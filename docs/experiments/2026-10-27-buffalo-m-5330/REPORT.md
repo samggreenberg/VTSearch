@@ -112,7 +112,7 @@ have both eyes annotated. In 422 of them (79%), buffalo_l's points are the close
 0.14 against buffalo_m's 0.19. Figure 1 shows the whole distribution. The two curves overlap for most
 photos, and buffalo_m's tail is about twice as heavy from an error of 0.2 on.
 
-![The share of subject photos above each landmark error, per detector](fig_landmarks.png)
+![The share of subject photos above each landmark error, per detector](fig_landmarks.webp)
 
 *Figure 1. The share of subject photos whose landmark error against FHIBE's five annotated points is
 above a given value (log scale), at 1024 and 640 px. The sample is the 8,537 photos where both
@@ -129,7 +129,7 @@ below 0.5 have their two landmark sets a median 0.80 inter-ocular distances apar
 still 0.78. They are the same face, aligned differently. In the photos with a cosine of 0.98 and above,
 the median is 0.036.
 
-![The cosine between the two vectors of the same subject photo](fig_cosine.png)
+![The cosine between the two vectors of the same subject photo](fig_cosine.webp)
 
 *Figure 2. The cosine between buffalo_l's and buffalo_m's vector of the same subject photo, binned (log
 scale). The sample is every subject photo that both cells keep: 10,132 at 1024 px and 9,839 at 640 px.

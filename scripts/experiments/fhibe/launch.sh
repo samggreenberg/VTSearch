@@ -55,7 +55,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 CALIB="$WT/scripts/experiments/calibration"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 # The pile's datadir, never the live app's (the bashrc exports that one).
 if [[ "$VTSEARCH_DATA_DIR" == "/expscratch/$USER/vtsearch-data" ]]; then
@@ -144,6 +144,10 @@ ENVX="$ENVX CALIB_HEAD_COUNT_RECALL_EXPONENT=${CALIB_HEAD_COUNT_RECALL_EXPONENT:
 # declares it. CALIB_SPOT_CHECK likewise.
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
 ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-}"
+# The Span target (#5473): unset is the app's 40; 0 skips the Diversity step. Preflight declares it.
+ENVX="$ENVX CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-}"
+# The Goods Smart and Stable need (#5477), and the dry run that waives it: unset is the app's. Preflight declares them.
+ENVX="$ENVX CALIB_MIN_GOOD=${CALIB_MIN_GOOD:-} CALIB_HARD_DRY_RUN=${CALIB_HARD_DRY_RUN:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
@@ -167,7 +171,7 @@ identities)
   echo "identities: admitted at $FHIBE_MAX_EXAMPLES example(s), n=${FHIBE_N_IDENTITIES:-all} -> $FHIBE_IDENTITIES"
   submit identities --job-name=fhibe-ids --mem=8G --cpus-per-task=2 --time=1:00:00 \
     --partition="$PARTITION" --export=ALL --output="$LOGS/identities-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python identities.py --examples $FHIBE_MAX_EXAMPLES \
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python identities.py --examples $FHIBE_MAX_EXAMPLES \
 ${FHIBE_N_IDENTITIES:+--n $FHIBE_N_IDENTITIES} ${FHIBE_STRATA:+--strata $FHIBE_STRATA} --out $FHIBE_IDENTITIES \
 && chmod 600 $FHIBE_IDENTITIES ${FHIBE_STRATA:+$FHIBE_IDENTITIES.strata.tsv}"
   ;;
@@ -178,7 +182,7 @@ prepare)
     "identities=$(grep -vc '^#' "$FHIBE_IDENTITIES")"
   submit prepare --job-name=fhibe-prep --mem=32G --cpus-per-task=4 --time=2:00:00 \
     --partition="$PARTITION" --export=ALL --output="$LOGS/prepare-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python prepare_data.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python prepare_data.py"
   ;;
 
 size)
@@ -190,7 +194,7 @@ size)
   for idx in ${IDXS//,/ }; do
     submit "size$idx" --job-name="fhibe-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
       --time=2:00:00 --partition="$PARTITION" --export=ALL --output="$LOGS/size-$idx-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $idx"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $CALIB && time python run_cells.py --index $idx"
   done
   echo "read Elapsed and MaxRSS off 'sacct -j <id> --format=Elapsed,MaxRSS,State' before sizing the array"
   ;;
@@ -239,6 +243,8 @@ PYSHAPE
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
   DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
   DIVERGES="$DIVERGES${CALIB_SPOT_CHECK:+,spot_check}"
+  DIVERGES="$DIVERGES${CALIB_SPAN_GREEN:+,span_green}"
+  DIVERGES="$DIVERGES${CALIB_MIN_GOOD:+,min_good}${CALIB_HARD_DRY_RUN:+,hard_dry_run}"
   DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_BADS:+,head_count_bads}"
   DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_RECALL_EXPONENT:+,head_count_recall_exponent}${CALIB_HEAD_COUNT_RECALL_Z:+,head_count_recall_z}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
@@ -256,13 +262,13 @@ PYSHAPE
     submit pack --job-name="$JOB_NAME-pack" --partition=gpu --gres="${CALIB_PACK_GRES:-gpu:v100:1}" \
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-8:00:00}" \
       --export=ALL --output="$LOGS/pack-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $CALIB && \
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $CALIB && \
 seq 0 $((N - 1)) | xargs -P $PAR -I{} sh -c 'python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
   else
     submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL --output="$LOGS/cells-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
   fi
   ;;
 
@@ -273,7 +279,7 @@ redo)
   submit redo --job-name="$JOB_NAME-redo" --array="$IDXS%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL --output="$LOGS/redo-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $CALIB && python run_cells.py"
   ;;
 
 status)

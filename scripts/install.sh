@@ -9,7 +9,7 @@ set -euo pipefail
 # hardware you have:
 #
 #   - GPU present -> CUDA torch, with the right cuXYZ wheel tag auto-selected
-#     from the GPU's compute capability (scripts/detect_cuda_tag.py).
+#     from the GPU's compute capability (scripts/install/detect_cuda_tag.py).
 #   - No GPU      -> the smaller CPU-only torch wheel (~200 MB vs ~2 GB).
 #
 # "GPU present" means nvidia-smi can actually see the card. If the GPU is
@@ -55,10 +55,10 @@ set -euo pipefail
 # Rule of thumb: use the newest tag your driver supports that still covers
 # your GPU. cu129 is the default the auto-detect picks for Turing through
 # Blackwell: its torch pins the CUDA 12.9 libraries that RAPIDS >= 26.8 is
-# built on, so it is the only tag on which the optional cuML step below runs
-# (RAPIDS >= 26.8 is the first whose cudf takes the pandas 3 that
-# pyproject.toml pins, #4390). A Volta card, or a driver older than CUDA 12.9,
-# steps down to cu126 (or older) and the app runs UMAP / k-means on the CPU.
+# built on. The optional cuML step below runs on cu129 and on cu126 (RAPIDS
+# >= 26.8 is the first whose cudf takes the pandas 3 that pyproject.toml pins,
+# #4390); a Volta card, or a driver older than CUDA 12.9, steps down to cu126
+# and keeps GPU UMAP / k-means. On cu118 and cu128 the app runs them on the CPU.
 #
 # (VTSearch also smoke-tests CUDA at runtime and falls back to CPU if the
 # installed wheel can't run on the GPU, so a mismatch degrades instead of
@@ -88,8 +88,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Shared progress-printing helpers.
-# shellcheck source=_progress.sh
-source "$SCRIPT_DIR/_progress.sh"
+# shellcheck source=install/_progress.sh
+source "$SCRIPT_DIR/install/_progress.sh"
 
 # --- GPU presence ------------------------------------------------------------
 # True (exit 0) when nvidia-smi exists and lists at least one GPU. This is the
@@ -818,8 +818,8 @@ EOF
 # Echo a cuXYZ tag for the GPU. An explicit arg wins; otherwise auto-detect via
 # detect_cuda_tag.py (which prints its reasoning to stderr -> the terminal), and
 # fall back to cu126 if it can't tell: the widest wheel (Volta..Hopper), so a GPU
-# we could not identify still gets a torch that runs on it, at the cost of the
-# cuML step (which needs cu129; see vts_install_cuml).
+# we could not identify still gets a torch that runs on it, and the cuML step
+# still runs there (see vts_install_cuml).
 vts_resolve_cuda_tag() {
     local explicit="${1:-}"
     if [ -n "$explicit" ]; then
@@ -828,7 +828,7 @@ vts_resolve_cuda_tag() {
     fi
     local pybin detected
     pybin="$(command -v python || command -v python3 || true)"
-    if [ -n "$pybin" ] && detected="$("$pybin" "$SCRIPT_DIR/detect_cuda_tag.py")"; then
+    if [ -n "$pybin" ] && detected="$("$pybin" "$SCRIPT_DIR/install/detect_cuda_tag.py")"; then
         echo "$detected"
     else
         echo "  (auto-detect failed; falling back to default tag cu126)" >&2
@@ -905,7 +905,7 @@ vts_install_toponymy() {
 # again after, so a torch that arrives with or without a cap is reconciled.
 vts_upgrade_setuptools() {
     local spec
-    spec="$(python "$SCRIPT_DIR/setuptools_spec.py")" || spec="setuptools>=83"
+    spec="$(python "$SCRIPT_DIR/install/setuptools_spec.py")" || spec="setuptools>=83"
     pip install --upgrade "$spec" --progress-bar on
 }
 
@@ -916,8 +916,8 @@ vts_install_cpu() {
     echo "normal -- it is working, not frozen."
 
     vts_progress_step "Checking Python version (>= 3.11)"
-    # shellcheck source=_check-python.sh
-    source "$SCRIPT_DIR/_check-python.sh"
+    # shellcheck source=install/_check-python.sh
+    source "$SCRIPT_DIR/install/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
     pip install --upgrade pip wheel --progress-bar on
@@ -939,7 +939,7 @@ vts_install_cpu() {
 # --- optional cuML / RAPIDS accelerator (best-effort) ------------------------
 # cuML powers GPU UMAP (VTSBrowse projection) and GPU k-means (diversity tree);
 # VTSearch auto-detects it at runtime and falls back to the CPU umap-learn /
-# scikit-learn paths when it's absent (see vtscore/gpu_backends.py). We install
+# scikit-learn paths when it's absent (see vtscore/config/gpu_backends.py). We install
 # it by default on GPU hosts, but as an ISOLATED, NON-FATAL step:
 #
 #   - It's a multi-gigabyte RAPIDS stack (cudf, rmm, cupy, ...) and lives on a
@@ -950,14 +950,18 @@ vts_install_cpu() {
 #     pandas is held at >= 3 everywhere (pyproject.toml, #4381), and cudf, which
 #     cuML depends on, is the first to take pandas 3 at 26.8: an older RAPIDS
 #     would downgrade pandas to 2.x in this very step (#4390). RAPIDS 26.x in
-#     turn requires nvidia-nvjitlink-cu12>=12.9, which only the cu129 torch wheel
-#     pins -- cu126 pins ==12.6.x and cu128 ==12.8.x, so pip reports a conflict
-#     there, and a stack assembled anyway has cupy JIT-compiling cuVS/raft
-#     kernels against mismatched headers ("cuda_fp8.hpp: this declaration has no
-#     storage class" at fit time). So cuML is installed on cu129 (and cu13x)
-#     only; on cu118..cu128 this step is SKIPPED with a message and the app
-#     uses the CPU fallback. See docs/TROUBLESHOOTING.md "cuML crashes compiling a
-#     kernel".
+#     turn requires nvidia-nvjitlink-cu12>=12.9. The cu129 torch pins the whole
+#     12.9 set. The cu126 torch (2.14.1) pins the other CUDA libraries at 12.6.x
+#     but leaves nvjitlink open (>=12.6.85,<13), so pip lifts it to 12.9 here
+#     and reports no conflict; on the GRID that stack ran cuML 26.10 UMAP and
+#     k-means fits on a V100S and an A100 with no CPU fallback, and torch,
+#     onnxruntime-gpu and the embedders unchanged (#4390). That is how a Volta
+#     card, which has no cu129 torch, keeps GPU UMAP. Do NOT lift cuDNN with
+#     the rest: cuDNN 9.20 (cu129's) refuses GPUs below sm_75. cu118 (CUDA 11
+#     libraries) and cu128 are untested and SKIP this step with a message; the
+#     app uses the CPU fallback there. A RAPIDS whose headers out-run the nvrtc
+#     beside it dies at fit time ("cuda_fp8.hpp: this declaration has no storage
+#     class"); see docs/TROUBLESHOOTING.md "cuML crashes compiling a kernel".
 #   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
 #     platform/Python this step just warns and the app uses the CPU fallback.
 #
@@ -972,31 +976,32 @@ vts_install_cuml() {
     fi
 
     # The spec follows the CUDA tag; see the header comment above for why only
-    # cu129 (and cu13x) get one. VTS_CUML_CU12_SPEC replaces it outright -- and
-    # un-skips the step -- for anyone assembling a different RAPIDS on their own
-    # terms, e.g. RAPIDS 25 on a Volta card at the cost of pandas dropping to 2:
-    #   VTS_CUML_CU12_SPEC='cuml-cu12<26' bash scripts/install.sh cu126
+    # cu126, cu129 (and cu13x) get one. VTS_CUML_CU12_SPEC replaces it outright
+    # -- and un-skips the step -- for anyone assembling a different RAPIDS on
+    # their own terms, e.g. RAPIDS 25 at the cost of pandas dropping to 2:
+    #   VTS_CUML_CU12_SPEC='cuml-cu12<26' bash scripts/install.sh cu128
     local cuml_pkg
     if [ -n "${VTS_CUML_CU12_SPEC:-}" ]; then
         cuml_pkg="$VTS_CUML_CU12_SPEC"
     else
         case "$cuda_tag" in
             cu13*) cuml_pkg="cuml-cu13>=26.8" ;;
-            cu129) cuml_pkg="cuml-cu12>=26.8" ;;
+            cu126 | cu129) cuml_pkg="cuml-cu12>=26.8" ;;
             *)
                 echo "  (skipped: cuML needs RAPIDS >= 26.8, the first release whose cudf takes"
-                echo "   the pandas 3 pinned in pyproject.toml, and RAPIDS >= 26.8 needs the CUDA"
-                echo "   12.9 libraries that only the cu129 torch wheel pins; this install is"
-                echo "   ${cuda_tag}. GPU UMAP/k-means will use the CPU fallback. If the GPU is"
-                echo "   Turing or newer and the driver supports CUDA 12.9, re-run as"
-                echo "   'bash scripts/install.sh cu129' to get cuML.)"
+                echo "   the pandas 3 pinned in pyproject.toml, and it is installed only beside"
+                echo "   the cu126 and cu129 torch wheels; this install is ${cuda_tag}. GPU"
+                echo "   UMAP/k-means will use the CPU fallback. Re-run as"
+                echo "   'bash scripts/install.sh cu129' (Turing or newer, driver CUDA >= 12.9)"
+                echo "   or 'bash scripts/install.sh cu126' (driver CUDA >= 12.6) to get cuML.)"
                 return 0
                 ;;
         esac
     fi
 
     # On cu129 the two stacks share one set of nvidia-*-cu12 wheels: torch pins
-    # them exactly at 12.9.x and RAPIDS 26.8 accepts those, so pip should install
+    # them exactly at 12.9.x and RAPIDS 26.8 accepts those. On cu126 pip lifts
+    # only nvjitlink, which torch leaves open. Either way pip should install
     # this cleanly. A red "dependency conflicts" report here means the venv holds
     # a torch from another tag (a venv built before #4390, or VTS_CUML_CU12_SPEC
     # pairing a RAPIDS with a torch that pins other CUDA libs); pip still
@@ -1165,8 +1170,8 @@ vts_install_gpu() {
     vts_report_driver_persistence
 
     vts_progress_step "Checking Python version (>= 3.11)"
-    # shellcheck source=_check-python.sh
-    source "$SCRIPT_DIR/_check-python.sh"
+    # shellcheck source=install/_check-python.sh
+    source "$SCRIPT_DIR/install/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
     pip install --upgrade pip wheel --progress-bar on

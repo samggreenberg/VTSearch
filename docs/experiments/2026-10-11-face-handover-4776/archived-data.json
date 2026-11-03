@@ -1,0 +1,35 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-face-handover-4776.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "curves_coco.csv": {
+     "bytes": 89267,
+     "oid": "b5de95c8b3c3c7639e6540095be1b2ab1e1d2eb0"
+    },
+    "curves_faces.csv": {
+     "bytes": 383721,
+     "oid": "ba6e9859b6f5c71881b01bf6a6f03007316643be"
+    },
+    "dip.csv": {
+     "bytes": 2255,
+     "oid": "a37f2afd184c7477968b01634667ec64b386f436"
+    },
+    "prior_ab.csv": {
+     "bytes": 5841,
+     "oid": "5b442ce524a19b5465a87727da8a10fa6f540072"
+    },
+    "rules_coco.csv": {
+     "bytes": 14692,
+     "oid": "de8d24df4c4262ac73f7df351c4799d7760933cc"
+    },
+    "rules_faces.csv": {
+     "bytes": 57318,
+     "oid": "2597de67dbf2b7669950f646835beff2f3a80942"
+    }
+   }
+  }
+ ]
+}

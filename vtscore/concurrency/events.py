@@ -125,7 +125,7 @@ def uncap_sse_connections() -> None:
 
     The cap exists to keep long-lived streams from starving gunicorn's
     ``gthread`` worker pool. The Flask dev server (``app.run(threaded=True)``,
-    see ``vtsearch/cli_main.py``) spawns a thread per connection and has no
+    see ``vtsearch/cli/main.py``) spawns a thread per connection and has no
     pool to protect, so there the cap is pure downside: extra tabs get 503s
     while the server has capacity to spare (#2816). An explicit
     ``VTSEARCH_SSE_MAX_CONNECTIONS`` override still wins.

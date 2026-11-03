@@ -1,0 +1,75 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-24-head-bulk-5084.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/ab_binary_counts.json": {
+     "bytes": 155,
+     "oid": "3266347bcffed5e51e8386120abcb42f55a634f3"
+    },
+    "tables/ab_binary_curves.csv": {
+     "bytes": 26153,
+     "oid": "6d8a73f7edb7d08cdeaeedc6c88770aabfc84543"
+    },
+    "tables/ab_binary_examples.csv": {
+     "bytes": 3426,
+     "oid": "92b34f770d1c263d1a0f74b603491a9776555b19"
+    },
+    "tables/ab_binary_gains.csv": {
+     "bytes": 34688,
+     "oid": "addcf0db2969287991b013af2ec6fbd234a99d11"
+    },
+    "tables/ab_binary_splits.csv": {
+     "bytes": 5878,
+     "oid": "47384f641b06f2e1ce33839a15b8beb8851e0186"
+    },
+    "tables/ab_binary_summary.csv": {
+     "bytes": 8102,
+     "oid": "98d7644895e43b1e8138118c8301c08385427baf"
+    },
+    "tables/ab_region_counts.json": {
+     "bytes": 103,
+     "oid": "725da871d7e15c3a03b65b74e21877a390ec3d6b"
+    },
+    "tables/ab_region_curves.csv": {
+     "bytes": 9187,
+     "oid": "3da1b985eec817b8c755063097b78ef4f73c5d69"
+    },
+    "tables/ab_region_examples.csv": {
+     "bytes": 1409,
+     "oid": "c5eea80d3b1626b8744190d5790e81bdbabd56d2"
+    },
+    "tables/ab_region_gains.csv": {
+     "bytes": 9575,
+     "oid": "521a4315132bf663c0b2d575e2807b1009ec2e10"
+    },
+    "tables/ab_region_splits.csv": {
+     "bytes": 2967,
+     "oid": "5a9d0dabd288105ec4a9aae0fde351c53703e85b"
+    },
+    "tables/ab_region_summary.csv": {
+     "bytes": 3591,
+     "oid": "d9f96b33dba6d84599b4b359f75c0524f194cf12"
+    },
+    "tables/offline_candidates.csv": {
+     "bytes": 16305,
+     "oid": "dcb1ef21495f9f968e6553c216befd3b67cdf71d"
+    },
+    "tables/offline_diagnosis.csv": {
+     "bytes": 2417,
+     "oid": "ff36a5c1cca3139b26c1f74594a7e9c0043ada5f"
+    },
+    "tables/offline_examples.csv": {
+     "bytes": 1082,
+     "oid": "98d4ab3221edb949e81fb5b44d6d871d30c1aade"
+    },
+    "tables/offline_presets.csv": {
+     "bytes": 7367,
+     "oid": "203d34f84a03f464e9a7668c5137cbb4b55ce6bb"
+    }
+   }
+  }
+ ]
+}

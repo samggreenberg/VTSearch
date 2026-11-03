@@ -18,7 +18,7 @@ blocker, native-thread caps and library-only ``CoreConfig`` builder.
 **Contract:** nothing here may import ``flask``, ``werkzeug``,
 ``flask_smorest``, or any app-tier ``vtsearch`` module — ``tests_lib/`` imports
 this package under the Flask blocker installed by
-``scripts/check-vtscore-clean.py``.  Mutable app-tier objects (the ``medias``
+``scripts/gates/check-vtscore-clean.py``.  Mutable app-tier objects (the ``medias``
 map) are passed in by the caller rather than imported here.
 
 Nothing under this package is collected as a test; it holds no ``test_*``

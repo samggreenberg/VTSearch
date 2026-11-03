@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from vtsearch import admin_overrides
+from vtsearch.settings import admin_overrides
 from vtsearch import settings as settings_mod
 
 

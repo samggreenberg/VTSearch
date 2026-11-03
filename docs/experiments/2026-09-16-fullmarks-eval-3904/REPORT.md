@@ -26,7 +26,7 @@ contamination rule the issue asked to be wired in.
 4. **SigLIP is the only method above chance**, at mean AP **0.12** on tier `s`
    and **0.076** on `m`, against 0.029 for the source-only control.
 
-![mean AP by pool and method](fig_ap_by_pool.png)
+![mean AP by pool and method](fig_ap_by_pool.webp)
 
 ## What was scored
 
@@ -63,12 +63,12 @@ s / m / l were eligible negatives for all ten Tobacco800 classes.**
 
 `eligible_pages` now takes `industry_of` and puts each page to
 `fullmarks_config.eligible_distractor`. Tested in
-`tests_lib/datasets/test_fullmarks_eval.py`.
+`tests_lib/meta/test_fullmarks_eval.py`.
 
 **The pages it removes are real positives, not a precaution.** SigLIP's
 highest-ranked excluded pages for each Tobacco800 class, beside its query crop:
 
-![excluded pages](excluded_tobacco800_m.png)
+![excluded pages](excluded_tobacco800_m.webp)
 
 The *Lorillard* script class has its own wordmark on the UCSF pages SigLIP ranks
 1, 2, 3 and 4; the B&W three-leaf class has it at 1, 2, 4 and 5; the *RJR* block
@@ -107,14 +107,14 @@ the 2026-07-13 study** on the same SPODS pages, which found SIFT verifies only
 5.1% of true scanned-document pairs. Its structural win came from a different
 backend: SuperPoint+LightGlue verified 41% and, as a ranker, reached AP 0.395 /
 0.481 against SigLIP's 0.204 / 0.235. That backend
-(`vtscore/media/structural_splg.py`) has never been wired to an embedder, so
+(`vtscore/media/structural/structural_splg.py`) has never been wired to an embedder, so
 FullMarks has no cell for it.
 
 `diag_structural.py` asks the direct question: RANSAC inliers between each query
 crop and (a) 8 of its true positives, (b) 8 same-source negatives, with the
 stored features and with the pages re-extracted at larger budgets.
 
-![inliers by budget](fig_inliers_by_budget.png)
+![inliers by budget](fig_inliers_by_budget.webp)
 
 **Stored pages hold exactly 1,024 keypoints** (median), taken by response from a
 300 dpi page that is mostly text, and the mark gets almost none of them:

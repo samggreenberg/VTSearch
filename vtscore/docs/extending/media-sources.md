@@ -210,7 +210,7 @@ Test the factory and the source directly; there is no need to install
 the entry point to exercise the contract. Stub the network.
 
 ```python
-# tests_lib/io/test_http_mirror_source.py
+# tests_lib/datasets/test_http_mirror_source.py
 from unittest.mock import patch
 
 from my_pkg.mirror_source import SOURCE, HttpMirrorSource
@@ -245,5 +245,5 @@ def test_rejects_traversal():
 
 `fetch_validated_url` resolves the hostname to screen private addresses
 before it makes the request, which is why the test stubs it. The built-in sources'
-tests under `tests_lib/datasets/` and `tests_lib/io/` cover archive
+tests under `tests_lib/datasets/` cover archive
 extraction and the resolver's cleanup timing.

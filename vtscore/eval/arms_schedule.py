@@ -69,7 +69,7 @@ def _schedule_variant_rows(
         fit_gmm_threshold,
         safe_blend_weight,
     )
-    from vtscore.utils.scores import scored_only  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import scored_only  # noqa: PLC0415
 
     xcal = float(details["xcal_threshold"])
     n_votes = int(details["n_votes"])

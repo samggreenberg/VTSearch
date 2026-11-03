@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
-from vtscore.io import (
+from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume, hit_column_value
+from vtscore.utils.io import (
     atomic_write_stream,
     atomic_write_text,
     commit_write_stream,
@@ -80,6 +80,26 @@ def _stream_hit_row(detector_name: str, hit: dict[str, Any], thresholds: dict[st
         _sanitize_csv_cell(origin_str),
         _sanitize_csv_cell(hit.get("origin_name", "")),
     ]
+
+
+def _selected_hit_cell(detector_result: dict[str, Any], hit: dict[str, Any], column: str) -> Any:
+    """One hit's cell in a user-chosen *column* (``selected_columns``).
+
+    Read through :func:`~vtscore.exporters.base.hit_column_value`; an ``origin``
+    is written as its display string, as the fixed-column export writes it, a
+    ``clip_box`` as comma-joined numbers, a number as itself, and anything else
+    as text guarded against formula injection.
+    """
+    value = hit_column_value(detector_result, hit, column)
+    if column == "origin" and isinstance(value, dict):
+        from vtscore.datasets.origin import Origin  # noqa: PLC0415
+
+        return _sanitize_csv_cell(Origin.from_dict(value).display())
+    if column == "clip_box" and isinstance(value, (list, tuple)):
+        return ",".join(str(v) for v in value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return _label_cell(value)
 
 
 class ServerCsvResultsExporter(ResultsExporter):
@@ -159,7 +179,7 @@ class ServerCsvResultsExporter(ResultsExporter):
 
         Uses a fixed column superset (see :attr:`_STREAM_COLUMNS`) because a
         streaming writer cannot look ahead to decide which optional clip
-        columns are present.  :func:`~vtscore.io.atomic_write_stream` owns the
+        columns are present.  :func:`~vtscore.utils.io.atomic_write_stream` owns the
         tmp-file/``fsync``/rename ritual, so a run that dies mid-stream leaves
         no half-written export and two concurrent exports to the same path
         can't clobber each other's temp file.
@@ -241,7 +261,7 @@ class ServerCsvResultsExporter(ResultsExporter):
         streaming writer cannot look ahead, and they are the ones the
         ``server_csv_file`` label importer reads, which ignores the extra
         ``detector`` column.  Written through
-        :func:`~vtscore.io.atomic_write_stream`, as the hit stream is.
+        :func:`~vtscore.utils.io.atomic_write_stream`, as the hit stream is.
         """
         filepath = Path(field_values["filepath"])
 
@@ -306,8 +326,14 @@ class ServerCsvResultsExporter(ResultsExporter):
         }
 
     def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:  # noqa: C901
-        """Export autodetect results (detector hits)."""
-        # Scan all hits to determine which clip columns are present.
+        """Export autodetect results (detector hits).
+
+        In the user's ``selected_columns`` when the payload carries them (the
+        Find Results dialog's choice); otherwise in the fixed column set below.
+        """
+        if results.get("selected_columns"):
+            return self._export_autodetect_selected(results, filepath, list(results["selected_columns"]))
+        # Scan all hits to determine which optional columns are present.
         all_hits: list[tuple[str, Any, dict]] = []
         for det_result in results.get("results", {}).values():
             detector_name = det_result.get("detector_name", "unknown")
@@ -315,11 +341,16 @@ class ServerCsvResultsExporter(ResultsExporter):
             for hit in det_result.get("hits", []):
                 all_hits.append((detector_name, threshold, hit))
 
+        # A payload holding both sides of the threshold labels every hit
+        # (``export_find_results``); one side alone needs no column for it.
+        has_label = any(h.get("label") is not None for _, _, h in all_hits)
         has_clip_start = any(h.get("clip_start") is not None for _, _, h in all_hits)
         has_clip_end = any(h.get("clip_end") is not None for _, _, h in all_hits)
         has_clip_box = any(h.get("clip_box") is not None for _, _, h in all_hits)
 
         base_cols = ["detector", "threshold", "filename", "category", "score"]
+        if has_label:
+            base_cols.append("label")
         if has_clip_start:
             base_cols.append("clip_start")
         if has_clip_end:
@@ -347,6 +378,8 @@ class ServerCsvResultsExporter(ResultsExporter):
                     _sanitize_csv_cell(hit.get("category", "")),
                     hit.get("score", ""),
                 ]
+                if has_label:
+                    row.append(_sanitize_csv_cell(hit.get("label", "")))
                 if has_clip_start:
                     row.append(hit.get("clip_start", ""))
                 if has_clip_end:
@@ -364,7 +397,28 @@ class ServerCsvResultsExporter(ResultsExporter):
                 total_hits += 1
 
         _atomic_write_csv(filepath, _write)
+        return self._autodetect_outcome(results, filepath, total_hits)
 
+    def _export_autodetect_selected(
+        self, results: dict[str, Any], filepath: Path, columns: list[str]
+    ) -> dict[str, Any]:
+        """Write one row per hit in *columns*, in their order, headed by their keys."""
+        total_hits = 0
+
+        def _write(writer: "csv.writer") -> None:  # type: ignore[name-defined]
+            nonlocal total_hits
+            writer.writerow(columns)
+            for det_result in results.get("results", {}).values():
+                for hit in det_result.get("hits", []):
+                    writer.writerow([_selected_hit_cell(det_result, hit, col) for col in columns])
+                    total_hits += 1
+
+        _atomic_write_csv(filepath, _write)
+        return self._autodetect_outcome(results, filepath, total_hits)
+
+    @staticmethod
+    def _autodetect_outcome(results: dict[str, Any], filepath: Path, total_hits: int) -> dict[str, Any]:
+        """The status dict a scored-run export answers with."""
         return {
             "message": (
                 f"Saved {total_hits} hit(s) across "

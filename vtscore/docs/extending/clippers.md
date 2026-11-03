@@ -7,8 +7,8 @@ paragraph into per-sentence clips; the scene clipper splits a video at
 detected scene changes. Default clippers return the media unchanged
 (one-element list) - they're the no-op that lets the framework
 uniformly route everything through a clipper. Subclass
-[`MediaClipper`](../../media/clipper.py)
-([`vtscore/media/clipper.py`](../../media/clipper.py)), declare
+[`MediaClipper`](../../media/clipping/clipper.py)
+([`vtscore/media/clipping/clipper.py`](../../media/clipping/clipper.py)), declare
 which type it operates on, implement `clip()`, and add the instance to
 the media-type sub-package's `CLIPPERS` list.
 
@@ -76,13 +76,13 @@ splitting." for the description. Existing default clippers:
 | `FaceDefaultClipper` (`face_default`) | face |
 
 Each of those is a four-line subclass of the concrete
-`DefaultClipper` base (`vtscore/media/clipper.py`), which fixes the three
+`DefaultClipper` base (`vtscore/media/clipping/clipper.py`), which fixes the three
 things every default clipper agrees on - the `"None"` display label, the
 pass-through `clip()`, and the name/type/description trio passed to
 `__init__`:
 
 ```python
-from vtscore.media.clipper import DefaultClipper
+from vtscore.media.clipping.clipper import DefaultClipper
 
 
 class SoundDefaultClipper(DefaultClipper):
@@ -114,7 +114,7 @@ grid-based.
 
 ## Shared helpers
 
-`vtscore/media/clipper.py` carries the pieces that would otherwise be
+`vtscore/media/clipping/clipper.py` carries the pieces that would otherwise be
 copied between clippers. Reach for them before hand-rolling an
 equivalent - a second copy of the tiling arithmetic is exactly the kind
 of drift that makes two media types tile differently.
@@ -251,7 +251,7 @@ go.
 from typing import Any
 
 from vtscore.media.audio.wav import AudioDecodeError, wav_duration
-from vtscore.media.clipper import MediaClipper, tile_starts, validate_tiling_params
+from vtscore.media.clipping.clipper import MediaClipper, tile_starts, validate_tiling_params
 
 
 class SoundOverlapClipper(MediaClipper):
@@ -339,12 +339,13 @@ recording does, and nothing at the tail is dropped.
 
 ## Testing pattern
 
-Clipper tests live in `tests_lib/core/` (registration + behaviour) or
-`tests_lib/detectors/test_clipper_chain.py`. The autouse
+Clipper tests live in `tests_lib/media/` (registration + behaviour), beside
+the clippers in `vtscore/media/`, or in
+`tests_lib/datasets/test_clipper_chain.py` for the chain that runs them. The autouse
 `reset_contexts` fixture resets all contexts between tests.
 
 ```python
-# tests_lib/core/test_sound_overlap_clipper.py
+# tests_lib/media/test_sound_overlap_clipper.py
 import io
 import wave
 
@@ -397,7 +398,7 @@ class TestSoundOverlapClipper:
         assert cl.parameters[0]["default"] == 2.0  # original unchanged
 ```
 
-See [`tests_lib/detectors/test_clipper_chain.py`](../../../tests_lib/detectors/test_clipper_chain.py)
+See [`tests_lib/datasets/test_clipper_chain.py`](../../../tests_lib/datasets/test_clipper_chain.py)
 for end-to-end load-pipeline tests that route media through a clipper
 and verify the produced clips end up in `medias` with the right
 origins.

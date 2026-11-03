@@ -1,0 +1,55 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-12-overview-bench.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "ANALYSIS_HORIZON_boxbands_partial.txt": {
+     "bytes": 2162,
+     "oid": "903ebed8656b89d52a80b82ba24617acd648e7d7"
+    },
+    "ANALYSIS_HORIZON_noboxes.txt": {
+     "bytes": 1859,
+     "oid": "dae6e1ba3f78853c22018dd3752958ed1d3b6d32"
+    },
+    "ANALYSIS_HORIZON_vg_coco.txt": {
+     "bytes": 2553,
+     "oid": "d88a5a666d7c53056d59c9b705243b6684d6ed90"
+    },
+    "ANALYSIS_TABLES_binary.txt": {
+     "bytes": 6189,
+     "oid": "28871a25d88ab14c1ee1135156acb3db99c3e06e"
+    },
+    "ANALYSIS_TABLES_interaction.txt": {
+     "bytes": 2546,
+     "oid": "c74ef4b27de71c3426a98968d95e903285761b2f"
+    },
+    "ANALYSIS_TABLES_vgbox.txt": {
+     "bytes": 7278,
+     "oid": "f1a8584d953955698754044caa44e35c7086d549"
+    },
+    "ERROR_EXAMPLES.txt": {
+     "bytes": 21350,
+     "oid": "ad2e09985b98b7e855d4c946d17dab97f00d853b"
+    },
+    "ERROR_EXAMPLES_text.txt": {
+     "bytes": 53617,
+     "oid": "87f10bcb3d67cc3f601ca25afcf9e9e5e87aeb20"
+    },
+    "LABEL_NOISE.txt": {
+     "bytes": 7702,
+     "oid": "81431dd3e1d3ae8ea0e11cdcc3fc5469883070e9"
+    },
+    "TEXT_TABLES.txt": {
+     "bytes": 6657,
+     "oid": "4aa1cbf1412b22ed602f4abb3148d349940b9039"
+    },
+    "text_baseline.csv": {
+     "bytes": 15076,
+     "oid": "5bcd9e12053a0b84a075a5afa927deb1f3b58c34"
+    }
+   }
+  }
+ ]
+}

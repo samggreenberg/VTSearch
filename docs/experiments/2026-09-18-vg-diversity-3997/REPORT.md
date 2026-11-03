@@ -47,7 +47,7 @@ cell scores positive-versus-negative under a provenance heading and reads 0.85.
 And **composition must be matched away**: off-COCO supply runs from 4 to 82 per
 cell, so class and band are themselves readable as provenance.
 
-![pooled vs matched provenance AUC](fig_matched.png)
+![pooled vs matched provenance AUC](fig_matched.webp)
 
 Matching halves the signal. What is left is small and consistent across five
 embedders — `dinov3_patch` lowest at 0.53, `siglip` highest at 0.54. Draw-to-draw
@@ -85,7 +85,7 @@ hidden there.
 | **share in the pool's top 1%** | **+0.018 ± 0.013** | **+0.027 ± 0.012** | **+0.026 ± 0.016** |
 | median rank above | +4.1 ± 2.6 | +8.0 ± 3.6 | +11 ± 5.6 |
 
-![per-cell hardness differences](fig_hardness.png)
+![per-cell hardness differences](fig_hardness.webp)
 
 There is no direction here in which off-COCO is harder. The effect is small —
 about 2 se on `log1p` for `siglip2_l` and `clip`, less for `siglip` — but it is

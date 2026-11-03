@@ -96,7 +96,7 @@ PREP_GRES_ARG=(--gres="$GRES")
 P=$(sbatch --parsable --job-name=cal-prep "${PREP_GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" \
   --time="${CALIB_PREP_TIME:-3:00:00}" --partition="$PREP_PARTITION" --export=ALL \
   --output="$LOGS/prepare-%j.out" \
-  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
 echo "prepare job: $P"
 require_jobid "$P" "prepare"
 
@@ -105,7 +105,7 @@ require_jobid "$P" "prepare"
 # because the count isn't known until prepare finishes.
 S=$(sbatch --parsable --dependency=afterok:$P --job-name=cal-launch --mem=4G --cpus-per-task=1 \
   --time=0:20:00 --partition=cpu --export=ALL --output="$LOGS/launch-%j.out" \
-  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && bash launch_cells.sh")
+  --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && bash launch_cells.sh")
 echo "cells launcher job (after prepare): $S"
 require_jobid "$S" "cells launcher"
 echo "Report -> $CALIB_RESULTS/REPORT.md   Logs -> $LOGS"

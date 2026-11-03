@@ -1,0 +1,59 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-split-rounding-4864.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/coin.csv": {
+     "bytes": 288,
+     "oid": "da4b3476cbe721eaf06021a01c0e828107f70405"
+    },
+    "tables/curves.csv": {
+     "bytes": 5289,
+     "oid": "19efa84afdb7d44d569e4f7f926c56ea7526f326"
+    },
+    "tables/decomposition.json": {
+     "bytes": 5058,
+     "oid": "63cd22b0df3685ac334ae8635004ae3ee1ca803b"
+    },
+    "tables/delta_curves.csv": {
+     "bytes": 6060,
+     "oid": "618d297df243d519e8f6a5a47bc19f6651582259"
+    },
+    "tables/paired.csv": {
+     "bytes": 6401,
+     "oid": "84f8cdd41b9501205b91caf688e1cd01965275d9"
+    },
+    "tables/provenance.json": {
+     "bytes": 1463,
+     "oid": "10cdef26abd2467a5aa78be9ba6abee089726cec"
+    },
+    "tables/ripple.csv": {
+     "bytes": 1459,
+     "oid": "56f203a8e10f0f01019548dd046402a193897a47"
+    },
+    "tables/spectra.csv": {
+     "bytes": 22912,
+     "oid": "f6f03a58cfc033a4fa3bd3df46e137edaba22ab7"
+    },
+    "tables/step0_cadence.json": {
+     "bytes": 13432,
+     "oid": "37765152186d1ae6862aac80e39f3fc0c79cc0c0"
+    },
+    "tables/step0_p_labels_by_goods.csv": {
+     "bytes": 874,
+     "oid": "121d86649b0a974d90edad8dfcad8d192437b59b"
+    },
+    "tables/step0_spectra.csv.gz": {
+     "bytes": 37625,
+     "oid": "c5619ae03844d2852081824ae815964083d1f2ec"
+    },
+    "tables/switches.csv.gz": {
+     "bytes": 14660,
+     "oid": "7437da01e957c4e1ea25d1c591c74b8bcf41c60b"
+    }
+   }
+  }
+ ]
+}

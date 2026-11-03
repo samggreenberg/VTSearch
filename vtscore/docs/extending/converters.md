@@ -218,7 +218,7 @@ entry point (see below).
 
 Converters declare user-configurable knobs the same way every other
 plugin family does - a list of `PluginField`s
-([`vtscore/plugins/__init__.py`](../../plugins/__init__.py)) on the
+([`vtscore/plugins/field.py`](../../plugins/field.py)) on the
 class. The audio→image spectrogram converter is a good reference for
 the spread of field types (select, number with min/max/step) it can
 accept; see [`vtscore/converters/audio2image.py`](../../converters/audio2image.py).
@@ -367,13 +367,12 @@ registry key is the derived name, not the entry-point name).
 ## Testing pattern
 
 Converter tests live in `tests/converters/` (app-tier) and
-`tests_lib/` doesn't currently have a converters folder - most
-converter tests are app-tier because they exercise the
+Most converter tests are app-tier because they exercise the
 post-load-conversion pipeline. For library-only smoke tests, drop a
-file in `tests_lib/core/` or `tests_lib/datasets/`:
+file in `tests_lib/converters/`:
 
 ```python
-# tests_lib/core/test_video2text_whisper.py
+# tests_lib/converters/test_video2text_whisper.py
 import importlib.util
 
 import pytest

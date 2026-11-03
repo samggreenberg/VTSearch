@@ -11,7 +11,7 @@ Also:
   SigLIP 2 L cell was built under an older transformers than the one the sessions run;
 * a text-query timing for each.
 
-    source gridenv.sh && source scripts/experiments/pile/pile_env.sh
+    source scripts/grid/gridenv.sh && source scripts/experiments/pile/pile_env.sh
     VTS_REPO=<worktree> python s2l_timing_4874.py --out timing.jsonl [--embedders siglip,siglip2_l,embeddinggemma2]
 
 Writes one JSON line per measurement to --out.

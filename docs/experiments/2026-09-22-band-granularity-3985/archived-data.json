@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-band-granularity-3985.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "granularity-faults.json": {
+     "bytes": 20411,
+     "oid": "e2bdc7afdfe0fcf263263554e1cd93c45a5ec9b6"
+    },
+    "queues/apple.json": {
+     "bytes": 5785,
+     "oid": "87d3771ddeb6fe01a112adb04799e2d3a24b4810"
+    },
+    "queues/banana.json": {
+     "bytes": 5830,
+     "oid": "8273cf50b1475a5d3e8022a03ce2bb8ab79380b4"
+    },
+    "queues/orange.json": {
+     "bytes": 5847,
+     "oid": "245cb60bc212eb1436bfea7ab843aae87853062f"
+    },
+    "queues/potted_plant.json": {
+     "bytes": 5936,
+     "oid": "91a4626d048300250f6be9e1aefd5de90e0c5dff"
+    },
+    "queues/skis.json": {
+     "bytes": 5738,
+     "oid": "4fcbe5edae6b5ce3e1faf492eaacee2b7e17d2c0"
+    },
+    "votes-book-20260922.jsonl": {
+     "bytes": 6391,
+     "oid": "ad84c3824363714f8436d942e8093521432bfbba"
+    },
+    "votes-book-round2-20260922.jsonl": {
+     "bytes": 8688,
+     "oid": "9bd19eaaaba3813a12d9ba36cb9c43b1cd65b7e2"
+    }
+   }
+  }
+ ]
+}

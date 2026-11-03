@@ -23,6 +23,7 @@ from vtscore.concurrency.progress import loading_tasks
 from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
 from vtscore.datasets.importers.base import ImporterBase, OutputSpec, PluginField, SourceSpec
 from vtscore.embedding.binding import expected_dim_for_embedder
+from vtscore.embedding.media_vectors import init_embeddings
 
 
 def _sync_thread_factory():
@@ -110,6 +111,17 @@ class _AcquireOnce(_MultiImporter):
             yield output, medias
 
 
+class _OneUnreadableAudio(_MultiImporter):
+    """:class:`_MultiImporter`, but audio item 2 arrives with no vector, for the embedder to decline."""
+
+    name = "test_multi_unreadable"
+
+    def run(self, field_values, medias, thin=False):
+        super().run(field_values, medias, thin=thin)
+        if field_values["media_type"] == "audio":
+            medias[2].update(embedder="", embeddings=init_embeddings("", None))
+
+
 class _Exploding(_MultiImporter):
     name = "test_multi_boom"
 
@@ -182,6 +194,23 @@ class TestHappyPath:
         assert len(seen_ctx) == 2 and seen_ctx[0] is not seen_ctx[1], "AutoFind runs once per dataset"
         assert {c.dataset_id for c in seen_ctx} == {e["id"] for e in registered.values()}
 
+    def test_each_output_reports_its_own_drops(self, isolated_settings, monkeypatch):
+        """The import-finished event of each dataset counts only what that dataset dropped (#5449)."""
+        from tests.helpers import register_declining_embedder
+
+        register_declining_embedder(monkeypatch, "clap", "audio", decline={"audio_2.bin"})
+        events: list[DatasetImported] = []
+        _run(
+            _OneUnreadableAudio({"audio": 3, "image": 3}),
+            [OutputSpec("audio", embedder="clap"), OutputSpec("image", embedder="siglip")],
+            on_finished=events.append,
+        )
+
+        audio, image = events
+        assert (audio.n_imported, audio.n_media, audio.n_dropped) == (3, 2, 1)
+        assert [g["items"] for g in audio.dropped] == [["audio_2.bin"]]
+        assert (image.n_imported, image.n_media, image.n_dropped, image.dropped) == (3, 3, 0, [])
+
     def test_each_output_records_its_own_origin(self, isolated_settings):
         _run(_MultiImporter(), [OutputSpec("audio"), OutputSpec("image", category="document")])
 
@@ -251,7 +280,7 @@ class TestImportGroup:
     def test_a_single_dataset_import_has_no_group(self, isolated_settings):
         from vtscore.datasets.load_pipeline import _run_importer_in_background
 
-        with mock.patch("vtscore.datasets.load_pipeline.threading.Thread", side_effect=_sync_thread_factory()):
+        with mock.patch("vtscore.datasets.load_workers.threading.Thread", side_effect=_sync_thread_factory()):
             _run_importer_in_background(
                 _MultiImporter(),
                 {"url": "http://example.com/solo.zip", "dataset_name": "solo", "media_type": "audio"},
@@ -354,11 +383,11 @@ class TestCancellation:
 class TestEmbedderMemory:
     def test_each_output_remembers_its_embedder_pick(self, isolated_settings, monkeypatch):
         """The per-media-type "last embedder" memory sees the hook the app installs after import."""
-        from vtscore.datasets import load_pipeline
+        from vtscore.datasets import load_workers
 
         remembered: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            load_pipeline, "_last_embedder_persistence_hook", lambda mt, emb: remembered.append((mt, emb))
+            load_workers, "_last_embedder_persistence_hook", lambda mt, emb: remembered.append((mt, emb))
         )
 
         _run(_MultiImporter(), [OutputSpec("audio", embedder="clap"), OutputSpec("image", embedder="siglip")])

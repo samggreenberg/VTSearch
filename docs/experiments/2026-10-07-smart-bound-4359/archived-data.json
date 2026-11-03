@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-smart-bound-4359.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/curves.csv": {
+     "bytes": 6810,
+     "oid": "5067417fb8677aeda2c2fdf71bb5e6056b1d01d7"
+    },
+    "tables/levels.csv": {
+     "bytes": 663,
+     "oid": "fe8ceb9c34f9c9b18554d41c18f25890e6999418"
+    },
+    "tables/paired.csv": {
+     "bytes": 2609,
+     "oid": "ba54ced945e35e5bd749190784099b75525707ff"
+    },
+    "tables/provenance.json": {
+     "bytes": 887,
+     "oid": "8ad181ede520a57f743511cc4070ee43d4c9f718"
+    }
+   }
+  }
+ ]
+}

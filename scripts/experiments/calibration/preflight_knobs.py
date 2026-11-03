@@ -65,6 +65,7 @@ def _shipped_spot_check(C: Any, T: Any) -> str:
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
     from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
+    from vtscore.eval.autopilot_flow import HARD_DRY_RUN, MIN_PER_CLASS, SPAN_GREEN_DEFAULT
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -279,6 +280,32 @@ def probe(C: Any) -> list[str]:
         refuse("new_walk", "CALIB_NEW_WALK", "must be one of %s" % ", ".join(NEW_WALKS))
     elif C.NEW_WALK != harness_default("new_walk"):
         rows.append(("new_walk", C.NEW_WALK, "<unset> = atlas, the app's Coverage Atlas walk"))
+    # #5473's Span target: the app's autopilot_goal_diversity at another value (0 = no Diversity step).
+    if C.SPAN_GREEN is not None:
+        if isinstance(C.SPAN_GREEN, int) and not isinstance(C.SPAN_GREEN, bool) and C.SPAN_GREEN >= 0:
+            if C.SPAN_GREEN != SPAN_GREEN_DEFAULT:
+                rows.append(("span_green", str(C.SPAN_GREEN), "<unset> = 40, the app's default Span target"))
+        else:
+            refuse("span_green", "CALIB_SPAN_GREEN", "must be an integer >= 0, the atlas nodes Span needs")
+    # #5477's Goods minimum and the dry run that waives it: arms the app does not take.
+    if C.MIN_GOOD is not None:
+        if isinstance(C.MIN_GOOD, int) and 1 <= C.MIN_GOOD <= MIN_PER_CLASS:
+            if C.MIN_GOOD != MIN_PER_CLASS:
+                rows.append(("min_good", str(C.MIN_GOOD), "<unset> = 5, the app's MIN_PER_CLASS"))
+        else:
+            refuse("min_good", "CALIB_MIN_GOOD", "must be an integer from 1 to 5, the Goods Smart and Stable need")
+    if C.HARD_DRY_RUN is not None:
+        if isinstance(C.HARD_DRY_RUN, int) and C.HARD_DRY_RUN >= 0:
+            if C.HARD_DRY_RUN != HARD_DRY_RUN:
+                rows.append(
+                    ("hard_dry_run", str(C.HARD_DRY_RUN or "off"), f"<unset> = {HARD_DRY_RUN}, the app's HARD_DRY_RUN")
+                )
+        else:
+            refuse(
+                "hard_dry_run",
+                "CALIB_HARD_DRY_RUN",
+                "must be an integer >= 0, a run of picks past the opening (0 = off)",
+            )
     # #4482's band picks: an arm the app does not take.
     if C.BAND_SHARE is not None:
         if isinstance(C.BAND_SHARE, int) and C.BAND_SHARE >= 1:

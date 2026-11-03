@@ -1,0 +1,75 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-25-progression-4184.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "examples_natural_seed0.csv": {
+     "bytes": 485,
+     "oid": "85064b55bcfd8873192d3e7b0093a61d139ed7aa"
+    },
+    "h0.05/figures/cost_vs_clicks.csv": {
+     "bytes": 111507,
+     "oid": "12a23b97c4c4cd23872a570e214b9f39714ea478"
+    },
+    "h0.05/figures/cost_vs_clicks.png": {
+     "bytes": 107537,
+     "oid": "52461fdd0ad65d1746f68b3ccca6fe8169de509e"
+    },
+    "h0.05/figures/cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 679805,
+     "oid": "2739e640a59707ff5220adac5ed028dfc0bceeec"
+    },
+    "h0.05/paired.csv": {
+     "bytes": 5335,
+     "oid": "4bb23d5cd0bfd210405c5968e0a5a557f715e811"
+    },
+    "h0.05/progression_curve.csv": {
+     "bytes": 67632,
+     "oid": "017320d54118cb329ba023e11248615e52e19c31"
+    },
+    "h0.05/provenance.json": {
+     "bytes": 1976,
+     "oid": "0659a99421f587a0ef4729d62ad7bce80773f87d"
+    },
+    "natural/figures/cost_vs_clicks.csv": {
+     "bytes": 113157,
+     "oid": "dc83a945e7bfe5584e77482f48dc8033d0d4803e"
+    },
+    "natural/figures/cost_vs_clicks.png": {
+     "bytes": 104770,
+     "oid": "4f05da2c179c422e67b938b756faade5e95e6c32"
+    },
+    "natural/figures/cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 960500,
+     "oid": "8d687bf60be17276d086ea7310a98bb6b957e3af"
+    },
+    "natural/paired.csv": {
+     "bytes": 5331,
+     "oid": "9c51a5bf2859970766b9905ac32fdc6c72e45faf"
+    },
+    "natural/progression_curve.csv": {
+     "bytes": 69130,
+     "oid": "918aef5435510f0a932ecfc7a67b915cd95c4e11"
+    },
+    "natural/provenance.json": {
+     "bytes": 5231,
+     "oid": "8e6162b5e28eb33594aed81957577cf4be7d5692"
+    },
+    "prevalence_paired.csv": {
+     "bytes": 349,
+     "oid": "d5290337172a63fbbae0781b8a0527ef509fee91"
+    },
+    "prevalence_summary.csv": {
+     "bytes": 1334,
+     "oid": "0f461063925aeb61c07cbc62c88121f240beee1b"
+    },
+    "r5_minus_r4_by_class.csv": {
+     "bytes": 1222,
+     "oid": "7dbfc11768e7f12d2a73b1883009b62648569009"
+    }
+   }
+  }
+ ]
+}

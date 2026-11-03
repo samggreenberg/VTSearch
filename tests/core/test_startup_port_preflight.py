@@ -5,7 +5,7 @@ These cover the detection + safe-exit paths (``_port_is_free``,
 ``_terminate_listeners`` path against a throwaway child process. They use
 ephemeral ports so they never collide with a real instance on :5000.
 
-The helpers live in ``vtsearch.port_preflight`` (extracted from ``app.py``);
+The helpers live in ``vtsearch.cli.port_preflight`` (extracted from ``app.py``);
 only ``python app.py``'s ``__main__`` launch path calls them.
 """
 
@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-import vtsearch.port_preflight as app_module
+import vtsearch.cli.port_preflight as app_module
 
 
 def _listening_socket():

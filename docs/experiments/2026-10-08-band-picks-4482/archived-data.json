@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-08-band-picks-4482.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/band_by_band.csv": {
+     "bytes": 888,
+     "oid": "9d888803ed5086a4b7c094aa7f4130de8d037acf"
+    },
+    "tables/band_check_at_stop.csv": {
+     "bytes": 858,
+     "oid": "93aa091e0370046cb3ca81bde722ea5d5aca21a2"
+    },
+    "tables/band_curves.csv": {
+     "bytes": 22425,
+     "oid": "7b895049bf30a6b54bc586f7a689f34998bf22a5"
+    },
+    "tables/band_mix.csv": {
+     "bytes": 4647,
+     "oid": "17c01adba6574090875a15785463e52c3637a5b8"
+    }
+   }
+  }
+ ]
+}

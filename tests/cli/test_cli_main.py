@@ -1,4 +1,4 @@
-"""In-process coverage for ``vtsearch.cli_main`` — the ``python app.py``
+"""In-process coverage for ``vtsearch.cli.main`` — the ``python app.py``
 argparse build, two-pass parsing, ``_apply_*`` overrides, and the
 list-plugins / pipeline / autodetect / server dispatch.
 
@@ -18,9 +18,10 @@ import sys
 
 import pytest
 
-from vtsearch import admin_overrides
-from vtsearch import cli_main
+from vtsearch.settings import admin_overrides
+from vtsearch.cli import main as cli_main
 from vtsearch import settings as settings_mod
+from vtsearch.settings import tiers as settings_tiers
 
 
 @pytest.fixture(autouse=True)
@@ -222,7 +223,7 @@ class TestPipeline:
     @staticmethod
     def _record_run(monkeypatch, probe=None):
         """Patch the pipeline runner to record its path, plus *probe()* taken at run time."""
-        import vtscore.cli_pipeline as pipe
+        import vtscore.cli.pipeline as pipe
 
         seen = {}
 
@@ -252,6 +253,7 @@ class TestPipeline:
             (["--keep-negatives"], "--keep-negatives"),
             (["--as-labelset"], "--as-labelset"),
             (["--resume"], "--resume"),
+            (["--max-results", "5"], "--max-results"),
             (["--label-importer", "server_csv_file"], "--label-importer"),
         ],
     )
@@ -301,7 +303,7 @@ class TestPipeline:
         assert seen["probe"] == ["alice"], "the user must be active before the pipeline runs"
 
     def test_pipeline_honours_json_progress_format(self, monkeypatch):
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
 
         callbacks = []
         monkeypatch.setattr(cli_main, "set_progress_callback", callbacks.append)
@@ -442,6 +444,15 @@ class TestAutodetectWiring:
         _, kwargs = rec.calls["autodetect_main_chunked"]
         assert kwargs["resume"] is True
 
+    def test_max_results_reaches_the_entry_point(self, monkeypatch):
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(
+            monkeypatch,
+            ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results", "--max-results", "7"],
+        )
+        _, kwargs = rec.calls["autodetect_main_chunked"]
+        assert kwargs["max_results"] == 7
+
     def test_no_resume_is_not_passed(self, monkeypatch):
         """Only a chunked entry point takes ``resume``; a run without the flag passes none."""
         rec = _AutodetectRecorder(monkeypatch)
@@ -514,6 +525,28 @@ class TestAutodetectValidation:
             _run_main(monkeypatch, [*argv, "--as-labelset", "--resume"])
         assert exc.value.code == 2
         assert "--resume cannot resume a labelset stream" in capsys.readouterr().err
+
+    def test_max_results_requires_stream_results(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--max-results", "5"])
+        assert exc.value.code == 2
+        assert "--max-results only applies with --stream-results" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("value", ["0", "-3"])
+    def test_max_results_must_be_positive(self, monkeypatch, capsys, value):
+        argv = ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results"]
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, [*argv, "--max-results", value])
+        assert exc.value.code == 2
+        assert "--max-results must be a positive integer" in capsys.readouterr().err
+
+    def test_max_results_refuses_resume(self, monkeypatch, capsys):
+        """A top-N run writes nothing until its last chunk, so there is no chunk to checkpoint (#5279)."""
+        argv = ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results"]
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, [*argv, "--max-results", "5", "--resume"])
+        assert exc.value.code == 2
+        assert "--max-results cannot be combined with --resume" in capsys.readouterr().err
 
     def test_unknown_importer_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -1210,7 +1243,7 @@ class TestRunServer:
         cli_main._run_server(
             argparse.Namespace(login=None, port=5055, local=True, settings=str(settings_file)),
             _FakeApp(),
-            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+            lambda **kw: seen.update(path=settings_tiers.SETTINGS_PATH),
         )
         assert seen["path"] == settings_file
         assert str(settings_file) in capsys.readouterr().out
@@ -1219,12 +1252,12 @@ class TestRunServer:
         import argparse
 
         self._patch_preflight(monkeypatch)
-        before = settings_mod.SETTINGS_PATH
+        before = settings_tiers.SETTINGS_PATH
         seen = {}
         cli_main._run_server(
             argparse.Namespace(login=None, port=5055, local=True, settings=None),
             _FakeApp(),
-            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+            lambda **kw: seen.update(path=settings_tiers.SETTINGS_PATH),
         )
         assert seen["path"] == before
 

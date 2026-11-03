@@ -38,7 +38,7 @@ none fail (#4777).
 (β 1, one photo, 1024 px). The gaps hold at both sizes and both starting-photo counts. These are
 descriptive strata, not causes (#4780).
 
-![The objective at every click, per preset and size, from 1 and from 4 starting photos](fig_objective.png)
+![The objective at every click, per preset and size, from 1 and from 4 starting photos](fig_objective.webp)
 
 *Figure 1. What the session shows at every click: F-beta of the withheld set at the app's line, at
 each set's own beta, over 562 people. Click 0 is the example sort at its own line; the session
@@ -100,7 +100,7 @@ click 25.
 
 ## The dip
 
-![What a Find returns at every vote, and the share of runs on the centroid and in a spot check](fig_find_by_vote.png)
+![What a Find returns at every vote, and the share of runs on the centroid and in a spot check](fig_find_by_vote.webp)
 
 *Figure 2. What a Find returns at every vote (Test, which the viewer draws), votes 1–60, over 562
 people; the colours and styles as in Figure 1. Below: the share of runs (β 1, 1024 px) whose Find
@@ -149,7 +149,7 @@ At 640 px it moves −0.017 to +0.015 (+0.007 to +0.012 from one photo). Its pre
 
 ## Where the app does well and where it does poorly
 
-![The objective after the check per stratum of the people](fig_strata.png)
+![The objective after the check per stratum of the people](fig_strata.webp)
 
 *Figure 3. The objective after the check, ±1 SE, per stratum (β 1, one photo, 1024 px; strata with
 5+ people). The dashed line is everyone (0.79). Skin tone is FHIBE's `natural_skin_color` scale:

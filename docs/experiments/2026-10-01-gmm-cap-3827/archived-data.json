@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-gmm-cap-3827.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "provenance.json": {
+     "bytes": 648,
+     "oid": "2c5f72db84b69e16c64c71d826552b85b1a99cc0"
+    },
+    "summary_cuts.csv": {
+     "bytes": 42767,
+     "oid": "d5a3ba4dc05e44330f8eab9b7cdd04b95538751e"
+    },
+    "summary_lines.csv": {
+     "bytes": 263907,
+     "oid": "6d2d773864d10eefa1c2e0c8c03fd17b1b3b196b"
+    },
+    "timing.csv": {
+     "bytes": 2289,
+     "oid": "048ae01717e6d8144b6fb8ee2ace6897d40b657f"
+    }
+   }
+  }
+ ]
+}

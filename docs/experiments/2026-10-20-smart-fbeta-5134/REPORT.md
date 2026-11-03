@@ -82,7 +82,7 @@ of 432,000 clicks (the columns are rounded to 4 and 2 places).
 
 ## Where each light is green
 
-![Each light's share of sessions green at each click, above the withheld F-beta](figures/lights.png)
+![Each light's share of sessions green at each click, above the withheld F-beta](figures/lights.webp)
 
 *Top: the share of sessions whose light is green at each click (the light flaps, so a session can count green, then
 not). Bottom: the mean withheld F-beta at the same clicks, each preset at its own beta.*
@@ -156,7 +156,7 @@ different clicks. Paired by cell and seed, SE over the 49 classes (`smart_fbeta_
 | … Smart first green, median click | 31 | 31 | 30 |
 | … Done later by (mean, paired) / F-beta at Done | +4.8 ± 1.7 / +0.021 ± 0.004 | +6.2 ± 1.9 / +0.011 ± 0.003 | +3.9 ± 1.7 / +0.012 ± 0.003 |
 
-![Each arm minus today's app over clicks, paired, ±1 SE over classes](figures/ab.png)
+![Each arm minus today's app over clicks, paired, ±1 SE over classes](figures/ab.webp)
 
 *Each arm's withheld F-beta minus today's app's, session for session, ±1 SE over classes. The two runs are one run
 until the first click their lights differ, around click 25 to 30 where the first detector goes on screen.*

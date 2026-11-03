@@ -58,7 +58,7 @@ export CALIB_CONC="${CALIB_CONC:-13}"
 export CALIB_ANALYZE=noop.py
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 # shellcheck disable=SC1091
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 

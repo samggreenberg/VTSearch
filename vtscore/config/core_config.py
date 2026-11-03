@@ -265,7 +265,7 @@ def register_setting_getter(name: str, fn: Callable[[], Any]) -> None:
     so it should be cheap and answer for whoever is asking (the request's user,
     in a multi-user host).  It wins over a registered builder.  The VTSearch app
     registers one per knob at startup
-    (``vtsearch.shim.register_app_setting_getters``).
+    (``vtsearch.seam_wiring.register_app_setting_getters``).
 
     Raises :class:`ValueError` for a name that is not a setting.
     """

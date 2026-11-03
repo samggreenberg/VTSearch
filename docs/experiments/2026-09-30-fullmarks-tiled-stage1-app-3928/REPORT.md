@@ -51,7 +51,7 @@ AP was 0.02–0.04.
   priced for a 1,000-page shortlist at this size (0.72 against 0.87,
   2026-09-30 re-eval).
 
-![Closed loop](figures/closed_loop.png)
+![Closed loop](figures/closed_loop.webp)
 
 ## What ran
 
@@ -97,7 +97,7 @@ pools, positives and 8,192-keypoint matches:
 
 ## Per class
 
-![Per class, tier s](figures/per_class_s.png)
+![Per class, tier s](figures/per_class_s.webp)
 
 Most classes sit on the diagonal. The departures, all Tobacco800 logos or
 StaVer/SPODS stamps:

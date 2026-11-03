@@ -27,7 +27,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ER
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 
 export VTS_REPO="$WT"
 export VTS_PRECISION_STUDY="${VTS_PRECISION_STUDY:-/expscratch/$USER/precision-3143}"
@@ -91,7 +91,7 @@ submit_arm() {
     --mem="$MEM" \
     --time="$TIME" \
     --output="$LOGS/$arm-%j.out" \
-    --wrap "source $WT/gridenv.sh && $BUILDENV && cd $HERE && python build_arm.py --arm $arm --dataset $DATASET --embedders $EMBEDDERS") || {
+    --wrap "source $WT/scripts/grid/gridenv.sh && $BUILDENV && cd $HERE && python build_arm.py --arm $arm --dataset $DATASET --embedders $EMBEDDERS") || {
       echo "SUBMIT FAILED for $arm" >&2; return 1; }
   if [[ ! "$jid" =~ ^[0-9]+$ ]]; then
     echo "$arm SUBMIT FAILED (empty job id) — NOT LAUNCHED" >&2

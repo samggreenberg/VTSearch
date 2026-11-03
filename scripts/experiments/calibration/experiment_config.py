@@ -303,7 +303,7 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
 #: plainly.
 #:
 #: This must track the app's shipped default for ``enrich_descriptions``
-#: (``vtsearch/settings_models.py``), which is ``False``: the opening and the
+#: (``vtsearch/settings/models.py``), which is ``False``: the opening and the
 #: click-0 anchor are supposed to be the sort a real user sees, and a harness
 #: that quietly embeds plainly while the app enriches is measuring a different
 #: opening than the one it reports.  Every ``embed_text_query`` call in this
@@ -1244,6 +1244,31 @@ MORE_WALK = os.environ.get("CALIB_MORE_WALK", "").strip() or "seed"
 #: New phase would walk the Coverage Atlas, the phase machine unchanged.  Unset
 #: (the default, ``atlas``) is the app.
 NEW_WALK = os.environ.get("CALIB_NEW_WALK", "").strip() or "atlas"
+
+#: Issue #5473's Span target: how many evidence-bearing atlas nodes turn Span
+#: green, the app's ``autopilot_goal_diversity``.  ``0`` skips the Diversity step:
+#: Span reads green from the first vote, so Done waits on Smart and Stable alone.
+#: Unset is the app's default, 0 since #5473; ``40`` is the step on, the default
+#: before.  Not an int is refused by preflight.
+_SPAN_GREEN_RAW = os.environ.get("CALIB_SPAN_GREEN", "").strip()
+SPAN_GREEN: "int | str | None" = (
+    int(_SPAN_GREEN_RAW) if _SPAN_GREEN_RAW.lstrip("-").isdigit() else (_SPAN_GREEN_RAW or None)
+)
+
+#: Issue #5477's Goods minimum: how many Goods Smart and Stable need before either
+#: leaves red (the app's ``MIN_PER_CLASS``, 5).  Unset is the app's.  Not an int
+#: from 1 to 5 is refused by preflight.
+_MIN_GOOD_RAW = os.environ.get("CALIB_MIN_GOOD", "").strip()
+MIN_GOOD: "int | str | None" = int(_MIN_GOOD_RAW) if _MIN_GOOD_RAW.isdigit() else (_MIN_GOOD_RAW or None)
+
+#: Issue #5477's dry run past the opening: once this many votes in a row in
+#: Boundary, Diversity or a spot check held no Good, Smart and Stable need only
+#: the Goods in hand.  Unset is the app's (``HARD_DRY_RUN``, 16); ``0`` never
+#: waives the minimum (the app before #5477).  Not an int >= 0 is refused by preflight.
+_HARD_DRY_RUN_RAW = os.environ.get("CALIB_HARD_DRY_RUN", "").strip()
+HARD_DRY_RUN: "int | str | None" = (
+    int(_HARD_DRY_RUN_RAW) if _HARD_DRY_RUN_RAW.isdigit() else (_HARD_DRY_RUN_RAW or None)
+)
 
 #: Issue #4699's **example opening**: each cell starts from this many photos of
 #: its target, drawn from the voting half, voted Good as the run's first votes,

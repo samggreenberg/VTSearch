@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-23-fullmarks-boxes-4109.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/box_verdicts.jsonl": {
+     "bytes": 55089,
+     "oid": "ce724c1d6d8d56ea8414ec439508638fa4f17850"
+    },
+    "measurements/draw_verdicts.jsonl": {
+     "bytes": 5144,
+     "oid": "16d568c8b202113818dc1cbcb8b702d5a2f44a07"
+    }
+   }
+  }
+ ]
+}

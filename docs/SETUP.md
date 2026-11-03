@@ -196,11 +196,11 @@ and install problems on GPU boxes are covered in
 
 ### Picking the CUDA tag
 
-When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
+When a GPU is visible, `scripts/install/detect_cuda_tag.py` picks the torch wheel's
 CUDA tag from the GPU's compute capability and the driver's CUDA version; pass
 an explicit `cuXYZ` tag only to override it. If the tag can't be determined it
 falls back to `cu126`, the widest wheel. You can preview the choice without
-installing anything: `python scripts/detect_cuda_tag.py`.
+installing anything: `python scripts/install/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
@@ -214,11 +214,11 @@ floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
 import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
-later, and it is the **only tag that gets cuML** (GPU UMAP / k-means). A
-Volta card, or an older driver, steps down to `cu126` (or older), where the
-installer skips cuML and the app runs UMAP / k-means on the CPU; why, and the
-by-hand escape hatch, are in
-[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
+later. It and `cu126`, where a Volta card or a driver below CUDA 12.9 steps
+down to, are the **tags that get cuML** (GPU UMAP / k-means). On `cu118` and
+`cu128` the installer skips cuML and the app runs UMAP / k-means on the CPU;
+why, and the by-hand escape hatch, are in
+[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-cu118-and-cu128).
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
@@ -487,7 +487,7 @@ is streamlined the same way:
 
 The embedder lock and the hidden plugins (the all-types image's hidden media
 types among them) are seeded into the `/app/data` volume (by
-`scripts/seed_labbench_settings.py`), and Docker only seeds a fresh volume, so
+`scripts/install/seed_labbench_settings.py`), and Docker only seeds a fresh volume, so
 a volume an earlier LabBench image populated keeps that image's values. That is
 why each LabBench variant needs its own volume: `docker-compose.labbench-audio.yml`
 mounts `vtsearch-labbench-audio-data` rather than the `vtsearch-data` the other
@@ -554,7 +554,7 @@ DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
 README's License section.)
 
 ```bash
-HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh      # optional, one-time: populates ./model_cache/
+HF_TOKEN=hf_xxx ./scripts/install/cache_gated_models.sh      # optional, one-time: populates ./model_cache/
 
 docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders

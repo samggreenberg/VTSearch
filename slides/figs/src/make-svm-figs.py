@@ -443,7 +443,7 @@ VOTE_COUNTS = (10, 20, 50, 100, 200, 500)
 PILE_SIZES = (1_000, 10_000, 100_000, 1_000_000)
 FIT_REPEATS, SCORE_REPEATS = 15, 5
 #: What one click costs: the two calibration folds and the final head, each fitted, and the pile scored
-#: by each (`vtscore/training/thresholds/conformal.py`, `calibrate_count=2`).
+#: by each (`vtscore/training/thresholds/fold_orderings.py`, `calibrate_count=2`).
 FITS_PER_CLICK = SCORE_PASSES_PER_CLICK = 3
 #: The points that carry their number: every pile size, and the vote counts the notes quote.
 LABELLED = {10, 50, 500, *PILE_SIZES}

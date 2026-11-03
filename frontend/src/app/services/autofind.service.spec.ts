@@ -166,6 +166,39 @@ describe('AutoFindService', () => {
     expect(service.results()).toEqual(run);
   });
 
+  it('turns the notice to a warning naming each detector whose training domain this dataset is not (#5501)', () => {
+    loadingTasks$.next([
+      finished(
+        {},
+        info({
+          domain_shifts: [
+            {
+              detector_name: 'Mammal',
+              reference_dataset_name: 'Caltech-101 (S)',
+              frac_atypical: 0.68,
+              message: '68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift',
+            },
+          ],
+        }),
+      ),
+    ]);
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    const opts = toast.warning.mock.calls[0][0];
+    expect(opts.message).toBe('AutoFind finished on "Birds": 5 hits');
+    expect(opts.detail).toBe(
+      '2 detectors. \u26A0 Mammal: 68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift.',
+    );
+    expect(opts.action.label).toBe('View Results');
+  });
+
+  it('keeps a run with no domain shift a success', () => {
+    loadingTasks$.next([finished({}, info({ domain_shifts: [] }))]);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success.mock.calls[0][0].detail).toBe('2 detectors.');
+  });
+
   it('announces each run once, however often the row is re-sent', () => {
     loadingTasks$.next([finished()]);
     loadingTasks$.next([finished()]);
@@ -193,9 +226,26 @@ describe('AutoFindService', () => {
   });
 
   it('warns rather than congratulates when the auto-export failed', () => {
-    loadingTasks$.next([finished({}, info({ auto_export: { exporter: 'email_smtp', success: false, error: 'no MX' } }))]);
+    loadingTasks$.next([
+      finished(
+        {},
+        info({ auto_export: { exporter: 'email_smtp', exporter_display_name: 'Send by Email', success: false, error: 'no MX' } }),
+      ),
+    ]);
     expect(toast.success).not.toHaveBeenCalled();
-    expect(toast.warning.mock.calls[0][0].detail).toContain('no MX');
+    const detail = toast.warning.mock.calls[0][0].detail;
+    expect(detail).toContain('no MX');
+    // The exporter as the user picked it, and where to fix it (#5463).
+    expect(detail).toContain('via Send by Email');
+    expect(detail).not.toContain('email_smtp');
+    expect(detail).toContain('Settings › AutoFind');
+  });
+
+  it('names the exporter by its display name when the auto-export worked', () => {
+    loadingTasks$.next([
+      finished({}, info({ auto_export: { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: true } })),
+    ]);
+    expect(toast.success.mock.calls[0][0].detail).toContain('Sent via Webhook (HTTP POST).');
   });
 
   it('says so when the results have expired', () => {

@@ -14,7 +14,7 @@ CRUD endpoints (``vtsearch/routes/detectors/crud.py``):
 * ``POST   /api/detectors/combine``         -> :class:`DetectorCombineRequestSchema` ->
                                               :class:`DetectorCombineResponseSchema`
 
-Registry endpoints (``vtsearch/routes/detectors/registry.py``):
+Registry endpoints (``vtsearch/routes/detectors/registry/``):
 
 * ``GET    /api/detectors/registry``                   -> :class:`DetectorRegistryListResponseSchema`
 * ``POST   /api/detectors/registry``                   -> :class:`DetectorRegistryCreateRequestSchema` ->
@@ -71,7 +71,7 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
-from vtsearch.schemas.datasets import DatasetDomainShiftResponseSchema
+from vtsearch.schemas.datasets.registry import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
@@ -255,7 +255,7 @@ class DetectorCombineResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# Registry schemas (vtsearch/routes/detectors/registry.py)
+# Registry schemas (vtsearch/routes/detectors/registry/)
 # ---------------------------------------------------------------------------
 
 
@@ -733,6 +733,32 @@ class _HitSchema(MediaEntrySchema):
     )
 
 
+class FindTrainingDomainResponseSchema(Schema):
+    """Response for ``GET /api/find/training-domain``.
+
+    The training-domain overlap check for the active detector on the active
+    dataset, against the dataset it was trained on: the dataset holding the
+    most of its Good / Bad examples, among the loaded ones and the one
+    recorded on the detector (#5501), which need not be loaded.  Every
+    Find / AutoFind result carries the same report per detector.
+    ``domain_shift`` is null when there is nothing to compare, and ``reason``
+    says why.
+    """
+
+    # The inferred training dataset; empty when no dataset to compare with
+    # holds any of the detector's labelled examples.
+    reference_dataset_id = fields.String(required=True)
+    reference_dataset_name = fields.String(required=True)
+    # What the inference rests on: the detector's Good / Bad examples, and how
+    # many of them name a media in the reference and in the active dataset.
+    labels_total = fields.Integer(required=True)
+    labels_in_reference = fields.Integer(required=True)
+    labels_in_active = fields.Integer(required=True)
+    domain_shift = fields.Nested(DatasetDomainShiftResponseSchema, required=True, allow_none=True)
+    # Why ``domain_shift`` is null; empty when it is not.
+    reason = fields.String(required=True)
+
+
 class _AutoDetectResultSchema(Schema):
     """One entry in ``AutoDetectResponseSchema.results``."""
 
@@ -748,20 +774,34 @@ class _AutoDetectResultSchema(Schema):
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
+    # The training-domain overlap check Tune warns with, run for this detector
+    # on the scored dataset (#5501); ``null`` when the check itself failed or
+    # from a caller that does not run it.
+    training_domain = fields.Nested(FindTrainingDomainResponseSchema, allow_none=True)
 
 
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an AutoFind run's results.
 
-    Built by ``vtsearch.autofind.run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.runtime.autofind.run_autofind_export``: a fixed
+    ``{exporter, exporter_display_name, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
     the base is enumerated and the rest passed through, same as the clipper
-    descriptors in :mod:`vtsearch.schemas.datasets`.
+    descriptors in :mod:`vtsearch.schemas.datasets.listings`.
     """
 
     exporter = fields.String(required=True)
+    exporter_display_name = fields.String(
+        required=True,
+        metadata={
+            "description": (
+                "The exporter's display name, for messages to the user (#5463); the "
+                "``exporter`` name itself when that names no registered exporter."
+            )
+        },
+    )
     success = fields.Boolean(required=True)
     message = fields.String(metadata={"description": "Human-readable outcome; present on success."})
     error = fields.String(metadata={"description": "Failure reason; present instead of ``message`` on failure."})
@@ -1160,29 +1200,6 @@ class FindEvidenceCoverageResponseSchema(Schema):
     # Headline: that excess is both statistically clear and practically large
     # (z_beyond > 3 and frac_beyond >= 2*alpha); always false with no baseline.
     unsupported = fields.Boolean(required=True)
-
-
-class FindTrainingDomainResponseSchema(Schema):
-    """Response for ``GET /api/find/training-domain``.
-
-    The training-domain overlap check for the active detector on the active
-    dataset, against the dataset it was trained on: the loaded dataset holding
-    the most of its Good / Bad examples.  ``domain_shift`` is null when there
-    is nothing to compare, and ``reason`` says why.
-    """
-
-    # The inferred training dataset; empty when no loaded dataset holds any of
-    # the detector's labelled examples.
-    reference_dataset_id = fields.String(required=True)
-    reference_dataset_name = fields.String(required=True)
-    # What the inference rests on: the detector's Good / Bad examples, and how
-    # many of them name a media in the reference and in the active dataset.
-    labels_total = fields.Integer(required=True)
-    labels_in_reference = fields.Integer(required=True)
-    labels_in_active = fields.Integer(required=True)
-    domain_shift = fields.Nested(DatasetDomainShiftResponseSchema, required=True, allow_none=True)
-    # Why ``domain_shift`` is null; empty when it is not.
-    reason = fields.String(required=True)
 
 
 class FindCorrectionsToDetectorResponseSchema(Schema):

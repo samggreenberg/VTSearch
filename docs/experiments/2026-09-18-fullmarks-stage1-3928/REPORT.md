@@ -24,7 +24,7 @@ against 0.70 at K = 1,000). Tier `l` becomes a **4.4 GiB** cell at 256 dims or
 pages, 256 dims matches verifying every page at K = 2,000 (0.879 against 0.876);
 at 50,000 pages it does not (0.770 against 0.832, 93%).
 
-![Stage 1 by stored width](fig_width.png)
+![Stage 1 by stored width](fig_width.webp)
 
 ## The obstacle is storage, and the arithmetic says so before anything is built
 
@@ -166,7 +166,7 @@ rather than explained.
 
 ## Cost
 
-![storage and search cost](fig_cost.png)
+![storage and search cost](fig_cost.webp)
 
 | stored width | tier `s` cell | tier `s` search | tier `m` cell | tier `m` search |
 |---|---:|---:|---:|---:|

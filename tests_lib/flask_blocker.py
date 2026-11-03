@@ -4,7 +4,7 @@ The ``vtscore`` library must be importable without Flask installed
 (seam 1, "Flask", in ``../vtscore/docs/architecture.md``).  Because the
 library ships inside the ``vtsearch`` distribution, we can't simulate
 "Flask uninstalled" with a Flask-less virtualenv; instead
-``scripts/check-vtscore-clean.py`` installs the hook below, which makes
+``scripts/gates/check-vtscore-clean.py`` installs the hook below, which makes
 ``import flask`` (and friends) raise :class:`ImportError`.
 
 **Why this lives here and not in the script.**  The gate runs pytest

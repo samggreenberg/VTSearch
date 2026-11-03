@@ -31,7 +31,7 @@ runner() {  # $1=jobname $2..=python argv ; prints the submitted job id
 }
 
 # Wrap a python stage in an srun-friendly one-liner sourced from gridenv.sh.
-STAGE_WRAP="source $WT/gridenv.sh && cd $HERE"
+STAGE_WRAP="source $WT/scripts/grid/gridenv.sh && cd $HERE"
 
 PREP=$(sbatch --parsable --job-name=mlpsvm-prep --gres="$GRES" --mem="$MEM" --cpus-per-task="$CPUS" \
   --time=2:00:00 --partition=gpu --output="$LOGS/prep-%j.out" \

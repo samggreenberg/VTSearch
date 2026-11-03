@@ -173,7 +173,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=incl-prep --mem=24G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$LOGS/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $LOGS/prepare-$P.out"
     ;;
@@ -185,7 +185,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=incl-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$LOGS/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $CALIB_EXP/sizing")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $CALIB_EXP/sizing")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX)  ->  $LOGS/size-$S.out"
     ;;

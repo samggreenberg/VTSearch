@@ -75,7 +75,7 @@ from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.errors import error_response
 from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, run_plugin_or_error, validate_plugin_args
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
     ImporterSuggestedNameRequestSchema,
@@ -203,7 +203,7 @@ def _start_auto_resolve(missing: list[dict]) -> str:
     """
     from vtscore.datasets.ingest_task import start_ingest_task
     from vtscore.state.core import get_active_detector_context
-    from vtsearch.threading import spawn
+    from vtsearch.runtime.context_threads import spawn
 
     det_ctx = get_active_detector_context()
     detector_id = det_ctx.detector_id or ""

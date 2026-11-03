@@ -2,7 +2,8 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 
-import { SettingsStateService } from './settings-state.service';
+import { SettingsStateService, settingChangeEvents } from './settings-state.service';
+import { MetricsService } from './metrics.service';
 import { settleResource } from '../testing/settle-resource';
 import { provideHttpTesting } from '../testing/test-providers';
 
@@ -62,6 +63,66 @@ describe('SettingsStateService', () => {
     req.flush(updated);
     TestBed.tick();
     expect(service.settingsSignal()?.volume).toBe(0.5);
+  });
+
+  describe('settingChanged metrics', () => {
+    let logEvent: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      logEvent = vi.spyOn(TestBed.inject(MetricsService), 'logEvent').mockImplementation(() => {});
+    });
+
+    it('logs each key the write changed, with its new value', async () => {
+      await load();
+      service.update({ volume: 0.5 }).subscribe();
+      httpMock.expectOne('/api/settings').flush({ ...mockSettings, volume: 0.5 });
+      expect(logEvent).toHaveBeenCalledExactlyOnceWith({
+        group: 'settingChanged',
+        attributes: { key: 'volume', value: 0.5 },
+      });
+    });
+
+    it('logs nothing for keys a whole-object save sent unchanged', async () => {
+      await load();
+      service.update({ ...mockSettings }).subscribe();
+      httpMock.expectOne('/api/settings').flush(mockSettings);
+      expect(logEvent).not.toHaveBeenCalled();
+    });
+
+    it('logs nothing before settings have loaded (no "before" to compare)', () => {
+      service.update({ volume: 0.5 }).subscribe();
+      httpMock.expectOne('/api/settings').flush({ ...mockSettings, volume: 0.5 });
+      expect(logEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('settingChangeEvents', () => {
+    it('yields one event per changed media-type entry of a dict setting', () => {
+      const before = { grid_icon_size_left: { image: 'M', audio: 'S' } };
+      const after = { grid_icon_size_left: { image: 'L', audio: 'S', video: 'XS' } };
+      expect(settingChangeEvents(['grid_icon_size_left'], before, after)).toEqual([
+        { group: 'settingChanged', attributes: { key: 'grid_icon_size_left', entry: 'image', value: 'L' } },
+        { group: 'settingChanged', attributes: { key: 'grid_icon_size_left', entry: 'video', value: 'XS' } },
+      ]);
+    });
+
+    it('names a removed dict entry without a value', () => {
+      expect(settingChangeEvents(['panel_pct_left'], { panel_pct_left: { image: 30 } }, { panel_pct_left: {} })).toEqual(
+        [{ group: 'settingChanged', attributes: { key: 'panel_pct_left', entry: 'image' } }],
+      );
+    });
+
+    it('records only the key for a non-scalar value', () => {
+      expect(settingChangeEvents(['hidden_hints'], { hidden_hints: [] }, { hidden_hints: ['browse-map'] })).toEqual([
+        { group: 'settingChanged', attributes: { key: 'hidden_hints' } },
+      ]);
+    });
+
+    it('skips keys the app writes on the user\'s behalf', () => {
+      expect(settingChangeEvents(['used_features'], { used_features: [] }, { used_features: ['browse-select'] })).toEqual(
+        [],
+      );
+    });
   });
 
   it('clear should reset settings to null', async () => {

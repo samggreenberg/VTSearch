@@ -233,7 +233,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=gm-prep --mem=24G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$LOGS/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $LOGS/prepare-$P.out"
     ;;
@@ -253,7 +253,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=gm-size --mem=8G --cpus-per-task="$CALIB_CPUS" \
       --time=2:00:00 --partition=cpu --export=ALL \
       --output="$LOGS/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS CALIB_STARTUP_SCHEDULE='${ARMS[$ARM]}' && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS CALIB_STARTUP_SCHEDULE='${ARMS[$ARM]}' && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX, arm $ARM)  ->  $LOGS/size-$S.out   cells -> $SIZING"
     ;;
@@ -271,8 +271,8 @@ case "$MODE" in
     # the dangerous version of this is preflight reporting `ok` without having
     # looked (#2905).
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
 
     # Reject a typo'd schedule here, not four hours into the array.  Every arm is
@@ -346,7 +346,7 @@ NOTE
       exit 1
     fi
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv at $WT/gridenv.sh" >&2; exit 1; }
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1; }
     ( cd "$HERE" && OLD="$OLD_SEEDS" NEW="$NEW_SEEDS" python -c "
 import importlib, json, os, sys
 info = json.load(open(os.environ['CALIB_RESULTS'] + '/prepare_info.json'))
@@ -381,7 +381,7 @@ print(len(grid(int(os.environ['OLD']))), len(grid(int(os.environ['NEW']))) - 1)
         --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" --time="$CALIB_TIME" \
         --partition="$CALIB_PARTITION" --export=ALL \
         --output="$LOGS/topup-%A_%a.out" \
-        --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$R \
+        --wrap="source $WT/scripts/grid/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$R \
           VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME \
           CALIB_N_SEEDS=$NEW_SEEDS CALIB_STARTUP_SCHEDULE='${ARMS[$arm]}' && cd $HERE && python run_cells.py")
       require_jobid "$B" "topup arm $arm"

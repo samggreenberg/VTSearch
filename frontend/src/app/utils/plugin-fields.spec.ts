@@ -75,7 +75,7 @@ function shownKeys(fields: ConditionalField[], values: Record<string, unknown>):
   return visibleFields(fields, values).map((f) => f.key);
 }
 
-// Every case here has a twin in tests_lib/core/test_plugin_field_visible_when.py:
+// Every case here has a twin in tests_lib/plugins/test_plugin_field_visible_when.py:
 // the form must hide exactly what the server stops requiring.
 describe('visible_when', () => {
   it('hides a field while its checkbox is unticked', () => {

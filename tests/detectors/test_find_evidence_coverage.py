@@ -14,6 +14,7 @@ import pytest
 from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.evidence_baseline import EVIDENCE_BASELINE_KEY
+from vtscore.detectors.training_domain import TRAINING_DATASET_KEY
 from vtscore.detectors.registry import get_detector
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 from vtscore.state.core import get_active_context, get_active_detector_context
@@ -91,9 +92,9 @@ class TestTheTrainingBaseline:
     @staticmethod
     def _away(monkeypatch):
         """Make the training dataset another one, as on a dataset the detector meets after a handoff."""
-        import vtsearch.training_domain as training_domain
+        import vtsearch.domain_overlap as domain_overlap
 
-        monkeypatch.setattr(training_domain, "infer_training_reference", lambda _labelset, _active: ("elsewhere", {}))
+        monkeypatch.setattr(domain_overlap, "infer_training_reference", lambda _labelset, _active: ("elsewhere", {}))
 
     def test_on_its_training_dataset_the_baseline_is_drawn_and_recorded(self, client, detector_path):
         data = client.get("/api/find/evidence-coverage").get_json()
@@ -110,6 +111,10 @@ class TestTheTrainingBaseline:
         assert stored["dataset_id"] == data["baseline_dataset_id"]
         assert stored["n_pos"] + stored["n_neg"] == data["n_baseline"]
         assert stored["k"] == data["k"] and stored["alpha"] == data["alpha"]
+        # The same write records the training dataset, for the overlap check to follow when it is unloaded (#5501).
+        training = data_on_disk[TRAINING_DATASET_KEY]
+        assert training["dataset_id"] == data["baseline_dataset_id"]
+        assert training["labels_held"] == 6
 
     def test_elsewhere_the_recorded_baseline_is_read(self, client, detector_path, monkeypatch):
         home = client.get("/api/find/evidence-coverage").get_json()
@@ -285,8 +290,12 @@ class TestTheBaselineFromTheTrainView:
 
         assert wait_for_baseline_draws(timeout=30.0)
         a_entry, _a_ctx = trained["a"]
-        stored = (_read_detector(trained["path"]) or {}).get(EVIDENCE_BASELINE_KEY)
+        on_disk = _read_detector(trained["path"]) or {}
+        stored = on_disk.get(EVIDENCE_BASELINE_KEY)
         assert stored is not None and stored["dataset_id"] == a_entry["id"]
+        # The training-dataset pointer lands with it (#5501).
+        assert on_disk[TRAINING_DATASET_KEY]["dataset_id"] == a_entry["id"]
+        assert on_disk[TRAINING_DATASET_KEY]["labels_held"] > 0
 
         det_ctx = get_active_detector_context()
         assert det_ctx.last_learned_scores and det_ctx.line_ranking is not None

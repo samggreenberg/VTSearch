@@ -58,6 +58,8 @@ from vtscore.eval.example_opening import (
 )
 from vtscore.eval.autopilot_flow import (
     APP_SMART_SIGNAL,
+    HARD_DRY_RUN,
+    MIN_PER_CLASS,
     MORE_DRY_RUN,
     SMART_HISTORY_READINGS,
     SMART_WINDOW,
@@ -84,7 +86,13 @@ from vtscore.eval.arms_set_overlap import SetOverlap, pick_overlap_blank
 from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
-from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
+from vtscore.detectors.centroid_head import (
+    CENTROID_LINE_RULES,
+    CENTROID_THRESHOLD,
+    FACE_BALL_RULE,
+    face_ball_holds,
+    is_centroid_line_rule,
+)
 from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
@@ -646,7 +654,7 @@ def _safe_threshold_for_step(
 
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then draws the line as
-    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    :func:`vtscore.detectors.training_calibration._fused_threshold` does: the labels' line
     under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
     production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
@@ -1912,7 +1920,7 @@ def _skyline_fit_and_score(
     same bag-aware flooding.  A skyline that trained through a private
     ``LinearSVC`` would report "fewer labels" and "different trainer" as one
     number, and would need its own ``Mirror(...)`` entry in
-    ``scripts/check-eval-app-sync.py`` to stay honest; delegation needs neither.
+    ``scripts/gates/check-eval-app-sync.py`` to stay honest; delegation needs neither.
 
     The threshold the trainer calibrates is computed and **discarded** - the
     caller takes the test oracle's cut instead (see :data:`SKYLINE_PROVENANCE`).
@@ -2766,7 +2774,7 @@ def _resolve_production_defaults(
     """Resolve the unnamed blend schedule and split fraction to the app's own.
 
     **The eval default arm must be the app's default.**  Both ``default``
-    mirrors in ``scripts/check-eval-app-sync.py`` -
+    mirrors in ``scripts/gates/check-eval-app-sync.py`` -
     ``training.blend_schedule_default`` and ``training.split_fraction_default`` -
     name *this* function as their harness side, so a tripped gate points the
     reconciler at twenty lines instead of at the thousand that make up
@@ -2806,7 +2814,7 @@ def _resolve_production_defaults(
     # reads off ``supports_patch_regions`` in
     # ``vtscore.detectors.training.resolve_calibration_fraction``, which the
     # ``training.split_fraction_default`` mirror in
-    # ``scripts/check-eval-app-sync.py`` pins against this block.  Note it is
+    # ``scripts/gates/check-eval-app-sync.py`` pins against this block.  Note it is
     # deliberately NOT the voting mode: ``dinov3_patch`` datasets take 0.5 in
     # both their styles, including boxless ``whole_image``.
     if calibration_fraction is None:
@@ -3037,7 +3045,7 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
             beta = float("nan")
         if (
             not sep
-            or not (rule in CENTROID_LINE_RULES or (rule == QUERY_LINE_VARIANT and not tilde))
+            or not (is_centroid_line_rule(rule) or (rule == QUERY_LINE_VARIANT and not tilde))
             or (tilde and corpus not in CENTROID_LINE_CORPORA)
             or not (math.isfinite(beta) and beta > 0)
         ):
@@ -3126,7 +3134,32 @@ def _fits_from_typed_query(fn: Any) -> Any:
     return run
 
 
+def _fits_weigh_hard_views(fn: Any) -> Any:
+    """Run *fn* (the session) with every head fit weighing a hard-view face's Good less (#5413).
+
+    The app names its voted hard-view Goods to the fit
+    (:func:`vtscore.detectors.labelset_matrix.hard_view_good_vectors`); a session
+    names every hard-view face of its pool, which is the same rule, since only a
+    voted Good is ever fitted on and :func:`~vtscore.training.svm_prior.hard_view_good_weights`
+    weighs Goods alone.  A pool with no Face Quality verdicts names none.
+    """
+    import functools  # noqa: PLC0415
+
+    @functools.wraps(fn)
+    def run(*args: Any, **kwargs: Any) -> Any:
+        from vtscore.media.face.imagekit_bridge import media_hard_view  # noqa: PLC0415
+        from vtscore.training.svm_prior import hard_view_rows  # noqa: PLC0415
+
+        clips = args[0] if args else kwargs.get("clips_dict", {})
+        hard = [v for m in clips.values() if media_hard_view(m) and (v := media_embedding(m)) is not None]
+        with hard_view_rows(hard):
+            return fn(*args, **kwargs)
+
+    return run
+
+
 @_fits_from_typed_query
+@_fits_weigh_hard_views
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -3184,6 +3217,9 @@ def simulate_voting_iterations(  # noqa: C901
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
     new_walk: str = "atlas",
+    span_green: Optional[int] = None,
+    min_good: Optional[int] = None,
+    hard_dry_run: Optional[int] = None,
     band_share: Optional[int] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
@@ -3611,6 +3647,22 @@ def simulate_voting_iterations(  # noqa: C901
             Coverage Atlas's walk.  ``"hard"`` takes the Hard pick in ``new``
             instead, with the phase machine (and so when Span gates ``done``)
             unchanged.  Needs the phase machine.
+        span_green: How many evidence-bearing atlas nodes turn Span green (issue
+            #5473), the app's ``autopilot_goal_diversity``.  ``None`` - the
+            default - is the app's default, 0: Span reads green from the first
+            vote, so Autopilot never enters ``new`` (the Diversity step) and
+            says Done once Smart and Stable are green.  A positive goal turns
+            the step back on (40, ``SPAN_GREEN_ON``, was the default before
+            #5473).  Needs the phase machine.
+        min_good: The Goods Smart and Stable need before either leaves red
+            (issue #5477), 1 to ``MIN_PER_CLASS``.  ``None`` - the default - is the
+            app's ``MIN_PER_CLASS`` (5).  The Bads' minimum is unchanged.  Needs
+            the phase machine.
+        hard_dry_run: Issue #5477's dry run past the opening: once this many
+            votes in a row in Boundary, Diversity or a spot check held no Good,
+            Smart and Stable need only the Goods in hand.  ``None`` - the
+            default - is the app's ``HARD_DRY_RUN`` (16); ``0`` never waives the
+            minimum (the app before #5477).  Needs the phase machine.
         band_share: An experiment knob (issue #4482): one in *band_share* of
             Autopilot's picks past the opening (the phases where the app shows
             a detector) is a **band pick** instead of the phase's own, a draw
@@ -4019,6 +4071,16 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"more_walk must be one of {MORE_WALKS}; got {more_walk!r}")
     if new_walk not in NEW_WALKS:
         raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
+    if span_green is not None and (isinstance(span_green, bool) or not isinstance(span_green, int) or span_green < 0):
+        raise ValueError(f"span_green must be an integer >= 0 or None; got {span_green!r}")
+    if min_good is not None and (
+        isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS
+    ):
+        raise ValueError(f"min_good must be an integer from 1 to {MIN_PER_CLASS} or None; got {min_good!r}")
+    if hard_dry_run is not None and (
+        isinstance(hard_dry_run, bool) or not isinstance(hard_dry_run, int) or hard_dry_run < 0
+    ):
+        raise ValueError(f"hard_dry_run must be an integer >= 0 or None; got {hard_dry_run!r}")
     if more_walk != "seed" and (startup_schedule is not None or diversity is not None):
         raise ValueError(
             "more_walk='detector' walks the app's own opening; drop startup_schedule and opening_diversity"
@@ -4429,6 +4491,9 @@ def simulate_voting_iterations(  # noqa: C901
             stop_cap=stop_cap,
             smart_signal=smart_signal,
             record_readings=smart_readings,
+            span_green=span_green,
+            min_good=MIN_PER_CLASS if min_good is None else min_good,
+            hard_dry_run=HARD_DRY_RUN if hard_dry_run is None else (hard_dry_run or None),
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4438,6 +4503,12 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("good_dry_run needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     elif new_walk != "atlas":
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif span_green is not None:
+        raise ValueError("span_green needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
+    elif min_good is not None or hard_dry_run is not None:
+        raise ValueError(
+            "min_good and hard_dry_run need Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
+        )
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
     if smart_signal != APP_SMART_SIGNAL and flow is None:
@@ -5266,15 +5337,21 @@ def simulate_voting_iterations(  # noqa: C901
         details.pop("find_on_test", None)
         # Under the label quota a Test here gives the Goods' centroid, not this
         # head (#4643): the withheld half is scored as that.
-        centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        quota_centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
+        # Past the quota too where the face crops' ball holds (#5478, the app's face_ball_tier):
+        # from beta 1 up with two Goods, Test gives the Goods' centroid cut by the ball.
+        centroid = quota_centroid or (
+            quota_on and centroid_line == FACE_BALL_RULE and face_ball_holds(beta, len(good_votes))
+        )
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
         # the quota too while the query holds on a single-vector space (#4736), but the
-        # centroid once the query has missed on a patch space (#4800).
+        # centroid once the query has missed on a patch space (#4800).  The query reads
+        # the quota's own tier, as the app's does.
         missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
-        query = centroid and query_on and not missed
+        query = quota_centroid and query_on and not missed
         held = (
             query_on
-            and not centroid
+            and not quota_centroid
             and query_holds(
                 len(good_votes),
                 len(bad_votes),

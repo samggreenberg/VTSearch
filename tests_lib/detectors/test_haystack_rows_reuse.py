@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 import vtscore.detectors.training as training
+import vtscore.detectors.training_scoring as training_scoring
 
 DIM = 8
 EMB = "dinov3_patch"
@@ -53,7 +54,12 @@ def _xy(snap: dict[int, dict], n: int = 12) -> tuple[list, list[float], set[int]
 
 @pytest.fixture
 def count_row_builds(monkeypatch):
-    """Count ``scoring_rows_for_snap`` calls made from inside the training module."""
+    """Count ``scoring_rows_for_snap`` calls made from inside the training pipeline.
+
+    Patched in both modules that look it up: :mod:`vtscore.detectors.training`
+    (the trainers) and :mod:`vtscore.detectors.training_scoring`
+    (``_score_all_media``, which a fold pass re-entering it would go through).
+    """
     real = training.scoring_rows_for_snap
     calls: list[int] = []
 
@@ -62,6 +68,7 @@ def count_row_builds(monkeypatch):
         return real(clips_dict, embedder_name)
 
     monkeypatch.setattr(training, "scoring_rows_for_snap", _counting)
+    monkeypatch.setattr(training_scoring, "scoring_rows_for_snap", _counting)
     return calls
 
 

@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-29-hard-face-train-weight-5413.2f33f0bcbae9.tar.gz",
+   "source_commit": "2f33f0bcbae9b51c5dc6abba46e691049939fafa",
+   "files": {
+    "paired.csv": {
+     "bytes": 136413,
+     "oid": "dcf78c516af2ce31b2845c9793df2ee8ab09a091"
+    },
+    "paired_b.csv": {
+     "bytes": 79540,
+     "oid": "f1f3aebf51ff8ba31f132ca4517bebf5430eeaad"
+    },
+    "summary.csv": {
+     "bytes": 34371,
+     "oid": "474b65ea1e56bebf238b1ff169339b766fe2b119"
+    },
+    "summary_b.csv": {
+     "bytes": 24971,
+     "oid": "8e73a8e40686014c96564fcbe8f8b8b873e2b626"
+    }
+   }
+  }
+ ]
+}

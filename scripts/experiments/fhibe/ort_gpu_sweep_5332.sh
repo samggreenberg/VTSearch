@@ -6,7 +6,7 @@
 #SBATCH --time=1:00:00
 # #5332: which onnxruntime-gpu releases run on a V100 (sm_70): CUDA session on w600k_mbf + det_500m, output vs CPU.
 cd /expscratch/sgreenberg/worktrees/vts-5332
-source gridenv.sh >/dev/null 2>&1
+source scripts/grid/gridenv.sh >/dev/null 2>&1
 hostname; nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
 M=/expscratch/sgreenberg/imagekit-models/grid-default/imagekit
 for v in 1.23.2 1.24.4 1.25.1 1.26.0 1.27.0 1.28.0 1.29.0 1.30.0 1.31.0; do

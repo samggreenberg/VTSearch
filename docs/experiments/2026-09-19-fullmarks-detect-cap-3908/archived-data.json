@@ -1,0 +1,63 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-19-fullmarks-detect-cap-3908.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/b1024-c025mp-rows.csv": {
+     "bytes": 35938,
+     "oid": "1a618ff2104d2e85e34a09d11b88077601a93098"
+    },
+    "measurements/b1024-c05mp-rows.csv": {
+     "bytes": 36335,
+     "oid": "e92607033d38cc163b0d9c8e41fe21497a6eecf9"
+    },
+    "measurements/b1024-c1mp-rows.csv": {
+     "bytes": 36247,
+     "oid": "221f3e9a15bdecb693d7dbf54c7f9cd069f772b7"
+    },
+    "measurements/b1024-c2mp-rows.csv": {
+     "bytes": 35243,
+     "oid": "4d53ed2cfd51915091472c4c1912bd8791db4edf"
+    },
+    "measurements/b1024-c4mp-rows.csv": {
+     "bytes": 34238,
+     "oid": "eaf92fc0e3d7621693cda44c937a931629143e8d"
+    },
+    "measurements/b1024-cuncapped-rows.csv": {
+     "bytes": 34194,
+     "oid": "5b19db99ad1ca7f23cff1526ac1446dcbcb09dd2"
+    },
+    "measurements/b8192-c025mp-rows.csv": {
+     "bytes": 36169,
+     "oid": "720be2e7ca4c0eb150385fdac80a9b5ad77e506f"
+    },
+    "measurements/b8192-c05mp-rows.csv": {
+     "bytes": 35866,
+     "oid": "e18c54e0c811f06e04e46b25b4f68469f6f488b3"
+    },
+    "measurements/b8192-c1mp-rows.csv": {
+     "bytes": 35670,
+     "oid": "4054495ab995129006149b18f77830124f387837"
+    },
+    "measurements/b8192-c2mp-rows.csv": {
+     "bytes": 36254,
+     "oid": "8fa3f46be99b60f3a968c0f031800b468a13244f"
+    },
+    "measurements/b8192-c4mp-rows.csv": {
+     "bytes": 37190,
+     "oid": "83a6b9e5abe3c4298ecbd0a16842b1c1c96a78ea"
+    },
+    "measurements/b8192-cuncapped-rows.csv": {
+     "bytes": 37423,
+     "oid": "04892c0ee16e4ebf4f662a99449c43e742f2ad10"
+    },
+    "measurements/bench-8192.json": {
+     "bytes": 107869,
+     "oid": "adc057c977ff543d89dbcf306a47910f6f0d3d06"
+    }
+   }
+  }
+ ]
+}

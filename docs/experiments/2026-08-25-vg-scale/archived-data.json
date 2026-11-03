@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-25-vg-scale.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/boxes_backpack_medium.jpg": {
+     "bytes": 403182,
+     "oid": "baa9970db17deddb456ea9e0a197779dc9aaa783"
+    }
+   }
+  }
+ ]
+}

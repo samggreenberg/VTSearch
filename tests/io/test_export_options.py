@@ -311,7 +311,7 @@ class TestCliScoringNegativeHits:
         import numpy as np
         import torch
 
-        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.cli.scoring import _score_medias_with_detectors
         from vtsearch.state import medias
 
         first_cid = next(iter(medias))
@@ -340,7 +340,7 @@ class TestCliScoringNegativeHits:
         """The detector CLI scorer should include negative_hits."""
         import torch
 
-        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.cli.scoring import _score_medias_with_detectors
         from vtscore.training import build_model_from_weights
         from vtscore.detectors.training import serialize_weights, train_and_threshold
         from vtsearch.state import (
@@ -381,7 +381,7 @@ class TestCliScoringNegativeHits:
         via ``zip(strict=True)`` instead of silently truncating the
         per-detector hit lists.
         """
-        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.cli.scoring import _score_medias_with_detectors
         from vtscore.detectors.training import train_and_threshold
         from vtscore.embedding import matrix as matrix_module
         from vtsearch.state import medias, snapshot_medias
@@ -420,7 +420,7 @@ class TestCliScoringNegativeHits:
         Both readings of the invariant hold: the victim is absent, and every
         other media still scores.
         """
-        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.cli.scoring import _score_medias_with_detectors
         from vtscore.detectors.training import train_and_threshold
         from vtscore.embedding.matrix import invalidate_embedding_matrix
         from vtscore.state.core import get_active_context

@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-27-good-mining-3267.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "startup_cuts.json": {
+     "bytes": 13948,
+     "oid": "061cf85a180c8f2f465ff8144f92c8cdc4a29b63"
+    },
+    "startup_summary.json": {
+     "bytes": 63280,
+     "oid": "53b66e1f54c766ff3bca9e8e43a0630b03e07a0f"
+    }
+   }
+  }
+ ]
+}

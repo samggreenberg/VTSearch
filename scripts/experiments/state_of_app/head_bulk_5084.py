@@ -38,7 +38,8 @@ def _run_cell(args) -> list:
     """The head-count snapshots of one Binary / Region cell, as ``head_count_5039._save`` takes them."""
     from vtscore.detectors.label_quota import query_holds
     from vtscore.eval.live_threshold_rules import head_count_recall
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, _finite_unit, head_count_cut
+    from vtscore.training.thresholds.class_model import _finite_unit
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, head_count_cut
 
     npz, run = args
     ident = _ident(os.path.dirname(npz), npz)

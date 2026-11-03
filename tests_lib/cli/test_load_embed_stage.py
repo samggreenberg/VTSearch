@@ -2,7 +2,7 @@
 
 Importers never call an embedder: they emit media dicts with ``embedding=None``
 and the framework's ``embed_missing`` stage fills the vectors in once the
-importer returns.  The GUI's ``load_pipeline`` runs that stage; the CLI ran none
+importer returns.  The GUI's ``load_origin`` runs that stage; the CLI ran none
 of the post-import stages and left the vectors to appear incidentally at scoring
 time, inside ``route_and_embed``'s per-detector-group embed pass.
 
@@ -24,8 +24,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from vtscore import cli_progress
-from vtscore.cli import _load_importer_chunked, _load_importer_whole
+from vtscore.cli import progress as cli_progress
+from vtscore.cli.sources import _load_importer_chunked, _load_importer_whole
 from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 
 

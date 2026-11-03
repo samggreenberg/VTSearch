@@ -602,7 +602,7 @@ class TestIntegrationHooks:
     def test_context_resolver_hooks_are_importable_and_installable(self, monkeypatch):
         from contextvars import ContextVar
 
-        import vtscore.state.core as state_core
+        import vtscore.state.resolution as resolution
         from vtscore.state import (
             DatasetContext,
             get_context,
@@ -612,8 +612,8 @@ class TestIntegrationHooks:
             register_detector_context_resolver,
         )
 
-        monkeypatch.setattr(state_core, "_dataset_context_resolver", state_core._default_context_resolver)
-        monkeypatch.setattr(state_core, "_detector_context_resolver", state_core._default_context_resolver)
+        monkeypatch.setattr(resolution, "_dataset_context_resolver", resolution._default_context_resolver)
+        monkeypatch.setattr(resolution, "_detector_context_resolver", resolution._default_context_resolver)
 
         current_dataset_id: ContextVar[str | None] = ContextVar("current_dataset_id", default=None)
         current_detector_id: ContextVar[str | None] = ContextVar("current_detector_id", default=None)

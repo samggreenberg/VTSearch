@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-29-floor-candidate-4267.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "best_attempt.csv": {
+     "bytes": 24806,
+     "oid": "ee535c78426d471ae58ad693cbd86e5e203ef2aa"
+    },
+    "provenance.json": {
+     "bytes": 1472,
+     "oid": "ca5a3a0f5d9fc9c22e59108277b2f8d0e68afb7d"
+    },
+    "summary.csv": {
+     "bytes": 300140,
+     "oid": "324f4bbfe1b42982f2406a77ab563d0dfd45ad72"
+    }
+   }
+  }
+ ]
+}

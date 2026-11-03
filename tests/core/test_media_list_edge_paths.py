@@ -1,4 +1,7 @@
-"""Edge-path coverage for ``vtsearch/routes/media/list.py``.
+"""Edge-path coverage for the ``medias`` blueprint's routes.
+
+They live in ``vtsearch/routes/media/``: ``list.py``, ``content.py``,
+``vote.py``, ``pile.py``, and the helpers in ``_serving.py``.
 
 The byte-serving, batch-metadata, vote, and add-to-pile routes carry a long
 tail of branches that the happy-path suites in ``test_medias.py`` /
@@ -22,7 +25,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from vtsearch.routes.media import list as media_list
+from vtsearch.routes.media import _serving, pile
 from vtsearch.state import medias
 from vtscore.media.audio.audio_generator import generate_wav
 
@@ -126,28 +129,28 @@ def _inject_archive_member(tmp_path, payload, member, media_type, filename):
 
 class TestParseRegionBox:
     def test_none_returns_none(self):
-        assert media_list._parse_region_box(None) is None
+        assert _serving._parse_region_box(None) is None
 
     def test_valid_four_tuple(self):
-        assert media_list._parse_region_box([0.1, 0.2, 0.3, 0.4]) == (0.1, 0.2, 0.3, 0.4)
+        assert _serving._parse_region_box([0.1, 0.2, 0.3, 0.4]) == (0.1, 0.2, 0.3, 0.4)
 
     def test_wrong_length_rejected(self):
         with pytest.raises(ValueError, match="4-element"):
-            media_list._parse_region_box([0.1, 0.2, 0.3])
+            _serving._parse_region_box([0.1, 0.2, 0.3])
 
     def test_non_list_rejected(self):
         with pytest.raises(ValueError, match="4-element"):
-            media_list._parse_region_box("0,0,1,1")
+            _serving._parse_region_box("0,0,1,1")
 
     def test_non_numeric_entries_rejected(self):
         # Hits the ``float(v)`` TypeError/ValueError branch that the API's
         # marshmallow schema forecloses (it coerces to floats first).
         with pytest.raises(ValueError, match="must be numbers"):
-            media_list._parse_region_box(["a", "b", "c", "d"])
+            _serving._parse_region_box(["a", "b", "c", "d"])
 
     def test_out_of_range_rejected(self):
         with pytest.raises(ValueError, match=r"\[0, 1\]"):
-            media_list._parse_region_box([0.0, 0.0, 1.5, 0.0])
+            _serving._parse_region_box([0.0, 0.0, 1.5, 0.0])
 
 
 # ---------------------------------------------------------------------------
@@ -785,7 +788,7 @@ class TestAddToPileEdgePaths:
     def test_insert_without_thumbnail(self, client, monkeypatch):
         # When the thumbnail generator yields nothing, the media is still
         # inserted -- just without thumbnail_bytes (the thumb-None branch).
-        monkeypatch.setattr(media_list, "_make_pile_thumbnail", lambda *_a, **_k: None)
+        monkeypatch.setattr(pile, "_make_pile_thumbnail", lambda *_a, **_k: None)
         wav = generate_wav(4324, 0.2)
         resp = client.post(
             "/api/medias/add-to-pile",
@@ -806,7 +809,7 @@ class TestAddToPileEdgePaths:
 
 class TestMakePileThumbnail:
     def test_image_branch(self):
-        thumb = media_list._make_pile_thumbnail("image", _png_bytes())
+        thumb = pile._make_pile_thumbnail("image", _png_bytes())
         # make_image_thumbnail re-encodes to JPEG; assert a decodable image.
         assert isinstance(thumb, bytes) and thumb
         with Image.open(io.BytesIO(thumb)) as img:
@@ -815,7 +818,7 @@ class TestMakePileThumbnail:
     def test_video_branch_returns_none_for_garbage(self):
         # No decodable frame -> generate_video_thumbnail yields None; the point
         # is that the video dispatch arm executes.
-        assert media_list._make_pile_thumbnail("video", b"not-a-video" * 8) is None
+        assert pile._make_pile_thumbnail("video", b"not-a-video" * 8) is None
 
     def test_unknown_type_returns_none(self):
-        assert media_list._make_pile_thumbnail("mystery_type", b"data") is None
+        assert pile._make_pile_thumbnail("mystery_type", b"data") is None

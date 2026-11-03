@@ -256,7 +256,7 @@ def served_quota(model: object, labelset: "LabelSet | None") -> dict[str, Any]:
 def quota_from_groups(groups: Iterable[tuple[str, Any]]) -> LabelQuota:
     """The quota of the labels a training set actually holds, from its per-row bag ids.
 
-    *groups* is :func:`~vtscore.detectors.labelset_training.build_xy_from_labelset`'s
+    *groups* is :func:`~vtscore.detectors.labelset_matrix.build_xy_from_labelset`'s
     ``("g" | "b", element id)`` per row.  A Bad that floods its patch rows is
     one bag of many rows, so the count is of distinct bags: labels, not rows.
     """

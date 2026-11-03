@@ -187,8 +187,8 @@ link_prepare() {
 # FAIL for a reason unrelated to the run.  Activate the venv first.
 activate_venv() {
   # shellcheck disable=SC1091
-  source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-    echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+  source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+    echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
   }
 }
 
@@ -240,7 +240,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=incl3196-prep --mem=24G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     echo "both arms enumerate from $PREP/prepare_info.json"
@@ -284,7 +284,7 @@ PYLIST
     S=$(sbatch --parsable --job-name=incl3196-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size (cell $IDX)"
     echo "size job: $S (cell $IDX)  ->  $BASE/sizing/logs/size-$S.out"
     ;;
@@ -327,7 +327,7 @@ PYLIST
     A=$(sbatch --parsable "${DEP[@]}" --job-name=incl3196-analyze --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$BASE/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_incl_3196.py --svm $BASE/svm/results --linear $BASE/linear/results --out $BASE/analysis && python figures_incl_3196.py --analysis $BASE/analysis")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_incl_3196.py --svm $BASE/svm/results --linear $BASE/linear/results --out $BASE/analysis && python figures_incl_3196.py --analysis $BASE/analysis")
     require_jobid "$A" "the cross-head analyze step"
     echo "cross-head analyze: $A  ->  $BASE/analysis"
     ;;

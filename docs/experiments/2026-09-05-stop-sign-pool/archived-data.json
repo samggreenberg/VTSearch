@@ -1,0 +1,43 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-05-stop-sign-pool.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/contam-dropbike.json": {
+     "bytes": 7636,
+     "oid": "58e7c69855fd9c529492dd0ab920fccf03e5f47d"
+    },
+    "measurements/contam-family.json": {
+     "bytes": 10107,
+     "oid": "092c6df6f1bd44d3b51bc331f02b236880a0391e"
+    },
+    "measurements/contam-sign.json": {
+     "bytes": 7077,
+     "oid": "9551706b65f9d8a316113222fb363dc3fcfd6b7a"
+    },
+    "measurements/hard-bicycle.json": {
+     "bytes": 940,
+     "oid": "c9d2a810ce3c316d669a1006a59598ff4965f46b"
+    },
+    "measurements/hard-stopsign.json": {
+     "bytes": 889,
+     "oid": "361d37acfcfaaf4cbd2a71c70b80016aeff19c82"
+    },
+    "measurements/prop-family.json": {
+     "bytes": 2924,
+     "oid": "113112a0c9e17c7cbe3ab7cb926c09b39412fbdc"
+    },
+    "measurements/prop-sign.json": {
+     "bytes": 54,
+     "oid": "c2e5a8bc2ede466115be2662711cc4513f399443"
+    },
+    "measurements/supply.json": {
+     "bytes": 1466,
+     "oid": "89ade8fb0fc63eacae00d9df7dca258f31197c91"
+    }
+   }
+  }
+ ]
+}

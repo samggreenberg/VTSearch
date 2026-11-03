@@ -20,32 +20,41 @@ import { join } from 'node:path';
 
 /** Any chromium executable under PLAYWRIGHT_BROWSERS_PATH, newest revision first. */
 function discoverChromium() {
-  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
   if (!root || !existsSync(root)) return null;
-  // Prefer full chromium over the headless shell: the shell cannot do a headed
-  // run, and some UI surfaces (popups, downloads) behave closer to a user's
-  // browser in the full build.
+  // Prefer the headless shell over full chromium, as Playwright's own headless
+  // launch does. The full build takes fontconfig's hinting whatever
+  // `--font-render-hinting=none` says, so on a machine whose fontconfig hints
+  // (the GRID: `hintstyle` slight) it drifted on 142 of 162 shots where the
+  // shell of the same build matched the baselines (#5391). The shell cannot do
+  // a headed run, which the harness never asks for. The revision still comes
+  // first: an older shell does not beat a newer build.
+  const revision = (n) => Number(n.match(/-(\d+)$/)?.[1] ?? 0);
+  const shell = (n) => (n.includes('headless_shell') ? 0 : 1);
   const candidates = readdirSync(root)
     .filter((d) => d.startsWith('chromium'))
-    .sort((a, b) => {
-      const shell = (n) => (n.includes('headless_shell') ? 1 : 0);
-      if (shell(a) !== shell(b)) return shell(a) - shell(b);
-      return b.localeCompare(a, undefined, { numeric: true });
-    })
+    .sort((a, b) => revision(b) - revision(a) || shell(a) - shell(b))
     // Older Playwright builds unpack to `chrome-linux/`; current ones to
     // `chrome-linux64/` (and the shell to its own `chrome-headless-shell-linux64/`).
     .flatMap((d) => [
-      join(root, d, 'chrome-linux', 'chrome'),
       join(root, d, 'chrome-linux', 'headless_shell'),
-      join(root, d, 'chrome-linux64', 'chrome'),
       join(root, d, 'chrome-headless-shell-linux64', 'chrome-headless-shell'),
+      join(root, d, 'chrome-linux', 'chrome'),
+      join(root, d, 'chrome-linux64', 'chrome'),
     ]);
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-/** Launch chromium, falling back to a discovered build if the pinned one is absent. */
+/**
+ * Launch chromium: `CHROMIUM_PATH` when set, else the pinned build, else a
+ * discovered one. The override wins even where the pinned build is installed,
+ * so a machine that has it can still draw in the container's build (#5391).
+ */
 export async function launchChromium(options = {}) {
+  if (process.env.CHROMIUM_PATH) {
+    console.log(`[launch] CHROMIUM_PATH: using ${process.env.CHROMIUM_PATH}`);
+    return await chromium.launch({ ...options, executablePath: process.env.CHROMIUM_PATH });
+  }
   try {
     return await chromium.launch(options);
   } catch (err) {

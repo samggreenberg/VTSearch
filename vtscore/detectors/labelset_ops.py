@@ -12,7 +12,13 @@ VTSearch has two unrelated families that both say "labels":
   :mod:`~vtscore.detectors.labelset_elements`,
   :mod:`~vtscore.detectors.labelset_training`,
   :mod:`~vtscore.detectors.labelset_rename`) plus the
-  :mod:`vtscore.datasets.labelset` data model.
+  :mod:`vtscore.datasets.labelset` data model.  ``labelset_training`` keeps
+  its helpers in four modules of its own
+  (:mod:`~vtscore.detectors.labelset_embeddings`,
+  :mod:`~vtscore.detectors.labelset_matrix`,
+  :mod:`~vtscore.detectors.labelset_structural`,
+  :mod:`~vtscore.detectors.labelset_heads`) and re-exports their public
+  names, so the imports below reach them through it.
 * **Labels, the import/export plugin family** - the ``labels`` plugin
   package (:mod:`vtscore.labels`, served by ``vtsearch/routes/labels/``)
   that reads and writes label files in external formats.  That is a

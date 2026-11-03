@@ -1,8 +1,13 @@
 """Schemas for the media-handling routes (list / server / embed).
 
-Listing / per-media routes (``vtsearch/routes/media/list.py``):
+Listing / per-media routes (``vtsearch/routes/media/list.py``, ``content.py``,
+``vote.py``, ``pile.py``):
 
 * ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
+* ``GET  /api/medias/picker`` -> :class:`MediaPickerQuerySchema` ->
+                                 :class:`MediaPickerListingSchema`
+* ``POST /api/medias/similarity-order`` -> :class:`MediaSimilarityOrderRequestSchema` ->
+                                           :class:`MediaSimilarityOrderSchema`
 * ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
                                 :class:`MediaBatchResponseSchema`
 * ``POST /api/medias/<id>/vote`` -> :class:`MediaVoteRequestSchema` ->
@@ -51,7 +56,7 @@ from marshmallow import Schema, fields, validate
 
 from vtscore.datasets import vote_provenance
 
-from vtsearch.schemas.datasets import ImporterPickerTabSchema
+from vtsearch.schemas.datasets.listings import ImporterPickerTabSchema
 from vtsearch.schemas.sorting import _WINDOW_META_FIELDS
 
 
@@ -80,7 +85,7 @@ class MediaVariantQuerySchema(Schema):
     """Query shared by every per-media payload route.
 
     ``variant=original`` streams the pre-clean payload of an item a
-    :class:`~vtscore.media.cleaner.MediaCleaner` rewrote at load time (see
+    :class:`~vtscore.media.clipping.cleaner.MediaCleaner` rewrote at load time (see
     ``docs/plans/media-cleaners.md``); the default streams the canonical
     (cleaned) payload.  An item with no snapshot ignores the parameter, so a
     stale link keeps working.
@@ -135,6 +140,93 @@ class MediaIdsListResponseSchema(Schema):
         # The list shape is signalled by ``many=True`` at the decorator
         # call site (`response(200, MediaIdsListResponseSchema(many=True))`).
         pass
+
+
+class MediaPickerQuerySchema(Schema):
+    """Query for ``GET /api/medias/picker``."""
+
+    q = fields.String(
+        load_default="",
+        metadata={
+            "description": (
+                "Keep only items whose name holds every whitespace-separated word, ignoring case. "
+                "A face's name starts with the photo it was cropped from, so a photo's name finds its faces."
+            )
+        },
+    )
+
+    class Meta:
+        # The ``dataset_id`` query param a browser-native request may carry.
+        unknown = "exclude"
+
+
+class MediaPickerListingSchema(Schema):
+    """Response for ``GET /api/medias/picker``: the ids New Detector's example picker lists."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "The matching items' ids, in ``order``."},
+    )
+    total = fields.Integer(
+        required=True,
+        metadata={"description": "How many items the dataset holds, matching or not."},
+    )
+    order = fields.String(
+        required=True,
+        validate=validate.OneOf(["similarity", "dataset"]),
+        metadata={
+            "description": (
+                "``similarity``: look-alikes side by side, by a 1-D UMAP of the embeddings (Face datasets). "
+                "``dataset``: the order the items were imported in."
+            )
+        },
+    )
+
+
+class MediaSimilarityOrderRequestSchema(Schema):
+    """Body for ``POST /api/medias/similarity-order``."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "The items to put in similarity order; ids the dataset lacks are dropped."},
+    )
+
+
+class MediaSimilarityOrderSchema(Schema):
+    """Response for ``POST /api/medias/similarity-order``: the ids in order, or how far the fit has got."""
+
+    status = fields.String(
+        required=True,
+        validate=validate.OneOf(["ready", "building", "error"]),
+        metadata={
+            "description": (
+                "``ready``: ``ids`` holds the asked ids in order. ``building``: the dataset's order is "
+                "being fit (with its Browse layout, when it has none); ask again. ``error``: that fit failed."
+            )
+        },
+    )
+    ids = fields.List(
+        fields.Integer(),
+        load_default=None,
+        metadata={"description": "When ``ready``: the asked ids, look-alikes side by side (a 1-D UMAP)."},
+    )
+    method = fields.String(
+        load_default=None,
+        metadata={"description": "When ``ready``: how the order was fit (``umap``, ``pca`` or ``trivial``)."},
+    )
+    # Fit progress (when status == "building"), as GET /api/projection/meta reports a build's.
+    job_id = fields.String(load_default=None)
+    current = fields.Integer(load_default=None)
+    total = fields.Integer(load_default=None)
+    message = fields.String(load_default=None)
+    step = fields.Integer(load_default=None)
+    total_steps = fields.Integer(load_default=None)
+    overall = fields.Float(load_default=None)
+    overall_step_end = fields.Float(load_default=None)
+    eta_seconds = fields.Float(load_default=None)
+    error = fields.String(load_default=None)
 
 
 class MediaBatchRequestSchema(Schema):
@@ -530,10 +622,15 @@ class ServerMediaUploadResponseSchema(Schema):
     ``filename`` is the server-generated UUID name (the persistence
     key); ``original_name`` is the user's original file name, kept for
     display.
+
+    ``face_hard_view`` comes only with a face: true when its Face Quality says
+    it is a hard view (turned, covered, small) that a search may miss the
+    person from (#5372), null when there is no verdict.
     """
 
     filename = fields.String(required=True)
     original_name = fields.String(required=True)
+    face_hard_view = fields.Boolean(allow_none=True)
 
 
 class ExampleSortServerRequestSchema(Schema):

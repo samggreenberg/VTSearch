@@ -224,7 +224,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=acq3547-prep --mem=48G --cpus-per-task=2 \
       --time=3:00:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     ;;
@@ -243,7 +243,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=acq3547-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time=6:00:00 --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX, arm $ARM)  ->  $BASE/sizing/logs/size-$S.out"
     echo "read it with: sacct -j $S --format=JobID,JobName%18,MaxRSS,Elapsed,State"
@@ -259,8 +259,8 @@ case "$MODE" in
     # has no venv, and the system python is old enough that `X | None` raises at
     # import -- so those checks come back FAIL for a reason unrelated to the run.
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
 
     SEEDSPEC="${2:-16}"
@@ -330,7 +330,7 @@ case "$MODE" in
         --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" --time="$CALIB_TIME" \
         --partition="$CALIB_PARTITION" --export=ALL \
         --output="$CALIB_EXP/logs/cells-%A_%a.out" \
-        --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+        --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
       require_jobid "$J" "arm $ARM's cells array"
       echo "--- $JOB_NAME (k=$OFF) job=$J -> $CALIB_EXP"
       echo "$J" > "$CALIB_EXP/logs/.cells_jobid"
@@ -351,7 +351,7 @@ case "$MODE" in
     A=$(sbatch --parsable --dependency="afterany:$DEPSTR" --job-name=acq3547-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves bin --out $BASE/analysis")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves bin --out $BASE/analysis")
     require_jobid "$A" "the cross-arm analyze step"
 
     echo

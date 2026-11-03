@@ -48,7 +48,7 @@ def main(argv: "list[str] | None" = None) -> int:
         gmm_fit_array,
         scored_ordering,
     )
-    from vtscore.utils.scores import scored_only
+    from vtscore.training.thresholds.knobs import scored_only
 
     z = np.load(Path(args.corpus) / f"{args.cell}.npz")
     print(G25._meta(z))

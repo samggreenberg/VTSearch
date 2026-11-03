@@ -63,7 +63,7 @@ def parse_fold_count_schedule(spec: str | None, base: int) -> "Callable[[int], i
     a run that does not set it resolves to *base* at every step, which is
     exactly what the constant did before.  If the schedule ever ships, the
     right shape is a ``production_fold_count_for(n_votes)`` beside
-    ``production_split_for``, with ``scripts/check-eval-app-sync.py`` gaining
+    ``production_split_for``, with ``scripts/gates/check-eval-app-sync.py`` gaining
     the mirror - the same discipline #3287's split fraction went through.
 
     Returns ``None`` for an empty spec, so the caller's fast path is the

@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DuplicatesModalComponent } from '../duplicates-modal/duplicates-modal.component';
+import { DroppedItemsModalComponent } from '../dropped-items-modal/dropped-items-modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import type { LoadingTask } from '../../../models/api.models';
@@ -16,7 +17,7 @@ import { originParamRows, type OriginParamRow } from '../../../utils/origin-para
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-stats-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, DuplicatesModalComponent],
+  imports: [CommonModule, ModalComponent, DuplicatesModalComponent, DroppedItemsModalComponent],
   templateUrl: './dataset-stats-modal.component.html',
   styleUrl: './dataset-stats-modal.component.scss',
 })
@@ -48,6 +49,9 @@ export class DatasetStatsModalComponent implements OnInit {
 
   /** Child Duplicates modal (issue #2697), opened from the Duplicate-groups row. */
   readonly showDuplicates = signal(false);
+
+  /** Child Dropped-items modal (issue #3798), opened from the Dropped-items row. */
+  readonly showDropped = signal(false);
 
   /** A coverage-atlas build is on (#4995): from the Build click, or stats
    *  that report one running, until a re-read of the stats says it ended.

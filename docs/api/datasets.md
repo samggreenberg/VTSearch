@@ -657,6 +657,10 @@ listed. `bound_embedders` names every embedder the dataset binds and
 Datasets dialog checks for conflicts; `clipper` is the clipper's display name
 (`"-"` for a media type's default clipper).
 
+`num_dropped` counts the items the dataset lost because they had no vector
+(see [Dataset statistics](#dataset-statistics), which names them); the
+Dashboard flags a dataset whose count is above zero.
+
 `import_group` and `output_category` link the datasets of one
 [multi-dataset import](#loading-datasets): every dataset the run produced
 carries the same `import_group` id and the `category` of the output it stands
@@ -676,6 +680,15 @@ way answers with that load's `task_id`.
 
 403 if access is denied; 404 if the dataset or its saved pickle is missing;
 410 if it has expired (it is unregistered on the spot).
+
+A dataset saved with an item missing a vector most of its items carry (one of
+its embedders could not read the item, but another, or the importer, gave it a
+vector) is repaired as it loads: the item is removed, the dataset's file is
+rewritten without it so the repair happens once, the item is added to the
+dataset's [dropped list](#dataset-statistics), and a warning notification names
+it. Such an item made every request for the missing embedder's space fail
+(`has no embedding for embedder`); imports no longer save one. Nothing is
+removed when the items to remove would be half the dataset or more.
 
 ### Run AutoFind on a registered dataset
 
@@ -700,7 +713,12 @@ skipped as for the AutoFind list. The task reports on the
 dataset's row, and carries an `autofind` block: `{run_id, owner, trigger,
 dataset_id, dataset_name}` (`trigger` is `"manual"` without `detector_ids` and
 `"find"` with them), plus `detectors_run`, `total_hits`,
-`missing_detectors` and `auto_export` once it finishes. The results go to the
+`missing_detectors`, `auto_export` and `domain_shifts` once it finishes.
+`domain_shifts` lists the detectors whose
+[training-domain check](find.md#training-domain-overlap) reads *likely domain
+shift* on this dataset, each as `{detector_name, reference_dataset_name,
+frac_atypical, message}` (`message` being the warning's line, as Tune words
+it), for the run's notice (#5501). The results go to the
 caller's AutoFind exporter when one is set, and are served by
 [`GET /api/autofind/runs/{run_id}`](find.md#autofind-results). Cancel with
 `POST /api/dataset/cancel/{task_id}`.
@@ -770,6 +788,16 @@ parenthesis is what tells a sentinel from a real extension). When the stored
 histogram is uninformative — every item unknown — and the dataset happens to be
 loaded, the endpoint recounts it from the in-memory medias and writes the repair
 back to the registry.
+
+`num_dropped` and `dropped_groups` are the items the dataset lost because they
+had no vector: the ones its import could not embed (an item any of the import's
+embedders could not read is dropped, even when another gave it a vector), and
+any a load later [repaired away](#load-registered-dataset). `dropped_groups` is
+`[{"reason", "count", "items"}]`, commonest reason first; `items` are the
+items' names (file name, plus where in the file for a clip). The names kept are
+capped across all groups, so a group's `items` can be shorter than its `count`,
+which is exact. Both are `0` / `[]` for a dataset that dropped nothing, or that
+was imported before they were recorded.
 
 `coverage_atlas` is `null` when the dataset is not loaded (the atlas lives only
 in memory), else `{"built", "building", "auto_build_threshold"}`: whether the
@@ -881,7 +909,9 @@ image/video/document, hexagons otherwise) is fixed by the media type and never
 sent by the client; `meta` reports it as `bin_shape`. Every read endpoint takes
 `?subset=true` to address the ephemeral subset layout instead of the
 full-dataset one. Nothing here persists vectors: the layout is derived from the
-dataset's own embeddings (see `vtscore.projection.service`).
+dataset's own embeddings (see `vtscore.projection.service`). A full-dataset fit
+also fits the dataset's 1-D similarity order once the map is ready, the order
+[`POST /api/medias/similarity-order`](medias.md#similarity-order) sorts by.
 
 | Method | Path | Purpose |
 |--------|------|---------|

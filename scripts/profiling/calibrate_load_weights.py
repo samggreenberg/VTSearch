@@ -160,10 +160,8 @@ def _run_cells_in_process(args: argparse.Namespace, cells: list[tuple[str, str]]
     from vtscore.config import EMBEDDINGS_DIR, resolve_device  # noqa: PLC0415
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
-    from vtscore.datasets.load_pipeline import (  # noqa: PLC0415
-        _run_importer_in_background,
-        loading_tasks,
-    )
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+    from vtscore.datasets.load_pipeline import _run_importer_in_background  # noqa: PLC0415
 
     device = resolve_device()
     _eprint(f"[calib] device={device} data_dir={os.environ['VTSEARCH_DATA_DIR']} out={args.out}")

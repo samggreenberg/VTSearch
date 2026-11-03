@@ -100,7 +100,7 @@ seeds 0–1 and read on seeds 2–4** (`held_out.csv`).
 
 ## Why a trend rule cannot work
 
-![Each reading's mean over clicks beside the withheld F-beta it estimates](figures/signals.png)
+![Each reading's mean over clicks beside the withheld F-beta it estimates](figures/signals.webp)
 
 *The mean over the sessions that have a class model at that click (from about click 30). Each preset is
 scored at its own beta.*
@@ -122,7 +122,7 @@ correlates 0.61–0.80 with the withheld F-beta, with a bias of −0.13 to +0.05
 
 ## The rules, priced
 
-![Each rule's two edges against its mean leave click, per preset](figures/edges.png)
+![Each rule's two edges against its mean leave click, per preset](figures/edges.webp)
 
 *One point per rule. Top: over its own stops dealt at random. Bottom: over a stop at a fixed click. The dotted
 line is the delay placebo. Grey points read `find_efbeta`, which the app cannot.*
@@ -216,7 +216,7 @@ picks as well as what the app says: the atlas walk ends at the stop, and the che
 - **The reader:** [`stop_ab_4878.py`](../../../scripts/experiments/state_of_app/stop_ab_4878.py). Tables in
   [`ab/ab.csv`](ab/ab.csv) and [`ab/over_clicks.csv`](ab/over_clicks.csv).
 
-![Each arm's withheld F-beta minus today's app, session for session, over clicks](ab/figures/vs_control.png)
+![Each arm's withheld F-beta minus today's app, session for session, over clicks](ab/figures/vs_control.webp)
 
 *The mean paired difference from today's app at each click. Dotted lines are each arm's mean stop click; the
 black one is today's Done. The arms differ only by noise: no stop rule changes what a session reaches.*

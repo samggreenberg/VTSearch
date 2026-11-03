@@ -20,6 +20,12 @@ throwaway origin + clone + worktree:
 * **data dir** -- the suite runs on a fresh ``VTSEARCH_DATA_DIR`` of its own,
   never the inherited one (the live app's, on the GRID: #4706), and the job
   removes it when it ends.
+* **old layout** -- a ref cut before #5407 keeps ``gridenv.sh`` at the repo
+  root rather than in ``scripts/grid/``, and the suite still sources it.
+* **dev's copy runs** -- a submitted copy that is not byte-for-byte
+  ``origin/dev``'s (a stale shared checkout, or a branch's own) runs dev's
+  instead, once, and leaves no fetched copy behind (#5484); an identical copy
+  runs as submitted.
 
 ``run-tests.sh`` and ``gridenv.sh`` are stubs here: what is under test is the
 launcher's ref handling, not the suite it launches.
@@ -77,7 +83,8 @@ def grid(tmp_path: Path) -> dict:
     _git(tmp_path, "clone", "-q", str(origin), str(seed))
     _git(seed, "checkout", "-q", "-b", "dev")
     # The stubs are committed, so every checkout the script makes still has them.
-    (seed / "gridenv.sh").write_text(
+    (seed / "scripts" / "grid").mkdir(parents=True)
+    (seed / "scripts" / "grid" / "gridenv.sh").write_text(
         'mkdir -p "$PWD/.bin"; printf "#!/bin/sh\\n" > "$PWD/.bin/ruff"\n'
         'chmod +x "$PWD/.bin/ruff"; export PATH="$PWD/.bin:$PATH"\n'
     )
@@ -103,6 +110,7 @@ def grid(tmp_path: Path) -> dict:
 
 def _run(wt: Path, ref: str, **extra_env: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "SUITE_HF_HOME": str(wt.parent / "hf"), **extra_env}
+    env.pop("SUITE_SBATCH_FROM_DEV", None)  # set when this suite itself runs under the exec'd copy
     return subprocess.run([BASH, str(SCRIPT), str(wt), ref], env=env, capture_output=True, text=True, timeout=120)  # noqa: S603  # fixed argv, no shell
 
 
@@ -201,6 +209,55 @@ def test_suite_gets_a_data_dir_of_its_own(grid: dict, tmp_path: Path) -> None:
     assert f"=== data {used} (inherited VTSEARCH_DATA_DIR: {live}, not used)" in r.stdout
     assert not any(live.iterdir()), "the suite wrote into the inherited data dir"
     assert not used.exists(), "the job's data dir outlived the job"
+    assert _restored(grid)
+
+
+def test_a_ref_from_before_the_move_still_finds_gridenv(grid: dict) -> None:
+    """#5407 moved gridenv.sh into scripts/grid/; a branch cut before that has it at the root."""
+    seed = grid["seed"]
+    _git(seed, "checkout", "-q", "-b", "old-layout")
+    _git(seed, "mv", "scripts/grid/gridenv.sh", "gridenv.sh")
+    _git(seed, "commit", "-q", "-m", "old layout")
+    old = _git(seed, "rev-parse", "HEAD")
+    _git(seed, "push", "-q", "origin", "HEAD:refs/heads/old-layout")
+    r = _run(grid["wt"], "old-layout")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"SUITE RAN at {old}" in r.stdout
+    assert _restored(grid)
+
+
+def _put_on_dev(grid: dict, text: str) -> None:
+    seed = grid["seed"]
+    _git(seed, "checkout", "-q", "dev")
+    (seed / "scripts" / "slurm").mkdir(parents=True, exist_ok=True)
+    (seed / "scripts" / "slurm" / "suite.sbatch").write_text(text)
+    _git(seed, "add", "scripts/slurm/suite.sbatch")
+    _git(seed, "commit", "-q", "-m", "suite.sbatch on dev")
+    _git(seed, "push", "-q", "origin", "dev")
+
+
+def test_submitted_copy_runs_when_it_is_devs(grid: dict) -> None:
+    _put_on_dev(grid, SCRIPT.read_text())
+    r = _run(grid["wt"], BRANCH)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "=== suite.sbatch  origin/dev's copy" in r.stdout
+    assert f"SUITE RAN at {grid['base']}" in r.stdout
+
+
+def test_a_stale_copy_runs_devs_instead(grid: dict, tmp_path: Path) -> None:
+    """#5484: the shared checkout's copy sat 791 commits behind dev and refused every worktree."""
+    marker = 'REF="$2"\n'
+    text = SCRIPT.read_text()
+    assert marker in text
+    _put_on_dev(grid, text.replace(marker, marker + 'echo "DEV COPY RAN"\n', 1))
+    scratch = tmp_path / "job-tmp"
+    scratch.mkdir()
+    r = _run(grid["wt"], BRANCH, TMPDIR=str(scratch))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.count("running origin/dev's") == 1, r.stdout
+    assert "DEV COPY RAN" in r.stdout
+    assert f"SUITE RAN at {grid['base']}" in r.stdout
+    assert not list(scratch.glob("suite.sbatch.dev.*")), "the fetched copy outlived the job"
     assert _restored(grid)
 
 

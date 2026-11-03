@@ -768,7 +768,7 @@ class TestGhCloseLookupFailures:
     A hook runs in front of the user's command. Blocking a close because GitHub
     was slow, or because this laptop has no `gh`, would wedge ordinary work over
     a network blip -- a far worse failure than the stale label that
-    `scripts/reconcile-solved-labels.py` goes on to catch anyway.
+    `scripts/release/reconcile-solved-labels.py` goes on to catch anyway.
     """
 
     CLOSE = "gh issue close 3319 --reason completed"

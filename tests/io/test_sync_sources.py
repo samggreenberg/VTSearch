@@ -25,6 +25,9 @@ import threading
 from contextlib import contextmanager
 
 import pytest
+from vtsearch.settings import schema as settings_schema
+from vtsearch.settings import sync as settings_sync
+from vtsearch.settings import tiers as settings_tiers
 
 
 @contextmanager
@@ -75,10 +78,9 @@ def _force_cold_sync(user_path, username: str = "default") -> None:
     dependency on timestamp granularity: with no marker there is nothing to
     adopt, so the load always fires.
     """
-    from vtsearch import settings
-    from vtsearch import settings_store as settings_store_mod
+    from vtsearch.settings import store as settings_store_mod
 
-    settings._sync_state.pop(username, None)
+    settings_tiers._sync_state.pop(username, None)
     settings_store_mod._sync_marker_path(user_path).unlink(missing_ok=True)
 
 
@@ -489,12 +491,12 @@ class TestSettingsSourceConfig:
         assert settings.get_settings_source_config() is None
 
     def test_settings_source_excluded_from_defaults(self):
-        from vtsearch.settings import _EXCLUDE_FROM_DEFAULTS
+        from vtsearch.settings.schema import _EXCLUDE_FROM_DEFAULTS
 
         assert "settings_source" in _EXCLUDE_FROM_DEFAULTS
 
     def test_settings_source_excluded_from_source_export(self):
-        from vtsearch.settings import _EXCLUDE_FROM_SOURCE_EXPORT
+        from vtsearch.settings.schema import _EXCLUDE_FROM_SOURCE_EXPORT
 
         assert "settings_source" in _EXCLUDE_FROM_SOURCE_EXPORT
 
@@ -523,9 +525,8 @@ class TestDefaultSettingsSourceInheritance:
     # -- resolver precedence --------------------------------------------
 
     def test_no_default_no_user_resolves_none(self, isolated_settings):
-        from vtsearch import settings
 
-        cfg, inherited = settings._store.resolve_settings_source("default")
+        cfg, inherited = settings_tiers._store.resolve_settings_source("default")
         assert cfg is None
         assert inherited is False
 
@@ -535,7 +536,7 @@ class TestDefaultSettingsSourceInheritance:
         default_file = tmp_path / "deployment.json"
         settings.set_default_settings_source(self._cfg(default_file))
 
-        cfg, inherited = settings._store.resolve_settings_source("default")
+        cfg, inherited = settings_tiers._store.resolve_settings_source("default")
         assert cfg is not None
         assert cfg["field_values"]["filepath"] == str(default_file)
         assert inherited is True
@@ -546,7 +547,7 @@ class TestDefaultSettingsSourceInheritance:
         settings.set_default_settings_source(self._cfg(tmp_path / "deployment.json"))
         settings.set_settings_source_config(self._cfg(tmp_path / "mine.json"))
 
-        cfg, inherited = settings._store.resolve_settings_source("default")
+        cfg, inherited = settings_tiers._store.resolve_settings_source("default")
         assert cfg is not None
         assert cfg["field_values"]["filepath"] == str(tmp_path / "mine.json")
         assert inherited is False
@@ -557,7 +558,7 @@ class TestDefaultSettingsSourceInheritance:
         settings.set_default_settings_source(self._cfg(tmp_path / "deployment.json"))
         settings.set_settings_source_config({"source_name": "none"})
 
-        cfg, inherited = settings._store.resolve_settings_source("default")
+        cfg, inherited = settings_tiers._store.resolve_settings_source("default")
         assert cfg is None
         assert inherited is False
 
@@ -568,7 +569,7 @@ class TestDefaultSettingsSourceInheritance:
         # "no deployment-wide source", same as ``None``.
         settings.set_default_settings_source({"source_name": "none"})
 
-        cfg, inherited = settings._store.resolve_settings_source("default")
+        cfg, inherited = settings_tiers._store.resolve_settings_source("default")
         assert cfg is None
         assert inherited is False
 
@@ -627,7 +628,7 @@ class TestDefaultSettingsSourceInheritance:
         default_file.write_text(json.dumps({"volume": 0.80}))
         new_mtime = default_file.stat().st_mtime_ns + 10_000_000_000
         os.utime(default_file, ns=(new_mtime, new_mtime))
-        settings._sync_state["default"].last_check_monotonic -= 5.0
+        settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
 
         # Next read picks up the new value via the inherited default.
         assert settings.get_volume() == 0.80
@@ -814,21 +815,20 @@ class TestApplySettings:
     def test_apply_settings_updates_volume(self, isolated_settings):
         from vtsearch import settings
 
-        settings._apply_settings({"volume": 0.42})
+        settings_sync._apply_settings({"volume": 0.42})
         assert settings.get_volume() == 0.42
 
     def test_apply_settings_skips_unknown_keys(self, isolated_settings):
-        from vtsearch import settings
 
         # Should not raise; unknown keys are silently ignored
-        settings._apply_settings({"nonexistent_key_xyz": "hello"})
+        settings_sync._apply_settings({"nonexistent_key_xyz": "hello"})
 
     def test_apply_settings_skips_invalid_values(self, isolated_settings):
         from vtsearch import settings
 
         orig_theme = settings.get_theme()
         # "neon" is not a valid theme; should be silently skipped
-        settings._apply_settings({"theme": "neon"})
+        settings_sync._apply_settings({"theme": "neon"})
         assert settings.get_theme() == orig_theme
 
     def test_apply_settings_ignores_infra_setters(self, isolated_settings, tmp_path):
@@ -842,9 +842,9 @@ class TestApplySettings:
         """
         from vtsearch import settings
 
-        orig_path = settings.SETTINGS_PATH
-        orig_override = settings._USER_DATA_DIR_OVERRIDE
-        settings._apply_settings(
+        orig_path = settings_tiers.SETTINGS_PATH
+        orig_override = settings_tiers._USER_DATA_DIR_OVERRIDE
+        settings_sync._apply_settings(
             {
                 "settings_path": str(tmp_path / "evil-settings.json"),
                 "user_data_dir_override": str(tmp_path / "evil-users"),
@@ -854,22 +854,20 @@ class TestApplySettings:
                 },
             }
         )
-        assert settings.SETTINGS_PATH == orig_path
-        assert settings._USER_DATA_DIR_OVERRIDE == orig_override
+        assert settings_tiers.SETTINGS_PATH == orig_path
+        assert settings_tiers._USER_DATA_DIR_OVERRIDE == orig_override
         assert settings.get_settings_source_config() is None
 
     def test_setter_map_contains_only_user_tier_keys(self):
         """Every importable key must be a per-user schema key (#4965)."""
-        from vtsearch import settings
 
-        setter_keys = set(settings._get_setter_map())
-        assert setter_keys == settings._USER_KEYS, sorted(setter_keys ^ settings._USER_KEYS)
-        assert not setter_keys & settings._SERVER_KEYS
+        setter_keys = set(settings_sync._get_setter_map())
+        assert setter_keys == settings_schema._USER_KEYS, sorted(setter_keys ^ settings_schema._USER_KEYS)
+        assert not setter_keys & settings_schema._SERVER_KEYS
 
     def test_apply_settings_reports_what_it_wrote(self, isolated_settings):
-        from vtsearch import settings
 
-        applied = settings._apply_settings({"volume": 0.5, "theme": "neon", "detectors_dir": "/x", "nope": 1})
+        applied = settings_sync._apply_settings({"volume": 0.5, "theme": "neon", "detectors_dir": "/x", "nope": 1})
         assert applied.keys == ("volume",)
 
 
@@ -961,7 +959,7 @@ class TestSyncFromSourceFreshness:
         new_mtime = source_file.stat().st_mtime_ns + 10_000_000_000
         os.utime(source_file, ns=(new_mtime, new_mtime))
         # Push past the 1s freshness window so the slow path probes.
-        settings._sync_state["default"].last_check_monotonic -= 5.0
+        settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
         assert settings.get_volume() == 0.40
 
         # External writer overwrites the source.
@@ -969,7 +967,7 @@ class TestSyncFromSourceFreshness:
         new_mtime += 10_000_000_000
         os.utime(source_file, ns=(new_mtime, new_mtime))
         # Force the freshness window open again.
-        settings._sync_state["default"].last_check_monotonic -= 5.0
+        settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
 
         # Next read picks up the new source value automatically.
         assert settings.get_volume() == 0.80
@@ -1010,7 +1008,7 @@ class TestSyncFromSourceFreshness:
         _force_cold_sync(isolated_settings._user)
         # First read: load() raises, last_sync_succeeded stays False.
         settings.get_volume()
-        state = settings._sync_state.get("default")
+        state = settings_tiers._sync_state.get("default")
         assert state is not None
         assert state.last_sync_succeeded is False
         # Push past the retry rate-limit window.
@@ -1106,7 +1104,7 @@ class TestSyncFromSourceFreshness:
         import os
 
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
         from vtsearch.settings_io.sources import get_settings_source
 
         source_file = tmp_path / "remote.json"
@@ -1173,9 +1171,9 @@ class TestSyncFromSourceFreshness:
         # window: local writer flips ``volume``, an external process
         # writes a different value to the source file, and an auto
         # re-sync fires before ``_sync_to_source`` catches up.
-        settings._sync_state["default"].dirty_keys.add("volume")
-        settings._sync_state["default"].last_check_monotonic -= 5.0
-        settings._sync_state["default"].last_version = None  # force probe
+        settings_tiers._sync_state["default"].dirty_keys.add("volume")
+        settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
+        settings_tiers._sync_state["default"].last_version = None  # force probe
 
         # Next read: auto re-sync runs, sees ``volume`` is dirty → skips
         # it, applies the other source keys.  Local ``volume`` survives.
@@ -1193,14 +1191,14 @@ class TestSyncFromSourceFreshness:
         }
         settings.set_settings_source_config(config)
         settings.set_volume(0.91)  # local + source = 0.91
-        settings._sync_state["default"].dirty_keys.add("volume")  # simulate unflushed dirty
+        settings_tiers._sync_state["default"].dirty_keys.add("volume")  # simulate unflushed dirty
 
         source_file.write_text(json.dumps({"volume": 0.10}))
 
         # Manual sync explicitly overrides local edits.
         settings.sync_from_settings_source()
         assert settings.get_volume() == 0.10
-        assert not settings._sync_state["default"].dirty_keys
+        assert not settings_tiers._sync_state["default"].dirty_keys
 
     def test_freshness_window_avoids_repeat_probes(self, tmp_path, isolated_settings, monkeypatch):
         """Inside the 1s rate-limit window the slow path doesn't probe.
@@ -1256,7 +1254,7 @@ class TestDirtyKeyWriteOrdering:
         be able to observe "value written, key not yet dirty".
         """
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         seen: list[set[str]] = []
         real_file_lock = settings_store_mod.file_lock
@@ -1269,7 +1267,7 @@ class TestDirtyKeyWriteOrdering:
                 finally:
                     # Still holding the lock: snapshot what a racing syncer
                     # would see the instant before it can acquire the lock.
-                    state = settings._sync_state.get("default")
+                    state = settings_tiers._sync_state.get("default")
                     seen.append(set(state.dirty_keys) if state is not None else set())
 
         monkeypatch.setattr(settings_store_mod, "file_lock", recording_file_lock)
@@ -1288,11 +1286,11 @@ class TestDirtyKeyWriteOrdering:
         from vtsearch import settings
 
         settings.set_volume(0.91)
-        assert "volume" in settings._sync_state["default"].dirty_keys
+        assert "volume" in settings_tiers._sync_state["default"].dirty_keys
 
         # Simulate the tail of an import: the pre-filter already let this key
         # through, and only now does the store see it.
-        with settings._store._importing("default", honor_dirty=True):
+        with settings_tiers._store._importing("default", honor_dirty=True):
             settings.set_volume(0.10)
 
         assert settings.get_volume() == 0.91
@@ -1302,7 +1300,7 @@ class TestDirtyKeyWriteOrdering:
         from vtsearch import settings
 
         settings.set_volume(0.91)
-        with settings._store._importing("default", honor_dirty=True):
+        with settings_tiers._store._importing("default", honor_dirty=True):
             settings.set_theme("highviz")
 
         assert settings.get_theme() == "highviz"
@@ -1312,7 +1310,7 @@ class TestDirtyKeyWriteOrdering:
         from vtsearch import settings
 
         settings.set_volume(0.91)
-        with settings._store._importing("default", honor_dirty=False):
+        with settings_tiers._store._importing("default", honor_dirty=False):
             settings.set_volume(0.10)
 
         assert settings.get_volume() == 0.10
@@ -1331,7 +1329,7 @@ class TestDirtyKeyWriteOrdering:
         release = threading.Event()
 
         def hold_import():
-            with settings._store._importing("default", honor_dirty=True):
+            with settings_tiers._store._importing("default", honor_dirty=True):
                 importing.set()
                 release.wait(timeout=10)
 
@@ -1374,11 +1372,11 @@ class TestDirtyKeyWriteOrdering:
             result = real_load(field_values)
             # Stand-in for a concurrent local write completing mid-load: the
             # key is dirty by the time the imported values get applied.
-            settings._sync_state["default"].dirty_keys.add("volume")
+            settings_tiers._sync_state["default"].dirty_keys.add("volume")
             return result
 
         monkeypatch.setattr(src, "load", load_then_user_write)
-        settings._store._run_sync_from_source("default")
+        settings_tiers._store._run_sync_from_source("default")
 
         assert settings.get_volume() == 0.91
         assert settings.get_theme() == "highviz"
@@ -1406,12 +1404,12 @@ class TestSyncDedupMarker:
         source_file.write_text(json.dumps({"volume": value}))
         new_mtime = source_file.stat().st_mtime_ns + 10_000_000_000
         os.utime(source_file, ns=(new_mtime, new_mtime))
-        settings._sync_state["default"].last_check_monotonic -= 5.0
+        settings_tiers._sync_state["default"].last_check_monotonic -= 5.0
         assert settings.get_volume() == value
 
     def test_fresh_worker_adopts_marker_and_skips_load(self, tmp_path, isolated_settings, monkeypatch):
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
         from vtsearch.settings_io.sources import get_settings_source
 
         source_file = tmp_path / "remote.json"
@@ -1424,8 +1422,8 @@ class TestSyncDedupMarker:
         # Simulate a fresh worker: forget in-memory sync state + user cache so
         # the next read reloads the user file from disk and hits the
         # first-attempt branch.  The source is unchanged since the marker.
-        settings._sync_state.pop("default", None)
-        settings._user_caches.pop("default", None)
+        settings_tiers._sync_state.pop("default", None)
+        settings_tiers._user_caches.pop("default", None)
 
         src = get_settings_source("server_json_file")
         assert src is not None
@@ -1441,7 +1439,7 @@ class TestSyncDedupMarker:
         # Value comes straight from the already-synced user file; no load.
         assert settings.get_volume() == 0.66
         assert loads["n"] == 0
-        state = settings._sync_state["default"]
+        state = settings_tiers._sync_state["default"]
         assert state.last_sync_succeeded is True
         assert state.last_version == marker_version
 
@@ -1461,8 +1459,8 @@ class TestSyncDedupMarker:
         new_mtime = source_file.stat().st_mtime_ns + 20_000_000_000
         os.utime(source_file, ns=(new_mtime, new_mtime))
 
-        settings._sync_state.pop("default", None)
-        settings._user_caches.pop("default", None)
+        settings_tiers._sync_state.pop("default", None)
+        settings_tiers._user_caches.pop("default", None)
 
         src = get_settings_source("server_json_file")
         assert src is not None
@@ -1481,7 +1479,7 @@ class TestSyncDedupMarker:
 
     def test_clearing_source_removes_marker(self, tmp_path, isolated_settings):
         from vtsearch import settings
-        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings import store as settings_store_mod
 
         source_file = tmp_path / "remote.json"
         self._configure_and_pull(settings, tmp_path, source_file, 0.66)

@@ -86,18 +86,18 @@ unmeasured.
 
 ## Results
 
-![The objective over clicks, both embedders, per preset](figures/objective_by_click.png)
+![The objective over clicks, both embedders, per preset](figures/objective_by_click.webp)
 
 *Figure 1. The objective (withheld F-beta at the app's line) over clicks, averaged over the 720 sessions of each
 arm at each preset. Flat to vote 30: the typed query's set is on screen until the 30-vote hold ends (#4736). Each
 arm's click 0 is its own typed query.*
 
-![Every seed](figures/objective_by_seed.png)
+![Every seed](figures/objective_by_seed.webp)
 
 *Figure 2. The same, one line per seed (each the mean of its 144 cells). The five seeds sit within about 0.01 of
 each other, so the gap is not a mean carried by a few runs.*
 
-![By band](figures/by_band.png)
+![By band](figures/by_band.webp)
 
 *Figure 3. SigLIP 2 L minus SigLIP by size band, paired, ±2 SE over classes. Left: the session mean. Right: the
 starved share in points (`@small`, then medium; large never starves).*
@@ -123,7 +123,7 @@ starved share in points (`@small`, then medium; large never starves).*
 - **This SigLIP control starves 20% of `@small` runs.** #4216's 2026-10-13 runs starved 18.7% on the same
   seeds. Dev moved between the two, which is why this grid re-ran SigLIP rather than reuse an older control.
 
-![Images a second](figures/runtime.png)
+![Images a second](figures/runtime.webp)
 
 *Figure 4. Images a second end to end, per embedder, median of the repeats. Hatched: `VTSEARCH_EMBED_PRECISION=
 fp16`. The multiples are of SigLIP's fp32 time on the same device. SigLIP's own fp16 speed-up (1.7× here) is

@@ -17,7 +17,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
-from vtsearch.hooks import state_sync_exempt
+from vtsearch.runtime.request_hooks import state_sync_exempt
 from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
@@ -46,7 +46,7 @@ detector_scoring_bp = Blueprint(
 
 def _detector_type(det_data: dict | None) -> str:
     """The locked embedder type of a detector JSON (legacy-migrated)."""
-    from vtsearch.autofind import detector_type  # noqa: PLC0415
+    from vtsearch.runtime.autofind import detector_type  # noqa: PLC0415
 
     return detector_type(det_data)
 
@@ -54,9 +54,9 @@ def _detector_type(det_data: dict | None) -> str:
 def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     """Whether the active snap binds an embedder of the detector's locked type.
 
-    See :func:`vtsearch.autofind.dataset_supplies_detector_type`.
+    See :func:`vtsearch.runtime.autofind.dataset_supplies_detector_type`.
     """
-    from vtsearch.autofind import dataset_supplies_detector_type  # noqa: PLC0415
+    from vtsearch.runtime.autofind import dataset_supplies_detector_type  # noqa: PLC0415
 
     return dataset_supplies_detector_type(det_data, snap)
 
@@ -552,27 +552,30 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
     file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
     the dataset the detector was trained on as the overlap check infers it
-    (the loaded dataset holding most of its labels), ``""`` when none is.
-    ``None`` with no embedder name to stamp it with or no detector file.
+    (the loaded dataset holding most of its labels), ``""`` when none is, with
+    ``labels_held``, how many of the labels it holds: the training-dataset
+    pointer recorded with the baseline (#5501).  ``None`` with no embedder name
+    to stamp it with or no detector file.
     """
     from vtscore.datasets.registry import get_dataset
     from vtscore.detectors.evidence_baseline import baseline_stamp
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path
     from vtscore.state.core import get_active_context
-    from vtsearch.training_domain import infer_training_reference
+    from vtsearch.domain_overlap import infer_training_reference
 
     active_id = get_active_context().dataset_id
     stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
     entry = get_detector(det_ctx.detector_id) or {}
     if stamp is None or not entry.get("name"):
         return None
-    training_id, _counts = infer_training_reference(labelset, active_id)
+    training_id, counts = infer_training_reference(labelset, active_id)
     return {
         "stamp": stamp,
         "path": _detector_path(entry["name"]),
         "training_id": training_id,
         "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
+        "labels_held": counts.get(training_id, 0) if training_id else 0,
     }
 
 
@@ -635,6 +638,7 @@ def defer_learned_sort_baseline(
                 results=results,
                 threshold=threshold,
                 embedder=embedder,
+                labels_held=home["labels_held"],
             )
         )
     except Exception:  # noqa: BLE001 - see the docstring
@@ -683,7 +687,7 @@ def find_evidence_coverage():
     from vtscore.detectors.evidence_coverage import evidence_coverage_report
     from vtscore.detectors.learned_sort import resolve_active_labelset
     from vtscore.detectors.store import _read_detector
-    from vtscore.detectors.training_domain import labelled_media_ids
+    from vtscore.detectors.training_domain import labelled_media_ids, training_dataset_record
     from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
@@ -735,7 +739,14 @@ def find_evidence_coverage():
             predicted_positive=predicted,
             labelled=labelled_media_ids(labelset, get_active_context()),
         )
-        record_baseline(home["path"], baseline, det_ctx=det_ctx)
+        record_baseline(
+            home["path"],
+            baseline,
+            det_ctx=det_ctx,
+            training_dataset=training_dataset_record(home["training_id"], home["training_name"], home["labels_held"])
+            if home["labels_held"] > 0
+            else None,
+        )
     elif home is not None:
         flush_baseline_draw(det_ctx.detector_id)
         baseline = stored_baseline(_read_detector(home["path"]), home["stamp"])
@@ -766,7 +777,7 @@ def find_training_domain():
     check cannot run, including every refusal of the domain-shift route.
     Pure read; no new state.
     """
-    from vtsearch.training_domain import training_domain_check
+    from vtsearch.domain_overlap import training_domain_check
 
     return training_domain_check()
 
@@ -935,10 +946,10 @@ def auto_detect(body: dict):
 
     The synchronous, scripted sibling of the Dashboard's background AutoFind
     (``POST /api/datasets/registry/<dataset_id>/autofind``); both run through
-    :mod:`vtsearch.autofind`.  This one reports on the shared Find
+    :mod:`vtsearch.runtime.autofind`.  This one reports on the shared Find
     tracker and is cancelled by ``/api/find/cancel``.
     """
-    from vtsearch.autofind import (  # noqa: PLC0415
+    from vtsearch.runtime.autofind import (  # noqa: PLC0415
         AutoFindUnavailable,
         plan_autofind,
         run_autofind_export,
@@ -988,7 +999,7 @@ def get_autofind_run(run_id: str):
     never existed.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autofind import get_autofind_run as _get_run  # noqa: PLC0415
+    from vtsearch.runtime.autofind import get_autofind_run as _get_run  # noqa: PLC0415
 
     record = _get_run(run_id, get_current_user())
     if record is None:
@@ -1018,7 +1029,7 @@ def prep_autofind_run_browse(run_id: str):
     handler reads no request proxy - it resolves the run's dataset by id.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
-    from vtsearch.autofind import prep_run_browse  # noqa: PLC0415
+    from vtsearch.runtime.autofind import prep_run_browse  # noqa: PLC0415
 
     answer = prep_run_browse(run_id, get_current_user())
     if answer is None:

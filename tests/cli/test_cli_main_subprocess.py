@@ -1,6 +1,6 @@
 """End-to-end subprocess smoke test for ``app.py``'s CLI entry point.
 
-The bulk of the ``vtsearch.cli_main`` dispatch surface — argparse build,
+The bulk of the ``vtsearch.cli.main`` dispatch surface — argparse build,
 two-pass parsing, ``_apply_*`` overrides, flag validation, error exits, and
 the autodetect/pipeline/server wiring — is covered in-process (and far
 faster) by ``test_cli_main.py``, which calls ``cli_main.main`` directly with

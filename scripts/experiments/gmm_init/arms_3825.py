@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from vtscore.training.thresholds import gmm as G
+from vtscore.training.thresholds import gmm_em as G
 
 
 @dataclass(frozen=True)
@@ -115,9 +115,10 @@ def _bindings() -> "list[tuple[Any, str]]":
     """Every module attribute that names the anchored loop, right now.
 
     ``_anchored_em`` is resolved as a module global by both of its callers
-    inside :mod:`~vtscore.training.thresholds.gmm`, so patching ``G`` is what
+    inside :mod:`~vtscore.training.thresholds.gmm_em`, so patching ``G`` is what
     does the work; the package re-export and any module that imported the name
-    are patched too, so an arm cannot be defeated by an import style.
+    (:mod:`~vtscore.training.thresholds.text_sort`, the ``gmm`` facade) are
+    patched too, so an arm cannot be defeated by an import style.
     """
     import vtscore.training.thresholds as pkg
 
@@ -136,7 +137,7 @@ def swap_anchored_stop(stop: Stop) -> Iterator[None]:
     """Run the **anchored** refit under *stop* for the duration.
 
     The wrapper substitutes the stopping rule only when the call has anchors.
-    That is what keeps the arm honest: :func:`~vtscore.training.thresholds.gmm.
+    That is what keeps the arm honest: :func:`~vtscore.training.thresholds.gmm_em.
     _plain_em` - the unanchored init every anchored fit runs first - is the same
     loop with both anchor arrays empty, and it must keep the rule *it* ships
     with, or the arm would be measuring two changes at once and attributing both
@@ -214,7 +215,7 @@ def objective_value(fit, x, anchor_scores, anchor_labels, anchored: bool, weight
     tautology: an arm stopped on the free likelihood must still be priced on
     the anchored one, which is the objective its EM was actually climbing.
 
-    Matches :func:`~vtscore.training.thresholds.gmm._anchored_em`'s definition
+    Matches :func:`~vtscore.training.thresholds.gmm_em._anchored_em`'s definition
     exactly - the anchored form adds each clamped point's own component log
     density at multiplicity *weight* and divides by the total mass, so with no
     anchors the two coincide.

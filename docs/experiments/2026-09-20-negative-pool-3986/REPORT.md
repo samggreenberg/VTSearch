@@ -21,7 +21,7 @@ to 61% changes almost nothing a ship decision reads.
 change: "holds none of *C*" caps the class list at 1.5x the needed pool where
 per-class pools give 5–11x.
 
-![The shortcut is undiminished, and already absorbed](figures/shortcut-already-absorbed.png)
+![The shortcut is undiminished, and already absorbed](figures/shortcut-already-absorbed.webp)
 
 ## The premise that needed correcting first
 

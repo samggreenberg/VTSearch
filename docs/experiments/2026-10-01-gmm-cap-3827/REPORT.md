@@ -77,7 +77,7 @@ their lines are read, their cuts are not.
 Medians over 3,992 fits a row, single-threaded, on GRID CPU nodes running the
 array (so absolute times are under load; the ratios are what matter).
 
-![Seconds per fit against the cap](figures/cost_by_cap.png)
+![Seconds per fit against the cap](figures/cost_by_cap.webp)
 
 ## 2. The cap sets how much the votes weigh
 
@@ -112,7 +112,7 @@ same corpus, click 150 (± SE; the share of runs whose count moved):
 | 0.1%, 100k | 90% | −0.076 ± 0.005 (48%) | −0.018 ± 0.003 (15%) | 0 | 0 |
 | 0.1%, 250k | 90% | −0.031 ± 0.003 (38%) | −0.007 ± 0.001 (12%) | 0 | 0.000 (1%) |
 
-![The no-vote line's F1 change against the cap](figures/line_by_cap.png)
+![The no-vote line's F1 change against the cap](figures/line_by_cap.webp)
 
 - **From 25k up, the line does not move** (at most 5% of runs change a count,
   and F1 by ≤ 0.001, at every world, size, floor and click count).
@@ -141,7 +141,7 @@ click 150, with the F1 of that set; the acquisition cut (offset −4) beside it:
 | 5% | bench size (~1k) | 6.1% | 6.1% | 6.1% | **6.1%** (F1 0.49) | 6.1% | 1.4% / 1.4% |
 | 5% | 100k–2M | 14.7% (0.41) | 20.8% (0.35) | 30.0% (0.27) | **35.5%** (0.23) | 37.8–38.7% (0.21) | 5.8% / 10.2% |
 
-![Where the fold-anchored cut sits against the cap](figures/cut_by_cap.png)
+![Where the fold-anchored cut sits against the cap](figures/cut_by_cap.webp)
 
 - **At low prevalence a 10k cap puts the cut on a large corpus exactly where
   the bench-size corpus has it** (24.0% against 24.3%; 20.8% against 21.1%).

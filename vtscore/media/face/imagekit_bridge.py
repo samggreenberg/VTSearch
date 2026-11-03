@@ -64,6 +64,15 @@ EMBEDDER_NAME = "face"
 COMPAT_METADATA_KEY = "Face Compat"
 QUALITY_METADATA_KEY = "Face Quality"
 
+#: The Face Quality below which a face is a *hard view* (turned, covered, small)
+#: and a search started from it alone tends to miss the person (#5372), per
+#: embedding space: a raw embedding's norm means nothing across models, so a
+#: space with no entry gets no verdict.  Read from the FHIBE one-photo sessions
+#: on buffalo_s, at 1024 px and 640 px: a starting face under 14 flags 1.2% of
+#: sessions and 11 of the 12 that fail at every beta.  A session whose best
+#: starting face clears it did not fail, four-photo sessions included.
+HARD_VIEW_QUALITY: dict[str, float] = {"oss-arcface-mbf:1": 14.0}
+
 #: How long a :func:`face_models` answer is reused.  The listing routes ask once
 #: per converter and per demo, so a page load asks dozens of times; a model
 #: dropped in still shows up within a couple of seconds, with no restart.
@@ -281,3 +290,41 @@ def reset_for_tests() -> None:
         _compat = ""
         _provider = ""
         _status = None
+
+
+def is_hard_view(quality: Any, compat: Any) -> Optional[bool]:
+    """Whether a face of this *quality* is a hard view (:data:`HARD_VIEW_QUALITY`).
+
+    ``None`` when there is no verdict: no quality, or a *compat* space with no cut.
+    """
+    cut = HARD_VIEW_QUALITY.get(str(compat or ""))
+    if cut is None or not isinstance(quality, (int, float)) or isinstance(quality, bool):
+        return None
+    return float(quality) < cut
+
+
+def hard_view_of_file(path: Path) -> Optional[bool]:
+    """:func:`is_hard_view` for a face picture on disk, read by the server's provider.
+
+    The face is the one the face embedder would embed (the provider's first
+    detection).  ``None`` when Face is off, nothing is detected, or the provider
+    fails: the verdict is advice, so it never stands in the way of the picture.
+    """
+    if not face_models().available:
+        return None
+    try:
+        from imagekit.util import read_image_tensor  # noqa: PLC0415
+
+        records = get_face_pipeline().process(read_image_tensor(Path(path)), media_id=Path(path).name)
+    except Exception:
+        logger.warning("could not read the Face Quality of %s", path, exc_info=True)
+        return None
+    if not records:
+        return None
+    return is_hard_view(records[0].quality, loaded_compat())
+
+
+def media_hard_view(media: dict) -> Optional[bool]:
+    """:func:`is_hard_view` for a loaded face, from the quality and space its converter stamped on it."""
+    meta = media.get("custom_metadata") or {}
+    return is_hard_view(meta.get(QUALITY_METADATA_KEY), meta.get(COMPAT_METADATA_KEY))

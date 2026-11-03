@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-text-cut-3826.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/by_dataset.csv": {
+     "bytes": 7506,
+     "oid": "b580d93bd83e54c19d26a543ce58adbf72f7d052"
+    },
+    "tables/summary.json": {
+     "bytes": 9029,
+     "oid": "61eb858ae8f1a80f0549f76501fd41a4b9c8214b"
+    }
+   }
+  }
+ ]
+}

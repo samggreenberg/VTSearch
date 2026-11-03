@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-02-multistat-gate-4434.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/cuts.json": {
+     "bytes": 114,
+     "oid": "4e50596c8b0485712ac6cfd97838a2e4507c4e77"
+    },
+    "measurements/rules.csv": {
+     "bytes": 53688,
+     "oid": "94bae6ab33e0699b05d1baeef4291de7104a7966"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,83 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-08-30-fit-quality-3329.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/b1_b2_atlas_uniformity.csv": {
+     "bytes": 13801,
+     "oid": "307131703c60d3bd730115ed4cc598d45706d6a1"
+    },
+    "agg/b2_combiner_comparison.csv": {
+     "bytes": 709,
+     "oid": "a8c74681d4c382c36f96e62c40c08db1d67a8f13"
+    },
+    "agg/b3_dispersion_vs_pathlen.csv": {
+     "bytes": 82,
+     "oid": "0093aaf31650090f2ce4e6db408d3a5e05cad547"
+    },
+    "agg/b4_b5_domain_shift_power.csv": {
+     "bytes": 271,
+     "oid": "3d1ccdfebec1584e09218111d8de9be8e2919cfc"
+    },
+    "agg/b4_guard_operating_point.csv": {
+     "bytes": 595,
+     "oid": "598c3d0c6a111a9d4250207617e8072e5f1f8394"
+    },
+    "agg/b5_power_by_source.csv": {
+     "bytes": 165,
+     "oid": "cb55669b475680449a8275a90230d58917401e7d"
+    },
+    "agg/b6_alpha_repair.csv": {
+     "bytes": 689,
+     "oid": "cf20d0ef0db795ba8fdc2e3ea967ae07cf99a71d"
+    },
+    "agg/c1_c3_projection.csv": {
+     "bytes": 15647,
+     "oid": "0239ab02e72d5d7a8fb422cd7ec475ea16a7d73e"
+    },
+    "agg/c4_region_coherence.csv": {
+     "bytes": 609,
+     "oid": "e8ef85068bba771d0a4d2cabaa166a7900de50d9"
+    },
+    "agg/conformal_control.csv": {
+     "bytes": 5255,
+     "oid": "c5b7603c2bb0965a81b4ee7a546b8c3a8b7a4dab"
+    },
+    "agg/h1_tail_calibration.csv": {
+     "bytes": 342,
+     "oid": "39567bcb8391ae1588eb9992f321881d19aa2f09"
+    },
+    "agg/h2_shape_levels.csv": {
+     "bytes": 324,
+     "oid": "3568ec26c692c309c0467110a77b7a663733b149"
+    },
+    "agg/h2_shape_paired.csv": {
+     "bytes": 221,
+     "oid": "1d1e3488242f064f32fe687a4a2be830d3543490"
+    },
+    "agg/h3_anchoring.csv": {
+     "bytes": 391,
+     "oid": "54eb6990e0486ef691c7b6c483a722609c391ab1"
+    },
+    "agg/h4_regret.csv": {
+     "bytes": 513,
+     "oid": "1f8470ad9bd3ca1efd15203b5778ea7eaabd78c1"
+    },
+    "figures/average_precision_vs_clicks_runs__vg_scale_any.png": {
+     "bytes": 425189,
+     "oid": "b571d85ff8c3ed057dab0fd66bea289e3e782110"
+    },
+    "summary_fitq3329.json": {
+     "bytes": 605,
+     "oid": "b88f2356221c78478bcd05dc7baef23d4dceeefe"
+    },
+    "summary_structure3329.json": {
+     "bytes": 1795,
+     "oid": "a39b7c9da3b528a4a4708f697f97abd75e36141e"
+    }
+   }
+  }
+ ]
+}

@@ -21,7 +21,7 @@ import type { AutoFindExportStatus } from '../generated/api-client/models/auto-f
 import type { Hit } from '../generated/api-client/models/hit';
 
 // Plugin-metadata and listing payloads, all described by nested Marshmallow
-// schemas in `vtsearch/schemas/datasets.py` and `vtsearch/schemas/eval.py`.
+// schemas in `vtsearch/schemas/datasets/` and `vtsearch/schemas/eval.py`.
 export type { EmbedderInfo } from '../generated/api-client/models/embedder-info';
 export type { MediaTypeInfo } from '../generated/api-client/models/media-type-info';
 export type { ConverterInfo } from '../generated/api-client/models/converter-info';
@@ -60,10 +60,10 @@ export type Media = MediaIdsListResponse &
  * The unified shape every long-running operation emits over the SSE stream
  * (`/api/events`; see `progress-events.service.ts`).
  *
- * Backend: every singleton `ProgressTracker` (dataset, sort, eval, find) and
+ * Backend: every singleton `ProgressTracker` (sort, eval, find) and
  * every per-task tracker created by `LoadingTasksTracker` carries the same
  * base fields plus the shared optional extras `step`/`total_steps`/`error`.
- * See `vtsearch/concurrency/progress.py:_PROGRESS_COMMON_EXTRAS`.
+ * See `PROGRESS_COMMON_EXTRAS` in `vtscore/concurrency/progress_tracker.py`.
  *
  * Frontend: a single component/helper (`utils/format-progress.ts`) can render
  * any payload regardless of which operation produced it.
@@ -293,11 +293,13 @@ export interface AutoDetectResultsData {
   dataset_name?: string;
   /** The background run these results came from (`GET /api/autofind/runs/<run_id>`). */
   run_id?: string;
+  /** The Find Results dialog's ticked columns, sent with an export (#5464). */
+  selected_columns?: string[];
 }
 
 /**
  * The `autofind` block on a background AutoFind's `loading-tasks` row (see
- * `vtsearch/autofind.py`). The identity half is there from the
+ * `vtsearch/runtime/autofind.py`). The identity half is there from the
  * first frame; the counts arrive with the terminal (`idle`) frame of a run
  * that finished.
  */
@@ -319,4 +321,17 @@ export interface AutoFindTaskInfo {
    *  detectors are for another media type, or need an embedder the dataset
    *  lacks): the reason. Such a row is idle from its first frame. */
   skipped?: string;
+  /** The detectors whose training-domain check says this dataset looks
+   *  unlike the one they were trained on (#5501), for the run's notice. */
+  domain_shifts?: AutoFindDomainShift[];
+}
+
+/** One detector of {@link AutoFindTaskInfo.domain_shifts}. */
+export interface AutoFindDomainShift {
+  detector_name: string;
+  reference_dataset_name: string;
+  /** The share of the scored dataset atypical of the training dataset, 0-1. */
+  frac_atypical: number;
+  /** The warning's line, worded by the server as Tune words it. */
+  message: string;
 }

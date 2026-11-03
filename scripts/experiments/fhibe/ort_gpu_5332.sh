@@ -9,7 +9,7 @@ set -uo pipefail
 W=/expscratch/sgreenberg/fhibe/ort-gpu-5332
 G=/expscratch/sgreenberg/ort-gpu-5330-122
 cd /expscratch/sgreenberg/worktrees/vts-5332
-source gridenv.sh >/dev/null 2>&1
+source scripts/grid/gridenv.sh >/dev/null 2>&1
 source scripts/experiments/pile/pile_env.sh
 export IMAGEKIT_FACE_PROVIDER=oss IMAGEKIT_FACE_CONFIG=/expscratch/sgreenberg/imagekit-models/grid-default/imagekit/face.json
 export VTSEARCH_TORCH_THREADS=8 OMP_NUM_THREADS=8

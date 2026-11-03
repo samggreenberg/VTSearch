@@ -7,7 +7,7 @@ import wave
 import pytest
 
 from vtscore.media.audio.audio_generator import generate_wav
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipping.clipper import MediaClipper
 
 
 # ---------------------------------------------------------------------------
@@ -2460,7 +2460,7 @@ class TestVideoAutoClipper:
         """The dataset-level hook is reserved and inert - see issue #3395.
 
         Routing is decided per item by ``resolve_for_media``; nothing calls
-        this. ``tests_lib/detectors/test_clipper_chain.py`` pins the "never
+        this. ``tests_lib/datasets/test_clipper_chain.py`` pins the "never
         invoked" half of the contract.
         """
         from vtscore.media.video.clipper import VideoAutoClipper

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-objective-sigma-4584.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "sigma_ab_window.csv": {
+     "bytes": 1915,
+     "oid": "b0167b12abe0bfcca6001258303116d9df233991"
+    }
+   }
+  }
+ ]
+}

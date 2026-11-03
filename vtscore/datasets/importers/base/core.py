@@ -125,7 +125,7 @@ class ImporterBase(PluginBase):
 
     #: Abstract family base: no auto-derived metadata.  Its name is *not*
     #: strippable — ``ImporterBase`` has never been in
-    #: :data:`~vtscore.plugins._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
+    #: :data:`~vtscore.plugins.base._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
     #: out-of-tree ``AcmeImporterBase`` derives ``acme_importer_base`` today and must keep
     #: doing so.
     _is_plugin_family_base = True

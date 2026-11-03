@@ -61,7 +61,7 @@ for k in "${KS[@]}"; do
         export FHIBE_EXAMPLES="$k" FHIBE_MAX_EXAMPLES=4 FHIBE_BETA="$b" FHIBE_RUN="$SET"
         export FHIBE_IDENTITIES="$RUNS/2026-10-09-k4/identities.txt" FHIBE_DATASETS="${FACES}_1024,${FACES}_640"
         ENVX=$(bash -c "source $HERE/launch.sh status >/dev/null 2>&1; echo \"\$ENVX\"")
-        source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+        source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
         eval "$ENVX"
         cd "$SOTA/../calibration"
         python "$SOTA/analyze.py" --exp "$exp" --baseline "$base" --path "$PATH_NAME" --dataset "${FACES}_$size" --out "$a" |
@@ -70,7 +70,7 @@ for k in "${KS[@]}"; do
       runs+=(--run "$b=$a")
     done
     (
-      source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
+      source "$HERE/../../grid/gridenv.sh" >/dev/null 2>&1
       cd "$SOTA/../calibration"
       python "$SOTA/perp.py" --kind balance "${runs[@]}" --out "$OUT/k$k-$size-perp" | tail -1
       python "$SOTA/by_click.py" "${runs[@]}" --baseline "$base" --embedder "$EMBEDDER" --dataset "${FACES}_$size" \

@@ -86,7 +86,7 @@ the rung before it, so two adjacent rungs differ in exactly that change.
 
 ## Result
 
-![Every rung's objective over votes, one panel per preset](figures/buildup_curves.png)
+![Every rung's objective over votes, one panel per preset](figures/buildup_curves.webp)
 
 *Each line is the mean of all 720 runs at that preset's own beta, at every vote. Read a step as the gap between a line
 and the one before it. b2–b5 lie within 0.04 of each other everywhere (widest at vote 150), so they overlap. b6 and b7 start at
@@ -119,7 +119,7 @@ last:
 The full table, with the windows 1–25 and 51–150, the points at votes 10, 25, 50, 100 and 150, and the share of runs
 better or worse by more than 0.05, is `paired.csv`.
 
-![The session mean and the short-session mean, rung by rung](figures/buildup_steps.png)
+![The session mean and the short-session mean, rung by rung](figures/buildup_steps.webp)
 
 *Blue: the mean over votes 1–150. Orange: the mean over votes 1–50. The orange jump at b6 is the typed query's line,
 and the blue jump at b2 (beta 1/4) is the labels line. Everything else moves by less than 0.01.*
@@ -128,7 +128,7 @@ and the blue jump at b2 (beta 1/4) is the labels line. Everything else moves by 
 detector shows, Find returns the typed query's own set, at the line of the rung's era. After, it returns the last
 line shown. `returned_curve.csv` has every vote, and `returned.csv` the session means.
 
-![Precision, recall, the returned set's size and the share of runs returning more than 200, at every vote](figures/returned_curves.png)
+![Precision, recall, the returned set's size and the share of runs returning more than 200, at every vote](figures/returned_curves.webp)
 
 *Every run at every vote, at each preset's own beta. Until about vote 23 no run shows a detector. b1–b5 then return
 the typed query's set at the mixture midpoint, a median of about 4,000 images at precision 0.01. b6–b7 return it at

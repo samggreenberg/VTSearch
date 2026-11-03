@@ -13,7 +13,7 @@ wordmark is on 37 of 40 bands. What `phash` failed to separate is a pool that is
 for six of the eight authors, dominated by a handful of repeated marks. #3902 is
 worth running.
 
-![calls by author](fig_calls_by_author.png)
+![calls by author](fig_calls_by_author.webp)
 
 ## What was counted
 
@@ -112,6 +112,6 @@ two typeset-only authors are a separate `distinctive` decision.
 Lorillard (37 of 40 printed marks), and BATCO (11 of 40), the least consistent
 of the six authors with artwork:
 
-![Lorillard](sheet_lorillard.png)
+![Lorillard](sheet_lorillard.webp)
 
-![BATCO](sheet_batco.png)
+![BATCO](sheet_batco.webp)

@@ -2,7 +2,7 @@
 
 The server-side Find work-queue / boundary-walk endpoints (scalability.md
 S3/S17/S19).  The underlying query logic is unit-tested in
-``tests_lib/detectors/test_find_navigation.py``; these assert the HTTP layer:
+``tests_lib/state/test_find_navigation.py``; these assert the HTTP layer:
 schema validation, the detector-header gate, and that responses reflect the
 active detector context's Find state.
 """

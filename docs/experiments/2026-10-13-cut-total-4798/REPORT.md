@@ -138,7 +138,7 @@ behind it holds two to five held-out Goods: on faces past the gate never more.
 the head's count in place of today's cut. Figure 1 bins those clicks by how much more today's cut
 keeps than the head's count:
 
-![Figure 1](fig_per_click.png)
+![Figure 1](fig_per_click.webp)
 
 *Figure 1. Past #4786's Bads gate, below 6 held-out Goods: Find's F-beta at a click with the head's
 count, minus today's cut, by today's count over the head's (clicks where the two agree drop out).
@@ -211,7 +211,7 @@ to the third decimal at every preset, COCO within 0.0003 (β 4: −0.0024 agains
 does not move the sessions. Over votes 51–150, after the gate, faces gain +0.012 / +0.017 at β ¼,
 +0.034 / +0.048 at β 1 and +0.005 / +0.019 at β 4; COCO +0.002, +0.001 and −0.005 ± 0.001.
 
-![Figure 2](fig_find_by_vote.png)
+![Figure 2](fig_find_by_vote.webp)
 
 *Figure 2. Find's F-beta by vote: today, the Goods-only gate (the arm), and the per-click oracle
 (the best count on the withheld half; a bound). Faces from 4 photos at 1024 px, and COCO, at each

@@ -23,7 +23,7 @@ Two hand passes, 2,153 Good/Bad questions, all answered the same afternoon.
   highest among the unchecked negatives carries the mark. A quarter of them are
   near-blank pages.
 
-![mark-blind control before and after](figures/shortcut.png)
+![mark-blind control before and after](figures/shortcut.webp)
 
 ## #4088: banded tobacco letters
 

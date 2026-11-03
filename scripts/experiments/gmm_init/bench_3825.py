@@ -129,7 +129,7 @@ def main(argv: "list[str] | None" = None) -> int:
         gmm_fit_array,
         scored_ordering,
     )
-    from vtscore.utils.scores import scored_only
+    from vtscore.training.thresholds.knobs import scored_only
 
     rng = np.random.default_rng(3825)
     samples = _pick(Path(args.corpus), args.per_cell, rng)

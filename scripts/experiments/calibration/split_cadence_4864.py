@@ -16,7 +16,7 @@ Rules (each returns how many Goods and Bads train every fold):
   (:func:`arms_split_rounding._dithered_counts`), its coin drawn per (run, vote)
   as the labelset-seeded RNG draws it;
 * ``nearest`` - #4864's arm when this ran, the app's since
-  (:func:`conformal._split_train_counts`);
+  (:func:`fold_orderings._split_train_counts`);
 * ``round``   - the rule before #3288, ``round()`` on the whole labelset then per
   class: the coherent reference, which the eval's one-vote-per-step clock
   phase-locks across every run.
@@ -53,7 +53,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from vtscore.eval.arms_split_rounding import _dithered_counts  # noqa: E402
-from vtscore.training.thresholds import conformal  # noqa: E402
+from vtscore.training.thresholds import fold_orderings  # noqa: E402
 from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: E402
 
 RULES = ("dither", "nearest", "round")
@@ -91,7 +91,7 @@ def train_counts(rule: str, n_good: int, n_bad: int, fraction: float, key: str) 
         rng = np.random.RandomState(zlib.crc32(key.encode()))
         return _dithered_counts(n, n_good, n_bad, fraction, rng)
     if rule == "nearest":
-        return conformal._split_train_counts(n, n_good, n_bad, fraction, None)
+        return fold_orderings._split_train_counts(n, n_good, n_bad, fraction, None)
     return round_train_counts(n, n_good, n_bad, fraction)
 
 

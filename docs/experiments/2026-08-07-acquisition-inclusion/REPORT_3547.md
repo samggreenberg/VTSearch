@@ -99,7 +99,7 @@ the default sweep.
 
 ### Compression — the criterion that decides which contrasts are readable
 
-![harvest per arm against the 50% bar](figures/fig2_3547_compression.png)
+![harvest per arm against the 50% bar](figures/fig2_3547_compression.webp)
 
 An arm that has consumed most of its positives is no longer being compared over
 the same opportunity as the control: its late gains are capped by the pool, not
@@ -142,7 +142,7 @@ Reported first, and H1 was to be withheld if it failed: if the t=100 frontier
 did not reproduce #3319's shape, the pile change did more than add depth and
 every deep reading here would be about the dataset rather than the horizon.
 
-![the plateau at both horizons](figures/fig1_3547_plateau.png)
+![the plateau at both horizons](figures/fig1_3547_plateau.webp)
 
 | arm | k | Δ cost vs `prod` @100 [95% CI] | Δ cost @400 | Δ positives @400 | Δ AP @400 |
 |---|---:|---|---|---:|---:|
@@ -165,7 +165,7 @@ withheld the verdict for exactly that reason; it is not omitted here.
 
 ## 2. H1 — the optimum does not move
 
-![the DiD as a forest plot](figures/fig3_3547_did.png)
+![the DiD as a forest plot](figures/fig3_3547_did.webp)
 
 | deep arm | k | metric | DiD [95% CI] | pairs | tail | reading |
 |---|---:|---|---|---:|---|---|
@@ -214,7 +214,7 @@ explanations; the deep pile separates them.
   a threshold on a pool that has almost none left. Predicts incidence falls to
   the shallow-wave level once harvest drops.
 
-![spike timing and incidence against harvest](figures/fig4_3547_spikes.png)
+![spike timing and incidence against harvest](figures/fig4_3547_spikes.webp)
 
 On the deep pile, incidence collapses — and, checked directly rather than
 assumed, **not one cell in 1344 acquires its first deep spike after t=100**:
@@ -319,7 +319,7 @@ between the two failure modes, which is why they spike least.
 
 ## 4. What the offset buys at depth: speed
 
-![clicks to prod's own answer](figures/fig5_3547_speed.png)
+![clicks to prod's own answer](figures/fig5_3547_speed.webp)
 
 Clicks for each arm to reach the final cost `prod` ends *that cell's* session
 with — #3319's construction, and the endpoint that separated the plateau's edges

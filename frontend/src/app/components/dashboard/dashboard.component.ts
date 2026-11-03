@@ -6,8 +6,7 @@ import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angul
 import { EMPTY, forkJoin, Observable, of, timer } from 'rxjs';
 import { catchError, filter, map, switchMap, take } from 'rxjs/operators';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import { DatasetsCrudApiService, DemoLoadParams } from '../../services/datasets-crud-api.service';
-import type { OutputRequest } from './dataset-importer-modal/pickers/shared/multi-output.util';
+import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
@@ -28,8 +27,7 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
-import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
+import { DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import {
@@ -386,9 +384,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.newThingFlows.importStarted$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.handleImportStarted());
-    this.newThingFlows.demoSelected$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(({ demo }) => this.handleDemoSelected(demo));
     this.newThingFlows.created$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ kind, id }) => {
@@ -1126,7 +1121,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Export / Add-Labels modal openers (state lives on DashboardModalsService) ---
 
   openExportModal(model: DetectorRegistryEntry): void {
-    this.modals.openExport(model.name);
+    this.modals.openExport(model.id, model.name);
   }
 
   openAddLabelsModal(model: DetectorRegistryEntry): void {
@@ -1202,53 +1197,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private handleImportStarted(): void {
     this.importerClosing.set(true);
     this.loadingTasksSvc.startProgressPolling();
-  }
-
-  private handleDemoSelected(demo: DemoDatasetEntry): void {
-    this.importerClosing.set(true);
-    // The importer modal augments the DemoDatasetEntry payload with the
-    // user-chosen embedder / clipper / display name before emitting;
-    // those extras aren't part of the typed schema so we read them
-    // through a permissive cast.
-    const extras = demo as DemoDatasetEntry & {
-      embedder?: string;
-      embedders?: string[];
-      clipper?: string;
-      clipper_params?: Record<string, number | string>;
-      cleaners?: CleanerSelection[];
-      converter?: string;
-      outputs?: OutputRequest[];
-      dataset_name?: string;
-      build_projection?: boolean;
-      merge_near_duplicates?: boolean;
-      autofind?: boolean;
-    };
-    const params: DemoLoadParams = {};
-    // Multi-Dataset: one linked dataset per entry (the photos, and the faces
-    // cut out of them); each carries its own embedder / clipper / cleanup.
-    if (extras.outputs && extras.outputs.length > 0) params['outputs'] = extras.outputs;
-    if (extras.embedder) params['embedder'] = extras.embedder;
-    if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
-    if (extras.clipper) {
-      params['clipper'] = extras.clipper;
-      if (extras.clipper_params && Object.keys(extras.clipper_params).length > 0) {
-        params['clipper_params'] = extras.clipper_params;
-      }
-    }
-    if (extras.cleaners && extras.cleaners.length > 0) params['cleaners'] = extras.cleaners;
-    // Convert-on-load step (e.g. document2image for the Document demo tab):
-    // the resulting dataset has the converter's target type.
-    if (extras.converter) params['converter'] = extras.converter;
-    const userName = (extras.dataset_name || '').trim();
-    if (userName) params['dataset_name'] = userName;
-    if (extras.build_projection) params['build_projection'] = 'true';
-    if (extras.merge_near_duplicates) params['merge_near_duplicates'] = 'true';
-    if (extras.autofind !== undefined) params['autofind'] = extras.autofind ? 'true' : 'false';
-    this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
-      next: (response) => {
-        this.loadingTasksSvc.startProgressPolling(response.task_id);
-      },
-    });
   }
 
   // --- New model modal ---

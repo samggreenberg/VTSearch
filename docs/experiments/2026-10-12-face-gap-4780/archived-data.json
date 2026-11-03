@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-12-face-gap-4780.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "arms.csv": {
+     "bytes": 4693,
+     "oid": "347db4bcd21ef455045e43b947e93abaf77dac4e"
+    },
+    "matched.csv": {
+     "bytes": 7531,
+     "oid": "b68ad82656a9b7efeef538df04bf027706a162d5"
+    },
+    "pairs.csv": {
+     "bytes": 2557,
+     "oid": "114ecdf87e93d7a1686c09b6e7d4f1c9ffc49e80"
+    },
+    "photos_by_pronoun.csv": {
+     "bytes": 529,
+     "oid": "b6a58bf5aa253f05c9531f1fba91bda2ef110c81"
+    },
+    "regress.csv": {
+     "bytes": 83373,
+     "oid": "458bd37b54242de043e61bfab06681550e9c17b8"
+    },
+    "stages.csv": {
+     "bytes": 23975,
+     "oid": "0464aa2419ecc259c590226bb208c54926f33f6e"
+    },
+    "static_gaps.csv": {
+     "bytes": 2674,
+     "oid": "ecb59f132cf1695be5c6b128af27abff60353621"
+    }
+   }
+  }
+ ]
+}

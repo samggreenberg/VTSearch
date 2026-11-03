@@ -108,8 +108,8 @@ Adopt iff positives rise (p<0.05) **and** the 95% upper bound on the final-cost 
 
 ## Figures
 
-![fig1_frontier.png](figures/fig1_frontier.png)
+![fig1_frontier.webp](figures/fig1_frontier.webp)
 
-![fig2_lever_verification.png](figures/fig2_lever_verification.png)
+![fig2_lever_verification.webp](figures/fig2_lever_verification.webp)
 
-![fig3_guardrails.png](figures/fig3_guardrails.png)
+![fig3_guardrails.webp](figures/fig3_guardrails.webp)

@@ -37,7 +37,7 @@ The table below is from one photo at 1024 px, β 1. The FaceNet-era values are #
 - **The cost is CPU time.** SCRFD at 640 × 640 plus ArcFace takes 330 ms per face, flat across photo
   sizes, against 180 / 100 ms for MTCNN + FaceNet at 1024 / 640.
 
-![The objective at every click, FaceNet and imagekit](fig_curves.png)
+![The objective at every click, FaceNet and imagekit](fig_curves.webp)
 
 *Figure 1. The objective at every click, at 1024 px, from 1 and from 4 photos, for β ¼ / 1 / 4. Each
 point is the mean over 562 sessions (561 for imagekit at 640 px with 4 photos). Click 0 is the example
@@ -127,7 +127,7 @@ SEs: FaceNet 0.013–0.021, imagekit 0.005–0.017. The paired change in each ga
 same: imagekit's she/her − he/him gap after the check is −0.000 to −0.025 at β ¼ and β 4, and
 −0.039 to −0.045 at β 1.
 
-![The gaps after the check, per arm, β and K](fig_gaps.png)
+![The gaps after the check, per arm, β and K](fig_gaps.webp)
 
 *Figure 2. The gaps after the check, ±1 SE, at 1024 px. Left: she/her minus he/him (283 and 278
 people). Right: 18–29 minus 45+ (287 and 106; 45–59 and 60+ pooled).*

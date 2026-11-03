@@ -28,7 +28,7 @@ sheets**). On the first pass, hits with **20+ inliers carried the mark on 470 of
 472 cells**. Hits with **8–11 inliers carried it on 50 of 351**, and 35 of those
 50 are the two smallest marks.
 
-![search](fig_search.png)
+![search](fig_search.webp)
 
 ## The proposals
 
@@ -64,7 +64,7 @@ The leaf spray over BROWN & WILLIAMSON TOBACCO also heads BRITISH AMERICAN
 TOBACCO letterheads, so the proposal could not say which mark it was. It was
 either the spray, spanning two companies, or the B&W lockup:
 
-![bat leaves](example_bw_1990s_bat_leaves.png)
+![bat leaves](example_bw_1990s_bat_leaves.webp)
 
 It is not `azb11c00` either: 0 inliers crop to crop against that bold
 three-leaf icon. No crop found it reliably. Leaves plus wordmark reached 9 of 19
@@ -165,7 +165,7 @@ per proposal.
 Member bands agree on the *whole printed letterhead*, not on the mark, so the
 consensus box covered the mark plus its typeset name and address:
 
-![crops](fig_crops.png)
+![crops](fig_crops.webp)
 
 Typeset text in a query matches typeset text anywhere. Counts of pages with
 8+ raw inliers, auto crop vs hand crop:
@@ -198,13 +198,13 @@ The small marks are the exception: the BAT roundel is ~75 px and the RJR block
 ~110 px. `lorillard_script`'s 12–19 sheet is a literal example: 5 of 16 are the
 script, and the rest are a PHILIP MORRIS heading, email headers and handwriting.
 
-![lorillard 12-19](example_lorillard_hits_12-19.png)
+![lorillard 12-19](example_lorillard_hits_12-19.webp)
 
 **What the band class could not see.** `pm_crest`'s 40–79 bin holds 157 pages,
 and every one carries the crest. None are in the 20-band class; they sit in
 #3902's *mixed* 1,357-band Philip Morris class:
 
-![pm 40-79](example_pm_crest_hits_40-79.png)
+![pm 40-79](example_pm_crest_hits_40-79.webp)
 
 **Reduced letterheads are the uncertain calls.** The (a) and (c) sheets show
 marks shrunk on a narrow letterhead layout. A tiny BAT roundel over a typed

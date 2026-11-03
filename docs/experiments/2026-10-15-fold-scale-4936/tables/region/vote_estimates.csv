@@ -1,8 +1,0 @@
-click,"corr(dtr_good,dpos)",mean dtr_good - dpos,"corr(dho_good,dpos)",mean dho_good - dpos,"corr(dtr_bad,dnegtop)",mean dtr_bad - dnegtop,"corr(dho_bad,dnegtop)",mean dho_bad - dnegtop
-10,,,,,,,,
-25,,,,,,,,
-50,,,,,,,,
-75,,,,,,,,
-100,,,,,,,,
-125,,,,,,,,
-150,,,,,,,,

@@ -3,8 +3,8 @@ converters, and dataset importers.
 
 Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. The plugin
-``to_dict()`` payloads are declared as ``fields.Dict()`` rather than
-nested schemas; see the module docstring in ``vtsearch/schemas/datasets.py``.
+``to_dict()`` payloads are enumerated as nested schemas; see the module
+docstring in ``vtsearch/schemas/datasets/listings.py``.
 """
 
 from collections import Counter
@@ -19,7 +19,7 @@ from vtsearch.settings import (
     filter_visible_plugin_dicts,
     filter_visible_plugins,
 )
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.listings import (
     CleanersListQuerySchema,
     CleanersListResponseSchema,
     ClippersListQuerySchema,

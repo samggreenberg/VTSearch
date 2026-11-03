@@ -8,7 +8,7 @@
     "capture": "tsx capture.ts"
   },
   "devDependencies": {
-    "playwright": "^1.49.0",
+    "playwright": "1.63.0",
     "tsx": "^4.19.2",
     "typescript": "~5.7.2"
   }

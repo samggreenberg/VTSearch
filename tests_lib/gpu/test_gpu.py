@@ -129,12 +129,12 @@ class TestCuMLBackends:
     def test_cuml_enabled_matches_install(self):
         # On a CUDA host (guarded by the module marker) the device resolves to
         # cuda, so cuml_enabled() tracks purely whether cuML is importable.
-        from vtscore.gpu_backends import cuml_enabled
+        from vtscore.config.gpu_backends import cuml_enabled
 
         assert cuml_enabled() == _cuml_installed()
 
     def test_umap_fit_transform_produces_2d_numpy_layout(self):
-        from vtscore.gpu_backends import umap_fit_transform
+        from vtscore.config.gpu_backends import umap_fit_transform
 
         rng = np.random.default_rng(0)
         mat = rng.standard_normal((60, 16)).astype(np.float32)
@@ -146,7 +146,7 @@ class TestCuMLBackends:
         assert np.isfinite(coords).all()
 
     def test_kmeans_fit_predict_clusters_and_reports_inertia(self):
-        from vtscore.gpu_backends import kmeans_fit_predict
+        from vtscore.config.gpu_backends import kmeans_fit_predict
 
         rng = np.random.default_rng(1)
         vecs = np.vstack([rng.standard_normal((30, 8)) + 5.0, rng.standard_normal((30, 8)) - 5.0]).astype(np.float32)

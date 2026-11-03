@@ -218,12 +218,12 @@ redis_stream = "my_pkg.label_importer:LABEL_IMPORTER"
 
 ## Testing pattern
 
-Label-importer tests live in `tests_lib/io/`. Use the autouse
+Label-importer tests live in `tests_lib/labels/`. Use the autouse
 `reset_contexts` fixture to clear state between tests; mock the
 external service so the test runs offline.
 
 ```python
-# tests_lib/io/test_redis_label_importer.py
+# tests_lib/labels/test_redis_label_importer.py
 from unittest.mock import patch
 
 from vtscore.labels.importers import get_label_importer, list_label_importers
@@ -270,5 +270,5 @@ class TestRedisStreamRun:
 
 See [`vtscore/labels/importers/server_json_file/__init__.py`](../../labels/importers/server_json_file/__init__.py)
 for a real working importer that reads from a JSON file, and
-[`tests_lib/io/test_importers.py`](../../../tests_lib/io/test_importers.py)
+[`tests_lib/datasets/test_importers.py`](../../../tests_lib/datasets/test_importers.py)
 for the general I/O test pattern.

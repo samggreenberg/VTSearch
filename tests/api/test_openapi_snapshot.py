@@ -11,7 +11,7 @@ version. These tests pin the canonical form so the drift guard is stable.
 
 from __future__ import annotations
 
-from vtsearch.openapi_postprocess import normalize_unprocessable_response
+from vtsearch.openapi.postprocess import normalize_unprocessable_response
 
 
 class TestUnprocessableResponseNormalization:

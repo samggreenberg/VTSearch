@@ -126,3 +126,53 @@ class TestServerMediaFileFromMediaIdEndpoint:
         saved_path = tmp_path / "example_media" / body["filename"]
         assert saved_path.exists()
         assert saved_path.stat().st_size > 0
+
+    def test_a_face_says_whether_it_is_a_hard_view(self, client, loaded_media_id, tmp_path, monkeypatch):
+        """A face comes back with its Face Quality verdict (#5372); any other media has none."""
+        import vtscore.security.path_validation as paths_mod
+        from vtscore.media.face import imagekit_bridge
+
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: tmp_path / "example_media")
+        monkeypatch.setattr(imagekit_bridge, "hard_view_of_file", lambda path: None)
+        media = medias[loaded_media_id]
+        if not media.get("media_bytes") and not media.get("media_path"):
+            media["media_bytes"] = b"fake content for materialisation test"
+
+        def post():
+            resp = client.post("/api/server-media-files/from-media-id", json={"media_id": loaded_media_id})
+            assert resp.status_code == 201, resp.get_json()
+            return resp.get_json()
+
+        assert "face_hard_view" not in post()
+        monkeypatch.setitem(media, "media_type", "face")
+        compat = imagekit_bridge.COMPAT_METADATA_KEY
+        for quality, verdict in ((11.0, True), (23.0, False)):
+            meta = {imagekit_bridge.QUALITY_METADATA_KEY: quality, compat: "oss-arcface-mbf:1"}
+            monkeypatch.setitem(media, "custom_metadata", meta)
+            assert post()["face_hard_view"] is verdict
+        monkeypatch.setitem(media, "custom_metadata", {})
+        assert post()["face_hard_view"] is None
+
+
+class TestUploadedFaceHardView:
+    def test_an_uploaded_face_says_whether_it_is_a_hard_view(self, client, monkeypatch):
+        """An upload sent as a face is read by the provider for its verdict (#5372); any other upload is not."""
+        import io
+
+        from vtscore.media.face import imagekit_bridge
+
+        seen = []
+        monkeypatch.setattr(imagekit_bridge, "hard_view_of_file", lambda path: seen.append(path) or True)
+
+        def upload(**form):
+            resp = client.post(
+                "/api/server-media-files/upload",
+                data={"file": (io.BytesIO(b"\x89PNG fake"), "face.png"), **form},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 201, resp.get_json()
+            return resp.get_json()
+
+        assert "face_hard_view" not in upload() and "face_hard_view" not in upload(media_type="image")
+        assert upload(media_type="face")["face_hard_view"] is True
+        assert len(seen) == 1 and seen[0].name.endswith(".png")

@@ -154,6 +154,17 @@ export interface Shot {
   clip?: { target: Target; pad?: number };
   /** Declarative callouts, drawn as a pre-capture DOM overlay. */
   annotations?: Annotation[];
+  /**
+   * CSS selectors for what the app computes in floating point that moves with
+   * the CPU: the Browse map's layout, a typicality percentage, which picture a
+   * ranking puts in a slot (#5378). Every match is boxed. A render for
+   * `check.sh` writes the boxes beside the shot, and `check.sh` blanks them in
+   * both the render and the baseline before diffing, so a render off the
+   * container can pass. The boxes come from the render, so name a region that
+   * stays in place and holds what moves, not the moving thing: the whole map
+   * canvas, not the bin popup that lands wherever its tile does.
+   */
+  computed?: string[];
   recipe: (page: Page, h: Helpers) => Promise<void>;
   /**
    * Undo whatever the recipe changed in the app to reach its frame (items
@@ -170,6 +181,25 @@ const BOTH: Theme[] = ['light', 'dark'];
 const GUIDE = 'docs/user/USER_GUIDE.md';
 const HOWTO = 'docs/user/howto';
 const STEPS = `${GUIDE}#step-by-step-your-first-search`;
+
+/**
+ * `Shot.computed` for the Browse map: the canvas (a UMAP fit, laid out
+ * differently on another CPU even under the projection seed), and the minimap
+ * and legend that draw the same layout. A bin popup or hover preview opens over
+ * the canvas, wherever its tile landed, so the canvas's box takes it in.
+ */
+const BROWSE_COMPUTED = ['vt-browse-canvas canvas', '.browse-side-minimap', '.browse-side-legend'];
+/**
+ * `Shot.computed` for a shot that opens Tune and answers what it serves: what
+ * it serves is the ranking's, so on another CPU a near tie can serve, and
+ * verify, another picture. They collect in the right panel's piles.
+ */
+const FIND_COMPUTED = ['.panel-right .vote-entry'];
+/**
+ * `Shot.computed` for the training-domain check: the share that looks
+ * atypical, and the typicality p and z under it.
+ */
+const DOMAIN_COMPUTED = ['.domain-chip:not(.evidence-chip)', '.domain-chip:not(.evidence-chip) + .domain-detail'];
 
 /** A dashboard row, matched by its exact name (see `Target`). */
 const datasetRow = (name: string): Target => ({ selector: 'tr[vt-dataset-card]', name });
@@ -572,10 +602,11 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
  * dealt. refresh.sh seeds the draw (VTSEARCH_SPOT_CHECK_SEED), so a refresh
  * frames the same picks.
  *
- * It waits for the round itself, a pick's dot, or for a test that ended
- * before one (Done, Nothing to test). Never for the stage's heading alone:
- * *Drawing picks…* is a heading too, and the view sat on it when the test
- * never started (#4555), so a wait that took it photographed the hang.
+ * It waits for the round itself, its first pick in the centre panel (the
+ * test's picks are voted there, as every vote is, #5502), or for a test that
+ * ended before one (Done, Nothing to test). Never for the stage's heading
+ * alone: *Drawing picks…* is a heading too, and the view sat on it when the
+ * test never started (#4555), so a wait that took it photographed the hang.
  */
 async function openTune(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
@@ -590,7 +621,7 @@ async function openTune(page: Page, h: Helpers): Promise<void> {
   // photographing a progress bar. The test starts once the pass lands.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
   await page.waitForSelector(
-    '.line-test-stage .pick-dot, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
+    '.panel-center vt-center-panel .media-swipe-wrapper, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
     { timeout: 60000 },
   );
   await h.wait(2500);
@@ -641,9 +672,9 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
 
 /**
  * Vote the Tune autopilot's rounds to Done, with the corpus's truth: each
- * round's pending picks (in draw order, which is the stage's dot order) are
- * read off `/api/line-test`, named through `/api/medias/batch`, and answered
- * with the keys, as a reader would. Up to twenty rounds; a test's budgets
+ * round's pending picks (in draw order, the order the centre panel shows
+ * them in) are read off `/api/line-test`, named through `/api/medias/batch`,
+ * and answered with the keys, as a reader would. Up to twenty rounds; a test's budgets
  * hold it to twelve. With no test running there is nothing to vote, and the
  * Done the caller waits for will never come, so that throws rather than
  * leaving the caller to time out on it.
@@ -669,14 +700,17 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
       await page.keyboard.press(isGood.get(nameOf.get(id) ?? '') ? 'ArrowRight' : 'ArrowLeft');
       await h.wait(250);
     }
+    // The round is whole once the server has dealt the next one (or ended the
+    // test); then the centre panel holds the next round's first pick, swiped
+    // in, or the stage the verdict.
+    for (let poll = 0; poll < 240; poll++) {
+      const next = (await getJson('/api/line-test')).test;
+      if (!next || next.phase === 'done' || next.phase === 'nothing' || next.round !== test.round) break;
+      await h.wait(250);
+    }
     await page
-      .waitForFunction(
-        (r) => {
-          const dots = document.querySelectorAll('.line-test-stage .pick-dot');
-          const headline = document.querySelector('.line-test-stage .stage-heading');
-          return (dots.length > 0 && dots[0].getAttribute('data-vote') === null) || headline !== null || r < 0;
-        },
-        round,
+      .waitForSelector(
+        '.panel-center vt-center-panel .media-swipe-wrapper:not(.swipe-left):not(.swipe-right), .line-test-stage .stage-heading',
         { timeout: 60000 },
       )
       .catch(() => {});
@@ -845,6 +879,7 @@ export const SHOTS: Shot[] = [
     caption:
       'Step 4, the Review tab: Tune ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: '.panel-left', kind: 'step', step: 1, at: 'corner' },
       { target: '.btn-good', kind: 'step', step: 2, at: 'right' },
@@ -1176,6 +1211,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${GUIDE}#browse-exploring-a-dataset-spatially`,
     caption: 'The Browse map: a pannable square-tile map of a dataset of drawings, with the legend and minimap on the right',
     themes: BOTH,
+    computed: BROWSE_COMPUTED,
     annotations: [
       { target: '.browse-side-meta', kind: 'box', label: 'Legend + minimap' },
     ],
@@ -1257,6 +1293,7 @@ export const SHOTS: Shot[] = [
     caption:
       "The Tune view's result pane at Done: the balance headline, the Right and Found ranges, the Precision by Number Returned chart, and the picks by band",
     themes: BOTH,
+    computed: DOMAIN_COMPUTED,
     clip: { target: '.line-test-result' },
     async recipe(page, h) {
       await openTune(page, h);
@@ -1273,7 +1310,7 @@ export const SHOTS: Shot[] = [
     id: 'test-verdict',
     embeddedIn: `${GUIDE}#the-result`,
     caption:
-      'The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
+      'The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
     themes: BOTH,
     clip: { target: '.verdict-card', pad: 8 },
     async recipe(page, h) {
@@ -1313,6 +1350,7 @@ export const SHOTS: Shot[] = [
     caption:
       'Step 1, on the Review tab: (1) the picture the detector is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: 'img.image-element', kind: 'step', step: 1, at: 'corner' },
       { target: '.btn-good', kind: 'step', step: 2, at: 'right' },
@@ -1330,6 +1368,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/check-and-correct.md#step-2-hand-your-corrections-to-the-detector`,
     caption: 'Step 2: (1) Add Corrections to Detector, then (2) Add Corrections to confirm',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: '.corrections-btn', kind: 'step', step: 1 },
       { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'Add Corrections' }, kind: 'step', step: 2, at: 'right' },
@@ -1352,6 +1391,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/borderline-matches.md#step-2-move-the-threshold-toward-false-positives`,
     caption: 'Step 2: (1) the Threshold moved toward False Positives, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: '.find-balance-row .balance-spectrum', kind: 'step', step: 1, at: 'top' },
       { target: '.find-balance-row .balance-state-text', kind: 'step', step: 2, at: 'right' },
@@ -1407,6 +1447,7 @@ export const SHOTS: Shot[] = [
     caption:
       'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector\'s examples than its training data does',
     themes: BOTH,
+    computed: DOMAIN_COMPUTED,
     clip: { target: '.line-test-result' },
     annotations: [
       { target: '.domain-ref-select', kind: 'step', step: 1, at: 'right' },
@@ -1453,6 +1494,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/export-matches.md#step-1-choose-what-to-send`,
     caption: 'Step 1: in Export Results, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: 'vt-modal .delimiter-row', kind: 'step', step: 1 },
       { target: 'vt-modal .column-checkboxes', kind: 'step', step: 2 },
@@ -1470,6 +1512,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/export-matches.md#step-2-send-it`,
     caption: 'Step 2: on the Server CSV File tab, (1) the path to save to on the server, then (2) Save',
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: '#field-filepath', kind: 'step', step: 1 },
       { target: { selector: 'vt-modal .btn--primary', hasText: 'Save' }, kind: 'step', step: 2, at: 'right' },
@@ -1489,6 +1532,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/export-matches.md#or-keep-the-matches-as-a-dataset`,
     caption: "Keep the matches as a dataset: (1) To Dataset, (2) the new dataset's name, (3) OK",
     themes: BOTH,
+    computed: FIND_COMPUTED,
     annotations: [
       { target: '.goods-actions button[aria-label="To Dataset"]', kind: 'step', step: 1, at: 'bottom' },
       { target: 'vt-dialog-host input.form-input', kind: 'step', step: 2 },
@@ -1694,6 +1738,8 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
     caption: 'Step 1: (1) the Manual tab, (2) the Text sort, then (3) a description and Search',
     themes: BOTH,
+    // The score strip draws a tick at each picture's score.
+    computed: ['.stripe-overview'],
     annotations: [
       { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
       { target: '.sort-mode-group', kind: 'step', step: 2, at: 'right' },
@@ -2019,6 +2065,7 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/explore-with-browse.md#step-2-find-your-way-around`,
     caption: 'Step 2: (1) the zoom buttons, (2) Signposts, (3) thumbnail size',
     themes: BOTH,
+    computed: BROWSE_COMPUTED,
     annotations: [
       { target: '.browse-zoom', kind: 'step', step: 1, at: 'bottom' },
       { target: '.browse-signposts', kind: 'step', step: 2, at: 'bottom' },
@@ -2033,6 +2080,9 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/explore-with-browse.md#step-3-look-inside-a-tile`,
     caption: 'Step 3: after right-clicking a tile, (1) its pictures, (2) a large view of one, (3) its details',
     themes: BOTH,
+    // The popup docks in a column of its own, beside the canvas, and shows
+    // the pictures of whichever tile the layout put under the click.
+    computed: [...BROWSE_COMPUTED, '.bin-popup--docked'],
     annotations: [
       { target: '.bin-popup-scroll', kind: 'step', step: 1, at: 'right' },
       { target: '.bin-popup-preview-img', kind: 'step', step: 2, at: 'right' },
@@ -2051,6 +2101,8 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-tune`,
     caption: "Browsing a tested detector's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Tune",
     themes: BOTH,
+    // The selection is the clicked tile's pictures, so it follows the layout.
+    computed: [...BROWSE_COMPUTED, '.bsp'],
     annotations: [
       { target: '.bsp', kind: 'step', step: 1 },
       { target: '.bsp-verify-good', kind: 'step', step: 2, at: 'bottom' },

@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-10-face-align-4777.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "compare.csv": {
+     "bytes": 2505,
+     "oid": "da1b8fef7de11a706465d593b11c97a43df13a3a"
+    },
+    "screen.csv": {
+     "bytes": 717,
+     "oid": "5db519d66c6e9d3b9fbf6e5dcc12748daef67a03"
+    },
+    "screen_by_roll.csv": {
+     "bytes": 1236,
+     "oid": "9e98505a23031ce459d10103cb1fcb671ddc0305"
+    }
+   }
+  }
+ ]
+}

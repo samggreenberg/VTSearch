@@ -33,13 +33,13 @@ set passes the query's at vote 8, 11 and 28. Paired per run, 720 runs a preset, 
 
 For scale: #4736's hold, the last change to this stretch of the session, was worth +0.004 / +0.006 / +0.009.
 
-![The head's AP at every vote](fig_dip.png)
+![The head's AP at every vote](fig_dip.webp)
 
 *Figure 1. Mean AP on the withheld half of the trained head at every vote it is drawn, against the typed
 query's sort (grey); before a run's first head, the typed query's. Blue: today's head, started from the
 Goods' centroid. Orange: started from the typed query as well. The grey rule is the hold's 30 labels.*
 
-![The set on screen at every vote](fig_shown.png)
+![The set on screen at every vote](fig_shown.webp)
 
 *Figure 2. The objective: mean F-beta, on the withheld half, of the set the app shows at every vote. Both
 arms show the typed query's set until 30 labels (#4736). From there the arm's head is ahead at every vote and
@@ -95,12 +95,12 @@ every preset. At beta 4 today's head starts below the query it replaces; the arm
   negatives for `@medium`). For chair, fork and sink the query's top negatives are other classes (86 of
   chair's top 100), so the prior and the labels pull the same way.
 
-![Each seed's paired difference](fig_seeds.png)
+![Each seed's paired difference](fig_seeds.webp)
 
 *Figure 3. The arm minus today, F-beta of the set on screen, each seed's mean over its 144 runs. Zero until
 the hold ends at 30 labels, positive in every seed at beta 4 and in nearly every vote at beta ¼ and 1.*
 
-![The shadow's candidates](fig_shadow.png)
+![The shadow's candidates](fig_shadow.webp)
 
 *Figure 4. The shadow: candidate heads refitted on today's votes, against today's head, with two clustered
 SEs, beta 1. Left: AP over votes 1-25. Right: the F-beta of the app's own count (what today's line keeps),

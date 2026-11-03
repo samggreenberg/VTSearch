@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-30-tiled-stage1-speed-k-4391.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/before-m.csv": {
+     "bytes": 12331,
+     "oid": "f672160b8252066e74f3a26936a72a62a5ad83c2"
+    },
+    "measurements/before-s.csv": {
+     "bytes": 11681,
+     "oid": "81f493655635c3ae2752a88bfacec3335e3492ab"
+    },
+    "measurements/replay-m-k2000.csv": {
+     "bytes": 13066,
+     "oid": "d89d48a721257a73721e0bdc947b6ad5d8f4b215"
+    },
+    "measurements/replay-m.csv": {
+     "bytes": 40309,
+     "oid": "415aaeb5475bbb65f74da36cefb1e04d650e5f62"
+    },
+    "measurements/replay-s.csv": {
+     "bytes": 38270,
+     "oid": "7ed298e98f2e842632bd8e7b108c678a16f0af1b"
+    }
+   }
+  }
+ ]
+}

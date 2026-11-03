@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-09-autopilot-fbeta-4671.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "curves.csv": {
+     "bytes": 170500,
+     "oid": "794ad0c0a6b17922340e9bafd7ee3593d17b2d03"
+    },
+    "goods.csv": {
+     "bytes": 556,
+     "oid": "5446e15a057b1abf904d88a8f13a12ee5c8156cd"
+    },
+    "paired.csv": {
+     "bytes": 11803,
+     "oid": "6085d3907488c2967771e6436eb388273d20c67f"
+    },
+    "paired_curve.csv": {
+     "bytes": 33024,
+     "oid": "2c6aeeb6029434a45af8a519d4b61b924d970c5b"
+    },
+    "provenance.json": {
+     "bytes": 3126,
+     "oid": "b0e308dc5b62cfbe845a777345bcd55ca8c0799a"
+    }
+   }
+  }
+ ]
+}

@@ -33,7 +33,7 @@
 #
 # DINOv3 is gated under Meta's research licence: rather than passing an
 # HF token through ``docker build``, we expect the user to run
-# ``scripts/cache_gated_models.sh`` **once** on the host (with their HF
+# ``scripts/install/cache_gated_models.sh`` **once** on the host (with their HF
 # credentials), which populates ``./model_cache/``. This Dockerfile then
 # COPYs that local cache into the image; no token ever touches the
 # build, the codebase, or any image layer.
@@ -64,9 +64,9 @@
 #   # 1. ONE-TIME setup to bake DINOv3 + EUPE into the image (skip if you
 #   #    only want SigLIP / SigLIP 2 / CLIP / DINOv2). HF_TOKEN is needed
 #   #    only for DINOv3; pass SKIP_DINOV3=1 to cache only EUPE:
-#   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh
+#   HF_TOKEN=hf_xxx ./scripts/install/cache_gated_models.sh
 #   #   …or, EUPE only (no token needed):
-#   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
+#   SKIP_DINOV3=1 ./scripts/install/cache_gated_models.sh
 #
 #   # 2. Build the image (from repo root); no token, no secrets:
 #   docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
@@ -172,7 +172,7 @@ ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
 RUN mkdir -p "$VTSEARCH_MODELS_DIR"
 
 # Copy any host-side cached gated weights into the image cache, if the
-# user ran scripts/cache_gated_models.sh. We seed an empty
+# user ran scripts/install/cache_gated_models.sh. We seed an empty
 # model_cache/.gitkeep in the repo so this COPY succeeds even when the
 # cache is empty (docker COPY needs at least one matching source).
 COPY model_cache/ "$VTSEARCH_MODELS_DIR/"
@@ -234,7 +234,7 @@ from transformers import AutoModel, AutoImageProcessor; \
 AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
 AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
 print('DINOv3 weights loaded from local cache.', flush=True)" \
-    || echo "DINOv3 not in local cache; skipping. Run scripts/cache_gated_models.sh on the host to enable DINOv3."
+    || echo "DINOv3 not in local cache; skipping. Run scripts/install/cache_gated_models.sh on the host to enable DINOv3."
 
 # EUPE (facebookresearch/EUPE, ViT-B/16). Loads via torch.hub: a cloned
 # GitHub repo plus a downloaded .pt weights file, both under
@@ -250,7 +250,7 @@ import torch; \
 torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', source='github', \
                pretrained=True, weights=EUPE_MODEL_ID, trust_repo=True); \
 print('EUPE weights cached via torch.hub.', flush=True)" \
-    || echo "EUPE not cached; skipping. Run scripts/cache_gated_models.sh on the host to enable EUPE in offline builds."
+    || echo "EUPE not cached; skipping. Run scripts/install/cache_gated_models.sh on the host to enable EUPE in offline builds."
 
 # ---------- application layer ----------
 COPY . .

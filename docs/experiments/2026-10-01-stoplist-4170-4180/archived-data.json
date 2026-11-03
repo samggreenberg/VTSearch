@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-stoplist-4170-4180.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/arm-all-steps.csv": {
+     "bytes": 327635,
+     "oid": "9626eca9f95d6b5c85b5d57c2fa9f84613255ad8"
+    },
+    "measurements/arm-gated-steps.csv": {
+     "bytes": 330754,
+     "oid": "88a4f0b4c6026a3555168653ee8b0742688cee1a"
+    },
+    "measurements/shipped-steps.csv": {
+     "bytes": 328437,
+     "oid": "600518cd32833b3b4081e9f6df69d1d100f16292"
+    }
+   }
+  }
+ ]
+}

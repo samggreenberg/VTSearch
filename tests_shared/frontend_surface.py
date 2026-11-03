@@ -39,7 +39,7 @@ from __future__ import annotations
 #   tests_lib/detectors/test_label_quota.py
 #                                    reads autopilot-state.service.ts to hold
 #                                    the TypeScript mirror to the Python rule.
-#   tests_lib/core/test_media_type_icons.py
+#   tests_lib/media/test_media_type_icons.py
 #                                    reads the icon SVG tables to hold every
 #                                    media type's served icon to a real glyph.
 FRONTEND_TEST_SURFACE: tuple[str, ...] = (
@@ -50,7 +50,7 @@ FRONTEND_TEST_SURFACE: tuple[str, ...] = (
     "tests/api/test_error_envelope.py",
     "tests/datasets/test_datasets.py",
     "tests_lib/detectors/test_label_quota.py",
-    "tests_lib/core/test_media_type_icons.py",
+    "tests_lib/media/test_media_type_icons.py",
 )
 
 #: Paths under which a change is a frontend change.  ``frontend/openapi.json``

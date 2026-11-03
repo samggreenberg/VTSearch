@@ -51,11 +51,11 @@ Share of runs each verdict fires on, today's app, the range over the three betas
 Without the walk, today's verdict fires in-domain on 26% / 93% at votes 25 / 150, and the chosen rule on 0 / 0-0.14%.
 Every leg, arm, beta and click is in [`rules.csv`](rules.csv).
 
-![Each rule's fire rate by click, per corpus](figures/rules_by_click.png)
+![Each rule's fire rate by click, per corpus](figures/rules_by_click.webp)
 
 Every run at vote 150, each share against the 2 alpha bar (dotted):
 
-![Every run's share at vote 150, today's against the chosen rule's](figures/shares_per_run.png)
+![Every run's share at vote 150, today's against the chosen rule's](figures/shares_per_run.webp)
 
 | Find corpus, arm | today's share, 5th / 50th / 95th percentile / max | share beyond the pool, same |
 |---|---|---|

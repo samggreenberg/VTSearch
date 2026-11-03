@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-15-wider-stop-4903.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "capped.csv": {
+     "bytes": 1472,
+     "oid": "c9f6f948b45185b28aeb3b09da4689b1bdcf6e62"
+    },
+    "caps.csv": {
+     "bytes": 24128,
+     "oid": "79d8e53febb73a973d730788566c9629fa534e6f"
+    },
+    "never.csv": {
+     "bytes": 2664,
+     "oid": "0f3551599fc0189e280a329e3a89b2d50556c070"
+    },
+    "over_clicks.csv": {
+     "bytes": 198019,
+     "oid": "397e81aa50d0b8ca88b85f6e71d15c2e97ddf9a6"
+    },
+    "survival.csv": {
+     "bytes": 934,
+     "oid": "ae5198282be4eb6c50845fb28ace24b2fcb6b166"
+    }
+   }
+  }
+ ]
+}

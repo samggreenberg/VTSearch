@@ -64,7 +64,7 @@ significantly livelier, and the shipped default detector (`siglip/whole_image`)
 is a null — a difference smaller than twice its own standard error, which is
 "not resolvable here", not "unchanged".
 
-![flat band](figures/flat_band.png)
+![flat band](figures/flat_band.webp)
 
 *Share of steps whose admitted set changed at each stop of the knob, one line
 per head, deep regime. Read the **position**, not just the level: liveness peaks
@@ -79,14 +79,14 @@ which is what the per-cell figure below is for.*
 The two arms are full trajectories, so the run also prices the head switch itself
 — for free, and on the only axis a user experiences.
 
-![cost over clicks](figures/cost_vs_clicks.png)
+![cost over clicks](figures/cost_vs_clicks.webp)
 
 *Cost against clicks spent, mean over 288 cells per arm, click 0 being the free
 text sort. The shipped SVM is below the logistic head at essentially every click
 count, reaches the zero-click text sort in **15 clicks against 18**, and ends at
 **0.27 against 0.28**. Dashed where fewer than 95% of an arm's cells have a
 detector yet; the band is ±1 sd across cells, and it is wide — see the per-run
-panel, [`cost_vs_clicks_runs__vg_scale.png`](figures/cost_vs_clicks_runs__vg_scale.png),
+panel, [`cost_vs_clicks_runs__vg_scale.webp`](figures/cost_vs_clicks_runs__vg_scale.webp),
 where some runs never leave the floor.*
 
 That is a side result — PR #3198 shipped on a ranking measurement, not this one —
@@ -112,7 +112,7 @@ plan: soft means dead-step rate ≥ 0.50 **or** admitted span ≤ 0.05.
 Nothing is close to either bar. Dragging the slider end to end moves the
 admitted fraction across three quarters to nine tenths of the collection.
 
-![knob authority](figures/knob_authority.png)
+![knob authority](figures/knob_authority.webp)
 
 *Mean admitted fraction across the knob (solid) beside the fold quantile the
 rule asked for (dashed, and falling because it is a low-side quantile). The
@@ -136,7 +136,7 @@ Dead-step rate (admitted span in parentheses), shipped head:
 | `siglip+dinov3_patch/whole_image` | 0.095 (0.94) | 0.12 (0.93) | **0.25** (0.84) |
 | `siglip+dinov3_patch/max_patch` | 0.087 (0.89) | 0.18 (0.80) | **0.40** (0.55) |
 
-![flatness by band](figures/flatness_by_band.png)
+![flatness by band](figures/flatness_by_band.webp)
 
 *The same numbers with the logistic head beside them. The ordering
 small < medium < large holds in all six series; the head shifts the level
@@ -148,7 +148,7 @@ under the shipped head, **5.6%** of cells have an admitted span ≤ 0.05 — a
 slider that genuinely does nothing — and **15%** have a dead-step rate ≥ 0.50.
 Under the logistic head those are **8.3%** and **21%**: worse, again.
 
-![authority per cell](figures/authority_per_cell.png)
+![authority per cell](figures/authority_per_cell.webp)
 
 *One marker per cell, bar at the mean. The distribution is bimodal, not spread:
 most cells sit at 0.9–1.0 and a minority sit near zero. The region panel's mean
@@ -223,7 +223,7 @@ admits exactly what reporting's does — the offset buying nothing:
 | `siglip+dinov3_patch/whole_image` | 0.27 | 0.051 | 0.000 |
 | `siglip+dinov3_patch/max_patch` | 0.41 | 0.16 | 0.090 |
 
-![offset collapse](figures/offset_collapse.png)
+![offset collapse](figures/offset_collapse.webp)
 
 *The curve starts at k = −7 because below it the selector's own stop falls off
 the end of the slider and there is nothing to compare. The collapse concentrates

@@ -317,7 +317,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=acq2877-prep --mem=24G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P  ->  $BASE/prepare/logs/prepare-$P.out"
     echo "cells enumerate from $PREP/prepare_info.json"
@@ -345,7 +345,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name=acq2877-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$BASE/sizing/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
     echo "size job: $S (half $HALF, cell $IDX, arm $ARM)  ->  $BASE/sizing/logs/size-$S.out"
     echo "read it with: sacct -j $S --format=JobID,JobName%18,MaxRSS,Elapsed,State"
@@ -364,7 +364,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=acq2877-baseline --mem=24G --cpus-per-task=2 \
       --time=2:00:00 --partition=cpu --export=ALL \
       --output="$BASE/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T  ->  $BASE/analysis/text_baseline.csv"
     ;;
@@ -382,8 +382,8 @@ case "$MODE" in
     # therefore survivable; the dangerous version is preflight reporting `ok`
     # without having looked (#2905).
     # shellcheck disable=SC1091
-    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
-      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/scripts/grid/gridenv.sh" >&2; exit 1
     }
 
     SEEDSPEC="${2:-8}"
@@ -494,7 +494,7 @@ case "$MODE" in
           --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" --time="$CALIB_TIME" \
           --partition="$CALIB_PARTITION" --export=ALL \
           --output="$CALIB_EXP/logs/cells-%A_%a.out" \
-          --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+          --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
         require_jobid "$J" "half $HALF arm $ARM's cells array"
         echo "--- $JOB_NAME (k=$OFF pct='${CALIB_ACQ_RANK_PERCENTILE:-}') job=$J -> $CALIB_EXP"
         echo "$J" > "$CALIB_EXP/logs/.cells_jobid"
@@ -533,7 +533,7 @@ case "$MODE" in
     A=$(sbatch --parsable --dependency="afterany:$DEPSTR" --job-name=acq2877-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves $ASCOPE --out $BASE/analysis")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves $ASCOPE --out $BASE/analysis")
     require_jobid "$A" "the cross-arm analyze step"
 
     echo

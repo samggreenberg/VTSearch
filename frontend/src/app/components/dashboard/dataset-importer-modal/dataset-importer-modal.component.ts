@@ -18,7 +18,6 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { HintsService } from '../../../services/hints.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { EmbedderInfo, ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../models/api.models';
-import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import { toTypeId } from './pickers/shared/media-type.util';
 import { datasetMediaWords } from '../../../utils/media-words';
 
@@ -78,7 +77,6 @@ export class DatasetImporterModalComponent implements OnInit {
 
   readonly closed = output<void>();
   readonly importStarted = output<void>();
-  readonly demoSelected = output<DemoDatasetEntry>();
 
   readonly importers = signal<ImporterInfo[]>([]);
   readonly selectedImporter = signal<ImporterInfo | null>(null);
@@ -425,13 +423,6 @@ export class DatasetImporterModalComponent implements OnInit {
     const resolved = importer || this.importers().find((i) => i.name === 'server_folder') || null;
     this.selectedImporter.set(resolved);
     this.serverFolderPicker().open(resolved);
-  }
-
-  /** Forward a demo picker's committed selection to the dashboard, then
-   *  close the modal. */
-  onDemoDatasetSelected(demo: DemoDatasetEntry): void {
-    this.demoSelected.emit(demo);
-    this.close();
   }
 
   close(): void {

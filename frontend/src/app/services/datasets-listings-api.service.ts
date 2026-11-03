@@ -23,7 +23,7 @@ import { mediaTypesList } from '../generated/api-client/fn/datasets-listings/med
 
 /** Plugin / media-type listings used by import-config widgets, settings
  *  panels, and the demo dataset picker.  Every payload here is described by a
- *  nested Marshmallow schema in ``vtsearch/schemas/datasets.py``, so the
+ *  nested Marshmallow schema in ``vtsearch/schemas/datasets/``, so the
  *  generated models are the real types and nothing is cast at the boundary:
  *  a backend field rename fails this build. */
 @Injectable({ providedIn: 'root' })

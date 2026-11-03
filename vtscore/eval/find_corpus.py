@@ -288,7 +288,7 @@ def find_columns(metrics: Mapping[str, Any]) -> dict[str, float]:
 def training_domain_flags(reference: "np.ndarray | None", matrix: "np.ndarray") -> dict[str, float]:
     """The Training-domain overlap chip's reading of *matrix* (#4961's warning), NaN where the app refuses it.
 
-    The app's route (``vtsearch.training_domain.domain_shift_against``) runs
+    The app's route (``vtsearch.domain_overlap.domain_shift_against``) runs
     :func:`~vtscore.coverage.domain_shift.domain_shift_report` at its default
     alpha with the reference dataset's whole-image vectors as *reference* and
     the whole-image vectors of every media of the dataset searched as

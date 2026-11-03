@@ -573,7 +573,7 @@ class TestCombineDatasetsImporterChunked:
 
 class TestMergeDetectorResults:
     def test_merge_new_detector(self):
-        from vtscore.cli import _merge_detector_results
+        from vtscore.cli.scoring import _merge_detector_results
 
         acc: dict[str, dict[str, Any]] = {}
         new = {
@@ -592,7 +592,7 @@ class TestMergeDetectorResults:
         assert len(acc["det_a"]["hits"]) == 2
 
     def test_merge_extends_existing(self):
-        from vtscore.cli import _merge_detector_results
+        from vtscore.cli.scoring import _merge_detector_results
 
         acc = {
             "det_a": {
@@ -616,7 +616,7 @@ class TestMergeDetectorResults:
 
     def test_merge_appends_without_sorting(self):
         """Merge only concatenates; ordering is deferred to _sort_detector_results."""
-        from vtscore.cli import _merge_detector_results
+        from vtscore.cli.scoring import _merge_detector_results
 
         acc = {
             "det_a": {
@@ -639,7 +639,7 @@ class TestMergeDetectorResults:
         assert [h["filename"] for h in acc["det_a"]["hits"]] == ["low.wav", "high.wav"]
 
     def test_sort_orders_descending(self):
-        from vtscore.cli import _merge_detector_results, _sort_detector_results
+        from vtscore.cli.scoring import _merge_detector_results, _sort_detector_results
 
         acc = {
             "det_a": {
@@ -667,7 +667,7 @@ class TestMergeDetectorResults:
         assert acc["det_a"]["negative_hits"][1]["filename"] == "neg_low.wav"
 
     def test_merge_multiple_detectors(self):
-        from vtscore.cli import _merge_detector_results
+        from vtscore.cli.scoring import _merge_detector_results
 
         acc: dict[str, dict[str, Any]] = {}
         new = {

@@ -52,7 +52,7 @@ scores its typed query's set.
 | 1 | 0.36 | 0.44 | 0.53 | **0.54** | 40 / 42 | 0% / 0% |
 | 4 | 0.47 | 0.52 | 0.61 | **0.61** | 82 / 80 | 18% / 19% |
 
-![The objective over clicks, per preset](figures/objective_at_own_beta.png)
+![The objective over clicks, per preset](figures/objective_at_own_beta.webp)
 
 1. **The presets return what they promise.** After the check:
    - the 1/4 preset returns a median of 17 images at precision 0.76 and recall 0.36;
@@ -75,7 +75,7 @@ scores its typed query's set.
 Per preset, the returned set's precision against its recall from the typed query through 25, 50, 100 and 150
 clicks to after the check (#4519). The values are means over every run; the returned size is a median.
 
-![Precision against recall through the session, per preset](figures/precision_recall_path.png)
+![Precision against recall through the session, per preset](figures/precision_recall_path.webp)
 
 | preset | point | precision | recall | F-beta | returned, median |
 |---:|---|---:|---:|---:|---:|
@@ -107,7 +107,7 @@ clicks to after the check (#4519). The values are means over every run; the retu
 
 ### The returned set, one rule per row
 
-![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
+![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.webp)
 
 Two rules, and only rows under the same rule compare:
 - **"App line"** is what each sort's own line returns: the text sort's line at the preset (#4603), the detector's
@@ -140,7 +140,7 @@ The ranking barely depends on the preset (the beta-1 sessions):
 | **AP** | 0.42 | 0.42 | 0.50 | **0.56** | 0.56 |
 | **Goods found** | — | 6 | 13 | **28** | — |
 
-![Mean AP over clicks](figures/ap_over_clicks.png)
+![Mean AP over clicks](figures/ap_over_clicks.webp)
 
 Through vote 29 the session shows the typed query, so the 25-click column is the query's. By click 50 AP is up
 +0.08, and by 150 it has closed the whole gap to full labels.
@@ -206,7 +206,7 @@ same stops, one dot a session.
 | medium (49) | 0.53 | 41 | 0.38 | 0.55 | 0.53 | 30 |
 | small (46) | 0.29 | 34 | 0.16 | 0.29 | 0.31 | 17 |
 
-![Every class x band](figures/per_cell.png)
+![Every class x band](figures/per_cell.webp)
 
 At large and medium, 150 clicks reach or pass the full-label AP. Small is the only band with headroom left.
 
@@ -284,7 +284,7 @@ The mean is +0.15 AP (0.42 → 0.56).
   Tennis racket and baseball bat start near their ceiling (text AP 0.96 and 0.91). Chair, bag or luggage and bench
   have a low ceiling to climb to.
 
-![Mean Goods found over clicks](figures/goods_over_clicks.png)
+![Mean Goods found over clicks](figures/goods_over_clicks.webp)
 
 ## Images (#4658)
 

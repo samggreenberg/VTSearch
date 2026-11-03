@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     import synthetic
     from vtscore.embedding.loader import ensure_torch_configured
     from vtscore.training.mlp import _auto_hidden_dim
-    from vtscore.utils.scores import sigmoid_to_finite_array
+    from vtscore.training.thresholds.knobs import sigmoid_to_finite_array
 
     ensure_torch_configured()
 

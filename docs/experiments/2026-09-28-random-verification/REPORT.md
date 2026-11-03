@@ -79,7 +79,7 @@ that most "recall" bought by auditing is the audit itself.
 
 ## Honesty: every audited rule keeps its promises
 
-![Promises broken, of those made and of all frames, against the audit budget](figures/honesty.png)
+![Promises broken, of those made and of all frames, against the audit budget](figures/honesty.webp)
 
 X = 50%, α = 5%, pooled over t. Top row: the issue's metric, the broken share of
 promises made. Hollow markers are read off fewer than 100 promises. Bottom row:
@@ -126,7 +126,7 @@ ones, so the rule shrinks until it has read the whole set.
 
 ## What the votes buy
 
-![Recall ÷ oracle, and its unaudited part, against the audit budget](figures/recall.png)
+![Recall ÷ oracle, and its unaudited part, against the audit budget](figures/recall.webp)
 
 X = 50%, α = 5%, pooled over t. Top row: recall ÷ oracle recall. Bottom row: the
 same, counting only the positives inside the promise that the user was never
@@ -216,7 +216,7 @@ of oracle recall with 3.4 and 7.2 unseen positives.
 
 ## Across floors
 
-![Unaudited positives delivered against mean audit votes, per floor and prevalence](figures/cost.png)
+![Unaudited positives delivered against mean audit votes, per floor and prevalence](figures/cost.webp)
 
 Each line runs m = 5, 10, 20, 40 left to right, at α = 5%. Rows share a y-axis.
 The grey star is the shipped estimator, which audits nothing, so every positive

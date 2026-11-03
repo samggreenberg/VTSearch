@@ -77,7 +77,7 @@ def cuml_active() -> bool:
     CUDA cells are measured as two variants, ``"cuda+cuml"`` and ``"cuda"``.
     """
     try:
-        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+        from vtscore.config.gpu_backends import cuml_enabled  # noqa: PLC0415
 
         return cuml_enabled()
     except Exception:

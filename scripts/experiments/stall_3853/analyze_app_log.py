@@ -6,7 +6,7 @@ default).  The lines this cares about are the ones the stall diagnostics
 emit at WARNING, all present at the default log level:
 
 * ``slow request: METHOD /path -> status in NNNms cpu=NNms gc=NNms
-  (request_id=…)`` from ``vtsearch.hooks`` (threshold
+  (request_id=…)`` from ``vtsearch.runtime.request_hooks`` (threshold
   ``VTSEARCH_SLOW_REQUEST_MS``), and at ``VTSEARCH_LOG_LEVEL=INFO`` the same
   figures for *every* request as ``request trace: …``;
 * ``stall: heartbeat late by NNNms; …`` from the watchdog;

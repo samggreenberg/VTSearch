@@ -97,7 +97,7 @@ class TestThumbnailRouteAfterWarm:
 class TestLoadPipelineKick:
     def test_load_pipeline_kicks_the_warm_up(self, tmp_path, monkeypatch):
         """The kick is wired into the shared load path, so import *and* reload get it."""
-        from vtscore.datasets import load_pipeline
+        from vtscore.datasets import load_origin
 
         seen: list[str] = []
         kicked = threading.Event()
@@ -106,7 +106,7 @@ class TestLoadPipelineKick:
             seen.append(ctx.dataset_id)
             kicked.set()
 
-        monkeypatch.setattr(load_pipeline, "start_archive_thumbnail_warm", record)
+        monkeypatch.setattr(load_origin, "start_archive_thumbnail_warm", record)
 
         payload = _jpeg_bytes()
         archive = _make_shard(tmp_path, payload)
@@ -127,7 +127,7 @@ class TestLoadPipelineKick:
                 "archive_member": {"path": str(archive), "member": "photo.jpg"},
             }
 
-        load_pipeline._run_origin_load_in_background(
+        load_origin._run_origin_load_in_background(
             load_fn,
             origin={"importer": "local_archive_member", "params": {"archive_path": str(archive)}},
             name="warm-kick-test",

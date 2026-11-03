@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import (
+from vtsearch.settings.models import (
     VALID_ANIMATION_MODES,
     VALID_BROWSE_GRAPHICS,
     VALID_FOCUS_MODES,
@@ -145,6 +145,12 @@ class AppSettingsSchema(Schema):
     # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
     # own size buttons and the Settings → Browse Map tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
+    # New Detector's Pick-from-Dataset grid thumbnail size, per media type.
+    # Driven by the picker's own size buttons.
+    grid_icon_size_picker = _PerMediaTypeStringDict()
+    # The Find Results list's thumbnail size, per media type. Driven by the
+    # list's own size buttons.
+    grid_icon_size_results = _PerMediaTypeStringDict()
     # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
     # px, per media type. Driven by the popup's own top-left size buttons.
     popup_preview_size = _PerMediaTypeIntDict()
@@ -212,6 +218,11 @@ class AppSettingsSchema(Schema):
     # tab can report which types carry a custom vocabulary. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     browse_signpost_vocab = _PerMediaTypeStringListDict(dump_only=True)
+    # Server-tier usage-metrics switch (#5475). Set by editing the persisted
+    # settings file; surfaced read-only here so the Server settings tab can
+    # report whether ``POST /api/metrics`` records anything. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    enable_metrics = fields.Boolean(dump_only=True)
 
     # AutoFind (per-user, editable from the AutoFind settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
@@ -310,6 +321,8 @@ class SettingsUpdateSchema(Schema):
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
     grid_icon_size_popup = fields.Raw()
+    grid_icon_size_picker = fields.Raw()
+    grid_icon_size_results = fields.Raw()
     popup_preview_size = fields.Raw()
     popup_metadata_shown = fields.Raw()
     bin_details_docked = fields.Raw()
@@ -328,7 +341,7 @@ class SettingsUpdateSchema(Schema):
     browse_details_metadata_width = fields.Integer()
     browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
 
-    # Per-media-type dicts; the setters in ``settings.py`` validate each
+    # Per-media-type dicts; the setters in ``vtsearch.settings`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are
     # declared ``Raw`` here like the other per-media settings.
     browse_colormap = fields.Raw()
@@ -388,7 +401,7 @@ class SettingsUpdateSchema(Schema):
 # Note: per-side dict fields (grid_icon_size_left etc.) are declared as
 # ``fields.Raw`` on the *update* schema because the existing setters
 # accept either ``"M"``/``{media_type: "M"}`` and the validators
-# inside ``settings.py`` are the source of truth. Tightening these to
+# inside ``vtsearch.settings`` are the source of truth. Tightening these to
 # ``fields.Dict(...)`` is a follow-up once the per-side setters are
 # unified.
 

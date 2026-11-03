@@ -1,0 +1,55 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-18-fullmarks-stage1-3928.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/cell_m_d128.json": {
+     "bytes": 229,
+     "oid": "9e85c4500165f2bb225e8187e71f4200815e9e5d"
+    },
+    "measurements/cell_m_d256.json": {
+     "bytes": 230,
+     "oid": "3ae8f06e2a6ba5e4d3258e0ecbc63e32f7ef4152"
+    },
+    "measurements/cell_m_d512.json": {
+     "bytes": 230,
+     "oid": "db08359c529dc56c6df8f7f8562d2fc2d8a7821a"
+    },
+    "measurements/cell_s_d128.json": {
+     "bytes": 180,
+     "oid": "8b87f94ed5b6333315a7fadc9ef17c4ce471b51e"
+    },
+    "measurements/cell_s_d256.json": {
+     "bytes": 181,
+     "oid": "5ac47ed38cc028c2ae9e024d64cf4ce757347f43"
+    },
+    "measurements/cell_s_d512.json": {
+     "bytes": 181,
+     "oid": "c0ef53447f32e5b3ab83409d0efa4e816c84d486"
+    },
+    "measurements/cell_s_raw.json": {
+     "bytes": 185,
+     "oid": "f063f7d5a2c9051586fd72bed4175d3443bcb774"
+    },
+    "measurements/rows_m.csv": {
+     "bytes": 56360,
+     "oid": "ade520d78dfee086dab868300e6b75cc9f8df756"
+    },
+    "measurements/rows_s.csv": {
+     "bytes": 69863,
+     "oid": "3994607e05bf547224bb46de6b4dc638993bcab8"
+    },
+    "measurements/timings_m.json": {
+     "bytes": 595,
+     "oid": "5cf0840b23d30d03b43773be01a2f199ec384969"
+    },
+    "measurements/timings_s.json": {
+     "bytes": 790,
+     "oid": "45e421e348d1716fe4130a7d6c8c25c5e17d1362"
+    }
+   }
+  }
+ ]
+}

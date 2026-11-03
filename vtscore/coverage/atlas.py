@@ -55,7 +55,7 @@ import numpy as np
 # import otherwise.
 from sklearn.cluster import KMeans  # noqa: F401 — warms the CPU cold-import; kmeans_fit_predict is the fallback
 
-from vtscore.gpu_backends import kmeans_fit_predict
+from vtscore.config.gpu_backends import kmeans_fit_predict
 
 COVERAGE_ATLAS_DEFAULT_K = 3
 COVERAGE_ATLAS_MAX_DEPTH = 10

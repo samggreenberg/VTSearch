@@ -1,4 +1,4 @@
-"""The release-window PR enumeration: `scripts/release-prs.py`.
+"""The release-window PR enumeration: `scripts/release/release-prs.py`.
 
 `docs/RELEASE.md` steps 4 and 6 both walk the release window to get its PR
 numbers, and both used to do it by enumerating *merge commits*. That was true
@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "release-prs.py"
+SCRIPT = REPO_ROOT / "scripts" / "release" / "release-prs.py"
 
 
 def _load_script():

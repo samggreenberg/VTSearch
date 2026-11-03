@@ -142,7 +142,9 @@ class Image2FaceMediaConverter(MediaConverter):
 
     Each crop records where it sat in its photo as ``source_box``, the padded
     crop box normalised to the upright source frame, so the face can be
-    outlined on the photo it came from.
+    outlined on the photo it came from, and carries its grid thumbnail as
+    ``thumbnail_bytes``, so a gallery of faces streams small tiles instead of
+    decoding and resizing every crop on request (#5465).
     """
 
     display_name = "Images → Faces"
@@ -307,6 +309,7 @@ class Image2FaceMediaConverter(MediaConverter):
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         p = self._resolve_params(params)
 
@@ -334,6 +337,9 @@ class Image2FaceMediaConverter(MediaConverter):
             buf = io.BytesIO()
             cropped.save(buf, format=fmt)
             crop_bytes = buf.getvalue()
+            # The same helper the thumbnail route falls back to, so this tile is
+            # the one a request would have generated, built once here instead.
+            thumb = make_image_thumbnail(crop_bytes)
             outputs.append(
                 {
                     "filename": f"{stem}_face_{idx + 1}.{out_ext}",
@@ -341,6 +347,7 @@ class Image2FaceMediaConverter(MediaConverter):
                     "duration": 0,
                     "width": cropped.width,
                     "height": cropped.height,
+                    "thumbnail_bytes": thumb[0] if thumb is not None else None,
                     # Where the face sat in the photo, as a fraction of the
                     # frame: the padded box, however the crop was turned. The
                     # bounded decode may be a downsample, so pixels here are not

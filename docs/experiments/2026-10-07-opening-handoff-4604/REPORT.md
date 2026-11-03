@@ -57,7 +57,7 @@ Gains are paired per run (rule minus today). ± is one SE over classes, because 
 
 ## Result
 
-![The returned set over clicks under each rule](figures/handoff_over_clicks.png)
+![The returned set over clicks under each rule](figures/handoff_over_clicks.webp)
 
 *Mean F-beta over every run, per path and preset.*
 - **Gray, today:** flat on the typed query's set until runs start reaching Hard around click 23.
@@ -111,7 +111,7 @@ At beta 1/4 and 1 the region and binary detectors jump far above the typed query
   - The typed query's top holds few of their positives, so the Good phase drags on: the first detector arrives at a median click of 34 (binary) to 45 (region), counting as never the runs that never train one (#4631).
   - The Bad phase then ends after click 50, or never before Hard.
 
-![Each run's gain, sorted](figures/run_gains.png)
+![Each run's gain, sorted](figures/run_gains.webp)
 
 *Each run's gain over clicks 1–50 from showing the detector at the end of the Bad phase, sorted. The flat zero
 stretch is the 20% of runs whose Bad phase ends after click 50, or never.*
@@ -161,7 +161,7 @@ At beta 1/4 the score rewards precision. A few images at the top of even a weake
 
 **The baseline.** The typed query's guarded line was rebuilt on the 1% pool with today's code (`handoff_1pct_4604.sh`). #4583's own baseline predates #4136, so its display line is the old midpoint.
 
-![The returned set over clicks at a 1% pool](figures/handoff_over_clicks_1pct.png)
+![The returned set over clicks at a 1% pool](figures/handoff_over_clicks_1pct.webp)
 
 **Gain against today, mean F-beta over clicks 1–50:**
 
