@@ -36,11 +36,11 @@ describe('DashboardModalsService', () => {
     expect(service.combineDetectors.open).toBe(false);
   });
 
-  it('openExport carries the detector name; close clears it', () => {
-    service.openExport('my-detector');
-    expect(service.export).toEqual({ open: true, detectorName: 'my-detector' });
+  it('openExport carries the detector id + name; close clears both', () => {
+    service.openExport('det-9', 'my-detector');
+    expect(service.export).toEqual({ open: true, detectorId: 'det-9', detectorName: 'my-detector' });
     service.closeExport();
-    expect(service.export).toEqual({ open: false, detectorName: '' });
+    expect(service.export).toEqual({ open: false, detectorId: '', detectorName: '' });
   });
 
   it('openAddLabels carries id + name; close clears both', () => {
@@ -65,8 +65,8 @@ describe('DashboardModalsService', () => {
   });
 
   it('emits the new state to observers of the matching stream', async () => {
-    service.openExport('streamed');
+    service.openExport('det-s', 'streamed');
     const state = await firstValueFrom(service.export$);
-    expect(state).toEqual({ open: true, detectorName: 'streamed' });
+    expect(state).toEqual({ open: true, detectorId: 'det-s', detectorName: 'streamed' });
   });
 });

@@ -115,10 +115,26 @@
         </div>
       </div>
     }
-    @if (findTab() === 'autopilot') {
-      <!-- The current pick with Good and Bad, the round's dots and the phase's
-           prompt: the spot check's round as the view rather than a modal. At
-           Done, the verdict with its exits (#5100). -->
+    @if (findTab() === 'autopilot' && lineTest.currentId() !== null) {
+      <!-- The test's picks are voted as every other vote is (#5502): the
+           ordinary centre panel, one pick at a time, with nothing over it to
+           say a test is on. The left panel's phase lights say how far it has
+           got. The votes are the test's own, so the panel hands each one to
+           the session rather than the vote state; ↓ walks back along the
+           picks already voted, from any round, to correct one. -->
+      <vt-center-panel
+        [media]="testPick()"
+        [disabled]="waiting"
+        [hostVotes]="true"
+        [hostVote]="lineTest.currentVote()"
+        [advancePending]="lineTest.awaitingRound()"
+        [voteHint]="testVoteHint()"
+        (mediaVoted)="lineTest.vote($event.vote, $event.id)"
+        (navigateRequested)="lineTest.navigate($event)"
+      />
+    } @else if (findTab() === 'autopilot') {
+      <!-- No pick to vote: the verdict with its exits at Done (#5100), or a
+           word on what the pane waits for. -->
       <vt-line-test-stage
         (moveToAutoFind)="onMoveToAutoFind()"
         (lean)="onLean($event)"

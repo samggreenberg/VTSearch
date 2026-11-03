@@ -1643,6 +1643,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A scored run can say how unlike its training dataset the scored dataset is** (issue #5501). Each detector
+  result of a `find_results` payload may now carry `training_domain`: the overlap check's report (the reference
+  dataset, the label counts it rests on, and `domain_shift`, `vtscore.coverage.domain_shift_report`'s dict or
+  `None`). The email exporter prints its figure and verdict under each detector and adds "(domain warning)" to its
+  default subject on a likely shift, worded by the new `vtscore.coverage.domain_shift_line`. Additive: an exporter
+  that ignores the key keeps working. See `extending/results-exporters.md`. To let the check run when that dataset is not loaded, a detector now records
+  it: `vtscore.detectors.training_domain` gains `TRAINING_DATASET_KEY`, `training_dataset_record` and
+  `recorded_training_dataset`, and `vtscore.detectors.evidence_baseline.record_baseline` takes a
+  `training_dataset` keyword that writes it with the baseline (`PendingDraw` gains `labels_held`). A pointer and a
+  count, never a vector. `vtscore.embedding.matrix.stored_primary_vectors(pkl_path)` reads a saved dataset's
+  primary vectors without loading it: the embedding-matrix sidecar when there is one, else the container.
+
+- **`LineTest.relabel(id, match)` corrects a pick already recorded** (issue #5502), from any round, the test
+  running or done: every round stays dealt, the ranges re-read on the corrected labels and the phase is
+  re-derived, so a correction can end a running test or reopen a finished one. It returns whether the label
+  changed. `LineTest.as_dict()` also carries `votes`, every label in the order first recorded. See
+  `packages/training.md`.
+
 - **A scored run can carry the user's column choice** (issue #5464). The Find Results dialog's
   `find_results` payload now has an optional `selected_columns` list, as a `labelset` already did: a
   hit's own keys, keys of its `custom_metadata`, and the detector result's `detector` / `threshold`.

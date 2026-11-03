@@ -13,7 +13,8 @@ pipeline exists.
 This module is media-type-agnostic: it produces the taxonomy, the per-item
 category paths, and the synthetic vectors.  The audio and image media types
 wrap each item in their own media bytes (a tone / a colour tile) and thumbnail.
-Library tier: numpy + stdlib only.
+Library tier: numpy + stdlib only, plus one lazy read of the embedder
+registry's declared widths (:func:`baked_dim`).
 """
 
 from __future__ import annotations
@@ -190,6 +191,26 @@ def generate_items(dim: int, items_per_city: int = DEFAULT_ITEMS_PER_CITY) -> li
     return items
 
 
+def baked_dim(embedder_name: str | None, fallback: int) -> int:
+    """Width to bake the demo's vectors at, for a load under *embedder_name*.
+
+    The demo files its vectors under the load's embedder name, and the load
+    pipeline refuses a named vector whose width differs from the one that
+    embedder declares.  So the vectors are baked at that declared width, which
+    lets the demo import under any embedder the picker offers.  They are
+    synthetic whatever the width, so they live in no embedder's real space and a
+    text query against them means nothing; the demo is for the signpost display,
+    which needs only their nested cluster structure, and that does not depend on
+    the width.
+
+    *fallback* applies to an embedder that declares no width, or a name no
+    embedder is registered under.  Nothing checks the width in either case.
+    """
+    from vtscore.embedding.binding import expected_dim_for_embedder  # noqa: PLC0415 - avoid import cycle
+
+    return expected_dim_for_embedder(embedder_name) or fallback
+
+
 def total_cities() -> int:
     """Number of leaf cities in the taxonomy (108) — for media rendering math."""
     return sum(
@@ -202,6 +223,7 @@ __all__ = [
     "TAXONOMY",
     "DEFAULT_ITEMS_PER_CITY",
     "ToponymyItem",
+    "baked_dim",
     "generate_items",
     "total_cities",
 ]

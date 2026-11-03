@@ -36,6 +36,11 @@ import { ToastService } from './toast.service';
  *  - an import whose dataset none of the user's AutoFind detectors applies to
  *    finishes as a `skipped` row, shown as an info toast giving the reason.
  *
+ * A run whose dataset looks unlike a detector's training dataset carries the
+ * detector in its row's `domain_shifts` (#5501): the announcing toast turns to
+ * a warning and names each one, in Tune's words. The Find Results dialog says
+ * the same per detector.
+ *
  * The dialog itself is mounted once in `AppComponent`, reading {@link results},
  * so a run's results can be opened from any view. Failed runs need nothing
  * here: `ToastService` already turns a failed task row into an error toast.
@@ -152,12 +157,18 @@ export class AutoFindService {
     const message = `${what} finished on "${info.dataset_name}": ${found}`;
     const ax = info.auto_export;
     const exportFailed = ax?.success === false;
-    const detail = exportFailed
+    const outcome = exportFailed
       ? `${detectorWord}. ${autoExportFailure(ax)}`
       : ax?.success
         ? `${detectorWord}. ${ax.message ?? `Sent via ${ax.exporter_display_name}.`}`
         : `${detectorWord}.`;
-    const show = exportFailed ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);
+    // Tune's training-domain warning, for each detector this dataset looks
+    // unlike the training dataset of (#5501): an AutoFind opens nothing on
+    // its own, so this notice is where the user first hears of it.
+    const shifts = (info.domain_shifts ?? []).map((s) => `\u26A0 ${s.detector_name}: ${s.message}.`);
+    const detail = [outcome, ...shifts].join(' ');
+    const warn = exportFailed || shifts.length > 0;
+    const show = warn ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);
     show({
       message,
       detail,

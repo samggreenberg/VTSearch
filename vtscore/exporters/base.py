@@ -371,6 +371,7 @@ class ResultsExporter(PluginBase):
                                "total_hits": 15,      # len(hits)
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
+                               "training_domain": {...},  # may be absent or None
                              }
                            },
                            "missing_detectors": [...],
@@ -422,6 +423,21 @@ class ResultsExporter(PluginBase):
                      Informational, like ``missing_detectors``:
                      ``threshold`` stays the float the hits were cut at,
                      whatever it says.
+
+                     **``training_domain``** (#5501) says how much of the
+                     scored dataset looks unlike the dataset the detector was
+                     trained on: ``{"reference_dataset_id",
+                     "reference_dataset_name", "labels_total",
+                     "labels_in_reference", "labels_in_active",
+                     "domain_shift", "reason"}``, where ``domain_shift`` is
+                     :func:`vtscore.coverage.domain_shift_report`'s dict
+                     (``frac_atypical``, ``shifted``, ...) or ``None`` with
+                     ``reason`` saying why there was nothing to compare.  An
+                     app run (Find, AutoFind, ``POST /api/auto-detect``) sets
+                     it; the CLI does not.  Informational too: a report or a
+                     message may print ``frac_atypical`` and the verdict, as
+                     the email exporter does, and a tabular exporter may skip
+                     it.
 
             field_values: Mapping of :attr:`PluginField.key` -> value supplied
                 by the user.

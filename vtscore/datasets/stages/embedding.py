@@ -766,11 +766,18 @@ class EmbedLoopProgress:
     bar for the 2nd/3rd embedders — no backslide, but a long static stretch.
 
     This proxy gives each embedder an equal, ordered sub-range of the embed step
-    (step 3) and rewrites the within-embedder fraction into the active range
-    before forwarding, so the bar fills once, cumulatively, across the whole loop
-    instead of per embedder.  An embedder that does no work (e.g. a reload whose
-    side-channels are already present) simply emits nothing and leaves its slice
-    unfilled; the next embedder jumps the bar forward, which is monotonic.
+    (step 3) and maps the within-embedder fraction into the active range, so the
+    bar fills once, cumulatively, across the whole loop instead of per embedder.
+    An embedder that does no work (e.g. a reload whose side-channels are already
+    present) simply emits nothing and leaves its slice unfilled; the next
+    embedder jumps the bar forward, which is monotonic.
+
+    The cumulative fraction travels as the tracker's ``within`` override, and
+    the embedder's own ``current``/``total`` pass through untouched, so the UI
+    shows the items this embedder has done out of the items it is embedding
+    (``312/2,000 SigLIP…``) rather than a count against an arbitrary scale
+    (#5492).  The count restarts with each embedder; the message names which
+    one is running, and the bar is what carries the whole loop.
 
     The **first** embedder's model-load keeps the dedicated model-load step
     (step 2) so its weighted slice of the bar still fills; **later** embedders'
@@ -781,10 +788,6 @@ class EmbedLoopProgress:
     Single-embedder loads (``n_embedders <= 1``) forward every update unchanged,
     so their pacing — download / model-load / embed / finalize — is untouched.
     """
-
-    #: Resolution of the synthetic within-step counter forwarded to the real
-    #: tracker (the embed fraction 0..1 is reported as ``current`` out of this).
-    _SCALE = 1000
 
     def __init__(self, tracker, n_embedders: int) -> None:
         self._tracker = tracker
@@ -817,10 +820,11 @@ class EmbedLoopProgress:
         self._tracker.update(
             status,
             message,
-            int(frac * self._SCALE),
-            self._SCALE,
+            current,
+            total,
             step=_STATUS_TO_STEP["embedding"],
             total_steps=_TOTAL_LOAD_STEPS,
+            within=frac,
         )
 
 

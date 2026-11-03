@@ -552,8 +552,10 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
     file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
     the dataset the detector was trained on as the overlap check infers it
-    (the loaded dataset holding most of its labels), ``""`` when none is.
-    ``None`` with no embedder name to stamp it with or no detector file.
+    (the loaded dataset holding most of its labels), ``""`` when none is, with
+    ``labels_held``, how many of the labels it holds: the training-dataset
+    pointer recorded with the baseline (#5501).  ``None`` with no embedder name
+    to stamp it with or no detector file.
     """
     from vtscore.datasets.registry import get_dataset
     from vtscore.detectors.evidence_baseline import baseline_stamp
@@ -567,12 +569,13 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     entry = get_detector(det_ctx.detector_id) or {}
     if stamp is None or not entry.get("name"):
         return None
-    training_id, _counts = infer_training_reference(labelset, active_id)
+    training_id, counts = infer_training_reference(labelset, active_id)
     return {
         "stamp": stamp,
         "path": _detector_path(entry["name"]),
         "training_id": training_id,
         "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
+        "labels_held": counts.get(training_id, 0) if training_id else 0,
     }
 
 
@@ -635,6 +638,7 @@ def defer_learned_sort_baseline(
                 results=results,
                 threshold=threshold,
                 embedder=embedder,
+                labels_held=home["labels_held"],
             )
         )
     except Exception:  # noqa: BLE001 - see the docstring
@@ -683,7 +687,7 @@ def find_evidence_coverage():
     from vtscore.detectors.evidence_coverage import evidence_coverage_report
     from vtscore.detectors.learned_sort import resolve_active_labelset
     from vtscore.detectors.store import _read_detector
-    from vtscore.detectors.training_domain import labelled_media_ids
+    from vtscore.detectors.training_domain import labelled_media_ids, training_dataset_record
     from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
@@ -735,7 +739,14 @@ def find_evidence_coverage():
             predicted_positive=predicted,
             labelled=labelled_media_ids(labelset, get_active_context()),
         )
-        record_baseline(home["path"], baseline, det_ctx=det_ctx)
+        record_baseline(
+            home["path"],
+            baseline,
+            det_ctx=det_ctx,
+            training_dataset=training_dataset_record(home["training_id"], home["training_name"], home["labels_held"])
+            if home["labels_held"] > 0
+            else None,
+        )
     elif home is not None:
         flush_baseline_draw(det_ctx.detector_id)
         baseline = stored_baseline(_read_detector(home["path"]), home["stamp"])

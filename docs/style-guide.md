@@ -86,7 +86,7 @@ Canonical roles:
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
 - **Chart series:** `--chart-verified` (what the user checked by hand). Validated per theme for 3:1 on `--bg-surface`; a new series gets its own token, validated against it for colorblind separation. Not a status color, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
-- **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). The first three flip per theme; `--badge-text-dark` is one dark ink in all three, because the fills it sits on stay bright in every theme. Never hardcode `#fff` on a fill.
+- **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text` (on any other `--accent`, `--color-good` or `--color-bad` fill, badges included), `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on the amber `--badge-embedding` badge). The first three flip per theme with the fills: dark ink on the dark theme's light fills (they double as text on dark panels, so they can't be darkened), white on the light theme's deep ones, black on highviz. `--badge-text-dark` is one dark ink in all three, because the amber stays bright in every theme. Never hardcode `#fff` on a fill. A hover on a filled button shades toward `--text-primary`, not `--bg-body`: `--text-primary` is the opposite of the fill's ink in every theme, so the hover raises contrast instead of eroding it.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
 
@@ -452,7 +452,9 @@ A connected row of buttons acting as one single-select control (the View/Focus p
 </div>
 ```
 
-Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense and icon-sized with a border-highlight hover instead of a fill (toolbars). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense, with a muted resting colour and a border-highlight hover instead of a fill (toolbars, and short labelled rows such as Find Results' Good/Bad/Both). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+
+A variant recolours its resting buttons by setting `--seg-ink`, never `color`. `.segmented-toggle--compact .segmented-toggle__btn` is two classes against `--active`'s one, so a `color` set there wins over `--toggle-active-text` and puts the variant's ink on the accent fill. The compact variant's muted grey did exactly that, at 1.2:1 in every theme (#5500).
 
 ### 2.11 Entity cards and card actions
 

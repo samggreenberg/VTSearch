@@ -602,10 +602,11 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
  * dealt. refresh.sh seeds the draw (VTSEARCH_SPOT_CHECK_SEED), so a refresh
  * frames the same picks.
  *
- * It waits for the round itself, a pick's dot, or for a test that ended
- * before one (Done, Nothing to test). Never for the stage's heading alone:
- * *Drawing picks…* is a heading too, and the view sat on it when the test
- * never started (#4555), so a wait that took it photographed the hang.
+ * It waits for the round itself, its first pick in the centre panel (the
+ * test's picks are voted there, as every vote is, #5502), or for a test that
+ * ended before one (Done, Nothing to test). Never for the stage's heading
+ * alone: *Drawing picks…* is a heading too, and the view sat on it when the
+ * test never started (#4555), so a wait that took it photographed the hang.
  */
 async function openTune(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
@@ -620,7 +621,7 @@ async function openTune(page: Page, h: Helpers): Promise<void> {
   // photographing a progress bar. The test starts once the pass lands.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
   await page.waitForSelector(
-    '.line-test-stage .pick-dot, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
+    '.panel-center vt-center-panel .media-swipe-wrapper, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
     { timeout: 60000 },
   );
   await h.wait(2500);
@@ -671,9 +672,9 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
 
 /**
  * Vote the Tune autopilot's rounds to Done, with the corpus's truth: each
- * round's pending picks (in draw order, which is the stage's dot order) are
- * read off `/api/line-test`, named through `/api/medias/batch`, and answered
- * with the keys, as a reader would. Up to twenty rounds; a test's budgets
+ * round's pending picks (in draw order, the order the centre panel shows
+ * them in) are read off `/api/line-test`, named through `/api/medias/batch`,
+ * and answered with the keys, as a reader would. Up to twenty rounds; a test's budgets
  * hold it to twelve. With no test running there is nothing to vote, and the
  * Done the caller waits for will never come, so that throws rather than
  * leaving the caller to time out on it.
@@ -699,14 +700,17 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
       await page.keyboard.press(isGood.get(nameOf.get(id) ?? '') ? 'ArrowRight' : 'ArrowLeft');
       await h.wait(250);
     }
+    // The round is whole once the server has dealt the next one (or ended the
+    // test); then the centre panel holds the next round's first pick, swiped
+    // in, or the stage the verdict.
+    for (let poll = 0; poll < 240; poll++) {
+      const next = (await getJson('/api/line-test')).test;
+      if (!next || next.phase === 'done' || next.phase === 'nothing' || next.round !== test.round) break;
+      await h.wait(250);
+    }
     await page
-      .waitForFunction(
-        (r) => {
-          const dots = document.querySelectorAll('.line-test-stage .pick-dot');
-          const headline = document.querySelector('.line-test-stage .stage-heading');
-          return (dots.length > 0 && dots[0].getAttribute('data-vote') === null) || headline !== null || r < 0;
-        },
-        round,
+      .waitForSelector(
+        '.panel-center vt-center-panel .media-swipe-wrapper:not(.swipe-left):not(.swipe-right), .line-test-stage .stage-heading',
         { timeout: 60000 },
       )
       .catch(() => {});
@@ -1306,7 +1310,7 @@ export const SHOTS: Shot[] = [
     id: 'test-verdict',
     embeddedIn: `${GUIDE}#the-result`,
     caption:
-      'The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
+      'The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
     themes: BOTH,
     clip: { target: '.verdict-card', pad: 8 },
     async recipe(page, h) {

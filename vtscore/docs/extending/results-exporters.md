@@ -106,6 +106,7 @@ deliver an empty export.
                 ...,
             ],
             "negative_hits": [...],
+            "training_domain": {...},  # app runs only; may be absent or None
         },
         # ... one entry per detector run
     },
@@ -117,6 +118,15 @@ deliver an empty export.
 Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
+
+`training_domain` is the check behind the app's domain warning: how much of
+the scored dataset looks unlike the dataset the detector was trained on. Its
+`domain_shift` holds `frac_atypical` (the share, 0-1) and `shifted` (the
+verdict), or is `None` when there was nothing to compare, with `reason`
+saying why. A message or report can print the figure, as the email exporter
+does ("68% of this dataset looks atypical vs photos: likely domain shift");
+a tabular exporter can ignore it. The app sets it on every Find and AutoFind
+run; the CLI does not.
 
 `selected_columns` is the user's column choice from the Find Results
 dialog, in order. It names a hit's own keys, keys of its
@@ -216,6 +226,13 @@ the detector's real name instead of the raw placeholder - visible and
 editable before the user hits Export. Resolving the active detector
 inside your export method instead gets you an empty box in the UI and
 a value that appears out of nowhere on submit.
+
+**Which detector `{detector_name}` names.** The one the export belongs
+to. From the app's Find and Train views that is the active detector; from
+a Dashboard row's Export labels it is the row's detector, which need not
+be loaded or active. The export route makes that detector the active
+context for the whole run, field validation and your export method alike,
+so even a body that reads `get_active_detector_context()` sees it.
 
 ## Server-path and URL validation
 

@@ -518,7 +518,7 @@ describe('LeftPanelComponent', () => {
       const checked = el.querySelector('.find-balance-row input[type="radio"]:checked') as HTMLInputElement;
       expect(checked.value).toBe('0.25');
       expect(el.querySelector('.find-balance-row .balance-state')!.textContent).toContain(
-        "Checked the 32 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept",
+        "Checked the 32 kept you hadn't voted on · likely 78 ± 23% right, about half of them found (checked 5) · 32 more kept",
       );
     });
 

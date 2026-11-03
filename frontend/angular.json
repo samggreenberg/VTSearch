@@ -58,8 +58,9 @@
                 // deferred chunk. Measured 2026-09-12 (#3811) the eager split
                 // is 317.54kB framework to 121.47kB app code.
                 //
-                // Measured initial total: 515.86kB (#5297; it was 483.71kB
-                // at #3811 and had crept to 524.28kB before #5297). The
+                // Measured initial total: 512.41kB (#5505; it was 483.71kB
+                // at #3811, 515.86kB after #5297, and had crept back to
+                // 524.67kB before #5505, ~9.5kB of it new app code). The
                 // headroom is deliberate and is NOT spare capacity for app
                 // code. Angular's own patch releases move this number ~3kB at
                 // a time, and when the margin was last under 1kB a routine
@@ -79,6 +80,13 @@
                 // `vt-dialog-host`: `vt-modal` is a native <dialog> opened with
                 // showModal(), which handles focus for all 23 dialogs with no
                 // library (-8.42kB). TestEagerBundleComposition guards that too.
+                //
+                // #5505 put `vt-toast-container` behind `@defer (on immediate)`
+                // in AppComponent (-12.31kB): nothing needs the toast stack for
+                // first paint, and ToastService holds toasts raised before its
+                // chunk lands. `vt-offline-banner` (and the `vt-toasty-hint` it
+                // shows) cannot follow: it renders exactly when no chunk can be
+                // fetched. TestEagerBundleComposition guards the toast stack.
                 //
                 // Do not raise without first auditing the eager path for
                 // genuine bloat.

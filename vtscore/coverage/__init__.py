@@ -25,7 +25,7 @@ from vtscore.coverage.atlas import (
     CoverageAtlas,
     auto_max_depth,
 )
-from vtscore.coverage.domain_shift import domain_shift_report
+from vtscore.coverage.domain_shift import domain_shift_line, domain_shift_report
 
 __all__ = [
     "COVERAGE_ATLAS_DEFAULT_K",
@@ -33,5 +33,6 @@ __all__ = [
     "COVERAGE_ATLAS_MIN_NODE_SIZE",
     "CoverageAtlas",
     "auto_max_depth",
+    "domain_shift_line",
     "domain_shift_report",
 ]

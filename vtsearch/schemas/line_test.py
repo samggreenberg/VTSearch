@@ -10,7 +10,6 @@ from the picks already taken.
 * ``GET  /api/line-test``        -> :class:`LineTestResponseSchema`
 * ``POST /api/line-test/start``  -> :class:`LineTestResponseSchema`
 * ``POST /api/line-test/votes``  -> :class:`LineTestVotesRequestSchema` -> :class:`LineTestResponseSchema`
-* ``POST /api/line-test/unvote`` -> :class:`LineTestUnvoteRequestSchema` -> :class:`LineTestResponseSchema`
 * ``POST /api/line-test/cancel`` -> :class:`LineTestResponseSchema`
 """
 
@@ -142,6 +141,9 @@ class LineTestStateSchema(Schema):
     # otherwise (#5116).
     ahead = fields.Nested(LineTestAheadSchema, required=True, allow_none=True)
     labelled = fields.Integer(required=True)
+    # Every pick voted so far, with its label, in the order first voted: the
+    # trail the ↓ key walks back along to correct one (#5502).
+    votes = fields.List(fields.Nested(PrecisionCheckVoteSchema), required=True)
     bands = fields.List(fields.Nested(LineTestBandSchema), required=True)
     # ``null`` when there is nothing to test.
     estimates = fields.Nested(LineTestEstimatesSchema, required=True, allow_none=True)
@@ -219,12 +221,9 @@ class LineTestVerdictSchema(Schema):
 
 
 class LineTestVotesRequestSchema(Schema):
-    """Body for ``POST /api/line-test/votes``: votes on this round's picks, a partial round accepted."""
+    """Body for ``POST /api/line-test/votes``: votes on this round's picks, a partial round accepted.
+
+    A vote on a pick already voted, from any round, corrects it (#5502).
+    """
 
     votes = fields.List(fields.Nested(PrecisionCheckVoteSchema), required=True)
-
-
-class LineTestUnvoteRequestSchema(Schema):
-    """Body for ``POST /api/line-test/unvote``: take back one vote of the current round (the ↓ key)."""
-
-    id = fields.Integer(required=True)

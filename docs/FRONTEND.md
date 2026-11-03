@@ -174,6 +174,10 @@ the component —
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
 by `AppComponent` inside `@defer` blocks, so any surface can start those flows.
+For the same reason, each of the Add-Dataset dialog's pickers sends its own
+import request and closes the dialog only once the server has accepted it.
+Never hand the request to the Dashboard to send: that view is not mounted
+when the dialog is opened from Label, and the request would be lost (#5498).
 
 ### Label view (`components/label-view/`)
 
@@ -261,9 +265,16 @@ server owns the sample and derives the phase on every read (`line_phase`;
 statistics in `vtscore/training/thresholds/line_test.py`, routes in
 `vtsearch/routes/line_test.py`), so nothing in the frontend accumulates it.
 Its panes are `vt-line-test-panel` (left, projected as `[findAutopilot]`),
-`vt-line-test-stage` (centre, and the verdict with its three exits at Done)
-and `vt-line-test-result` (right). The ranked list is not shown while a test
-runs: a pick is drawn from a band, and the list would show its rank (#4267).
+the centre and `vt-line-test-result` (right). The centre is the ordinary
+`vt-center-panel` while there is a pick to vote (#5502), so the test's picks
+are voted as every other vote is; its `hostVotes` input hands each vote to
+`LineTestSessionService` (`/api/line-test`) rather than `VoteStateService`,
+lights the buttons from the session's vote, and keeps undo off. Otherwise the
+centre is `vt-line-test-stage`: the verdict with its three exits at Done, or a
+word on what it waits for. ↓ walks back along the test's votes (the wire's
+`test.votes`), from any round and from the verdict, and a vote on a pick
+walked back to corrects it. The ranked list is not shown while a test runs: a
+pick is drawn from a band, and the list would show its rank (#4267).
 
 **Component-provided services:** `PairScopeService` and
 `LineTestSessionService` (the last `/api/line-test` response plus the round as
@@ -980,7 +991,12 @@ the seams `vt-modal` adds:
 Routes are lazy by construction. Beyond that, the heavy app-level modals are
 imported by `AppComponent` but used **only inside `@defer` blocks**, so Angular
 splits them into separate chunks — they drag in the file browser, the crop
-modal and `marked`, which together push the eager bundle over budget.
+modal and `marked`, which together push the eager bundle over budget. The
+always-mounted toast stack is deferred the same way, `@defer (on immediate)`:
+it is fetched right after first render, and a toast raised before it lands
+waits in `ToastService` (#5505). Chrome that must render when the server is
+unreachable cannot be deferred, because then no chunk can be fetched: that is
+why `vt-offline-banner`, and the `vt-toasty-hint` it shows, stay eager.
 
 The production `initial` budget is deliberately tight and the rationale is
 written into `angular.json` next to the number. `./run-tests.sh` treats **any**
@@ -1001,7 +1017,8 @@ any more, so one specific trap is covered by a test:
 `vt-dialog-host` each render a single uncontrolled text field and used to pull
 all ~37 kB of `@angular/forms` for it; both now use plain `[value]` + `(input)`.
 `TestEagerBundleComposition` in `tests/core/test_frontend.py` walks the built
-bundle's *static* imports from `main.js` and fails if the package reappears.
+bundle's *static* imports from `main.js` and fails if the package reappears;
+it guards `@angular/cdk/a11y` (#5297) and the toast stack (#5505) the same way.
 
 ### Other primitives
 

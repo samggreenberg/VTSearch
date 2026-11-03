@@ -310,7 +310,7 @@ describe('DetectorCardComponent', () => {
       fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict() });
       await settleZoneless(fixture);
       let line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
-      expect(line.textContent?.trim()).toBe('Tested on drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+      expect(line.textContent?.trim()).toBe('Tested on drawings-new: likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)');
       expect(line.title).toContain('34 random picks');
 
       fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict({ stale: true }) });
