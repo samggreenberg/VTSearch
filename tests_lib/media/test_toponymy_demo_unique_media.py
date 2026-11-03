@@ -32,17 +32,23 @@ from vtscore.state.media_lookup import collapse_duplicates
 
 @pytest.fixture(scope="module", params=["image", "audio"])
 def demo(request) -> tuple[str, dict[int, dict]]:
-    """``(media_type, clips)`` for one full-size demo load, shared by this module's tests."""
+    """``(media_type, clips)`` for one full-size demo load, shared by this module's tests.
+
+    Thumbnails are stubbed out: they are most of the load's time and none of what is tested here.
+    """
     clips: dict[int, dict] = {}
-    media_get(request.param).load_demo_source(
-        source=SOURCE_ID,
-        categories=list(TAXONOMY),
-        slice_start=0,
-        slice_end=None,
-        clips=clips,
-        on_progress=lambda *_args: None,
-        embedder=None,
-    )
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("vtscore.media.audio.media_type.generate_waveform_thumbnail", lambda _wav: None)
+        mp.setattr("vtscore.media.image.thumbnail.make_image_thumbnail", lambda _png: None)
+        media_get(request.param).load_demo_source(
+            source=SOURCE_ID,
+            categories=list(TAXONOMY),
+            slice_start=0,
+            slice_end=None,
+            clips=clips,
+            on_progress=lambda *_args: None,
+            embedder=None,
+        )
     return request.param, clips
 
 
