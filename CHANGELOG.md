@@ -20,6 +20,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Fixed
+
+- **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,
+  but every item in a city got the same tile or tone, byte for byte, so the import merged them as duplicates and
+  kept one item per city. That left nothing for the finest signpost tier, the cities, to cluster. Each item's tile
+  or tone now differs from its neighbours by one level in a few pixels or samples, which no one can see or hear,
+  so every item survives the import. A copy of either demo cached before this fix still holds the old media and
+  still loads 108 items; delete `data/embeddings/synthetic_world_image.pkl` or `synthetic_world_audio.pkl` to
+  rebuild it.
+
 ## 2026-11-03
 
 ### Changed
