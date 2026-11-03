@@ -5675,6 +5675,16 @@ def simulate_voting_iterations(  # noqa: C901
                     "find_on_test": None,
                     "fallback_threshold": CENTROID_THRESHOLD,
                 }
+                # The centroid's scores carry its line (#4732): cut at
+                # CENTROID_THRESHOLD they keep what Test keeps here, the face
+                # ball where it holds.  A face-ball session sits on this branch
+                # for the whole session, so it records its frames here (#5527).
+                if (
+                    rank_frame_sink is not None
+                    and rank_frame_steps
+                    and any(t_before < s <= t for s in rank_frame_steps)
+                ):
+                    rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
             for mr in metric_rows:
                 rows.append({**base_row, **mr, **band_metrics, **find_cols, **timing_cols})
         elif calibration is not None:
