@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-04-check-hold-5530.8d32be9731d8.tar.gz",
+   "source_commit": null,
+   "files": {
+    "measurements/summary.txt": {
+     "bytes": 1400,
+     "oid": "4a6525b2e10029246d46844ef6a902ef1fbe44d6"
+    }
+   }
+  }
+ ]
+}
