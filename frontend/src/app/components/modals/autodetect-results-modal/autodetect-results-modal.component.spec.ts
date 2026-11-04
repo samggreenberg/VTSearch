@@ -557,7 +557,7 @@ describe('AutoDetectResultsModalComponent', () => {
       expect(radios().map((r) => r.checked)).toEqual([true, false, false]);
       expect([component.goodCount, component.badCount]).toEqual([3, 1]);
       expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 3]);
-      expect(note()?.textContent).toContain("No detector's own Threshold changes");
+      expect(note()?.textContent).toContain("No detector's Threshold changes");
 
       component.setNotch(0.25);
       component.sides.set('bad');

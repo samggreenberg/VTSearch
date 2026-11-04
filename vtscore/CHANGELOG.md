@@ -10,6 +10,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Added
+
+- **A `find_results` payload from the app carries each detector's cut at every Threshold preset** (issue #5540).
+  Beside `threshold` and `balance`, an app run's detector result has `beta` (the balance `threshold` was cut at) and
+  `lines` (`[{"beta", "threshold"}]` at beta 4, 1 and 1/4). Both are informational. An export from the Find Results
+  dialog at another notch than the run's sends that notch's cut as `threshold` and its preset as `beta`, and no
+  `balance`. The CLI sends neither. See `vtscore/docs/extending/results-exporters.md`.
+
 ### Changed
 
 - **Smart and Stable can read fewer than 5 Goods after a dry run** (issue #5477). New in

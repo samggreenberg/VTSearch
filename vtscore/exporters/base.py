@@ -368,6 +368,8 @@ class ResultsExporter(PluginBase):
                                "detector_name": "...",
                                "threshold": 0.5,
                                "balance": {...},      # may be absent or None
+                               "beta": 1.0,           # may be absent or None
+                               "lines": [{"beta": 4.0, "threshold": 0.3}, ...],  # may be absent
                                "total_hits": 15,      # len(hits)
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
@@ -423,6 +425,15 @@ class ResultsExporter(PluginBase):
                      Informational, like ``missing_detectors``:
                      ``threshold`` stays the float the hits were cut at,
                      whatever it says.
+
+                     **``beta``** and **``lines``** (#5540; app runs only) are
+                     the balance ``threshold`` was cut at and the cut at each
+                     of the Threshold's presets (``[{"beta", "threshold"}]``,
+                     beta 4, 1 and 1/4).  Informational: the Find Results
+                     dialog lists the run at the notch picked there, and an
+                     export from another notch than the run's sends that
+                     notch's cut as ``threshold`` and its preset as ``beta``,
+                     with no ``balance``, which describes the run's own cut.
 
                      **``training_domain``** (#5501) says how much of the
                      scored dataset looks unlike the dataset the detector was

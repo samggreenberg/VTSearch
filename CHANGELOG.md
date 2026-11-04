@@ -20,6 +20,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
+  controls now run left to right in the order each acts on the list: the **Threshold**, then **Good** / **Bad** /
+  **Both**, then **Sort by**. The Threshold's three radios start on the notch the run was cut at; pick another and
+  the list, its Good and Bad counts, **Browse** and **Export** all split the run's scores where that notch draws the
+  line. Nothing is retrained, and no detector's own Threshold changes. An export from another notch sends that
+  notch's cut as the detector's `threshold`. The radios are frozen when no notch would list anything different,
+  for example a detector with too few labels for its line to move.
+
 ### Fixed
 
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,

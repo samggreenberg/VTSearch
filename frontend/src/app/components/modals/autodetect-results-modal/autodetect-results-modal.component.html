@@ -128,8 +128,7 @@
     </div>
     @if (notchMoved()) {
       <p class="info-text notch-note" role="note">
-        Listed at another notch than the run's: the same scores, split where that Threshold draws the line. No
-        detector's own Threshold changes.
+        Split at another notch than the run's, from the run's own scores. No detector's Threshold changes.
       </p>
     }
     <vt-column-chooser [columns]="columns()" (toggled)="setColumnEnabled($event.key, $event.enabled)" (allToggled)="toggleAllColumns()">
