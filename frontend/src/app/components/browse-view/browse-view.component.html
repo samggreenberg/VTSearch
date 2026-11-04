@@ -268,7 +268,7 @@
                 class="browse-size-btn"
                 [disabled]="atMinHexSize"
                 (click)="bumpHexSize(-1)"
-                title="Smaller thumbnails"
+                [title]="atMinHexSize ? 'Already the smallest thumbnails' : 'Smaller thumbnails'"
                 aria-label="Smaller thumbnails">
                 <vt-icon type="image" [size]="11"></vt-icon>
               </button>
@@ -277,7 +277,7 @@
                 class="browse-size-btn"
                 [disabled]="atMaxHexSize"
                 (click)="bumpHexSize(1)"
-                title="Bigger thumbnails"
+                [title]="atMaxHexSize ? 'Already the biggest thumbnails' : 'Bigger thumbnails'"
                 aria-label="Bigger thumbnails">
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>

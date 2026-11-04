@@ -58,7 +58,7 @@
             type="button"
             (click)="submitTextSort($any($event.currentTarget))"
             [disabled]="searchDisabled"
-            title="Run text search"
+            [title]="searchDisabled ? 'Type a description to search for first' : 'Run text search'"
           >Search</button>
         </div>
       }

@@ -81,6 +81,21 @@ describe('CombineDetectorsModalComponent', () => {
 
     expect(errorText()?.textContent).toContain('already exists');
     expect(combineBtn().disabled).toBe(true);
+    expect(combineBtn().title).toBe('A detector named "Barks" already exists.');
+  });
+
+  // #5533: a disabled Combine names the step still owed on hover.
+  it('says the name is required while it is blank, and describes the action once it is typed', async () => {
+    await fixture.whenStable();
+    expect(combineBtn().disabled).toBe(true);
+    expect(combineBtn().title).toBe('New name is required');
+
+    const el = nameInput();
+    el.value = 'All Dog Sounds';
+    el.dispatchEvent(new Event('input'));
+    await settleZoneless(fixture);
+    expect(combineBtn().disabled).toBe(false);
+    expect(combineBtn().title).toBe('Combine the selected detectors into a new one');
   });
 
   it('disables both buttons while the combine is in flight', async () => {
@@ -90,6 +105,7 @@ describe('CombineDetectorsModalComponent', () => {
     expect(combineBtn().textContent).toContain('Combining…');
     expect(combineBtn().disabled).toBe(true);
     expect(cancelBtn().disabled).toBe(true);
+    expect(cancelBtn().title).toBe('Wait for the combine to finish');
   });
 
   // Zoneless staleness canary: the failure state is written from the combine

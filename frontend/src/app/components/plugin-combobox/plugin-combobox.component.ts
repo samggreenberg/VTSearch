@@ -80,6 +80,8 @@ export class PluginComboboxComponent {
   /** Accessible name, for a form that names the field without a `<label>`. */
   readonly ariaLabel = input('');
   readonly required = input(false);
+  /** Every host disables the field only while its option list loads, which
+   *  is what the toggle's tooltip says while it is disabled (#5533). */
   readonly disabled = input(false);
 
   /** Emits the value the form should store: an option's value, or typed text. */

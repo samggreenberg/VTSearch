@@ -292,6 +292,16 @@ describe('ManagedColumns: drag-reorder', () => {
 });
 
 /**
+ * Stub an element's layout width the way a browser reports it: the exact
+ * (possibly fractional) `getBoundingClientRect().width`, and `offsetWidth`
+ * rounded to a whole pixel.
+ */
+function stubWidth(el: HTMLElement, width: number): void {
+  Object.defineProperty(el, 'offsetWidth', { value: Math.round(width), configurable: true });
+  el.getBoundingClientRect = () => ({ width }) as DOMRect;
+}
+
+/**
  * Build a `<table>` with a `<thead>` of `data-col` headers and one body row.
  * Stubs the layout geometry the resize code reads: table width, each header's
  * width, and each body cell's `scrollWidth` (its natural content width).
@@ -302,7 +312,7 @@ function makeTable(opts: {
   cellScrollWidths?: Partial<Record<Col, number>>;
 }): HTMLTableElement {
   const table = document.createElement('table');
-  Object.defineProperty(table, 'offsetWidth', { value: opts.tableWidth, configurable: true });
+  stubWidth(table, opts.tableWidth);
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
@@ -312,7 +322,7 @@ function makeTable(opts: {
   for (const col of DEFAULTS) {
     const th = document.createElement('th');
     th.setAttribute('data-col', col);
-    Object.defineProperty(th, 'offsetWidth', { value: opts.headerWidths[col], configurable: true });
+    stubWidth(th, opts.headerWidths[col]);
     headRow.appendChild(th);
 
     const td = document.createElement('td');
@@ -362,6 +372,25 @@ describe('ManagedColumns: resize', () => {
     expect(mc.colWidths['size']).toBeCloseTo(25);
     expect(document.body.style.cursor).toBe('col-resize');
     expect(document.body.style.userSelect).toBe('none');
+  });
+
+  it('startResize keeps a column its fractional width, not the rounded offsetWidth (#5534)', () => {
+    // A content-sized auto-layout column is often a fraction of a pixel
+    // wider than its offsetWidth; capturing the rounded value made the first
+    // drag ellipsize the column's longest cell.
+    const mc = make();
+    const table = makeTable({
+      tableWidth: 850,
+      headerWidths: { name: 287.140625, size: 76, date: 362, kind: 124.859375 },
+    });
+    mc.startResize({
+      target: table.querySelector('th[data-col="size"]') as HTMLElement,
+      clientX: 0,
+      stopPropagation() {},
+      preventDefault() {},
+    } as unknown as MouseEvent);
+    expect(mc.colWidths['name']).toBeCloseTo((287.140625 / 850) * 100, 6);
+    expect(mc.colWidths['kind']).toBeCloseTo((124.859375 / 850) * 100, 6);
   });
 
   it('startResize on the leftmost divider (no previous column) is a no-op', () => {

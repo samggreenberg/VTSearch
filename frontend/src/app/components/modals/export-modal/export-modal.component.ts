@@ -493,6 +493,9 @@ export class ExportModalComponent implements OnInit {
     return this.filteredLabels.length > 0;
   }
 
+  /** The disabled Export / Copy tooltip while {@link hasLabels} is false (#5533). */
+  readonly noItemsReason = 'No labeled items in this category; pick another under Categories';
+
   get hasExporterForm(): boolean {
     return this.selectedExporter !== null;
   }

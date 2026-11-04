@@ -106,6 +106,9 @@ export class BalanceComponent {
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();
 
+  /** The "Threshold:" heading's own tooltip: the short version of {@link hint} (#5536). */
+  readonly shortHint = 'Where to draw the line: more matches, or surer ones';
+  /** The (?)'s tooltip: the long version. */
   readonly hint =
     'Where to draw the line. Toward False Positives returns more, with more wrong ones in it; ' +
     'toward False Negatives returns only the surest, and misses more.';

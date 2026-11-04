@@ -103,12 +103,41 @@ describe('DialogHostComponent', () => {
   // text sits in its own element (so the icon stays a separate flex item) and
   // that element is `white-space: pre-line`.
   it('renders newlines in the message as line breaks', async () => {
-    const promise = dialogService.confirmDestructive('Delete 2 detectors?\n"a", "b"', '(Labels only.)');
+    const promise = dialogService.choose('First line.\nSecond line.', [{ label: 'OK', primary: true, value: true }]);
     await settleZoneless(fixture);
 
     const text = fixture.nativeElement.querySelector('.dialog-message__text') as HTMLElement;
-    expect(text.textContent).toBe('Delete 2 detectors?\n"a", "b"\n(Labels only.)');
+    expect(text.textContent).toBe('First line.\nSecond line.');
     expect(getComputedStyle(text).whiteSpace).toBe('pre-line');
+
+    component.onClosed();
+    await promise;
+  });
+
+  // #5532: the names a confirmation is about are a bulleted list between the
+  // question and the detail, not a comma-joined row.
+  it('renders the items as a list between the question and the detail', async () => {
+    const promise = dialogService.confirmDestructive('Delete 2 detectors?', '(Labels only.)', 'Delete', ['a, the first', 'b']);
+    await settleZoneless(fixture);
+
+    const body = fixture.nativeElement.querySelector('.dialog-message__body') as HTMLElement;
+    const parts = Array.from(body.children).map((el) => el.tagName.toLowerCase());
+    expect(parts).toEqual(['span', 'ul', 'span']);
+    expect(body.children[0].textContent).toBe('Delete 2 detectors?');
+    expect(Array.from(body.querySelectorAll('li')).map((li) => li.textContent)).toEqual(['a, the first', 'b']);
+    expect(body.querySelector('ul')!.classList).toContain('name-list');
+    expect(body.children[2].textContent).toBe('(Labels only.)');
+
+    component.onClosed();
+    await promise;
+  });
+
+  it('renders no list when a dialog has no items', async () => {
+    const promise = dialogService.confirmDestructive('Delete detector "a"?', '(Labels only.)');
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.querySelector('.dialog-message ul')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.dialog-message__detail')?.textContent).toBe('(Labels only.)');
 
     component.onClosed();
     await promise;

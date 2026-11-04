@@ -90,7 +90,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="browse.emit()"
               aria-label="Browse unverified positives"
-              [title]="'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
             >
               <vt-icon type="eye" [size]="14"></vt-icon>
             </button>
@@ -99,7 +99,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="toDataset.emit()"
               aria-label="Unverified positives to dataset"
-              [title]="'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
             >
               <vt-icon type="cubes" [size]="14"></vt-icon>
             </button>
@@ -108,7 +108,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="unverifiedExport.emit()"
               aria-label="Export unverified positives"
-              [title]="'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
             >
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
