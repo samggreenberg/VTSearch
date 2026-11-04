@@ -67,7 +67,7 @@
                         class="btn btn--toolbar preset-btn"
                         [class.active]="row.current"
                         [disabled]="row.current"
-                        [title]="presetTitle(row)"
+                        [title]="(row.current ? 'Already the current line. ' : '') + presetTitle(row)"
                         (click)="lean.emit(row.beta)"
                       >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
                     </td>

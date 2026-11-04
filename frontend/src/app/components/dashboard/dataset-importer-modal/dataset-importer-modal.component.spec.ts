@@ -670,12 +670,15 @@ describe('DatasetImporterModalComponent', () => {
           (b.textContent || '').includes('Import'),
         )!;
       expect(importButton().disabled).toBe(true);
+      // A disabled button says why on hover (#5533).
+      expect(importButton().title).toMatch(/ is required$/);
 
       const path = input('field-path');
       path.value = '/data/sounds';
       path.dispatchEvent(new Event('input'));
       await settleZoneless(fixture);
       expect(importButton().disabled).toBe(false);
+      expect(importButton().title).toBe('');
     });
 
     it("paints a clicked demo row's name into the demo form", async () => {
@@ -687,6 +690,25 @@ describe('DatasetImporterModalComponent', () => {
       (el().querySelector('.demo-row') as HTMLElement).click();
       await settleZoneless(fixture);
       expect(input('demo-dataset-name').value).toBe('GTZAN');
+    });
+
+    // #5533: with no demo picked the Import button is disabled, and its
+    // tooltip names the step that enables it.
+    it("tells the user to pick a demo on the disabled Import button's tooltip", async () => {
+      flushImporters();
+      openAndFlushDemoPicker();
+      await settleZoneless(fixture);
+      const importButton = () =>
+        (Array.from(el().querySelectorAll('.form-actions .btn--primary')) as HTMLButtonElement[]).find((b) =>
+          (b.textContent || '').includes('Import'),
+        )!;
+      expect(importButton().disabled).toBe(true);
+      expect(importButton().title).toBe('Select a demo dataset from the list');
+
+      (el().querySelector('.demo-row') as HTMLElement).click();
+      await settleZoneless(fixture);
+      expect(importButton().disabled).toBe(false);
+      expect(importButton().title).toBe('');
     });
 
     it("paints a dropped folder's name into the local-folder form", async () => {

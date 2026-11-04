@@ -154,6 +154,7 @@
             [rows]="clipboardRows"
             [columns]="clipboardColumns"
             [disabled]="!hasLabels || enabledColumns.length === 0"
+            [disabledReason]="!hasLabels ? noItemsReason : 'Tick at least one column to copy'"
             copyLabel="Copy"
           ></vt-clipboard-copy>
         </div>
@@ -281,7 +282,7 @@
             class="btn btn--primary"
             (click)="submitExporterTab()"
             [disabled]="!hasLabels || submitting()"
-            title="Send exported data to the selected destination"
+            [title]="hasLabels ? 'Send exported data to the selected destination' : noItemsReason"
           >
             <vt-icon type="export" [size]="16" [class.icon-waggle]="submitting()"></vt-icon>
             @if (submitting()) {

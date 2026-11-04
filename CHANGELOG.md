@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
 - **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
   say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
   differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that

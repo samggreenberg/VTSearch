@@ -1346,6 +1346,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.trainLoading() || this.findLoading() || this.contextSwitch.switching;
   }
 
+  /** What a toolbar button disabled by {@link isContextSwitching} says on
+   *  hover, or ``''`` while nothing is switching: a disabled button always
+   *  says why (#5533). Each button falls back to its own tooltip. */
+  get contextSwitchReason(): string {
+    return this.isContextSwitching ? 'Wait for the current load to finish' : '';
+  }
+
   /** Train/Tune gate on this rather than `isContextSwitching` because they
    *  must also wait out an in-flight browse-prep: when its projection build
    *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
