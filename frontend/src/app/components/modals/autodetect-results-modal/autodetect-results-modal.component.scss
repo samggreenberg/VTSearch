@@ -50,6 +50,11 @@
   font-weight: var(--weight-medium);
 }
 
+// The Threshold leads the row (#5540): wide enough for its spectrum's two ends.
+.results-threshold {
+  flex: 0 0 15rem;
+}
+
 // The size buttons sit at the far end of the row.
 .results-size {
   margin-left: auto;

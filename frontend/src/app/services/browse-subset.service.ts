@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { AutoDetectResultsData } from '../models/api.models';
+import { splitAtNotch } from '../utils/results-notch';
 
 /** Which of a Find run's rows the Find Results dialog lists, and so browses. */
 export type RunBrowseSides = 'good' | 'bad' | 'both';
@@ -8,17 +9,21 @@ export type RunBrowseSides = 'good' | 'bad' | 'both';
  * Where a subset browse was launched from, and so where its **Back** returns:
  * the Tune view, or the Find Results dialog of run *runId* (#4615), which
  * reopens on the Dashboard. Rides the browse URL's query
- * (`from=results&run=…&sides=…`) rather than the in-memory handoff, so it
- * survives a reload, and names enough for the browse view to rebuild a run's
- * map without the handoff (#5129).
+ * (`from=results&run=…&sides=…`, and `notch=…` when the dialog listed another
+ * notch of the Threshold than the run's, #5540) rather than the in-memory
+ * handoff, so it survives a reload, and names enough for the browse view to
+ * rebuild a run's map without the handoff (#5129).
  */
-export type BrowseSubsetOrigin = { kind: 'test' } | { kind: 'results'; runId: string; sides: RunBrowseSides };
+export type BrowseSubsetOrigin =
+  | { kind: 'test' }
+  | { kind: 'results'; runId: string; sides: RunBrowseSides; notch?: number | null };
 
 /** The `/browse/:datasetId` query params that open a subset browse from *origin*. */
 export function subsetBrowseQueryParams(origin: BrowseSubsetOrigin): Record<string, string | number> {
-  return origin.kind === 'results'
-    ? { subset: 1, from: 'results', run: origin.runId, sides: origin.sides }
-    : { subset: 1 };
+  if (origin.kind !== 'results') return { subset: 1 };
+  const params: Record<string, string | number> = { subset: 1, from: 'results', run: origin.runId, sides: origin.sides };
+  if (origin.notch != null) params['notch'] = origin.notch;
+  return params;
 }
 
 /** The `sides` query param as a {@link RunBrowseSides}: Good, the dialog's
@@ -29,17 +34,16 @@ export function runBrowseSidesParam(raw: string | null): RunBrowseSides {
 
 /**
  * The media ids a Browse of *run*'s *sides* rows lays out, once each: a media
- * two detectors both called Good is one item on the map. The Find Results
- * dialog's Browse button and the browse view rebuilding that map from a link
- * both ask this, so they lay out the same set.
+ * two detectors both called Good is one item on the map. *notch* splits each
+ * detector at that notch of the Threshold rather than the run's own (#5540).
+ * The Find Results dialog's Browse button and the browse view rebuilding that
+ * map from a link both ask this, so they lay out the same set.
  */
-export function runBrowseIds(run: AutoDetectResultsData, sides: RunBrowseSides): number[] {
+export function runBrowseIds(run: AutoDetectResultsData, sides: RunBrowseSides, notch: number | null = null): number[] {
   const ids = new Set<number>();
   for (const result of Object.values(run.results || {})) {
-    const rows = [
-      ...(sides === 'bad' ? [] : result.hits || []),
-      ...(sides === 'good' ? [] : result.negative_hits || []),
-    ];
+    const split = splitAtNotch(result, notch);
+    const rows = [...(sides === 'bad' ? [] : split.good), ...(sides === 'good' ? [] : split.bad)];
     for (const hit of rows) {
       if (typeof hit.id === 'number') ids.add(hit.id);
     }

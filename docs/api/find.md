@@ -181,10 +181,19 @@ demand, and returns one result column per detector.
 
 → `{media_type, detectors_run, results, missing_detectors}`; `results` is keyed
 by detector name, each with its `detector_name`, `threshold`, `balance`,
-`label_quota`, `total_hits`, `hits` and `negative_hits` (rows carrying `score`),
-and `training_domain`: the [training-domain overlap](#training-domain-overlap)
-report for that detector on the scored dataset (#5501), or `null` when the
-check itself failed.
+`beta`, `lines`, `label_quota`, `total_hits`, `hits` and `negative_hits` (rows
+carrying `score`), and `training_domain`: the
+[training-domain overlap](#training-domain-overlap) report for that detector
+on the scored dataset (#5501), or `null` when the check itself failed.
+
+`beta` is the balance `threshold` was cut at, and `lines` is the cut at each
+of the Threshold's presets, from false positives to false negatives:
+`[{beta: 4, threshold}, {beta: 1, threshold}, {beta: 0.25, threshold}]`
+(#5540). Each is re-derived from what the train cached, as a balance change
+re-cuts the line, so nothing is retrained: the Find Results dialog splits
+`hits` and `negative_hits` at another notch's cut to show what it would have
+kept. The detector's own balance keeps `threshold`, and so does a preset whose
+cut cannot be re-derived (a head no balance moves).
 
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
 under the label quota runs as its typed query's own set (`query`, #4758), or

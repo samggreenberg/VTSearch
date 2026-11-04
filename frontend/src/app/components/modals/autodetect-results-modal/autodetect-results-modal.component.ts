@@ -57,10 +57,12 @@ import { exporterIconKind } from '../../../utils/exporter-icon';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { iconSizeToGoalWidth } from '../../../utils/grid-icon-size';
 import { visibleFields } from '../../../utils/plugin-fields';
+import { notchMoves, runNotch, splitAtNotch } from '../../../utils/results-notch';
 import { labelsOwed } from '../../../utils/label-quota';
 import { coerceNonEmptyString } from '../../../utils/settings-coerce';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
 import { DomainShiftWarning, domainShiftWarning } from '../../../utils/training-domain';
+import { BalanceComponent } from '../../left-panel/balance/balance.component';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
@@ -107,8 +109,9 @@ const THUMB_CELL_PAD_PX = 12;
 /** The Find Results dialog: one Find or AutoFind run's hits on one dataset.
  *
  * Laid out by what each control acts on (#5464): above the list, what the list
- * shows (Good / Bad / Both, the sort, the columns, the thumbnail size); the
- * list; below it, what acts on the listed rows (Browse, which opens them as a
+ * shows, in the order each acts on it (#5540): the Threshold splits the run
+ * into Good and Bad, Good / Bad / Both picks the side to list, the sort orders
+ * it; then the columns and the thumbnail size; the list; below it, what acts on the listed rows (Browse, which opens them as a
  * map of their own, #4615; and where they go, a tab per destination with
  * Clipboard first); and the footer's Close / Export / Export and Close. While
  * the dialog is open, the server lays out the Good results for Browse whenever
@@ -132,6 +135,7 @@ const THUMB_CELL_PAD_PX = 12;
     ClipboardCopyComponent,
     ColumnChooserComponent,
     ViewControlsComponent,
+    BalanceComponent,
     IconComponent,
     PluginCheckboxComponent,
     ProgressBarComponent,
@@ -161,6 +165,40 @@ export class AutoDetectResultsModalComponent implements OnInit {
 
   // --- What the list shows --------------------------------------------------
 
+  /**
+   * The notch of the Threshold the run is split at (#5540): a preset's beta,
+   * or `null` for each detector's own, the notch the run was cut at. Another
+   * notch lists what it would have returned: no retrain, the run's scores
+   * split at that balance's cut (`splitAtNotch`). No detector's own balance
+   * moves.
+   */
+  readonly notch = signal<number | null>(null);
+  /** The notch the Threshold shows: the one picked, else the run's own (none when its detectors differ). */
+  readonly shownNotch = computed(() => this.notch() ?? runNotch(this.data()));
+  /** Whether another notch would list anything else; when not, the Threshold is frozen. */
+  readonly notchMoves = computed(() => notchMoves(this.data()));
+  /** Why the Threshold is frozen, on each of its radios. */
+  readonly notchFrozenHint =
+    "Every notch lists the same items here: these results' line doesn't move with the Threshold.";
+
+  /** Each detector's Good and Bad at the {@link notch}, by its key in the run's ``results``. */
+  readonly splits = computed(() => {
+    const notch = this.notch();
+    return Object.entries(this.data().results || {}).map(([resultKey, result]) => ({
+      resultKey,
+      result,
+      split: splitAtNotch(result, notch),
+    }));
+  });
+  /** Whether the list is split at another notch than the run's own, for the note under the row. */
+  readonly notchMoved = computed(() => this.splits().some(({ split }) => split.moved));
+
+  /** Split the run at *beta*'s notch; the run's own notch goes back to the run as it came. */
+  setNotch(beta: number): void {
+    const moves = Object.values(this.data().results || {}).some((result) => splitAtNotch(result, beta).moved);
+    this.notch.set(moves ? beta : null);
+  }
+
   /** Which side of the threshold is listed (and exported, and browsed). */
   readonly sides = signal<ResultsSides>('good');
   readonly sortMode = signal<ResultsSort>('score');
@@ -186,12 +224,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
   readonly rows = computed<ResultRow[]>(() => {
     const sides = this.sides();
     const rows: ResultRow[] = [];
-    for (const [resultKey, result] of Object.entries(this.data().results || {})) {
+    for (const { resultKey, result, split } of this.splits()) {
       const detector = result.detector_name || resultKey;
       const add = (hit: AutoDetectHit, label: 'good' | 'bad') =>
         rows.push({ hit, label, resultKey, detector, key: `${resultKey}|${label}|${hit.id ?? hit.md5}` });
-      if (sides !== 'bad') for (const hit of result.hits || []) add(hit, 'good');
-      if (sides !== 'good') for (const hit of result.negative_hits || []) add(hit, 'bad');
+      if (sides !== 'bad') for (const hit of split.good) add(hit, 'good');
+      if (sides !== 'good') for (const hit of split.bad) add(hit, 'bad');
     }
     return rows;
   });
@@ -532,10 +570,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
       const { run_id: runId, dataset_id: datasetId } = this.data();
       untracked(() => this.warmBrowse(runId ?? '', datasetId ?? ''));
     });
-    // A new run's ids need their own order: ask again if it is the sort.
+    // A new run's ids need their own order: ask again if it is the sort. It
+    // is listed at its own notch, which another run need not share.
     effect(() => {
       this.data();
       untracked(() => {
+        this.notch.set(null);
         this.stopSimilarity();
         this.similarity.set({ status: 'idle' });
         if (this.sortMode() === 'similarity') this.requestSimilarity();
@@ -666,20 +706,14 @@ export class AutoDetectResultsModalComponent implements OnInit {
     return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.data().media_type);
   }
 
+  /** The Good at the {@link notch}, across every detector. */
   get goodCount(): number {
-    let total = 0;
-    for (const result of Object.values(this.data().results || {})) {
-      total += (result.hits || []).length;
-    }
-    return total;
+    return this.splits().reduce((total, { split }) => total + split.good.length, 0);
   }
 
+  /** The Bad at the {@link notch}, across every detector. */
   get badCount(): number {
-    let total = 0;
-    for (const result of Object.values(this.data().results || {})) {
-      total += (result.negative_hits || []).length;
-    }
-    return total;
+    return this.splits().reduce((total, { split }) => total + split.bad.length, 0);
   }
 
   formatOrigin(hit: AutoDetectHit): string {
@@ -738,7 +772,9 @@ export class AutoDetectResultsModalComponent implements OnInit {
    * side is moved into `hits`: Bad exports the below-threshold rows, Both
    * exports every row with its `label` stamped, and `total_hits` counts what
    * is being sent. `selected_columns` carries the ticked columns, which an
-   * exporter writing a table honours (#5464).
+   * exporter writing a table honours (#5464). A detector split at another
+   * notch of the Threshold (#5540) sends that notch's cut as `threshold` and
+   * its balance as `beta`, and no `balance`, which describes the run's own cut.
    */
   exportPayload(): AutoDetectResultsData {
     const data = this.data();
@@ -750,9 +786,13 @@ export class AutoDetectResultsModalComponent implements OnInit {
       listed.set(row.resultKey, list);
     });
     const results: Record<string, AutoDetectDetectorResult> = {};
-    for (const [name, result] of Object.entries(data.results || {})) {
+    const notch = this.notch();
+    for (const { resultKey: name, result, split } of this.splits()) {
       const rows = listed.get(name) ?? [];
       results[name] = { ...result, hits: rows, negative_hits: [], total_hits: rows.length };
+      if (split.moved && notch != null) {
+        results[name] = { ...results[name], threshold: split.threshold, beta: notch, balance: undefined };
+      }
     }
     return {
       media_type: data.media_type,
@@ -819,7 +859,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   /** The listed rows' media ids, once each: what Browse lays out. A media
    *  two detectors both called Good is one item on the map. */
   get browseIds(): number[] {
-    return runBrowseIds(this.data(), this.sides());
+    return runBrowseIds(this.data(), this.sides(), this.notch());
   }
 
   /** Why Browse is unavailable, or `''` when it isn't. */
@@ -841,6 +881,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
     const runId = this.data().run_id;
     const ids = this.browseIds;
     const sides = this.sides();
+    const notch = this.notch();
     if (this.browseBlocker || !datasetId || !runId || this.browseStarting() || this.browsePrep.preparing()) return;
     // Browse's own build takes over from here: it attaches to a fit the
     // warm-up already started, or finds the map built.
@@ -855,7 +896,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() =>
-        this.browsePrep.start(datasetId, ids, { kind: 'results', runId, sides }, () => this.closed.emit()),
+        this.browsePrep.start(
+          datasetId,
+          ids,
+          { kind: 'results', runId, sides, ...(notch != null ? { notch } : {}) },
+          () => this.closed.emit(),
+        ),
       );
   }
 
