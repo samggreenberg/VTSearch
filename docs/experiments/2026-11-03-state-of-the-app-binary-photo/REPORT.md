@@ -301,7 +301,9 @@ The other images in `images.md` are new to this list and were not looked at for 
 ## What to A/B next
 
 - **The mid-session check now fires at click 15, inside the query hold, in three sessions in four or more.** Its votes
-  land before the app shows a detector. #5530 A/Bs holding the check until the app shows a detector.
+  land before the app shows a detector. #5530 A/Bs holding the check until the app shows a detector. Settled
+  without an A/B: since #5556 set the hold to 0, no session's first check comes before the label quota, so the check
+  always audits the trained head ([`REPORT.md`](../2026-11-04-check-hold-5530/REPORT.md)).
 
 ## Files
 

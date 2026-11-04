@@ -1,0 +1,21 @@
+/expscratch/sgreenberg/state-of-the-app/2026-11-03-b025/results/cells
+  sessions 11520, prompted 10967 (95%), kinds {'done': 6107, 'weak': 4860}
+  first check pick before the quota: 0; under the quota at it: 0
+  phase at it: {'prompt': 10967}
+  first check click quartiles [15.0, 15.0, 26.0]; quota click quartiles [7.0, 7.0, 17.0]; never met 318
+  clicks from the quota to the check: min 6, median 8
+  labels at first check under 30 (inside #4736's hold): 8437 (77%)
+/expscratch/sgreenberg/state-of-the-app/2026-11-03-b1/results/cells
+  sessions 11520, prompted 10962 (95%), kinds {'done': 5945, 'weak': 5017}
+  first check pick before the quota: 0; under the quota at it: 0
+  phase at it: {'prompt': 10962}
+  first check click quartiles [15.0, 16.0, 27.0]; quota click quartiles [7.0, 7.0, 17.0]; never met 318
+  clicks from the quota to the check: min 6, median 8
+  labels at first check under 30 (inside #4736's hold): 8427 (77%)
+/expscratch/sgreenberg/state-of-the-app/2026-11-03-b4/results/cells
+  sessions 11520, prompted 10887 (95%), kinds {'done': 6053, 'weak': 4834}
+  first check pick before the quota: 0; under the quota at it: 0
+  phase at it: {'prompt': 10887}
+  first check click quartiles [15.0, 15.0, 26.0]; quota click quartiles [7.0, 7.0, 17.0]; never met 318
+  clicks from the quota to the check: min 6, median 8
+  labels at first check under 30 (inside #4736's hold): 8434 (77%)
