@@ -167,6 +167,10 @@ def demo_dataset_list(query: dict):
     * ``"needs_embedding"`` – nothing is left to download (the source data is on
       disk, or the demo generates its media locally), but it is not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
+
+    ``browsable`` says whether the demo's files can be browsed through
+    ``/api/browse-media-files`` (``source=demo:<name>``), which needs a declared
+    ``required_folder`` with content.  It is independent of ``status``.
     """
     from vtscore.converters import get_converter, list_converters_for_source
     from vtscore.media import get as media_get
@@ -197,11 +201,12 @@ def demo_dataset_list(query: dict):
         pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
         has_pkl = pkl_file.exists()
         required_folder = dataset_info.get("required_folder")
+        has_source = _folder_has_content(required_folder)
 
         status = _initial_demo_status(
             has_pkl,
             required_folder,
-            _folder_has_content(required_folder),
+            has_source,
             requires_download=dataset_info.get("requires_download", True),
         )
         status, pkl_embedder, pkl_clipper = _downgrade_for_mismatch(
@@ -231,6 +236,11 @@ def demo_dataset_list(query: dict):
                 ],
                 "pkl_embedder": pkl_embedder or "",
                 "pkl_clipper": pkl_clipper or "",
+                # Browsing reads the source folder, never the pickle, so this
+                # is decided by the folder alone (#5558): a hub demo reads
+                # ``ready`` once loaded but has nothing to browse.
+                "has_source_folder": required_folder is not None,
+                "browsable": has_source,
             }
         )
     return {"datasets": demos}

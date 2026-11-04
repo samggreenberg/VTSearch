@@ -105,6 +105,8 @@ describe('DatasetImporterModalComponent', () => {
       num_categories: 10,
       pkl_embedder: '',
       pkl_clipper: '',
+      has_source_folder: false,
+      browsable: false,
       available_converters: [],
     },
     {
@@ -119,6 +121,8 @@ describe('DatasetImporterModalComponent', () => {
       num_categories: 102,
       pkl_embedder: 'clip',
       pkl_clipper: '',
+      has_source_folder: true,
+      browsable: true,
       available_converters: [],
     },
   ];
@@ -1232,6 +1236,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1264,6 +1270,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1294,6 +1302,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 5,
         pkl_embedder: '',  // unknown
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1325,6 +1335,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 10,
         pkl_embedder: 'clap',
         pkl_clipper: '',
+        has_source_folder: false,
+        browsable: false,
         available_converters: [],
       },
       {
@@ -1339,6 +1351,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1371,6 +1385,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 10,
         pkl_embedder: '',
         pkl_clipper: '',
+        has_source_folder: false,
+        browsable: false,
         available_converters: [],
       },
     ];

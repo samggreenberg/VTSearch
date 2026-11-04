@@ -788,6 +788,102 @@ class TestDemoDatasetReadiness:
             assert ds["status"] in ("ready", "needs_embedding", "needs_download")
 
 
+class TestDemoBrowsable:
+    """``browsable`` follows the demo's source folder, never its status (#5558).
+
+    New Detector › media example › Demo gates its rows on this flag; the
+    browse route resolves ``demo:<name>`` to ``required_folder`` alone, so a
+    demo with no folder can never be browsed, even when its pickle is cached.
+    Every test points the route at a private embeddings dir, so none touches
+    the repo-shared ``data/`` paths.
+    """
+
+    @staticmethod
+    def _entries(client) -> dict:
+        resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200
+        return {d["name"]: d for d in resp.get_json()["datasets"]}
+
+    @staticmethod
+    def _cache_pkl(embeddings_dir, name: str) -> None:
+        import pickle
+
+        from vtscore.datasets.container import write_container
+
+        write_container(
+            embeddings_dir / f"{name}.pkl", pickle.dumps({"name": name, "medias": {}}), {"format_version": 1}
+        )
+
+    def test_loaded_hub_demo_is_ready_but_not_browsable(self, client, monkeypatch, tmp_path):
+        """The bug: a cached hub demo read ``ready`` and its row was enabled, then 404'd."""
+        from vtscore.datasets import DEMO_DATASETS
+
+        assert DEMO_DATASETS["gtzan_a"].get("required_folder") is None, "gtzan_a is a hub demo"
+        monkeypatch.setattr("vtsearch.routes.datasets.ui.EMBEDDINGS_DIR", tmp_path)
+        self._cache_pkl(tmp_path, "gtzan_a")
+
+        ds = self._entries(client)["gtzan_a"]
+        assert ds["status"] == "ready"
+        assert ds["has_source_folder"] is False
+        assert ds["browsable"] is False, "a ready status must not make a folderless demo browsable"
+
+        resp = client.post("/api/browse-media-files/select", json={"source": "demo:gtzan_a", "path": "x.wav"})
+        assert resp.status_code == 404, "the flag must agree with the route it gates"
+
+    def test_generated_demo_is_not_browsable_before_its_first_load(self, client, monkeypatch, tmp_path):
+        """Since #5546 the synthetic demos read ``needs_embedding`` unloaded; that is not a folder either."""
+        monkeypatch.setattr("vtsearch.routes.datasets.ui.EMBEDDINGS_DIR", tmp_path)
+        entries = self._entries(client)
+        for name in ("synthetic_world_image", "synthetic_world_audio"):
+            assert entries[name]["status"] == "needs_embedding"
+            assert entries[name]["has_source_folder"] is False
+            assert entries[name]["browsable"] is False
+
+    def test_populated_source_folder_is_browsable_without_a_pickle(self, client, monkeypatch, tmp_path):
+        from vtscore.datasets import DEMO_DATASETS
+
+        folder = tmp_path / "source"
+        folder.mkdir()
+        (folder / "clip.wav").write_bytes(b"x")
+        monkeypatch.setitem(DEMO_DATASETS["esc50_s"], "required_folder", folder)
+        monkeypatch.setattr("vtsearch.routes.datasets.ui.EMBEDDINGS_DIR", tmp_path / "embeddings")
+
+        ds = self._entries(client)["esc50_s"]
+        assert ds["status"] == "needs_embedding"
+        assert ds["has_source_folder"] is True
+        assert ds["browsable"] is True
+        assert client.get("/api/browse-media-files?source=demo:esc50_s").status_code == 200
+
+    def test_declared_but_empty_source_folder_is_not_browsable(self, client, monkeypatch, tmp_path):
+        from vtscore.datasets import DEMO_DATASETS
+
+        folder = tmp_path / "source"
+        folder.mkdir()
+        monkeypatch.setitem(DEMO_DATASETS["esc50_s"], "required_folder", folder)
+        monkeypatch.setattr("vtsearch.routes.datasets.ui.EMBEDDINGS_DIR", tmp_path / "embeddings")
+
+        ds = self._entries(client)["esc50_s"]
+        assert ds["status"] == "needs_download"
+        assert ds["has_source_folder"] is True
+        assert ds["browsable"] is False
+
+    def test_flags_agree_with_the_browse_root_for_every_demo(self, client, monkeypatch, tmp_path):
+        """A browsable demo resolves a root; a demo with no folder never does."""
+        from vtscore.datasets import DEMO_DATASETS
+        from vtsearch.routes.datasets.ui import _resolve_browse_root
+
+        monkeypatch.setattr("vtsearch.routes.datasets.ui.EMBEDDINGS_DIR", tmp_path)
+        for name, ds in self._entries(client).items():
+            assert isinstance(ds["browsable"], bool)
+            assert ds["has_source_folder"] is (DEMO_DATASETS[name].get("required_folder") is not None)
+            root = _resolve_browse_root(f"demo:{name}")
+            if ds["browsable"]:
+                assert root is not None, f"{name} reads browsable but its browse root does not resolve"
+            if not ds["has_source_folder"]:
+                assert ds["browsable"] is False
+                assert root is None
+
+
 @pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetEmbedderStatus:
     """Demo dataset status respects which embedder produced the cached pkl.
