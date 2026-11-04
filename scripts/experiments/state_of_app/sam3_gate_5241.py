@@ -16,6 +16,8 @@ Picks never depend on what Test shows, so every rule is a choice between the two
     python sam3_gate_5241.py price --out DIR     # F1 shown under each rule -> DIR/sam3_5241_gate.csv
 
 ``collect`` loads the cells' media pickle and SAM3's shards (run it under ``sam3_5213.sh``'s environment).
+#5311 reruns it out of sample: ``--date``/``--tag``/``--beta`` name the run dirs (seeds 1 and 2 in one dir; a cell is
+(class@band, path, seed)), and F is F-beta at the run's beta.
 """
 
 from __future__ import annotations
@@ -32,10 +34,16 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 CAL = HERE.parent / "calibration"
 ROOT = Path("/expscratch/sgreenberg/state-of-the-app")
-RUN = "2026-10-26-sam3open5241-{arm}-b1"
+RUN = {"date": "2026-10-26", "tag": "", "beta": 1.0}  # set by main()
 STATS = ("mrr", "logrank", "median", "wins")
 GOODS = (4, 8, 12, 16, 20, 24, 32, 48)
 PATHS = {"siglip": "Binary", "siglip+dinov3_patch": "Region"}
+
+
+def run_cells(arm: str) -> Path:
+    from sam3_opening_5241 import run_dir  # noqa: PLC0415
+
+    return run_dir(ROOT, RUN["date"], RUN["tag"], arm, RUN["beta"])
 
 
 def _ranks(s: object) -> np.ndarray:
@@ -55,7 +63,8 @@ def collect(out: Path, scores_root: Path) -> None:
     from vtscore.eval.labels import evaluable_pool  # noqa: PLC0415
     from vtscore.eval.voting_iterations import _split_media_ids  # noqa: PLC0415
 
-    cells = Path(ROOT / RUN.format(arm="sam3") / "results" / "cells")
+    sys.path.insert(0, str(HERE))
+    cells = run_cells("sam3")
     medias = load_medias(EMBEDDINGS_DIR / cfg.text_pickle_name("coco_better", "siglip"))
     sam3 = load_sam3(scores_root, "typed")
     rows = []
@@ -106,23 +115,24 @@ def prefers_head(sam3: np.ndarray, head: np.ndarray, stat: str) -> bool | None:
 def price(out: Path) -> None:
     sys.path.insert(0, str(HERE))
     from early_check_4664 import area  # noqa: PLC0415
-    from sam3_opening_5241 import HOLD_TAG, T, curves, load, mean_se  # noqa: PLC0415
+    from sam3_opening_5241 import BETA, HOLD_TAG, T, curves, load, mean_se  # noqa: PLC0415
 
+    BETA["beta"] = RUN["beta"]
     ev = pd.read_csv(out / "sam3_5241_gate_evidence.csv")
-    sig = load(ROOT / RUN.format(arm="sig") / "results" / "cells", 8)
-    cells = ROOT / RUN.format(arm="sam3") / "results" / "cells"
+    sig = load(run_cells("sig"), 8)
+    cells = run_cells("sam3")
     sam3 = load(cells, 8)
     s_shown, q_shown, q_head = curves(sig, ""), curves(sam3, ""), curves(sam3, HOLD_TAG)
     # Goods labelled by each click, per (cell, path), off the session's own picks.
-    n_goods: dict[tuple[str, str], np.ndarray] = {}
+    n_goods: dict[tuple[str, str, int], np.ndarray] = {}
     for pp in sorted(glob.glob(f"{cells}/task_*__picks.csv*")):
-        pk = pd.read_csv(pp, usecols=["category", "embedder", "t", "picked_label"])
+        pk = pd.read_csv(pp, usecols=["seed", "category", "embedder", "t", "picked_label"])
         if pk.empty:
             continue
         g = np.zeros(T + 1)
         for t in pk.loc[(pk["picked_label"] == 1) & (pk["t"] <= T), "t"].astype(int):
             g[t:] += 1
-        n_goods[(str(pk["category"].iloc[0]), str(pk["embedder"].iloc[0]))] = g
+        n_goods[(str(pk["category"].iloc[0]), str(pk["embedder"].iloc[0]), int(pk["seed"].iloc[0]))] = g
     rows, per_click, info = [], [], {"judge_rows": len(ev)}
     for emb, path in PATHS.items():
         keys = sorted(k for k in set(s_shown) & set(q_shown) & set(q_head) & set(n_goods) if k[1] == emb)
@@ -142,7 +152,7 @@ def price(out: Path) -> None:
                 rules[f"judge:{s}"] = np.zeros_like(has)
                 rules[f"judge:{s} sticky"] = np.zeros_like(has)
             for k, c in enumerate(cats):
-                e = ev[ev["category"] == c].set_index("t").sort_index()
+                e = ev[(ev["category"] == c) & (ev["seed"] == keys[k][2])].set_index("t").sort_index()
                 dec = {s: np.zeros(T + 1, bool) for s in STATS}
                 for t, r in e.iterrows():
                     if t > T:
@@ -200,7 +210,7 @@ def figure(pc: pd.DataFrame, path: Path, rule: str = "goods>=20") -> None:
         ax.set_title(name, loc="left", fontsize=11)
         ax.set_xlabel("votes", color=MUTED)
         _axes_style(ax)
-    axes[0].set_ylabel("F1 shown (mean over cells)", color=MUTED)
+    axes[0].set_ylabel(f"F{RUN['beta']:g} shown (mean over cells)", color=MUTED)
     axes[1].legend(frameon=False, fontsize=8, loc="lower right")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
@@ -211,7 +221,11 @@ def main() -> int:
     ap.add_argument("mode", choices=["collect", "price"])
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--scores", type=Path, default=Path("/expscratch/sgreenberg/sam3-5213/scores"))
+    ap.add_argument("--date", default=RUN["date"])
+    ap.add_argument("--tag", default=RUN["tag"])
+    ap.add_argument("--beta", type=float, default=RUN["beta"])
     a = ap.parse_args()
+    RUN.update(date=a.date, tag=a.tag, beta=a.beta)
     collect(a.out, a.scores) if a.mode == "collect" else price(a.out)
     return 0
 
