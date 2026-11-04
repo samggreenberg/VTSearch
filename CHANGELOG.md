@@ -20,6 +20,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **Autopilot counts your votes** (issue #5539). The top of the Autopilot panel, folded or open, now reads how many
+  votes you have cast on this dataset. No step can say how many are left, since nobody knows how many a detector
+  will need, so the count's tooltip, and Toasty while Autopilot sharpens the detector, say how many it tends to
+  take: most detectors are trained within 50 votes, and Autopilot never asks for more than 200.
+
 ### Changed
 
 - **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used

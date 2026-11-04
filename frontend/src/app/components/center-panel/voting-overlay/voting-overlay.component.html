@@ -52,7 +52,8 @@
   }
   @case ('keep-voting') {
     <vt-toasty-hint hintId="keep-voting" [anchor]="voteButtons" side="above" reach="right">
-      I'm sharpening your detector now. Keep clicking.
+      I'm sharpening your detector now. Keep clicking. Most detectors are trained within
+      {{ typicalVotes }} votes, and I never ask for more than {{ stopCap }}.
     </vt-toasty-hint>
   }
   @case ('spot-check') {

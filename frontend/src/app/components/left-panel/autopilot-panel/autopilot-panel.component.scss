@@ -18,7 +18,18 @@
 
 .autopilot-header {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// The vote counter (#5539): every vote so far on this dataset, left of the
+// toggle and lined up with the step rows' lights.
+.ap-vote-count {
+  padding-left: var(--space-md);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
 }
 
 // `.collapse-toggle` (the ◀ / ▶) is shared: `scss/_components.scss`.
@@ -187,6 +198,17 @@
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-wide);
   white-space: nowrap;
+}
+
+// The vote counter, folded: under the toggle, set on end like the active
+// step's name.
+.collapsed-vote-count {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: help;
 }
 
 .collapsed-step.exhausted {
