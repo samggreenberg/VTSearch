@@ -53,4 +53,5 @@ this note does not price it.
 - `scripts/experiments/state_of_app/check_quota_5530.py`: the read above. Run as
   `check_quota_5530.py <run>/results/cells OUT.csv 8` over `/expscratch/sgreenberg/state-of-the-app/2026-11-03-b{025,1,4}`,
   in about 2 minutes a preset on 8 CPUs.
-- `measurements/summary.txt`: its printed summary for the three presets.
+- `measurements/summary.txt`: its printed summary for the three presets, archived to the experiments-data release
+  (`archived-data.json`; `study_data.py fetch 2026-11-04-check-hold-5530` restores it).
