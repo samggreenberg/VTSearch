@@ -20,6 +20,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
+  say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
+  differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
+  match are left out, and a list longer than four ends in "…" with a count of the rest. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
 ### Fixed
 
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,

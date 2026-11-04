@@ -182,10 +182,11 @@ describe('ImportDefaultsService', () => {
       ]);
     });
 
-    it('maybeOfferSaveImportDefaults offers to save a cleanup-only change, naming cleanup', () => {
-      service.maybeOfferSaveImportDefaults('image', snapshot([]), mediaTypes);
+    it('maybeOfferSaveImportDefaults offers to save a cleanup-only change, naming the gate it turns off', () => {
+      service.maybeOfferSaveImportDefaults('image', snapshot([]), mediaTypes, { cleaners });
       expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
-      expect(toastSuccessSpy.mock.calls[0][0].detail).toContain('cleanup');
+      // trim_borders was already off, so only exif_orient is a change.
+      expect(toastSuccessSpy.mock.calls[0][0].detail).toBe('exif_orient: off');
     });
 
     it('maybeOfferSaveImportDefaults stays silent when the saved cleanup choice matches', () => {
@@ -224,6 +225,28 @@ describe('ImportDefaultsService', () => {
     service.maybeOfferSaveImportDefaults('image', { embedder: 'siglip' }, mediaTypes);
     expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
     expect(toastSuccessSpy.mock.calls[0][0].message).toContain('Image');
+  });
+
+  // #5535: the offer says what saving would change, setting by setting,
+  // against the default saved now - not everything the import used.
+  it('maybeOfferSaveImportDefaults names only the settings that differ from the saved default', () => {
+    settings.set({ import_defaults_by_media_type: { image: { embedder: 'siglip', merge_near_duplicates: true } } });
+    const embedders = [
+      { name: 'clip', display_name: 'CLIP', is_default: true } as any,
+      { name: 'siglip', display_name: 'SigLIP 2' } as any,
+      { name: 'dinov3', display_name: 'DINOv3' } as any,
+    ];
+    service.maybeOfferSaveImportDefaults('image', { embedder: 'dinov3', build_projection: true }, mediaTypes, { embedders });
+    expect(toastSuccessSpy.mock.calls[0][0].detail).toBe(
+      'Embedder: DINOv3, Build Browse map now: on, Merge near-duplicates: off',
+    );
+  });
+
+  it('maybeOfferSaveImportDefaults names the built-in embedder when the import goes back to it', () => {
+    settings.set({ import_defaults_by_media_type: { image: { embedder: 'siglip', build_projection: true } } });
+    const embedders = [{ name: 'clip', display_name: 'CLIP', is_default: true } as any, { name: 'siglip' } as any];
+    service.maybeOfferSaveImportDefaults('image', { build_projection: true }, mediaTypes, { embedders });
+    expect(toastSuccessSpy.mock.calls[0][0].detail).toBe('Embedder: CLIP');
   });
 
   it('maybeOfferSaveImportDefaults skips when the exact config is already saved', () => {
@@ -284,7 +307,7 @@ describe('ImportDefaultsService', () => {
       expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
       const toast = toastSuccessSpy.mock.calls[0][0];
       expect(toast.message).toContain('Image');
-      expect(toast.detail).toBe('Next time it starts with Multi-Dataset (Image, Face) and Build Browse map now.');
+      expect(toast.detail).toBe('Multi-Dataset: Image + Face, Build Browse map now: on');
     });
 
     it('maybeOfferSaveImportDefaults stays silent when the same kinds are saved in another order', () => {
@@ -296,7 +319,7 @@ describe('ImportDefaultsService', () => {
     it('maybeOfferSaveImportDefaults offers a toggle-only change', () => {
       service.maybeOfferSaveImportDefaults('image', { merge_near_duplicates: true }, mediaTypes);
       expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
-      expect(toastSuccessSpy.mock.calls[0][0].detail).toBe('Next time it starts with Merge near-duplicates.');
+      expect(toastSuccessSpy.mock.calls[0][0].detail).toBe('Merge near-duplicates: on');
     });
 
     it('offers to save a one-dataset import of a type whose default opens Multi-Dataset, and saving forgets it', () => {
@@ -304,7 +327,7 @@ describe('ImportDefaultsService', () => {
       service.maybeOfferSaveImportDefaults('image', {}, withFace);
       expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
       const toast = toastSuccessSpy.mock.calls[0][0];
-      expect(toast.detail).toBe('Next time it starts with one dataset, not Multi-Dataset.');
+      expect(toast.detail).toBe('Multi-Dataset: off');
 
       toast.action.onClick();
       // Nothing left to save for Image: its entry goes, the other types' stay.
