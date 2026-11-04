@@ -95,7 +95,7 @@
       @if (localFolderPicker().pickerKind() === 'folder') {
         <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
-        <p class="info-text">
+        <p class="info-text" title="A text file of server paths, or a .npz">
           Upload a single file from <strong>this computer</strong> that lists the media to import.<vt-field-hint-icon hint="A UTF-8 text file with one server-side path per line, or a .npz archive of paths plus their pre-computed fingerprints."></vt-field-hint-icon>
         </p>
       }
