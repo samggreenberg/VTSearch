@@ -259,11 +259,14 @@ export class SourcePickerComponent {
   }
 
   /** Hover text for a Readiness badge: what the one- or two-word label means
-   *  for loading the demo (the same wording as `docs/user/howto/load-a-demo.md`). */
+   *  for loading the demo (the same wording as `docs/user/howto/load-a-demo.md`).
+   *  Ready and Needs setup never say "downloaded": a demo that generates its
+   *  media locally (the Synthetic World Map ones) reaches both states with
+   *  nothing ever fetched (#5546). */
   statusBadgeTitle(status: string): string {
-    if (status === 'ready') return 'Ready: already downloaded and analysed, so it loads straight away';
+    if (status === 'ready') return 'Ready: already analysed, so it loads straight away';
     if (status === 'needs_embedding') {
-      return 'Needs setup: already downloaded, but it has to be analysed with the chosen embedder before it can be searched';
+      return 'Needs setup: nothing left to download, but it has to be analysed with the chosen embedder before it can be searched';
     }
     return 'Needs Download: it has to be downloaded, then analysed, before it can be searched';
   }

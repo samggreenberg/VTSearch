@@ -62,14 +62,22 @@ def _folder_has_content(folder) -> bool:
         return False
 
 
-def _initial_demo_status(has_pkl: bool, required_folder, has_source: bool) -> str:
-    """Three-state status before embedder/clipper compatibility checks."""
+def _initial_demo_status(has_pkl: bool, required_folder, has_source: bool, requires_download: bool = True) -> str:
+    """Three-state status before embedder/clipper compatibility checks.
+
+    Without a cached pkl, a demo whose source is already on disk, or which
+    declares it fetches nothing (``DemoDataset.requires_download`` is False:
+    it generates its media at load time), only needs building, so it reads
+    ``needs_embedding`` rather than ``needs_download`` (#5546).
+    """
     if has_pkl:
         # Stale pkl iff the source folder is declared and currently empty.
         if required_folder is not None and not has_source:
             return "needs_download"
         return "ready"
     if required_folder is not None and has_source:
+        return "needs_embedding"
+    if not requires_download:
         return "needs_embedding"
     return "needs_download"
 
@@ -156,7 +164,8 @@ def demo_dataset_list(query: dict):
     Each dataset has a ``status`` field with one of three values:
 
     * ``"ready"`` – embeddings are cached and source data is present.
-    * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
+    * ``"needs_embedding"`` – nothing is left to download (the source data is on
+      disk, or the demo generates its media locally), but it is not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
     from vtscore.converters import get_converter, list_converters_for_source
@@ -189,7 +198,12 @@ def demo_dataset_list(query: dict):
         has_pkl = pkl_file.exists()
         required_folder = dataset_info.get("required_folder")
 
-        status = _initial_demo_status(has_pkl, required_folder, _folder_has_content(required_folder))
+        status = _initial_demo_status(
+            has_pkl,
+            required_folder,
+            _folder_has_content(required_folder),
+            requires_download=dataset_info.get("requires_download", True),
+        )
         status, pkl_embedder, pkl_clipper = _downgrade_for_mismatch(
             status, pkl_file, requested_embedder, requested_clipper
         )

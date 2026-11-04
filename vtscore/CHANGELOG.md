@@ -1643,6 +1643,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DemoDataset.requires_download`** (issue #5546). A demo that generates its media locally at load time and
+  fetches nothing sets it `False` (the two Synthetic World Map demos do); `all_demo_datasets()` carries it as
+  `"requires_download"`. The app's demo list then reads such a demo as `needs_embedding` rather than
+  `needs_download` before its first load. It defaults to `True`, so an existing `DemoDataset` is unchanged. See
+  `packages/media.md`.
+
 - **A scored run can say how unlike its training dataset the scored dataset is** (issue #5501). Each detector
   result of a `find_results` payload may now carry `training_domain`: the overlap check's report (the reference
   dataset, the label counts it rests on, and `domain_shift`, `vtscore.coverage.domain_shift_report`'s dict or

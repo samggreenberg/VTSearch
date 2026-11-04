@@ -533,6 +533,26 @@ class TestFolderHasContent:
         assert _folder_has_content(folder) is True
 
 
+class TestInitialDemoStatus:
+    """The pre-embedder status rule, without touching the shared data dir."""
+
+    def test_no_pkl_and_no_source_needs_a_download_by_default(self):
+        from vtsearch.routes.datasets.ui import _initial_demo_status
+
+        assert _initial_demo_status(False, None, False) == "needs_download"
+
+    def test_no_pkl_but_nothing_to_fetch_needs_only_embedding(self):
+        """A demo declaring ``requires_download=False`` skips Needs Download (#5546)."""
+        from vtsearch.routes.datasets.ui import _initial_demo_status
+
+        assert _initial_demo_status(False, None, False, requires_download=False) == "needs_embedding"
+
+    def test_cached_pkl_of_a_demo_that_fetches_nothing_is_ready(self):
+        from vtsearch.routes.datasets.ui import _initial_demo_status
+
+        assert _initial_demo_status(True, None, False, requires_download=False) == "ready"
+
+
 @pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetReadiness:
     """Demo datasets report three-state status: ready / needs_embedding / needs_download.
@@ -738,6 +758,26 @@ class TestDemoDatasetReadiness:
         assert ds is not None
         assert ds["status"] == "needs_download"
         assert ds["ready"] is False
+
+    def test_demo_that_fetches_nothing_shows_needs_embedding(self, client):
+        """No pkl, no required_folder, but nothing to fetch → needs_embedding, not needs_download (#5546).
+
+        The Synthetic World Map demos generate their media at load time, so
+        building the pickle is all that is left before their first load.
+        """
+        from vtscore.config import EMBEDDINGS_DIR
+
+        names = ("synthetic_world_image", "synthetic_world_audio")
+        if any((EMBEDDINGS_DIR / f"{name}.pkl").exists() for name in names):
+            pytest.skip("a synthetic demo pkl exists; cannot test the not-yet-loaded scenario")
+
+        resp = client.get("/api/dataset/demo-list")
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+        for name in names:
+            ds = by_name[name]
+            assert ds["status"] == "needs_embedding", f"{name} downloads nothing, so it must not read needs_download"
+            assert ds["ready"] is False
+            assert ds["download_size_mb"] == 0
 
     def test_status_field_always_present(self, client):
         """Every demo dataset must include a status field."""

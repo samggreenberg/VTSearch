@@ -133,6 +133,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             source=_TOPONYMY_SOURCE_ID,
             items_per_category=0,
             download_size_mb=0,
+            requires_download=False,
         ),
         DemoDataset(
             id="caltech101_s",
