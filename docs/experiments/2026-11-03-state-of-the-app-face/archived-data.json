@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-03-state-of-the-app-face.c3f38a57f3e3.tar.gz",
+   "source_commit": null,
+   "files": {
+    "find_by_vote.csv": {
+     "bytes": 90435,
+     "oid": "c759ebcb55067374631acd40bfc19138f010aacd"
+    },
+    "handover.csv": {
+     "bytes": 829,
+     "oid": "97562137e4af13c8dfc4b339845e80cd34bc47f9"
+    },
+    "headline.csv": {
+     "bytes": 2065,
+     "oid": "cbf8811820df28ed10fc2dfefee2168349c5ae3c"
+    },
+    "session_means.csv": {
+     "bytes": 327,
+     "oid": "358e5d63c82659c06ea9bedf7d56da65a58ed8b3"
+    },
+    "strata.csv": {
+     "bytes": 19468,
+     "oid": "e3a0d1fe1a896fba5c7d7fdaf3cd81fd6baf46c1"
+    }
+   }
+  }
+ ]
+}

@@ -25,7 +25,7 @@ for the report to point at (the owner: the report may name subject IDs).
 Usage::
 
     python sota_face_tables.py --analysis <dir from sota_face_analyze.sh> --runs <release runs dir> \\
-        --date <date> --strata <person_strata.csv> --out <report dir> [--worst 10]
+        --date <date> [--tag sota] [--arm ik] --strata <person_strata.csv> --out <report dir> [--worst 10]
 """
 
 from __future__ import annotations
@@ -134,6 +134,10 @@ def main() -> int:
     ap.add_argument("--analysis", type=Path, required=True)
     ap.add_argument("--runs", type=Path, required=True, help="the release's derived runs directory")
     ap.add_argument("--date", required=True)
+    ap.add_argument("--tag", default="sota", help="the run dirs' tag, as sota_face.sh's SOTA_FACE_TAG")
+    ap.add_argument(
+        "--arm", default="ik", help="the face arm, as sota_face.sh's SOTA_FACE_ARM ('' for the plain crops)"
+    )
     ap.add_argument("--strata", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--worst", type=int, default=0)
@@ -142,9 +146,10 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     strata = pd.read_csv(args.strata, dtype={"skin_tone": str})
     heads, strat_rows, by_vote, hand_rows = [], [], [], []
+    run_set = f"{args.date}-{args.tag}" + (f"-{args.arm}" if args.arm else "")  # sota_face.sh's SET
     for k in KS:
         for size in SIZES:
-            ds = f"fhibe_faces_{size}"
+            ds = "fhibe_faces" + (f"_{args.arm}" if args.arm else "") + f"_{size}"
             for beta, tag in BETAS.items():
                 cpath = args.analysis / f"k{k}-b{tag}-{size}" / "cells.csv"
                 if not cpath.exists():
@@ -176,7 +181,7 @@ def main() -> int:
                             f"  ({r.age_bracket}, {r.pronoun}, skin {r.skin_tone}, {r.ancestry}, {r.n_photos} photos)"
                         )
                 # Find at every vote, from the run cells.
-                cells = args.runs / f"{args.date}-sota-k{k}-b{tag}" / "results" / "cells"
+                cells = args.runs / f"{run_set}-k{k}-b{tag}" / "results" / "cells"
                 files = [str(f) for f in _cells_io.main_frame_files(cells)]
                 with ProcessPoolExecutor(max_workers=args.workers) as pool:
                     got = [g for g in pool.map(read_find, files, chunksize=8) if g is not None and g["dataset"] == ds]
