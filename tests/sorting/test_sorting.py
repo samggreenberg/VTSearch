@@ -844,10 +844,12 @@ class TestLearnedSortQueryHold:
         monkeypatch.setattr(training_calibration, "_patch_space_for", lambda _name: patch_space)
 
     def test_a_single_vector_space_under_the_hold_returns_it_on_wait_cache_and_poll(self, client, monkeypatch):
+        import vtscore.detectors.label_quota as label_quota
         from tests.conftest import _wait_for_job
         from vtscore.concurrency.async_jobs import learned_sort_jobs
 
         self._space(monkeypatch, patch_space=False)
+        monkeypatch.setattr(label_quota, "QUERY_HOLD_LABELS", 30)  # #4736's count: the app's is 0 (#5556)
         good_votes.update({k: None for k in [1, 2]})
         bad_votes.update({k: None for k in [3, 4]})
 
@@ -864,6 +866,20 @@ class TestLearnedSortQueryHold:
         polled = client.get(f"/api/learned-sort/result?job_id={first['job_id']}").get_json()
         assert polled["status"] == "done"
         assert polled["query_hold"] is True
+
+        learned_sort_jobs.reset_for_tests()
+
+    def test_the_apps_hold_of_zero_never_holds(self, client, monkeypatch):
+        """#5556: the app hands over at the quota, so a single-vector space is not held either."""
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+
+        self._space(monkeypatch, patch_space=False)
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        data = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert data["status"] == "done"
+        assert data["query_hold"] is False
 
         learned_sort_jobs.reset_for_tests()
 

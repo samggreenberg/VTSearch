@@ -167,7 +167,14 @@ violations:
   comparison, the gap and Figures 1-3. `check` now compares the stop click too, and reads gzipped cells' picks.
   Every table is in `measurements/{photos,screens}/summary_stop.md`.
 
-## Recommendation
+## Owner's ruling, and the build
+
+**2026-11-04: hold 0 everywhere.** The app now hands over to the trained head at the label quota at every preset
+(`label_quota.QUERY_HOLD_LABELS = 0`, in the same PR as this report). Only beta 4 departs from the rule's literal
+30, and by an amount within the noise (+0.005 ± 0.004). The server's `query_hold` mark, the sort runner's
+`heldRanking` and the eval knob `CALIB_QUERY_HOLD` all read that constant, so they keep working at any later count.
+
+## Recommendation (as made before the ruling)
 
 Per the rule: **hand over at the label quota at beta ¼ and 1, and keep 30 at beta 4.** The rule's literal counts
 are 8 / 0 / 30, and 8 is indistinguishable from 0. This gains +0.023 / +0.022 on the path to the stop and changes

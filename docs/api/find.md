@@ -143,8 +143,9 @@ Goods' centroid, `trained` for the trained head; `n_good` / `n_bad` are the
 detector's labels, `goods_owed` / `bads_owed` what the first quota still needs,
 and `dry_bad_quota` the Bads that give a single Good the trained head. Past the
 quota, a typed-query detector on a single-vector space keeps its query's set
-until it has `hold_labels` (30) labels; `hold_owed` is then the labels, Good or
-Bad, still owed (and `0` whenever the hold is not why the tier is `query`). Under
+until it has `hold_labels` labels; `hold_owed` is then the labels, Good or
+Bad, still owed (and `0` whenever the hold is not why the tier is `query`). The
+app's `hold_labels` is 0 since #5556 (30 before), so `hold_owed` is 0. Under
 the quota the line is the head's own (its `threshold` is always 0.5 on its own
 scale), drawn at the detector's balance: `balance` counts what it keeps, and a
 balance change redraws it.
