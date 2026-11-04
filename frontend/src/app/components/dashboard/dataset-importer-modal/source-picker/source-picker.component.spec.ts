@@ -109,6 +109,59 @@ describe('SourcePickerComponent', () => {
       expect(component.statusBadgeLabel('needs_embedding')).toBe('Needs setup');
       expect(component.statusBadgeLabel('needs_download')).toBe('Needs Download');
     });
+
+    it('gives each badge hover text that names it and says what it means', () => {
+      for (const status of ['ready', 'needs_embedding', 'needs_download']) {
+        const title = component.statusBadgeTitle(status);
+        expect(title.startsWith(`${component.statusBadgeLabel(status)}: `)).toBe(true);
+      }
+      expect(component.statusBadgeTitle('needs_embedding')).toContain('already downloaded');
+      expect(component.statusBadgeTitle('needs_download')).toContain('downloaded, then analysed');
+    });
+  });
+
+  describe('demo table readiness (#5534)', () => {
+    const demos = [
+      { name: 'esc50', label: 'ESC-50', num_files: 2000, description: 'Animals', status: 'ready', media_type: 'audio' },
+      { name: 'gtzan', label: 'GTZAN', num_files: 1000, description: 'Music', status: 'needs_download', media_type: 'audio' },
+    ] as DemoDatasetEntry[];
+
+    async function renderTable(): Promise<HTMLElement> {
+      const cols = new ManagedColumns(
+        ['label', 'num_files', 'description', 'status'],
+        {
+          label: { label: 'Name', title: '', sortable: true },
+          num_files: { label: '# Media', title: '', sortable: true },
+          description: { label: 'Description', title: '', sortable: true },
+          status: { label: 'Readiness', title: '', sortable: true },
+        },
+        { initialSort: 'num_files' },
+      );
+      fixture.componentRef.setInput('activePickerView', 'demo');
+      fixture.componentRef.setInput('selectedImporter', { name: 'demo' } as ImporterInfo);
+      fixture.componentRef.setInput('demos', demos);
+      fixture.componentRef.setInput('filteredDemos', demos);
+      fixture.componentRef.setInput('activeDemoTab', 'audio');
+      fixture.componentRef.setInput('demoCols', cols);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('says readiness in its own labelled column, not by tinting the row', async () => {
+      const el = await renderTable();
+      const rows = Array.from(el.querySelectorAll<HTMLElement>('tr.demo-row'));
+      expect(rows.length).toBe(2);
+      // The row carries no class that encodes its status: the Readiness
+      // cell, in words, is the only place the status shows.
+      for (const row of rows) {
+        expect(row.className).not.toMatch(/ready|download|embedding/);
+        expect(row.querySelector('.col-name')!.className).toBe('col-name');
+      }
+      const cells = rows.map((r) => r.querySelector<HTMLElement>('td.col-status')!);
+      expect(cells.map((c) => c.textContent!.trim())).toEqual(['Ready', 'Needs Download']);
+      expect(cells[0].title).toBe(component.statusBadgeTitle('ready'));
+      expect(cells[1].title).toBe(component.statusBadgeTitle('needs_download'));
+    });
   });
 
   describe('onDemoHeaderClick', () => {

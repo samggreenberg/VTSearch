@@ -7,14 +7,15 @@
 // styles unique to this top-level modal remain below.
 
 // Pin the Add Dataset modal to a single width so flipping between tabs
-// (Services / Server / Local / Demo) and inner widgets doesn't reflow the
-// dialog.  Sized to fit the demo table comfortably after dropping the
-// #Cat column and tightening descriptions.  min-height keeps the dialog
-// from collapsing to a thin strip in the no-selection state and then
-// jumping to fit the demo table.
+// (Services / Files / Demo) and inner widgets doesn't reflow the dialog.
+// `lg`, the media-picker width, because the demo table lives here: at `md`
+// its four columns left Description too little room once Name, # Media and
+// Readiness took theirs (#5534).  min-height keeps the dialog from
+// collapsing to a thin strip in the no-selection state and then jumping to
+// fit the demo table.
 :host {
   ::ng-deep .modal-content {
-    width: var(--modal-w-md);
+    width: var(--modal-w-lg);
     min-height: 480px;
   }
 }
