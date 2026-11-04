@@ -31,7 +31,7 @@
           class="bin-popup-size-btn"
           [disabled]="atMinPreview"
           (click)="bumpPreview(-1)"
-          title="Smaller detail image"
+          [title]="atMinPreview ? 'Already the smallest detail image' : 'Smaller detail image'"
           aria-label="Smaller detail image">
           <vt-icon type="image" [size]="11" />
         </button>
@@ -40,7 +40,7 @@
           class="bin-popup-size-btn"
           [disabled]="atMaxPreview"
           (click)="bumpPreview(1)"
-          title="Bigger detail image"
+          [title]="atMaxPreview ? 'Already the biggest detail image' : 'Bigger detail image'"
           aria-label="Bigger detail image">
           <vt-icon type="image" [size]="18" />
         </button>
@@ -56,7 +56,7 @@
           class="btn btn--toolbar bin-popup-photo-btn"
           [disabled]="displayedId == null"
           (click)="openSourcePhoto()"
-          title="Open the photo the item shown large was cut from, with the item outlined">
+          [title]="displayedId == null ? 'Point at an item to show it large first' : 'Open the photo the item shown large was cut from, with the item outlined'">
           Show in photo
         </button>
       }

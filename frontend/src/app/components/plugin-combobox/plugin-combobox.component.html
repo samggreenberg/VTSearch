@@ -27,6 +27,7 @@
     tabindex="-1"
     aria-label="Show options"
     [disabled]="disabled()"
+    [title]="disabled() ? 'Wait for the options to load' : ''"
     (mousedown)="onToggleMousedown($event)"
   >▾</button>
 </div>

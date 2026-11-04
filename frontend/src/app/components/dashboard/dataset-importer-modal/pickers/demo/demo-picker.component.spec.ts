@@ -63,6 +63,13 @@ describe('DemoPickerComponent', () => {
     expect(started).toBe(false);
   });
 
+  it('says to pick a demo while none is selected, the reason Import is disabled (#5533)', () => {
+    openAndFlush();
+    expect(component.submitBlocker).toBe('Select a demo dataset from the list');
+    component.selectDemo(mockDemos[0] as any);
+    expect(component.submitBlocker).toBe('');
+  });
+
   // Zoneless oracle (docs/FRONTEND.md, *Testing*): the parent calls these
   // from listeners on a sibling component, so nothing marks this view dirty
   // but its own signal writes (#5300).
@@ -274,6 +281,8 @@ describe('DemoPickerComponent', () => {
       component.setMultiDataset(true);
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
       expect(component.hasOutputs).toBe(false);
+      component.selectDemo(celebs as any);
+      expect(component.submitBlocker).toBe('Tick at least one kind of media to import');
     });
 
     it('a new tab starts from one dataset again', () => {

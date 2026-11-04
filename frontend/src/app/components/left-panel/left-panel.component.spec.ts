@@ -489,6 +489,7 @@ describe('LeftPanelComponent', () => {
     it('enables the work-queue actions only while an unverified positive exists', () => {
       let el = find([{ id: 1, score: 0.2 }], 0.5);
       actions.forEach((label) => expect(button(el, label).disabled).toBe(true));
+      actions.forEach((label) => expect(button(el, label).title).toBe('No unreviewed likely matches left'));
       el = find([{ id: 1, score: 0.9 }], 0.5);
       actions.forEach((label) => expect(button(el, label).disabled).toBe(false));
     });
@@ -497,6 +498,7 @@ describe('LeftPanelComponent', () => {
       fixture.componentRef.setInput('disabled', true);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       actions.forEach((label) => expect(button(el, label).disabled).toBe(true));
+      actions.forEach((label) => expect(button(el, label).title).toBe('Wait for the current run to finish'));
     });
 
     it('emits each work-queue action', () => {
@@ -599,6 +601,10 @@ describe('LeftPanelComponent with Collapse to photos', () => {
     fixture.componentRef.setInput('panelMode', 'find');
     fixture.componentRef.setInput('findTab', 'review');
     fixture.componentRef.setInput('hiddenIds', new Set([7]));
+    // One unverified positive above the line, so the actions are enabled and
+    // their tooltips describe what they send (a disabled one says why, #5533).
+    fixture.componentRef.setInput('sortOrder', [{ id: 1, score: 0.9 }]);
+    fixture.componentRef.setInput('threshold', 0.5);
     TestBed.tick();
     const grid = fixture.debugElement.query((d) => d.componentInstance instanceof PhotoGridComponent)
       .componentInstance as PhotoGridComponent;

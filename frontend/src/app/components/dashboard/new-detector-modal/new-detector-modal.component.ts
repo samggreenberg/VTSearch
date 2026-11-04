@@ -874,6 +874,14 @@ export class NewDetectorModalComponent implements OnInit {
     return 'Create the detector';
   }
 
+  /** Title for the trained-tab Create & Import button: the action while
+   *  enabled, the step still owed while disabled (#5533). */
+  get trainedSubmitTitle(): string {
+    if (!this.selectedLabelImporter || this.trainedView !== 'form') return 'Choose where to import labels from';
+    if (!this.autoExportReady()) return AUTO_EXPORT_HINT;
+    return 'Create the detector and import labels from the selected source';
+  }
+
   get canSubmitTrained(): boolean {
     return (
       !!this.selectedLabelImporter &&

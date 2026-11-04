@@ -220,7 +220,7 @@
       class="btn btn--primary btn--lg"
       (click)="browse()"
       [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
-      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
+      [title]="browseBlocker || (browseStarting() || browsePrep.preparing() ? 'Building the map…' : 'Open the listed items in Browse, laid out as a map of their own')"
     >
       <vt-icon type="eye" [size]="18"></vt-icon>
       Browse
@@ -311,7 +311,7 @@
       class="btn btn--primary"
       (click)="exportResults(true)"
       [disabled]="exporting() || !!exportBlocker"
-      [title]="exportBlocker || exportAction + ', then close this dialog'"
+      [title]="exportBlocker || (exporting() ? 'Wait for the export to finish' : exportAction + ', then close this dialog')"
     >
       Export and Close
     </button>

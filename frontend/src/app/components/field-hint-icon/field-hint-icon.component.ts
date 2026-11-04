@@ -67,8 +67,12 @@ export function fieldHintPlacement(
   standalone: true,
   imports: [],
   template: `
+    <!-- The empty title masks the label's own (#5536): a native tooltip comes
+         from the nearest titled ancestor, so a (?) inside a titled label
+         would otherwise show the short version over the long one. -->
     <span
       class="field-hint-icon"
+      title=""
       tabindex="0"
       role="img"
       [attr.aria-label]="ariaLabel() || hint()"

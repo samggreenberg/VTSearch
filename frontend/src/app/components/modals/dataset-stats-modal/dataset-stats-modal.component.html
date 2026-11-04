@@ -64,7 +64,7 @@
                 class="btn btn--secondary btn--sm build-atlas-btn"
                 [disabled]="atlasBuilding()"
                 (click)="buildAtlas()"
-                title="Build the coverage atlas now; its progress shows on the dataset's row"
+                [title]="atlasBuilding() ? 'Already building; its progress shows on the dataset\'s row' : 'Build the coverage atlas now; its progress shows on the dataset\'s row'"
               >Build</button>
             </td>
           </tr>

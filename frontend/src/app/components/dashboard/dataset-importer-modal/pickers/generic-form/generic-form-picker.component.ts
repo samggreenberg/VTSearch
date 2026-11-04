@@ -516,25 +516,29 @@ export class GenericFormPickerComponent {
     this.sourceSpecs.set(specs);
   }
 
-  /** True when every required field on the active importer has a value.
-   *  Bound by the parent modal's footer Import button. */
-  readonly canSubmit = computed(() => {
-    if (!this.hasOutputs) return false;
+  /** The next step before the footer's Import button can run, or ``''`` once
+   *  it can: the first required field on the active importer still without a
+   *  value (``"Path is required"``), then a Multi-Dataset list with nothing
+   *  ticked. The button's disabled state and its tooltip both read this, so
+   *  a disabled Import always says why (#5533). */
+  readonly submitBlocker = computed(() => {
     const fields = this.selectedImporter()?.fields ?? [];
     const values = this.formValues();
     const inactive = inactiveFieldKeys(fields, values);
     for (const f of fields) {
       if (!f.required || inactive.has(f.key)) continue;
       if (f.key === 'media_type' && this.multiDataset()) continue;
-      if (f.field_type === 'file') {
-        if (!this.selectedFile()) return false;
-      } else {
-        const v = values[f.key];
-        if (v === undefined || v === null || String(v).trim() === '') return false;
-      }
+      const missing =
+        f.field_type === 'file' ? !this.selectedFile() : values[f.key] === undefined || values[f.key] === null || String(values[f.key]).trim() === '';
+      if (missing) return `${f.label || f.key} is required`;
     }
-    return true;
+    if (!this.hasOutputs) return 'Tick at least one kind of media to import';
+    return '';
   });
+
+  /** True when every required field on the active importer has a value and
+   *  there is something to make: :prop:`submitBlocker` has nothing to say. */
+  readonly canSubmit = computed(() => !this.submitBlocker());
 
   openClipperChooser(): void {
     this.clipperChooserCategory = null;
@@ -667,6 +671,11 @@ export class GenericFormPickerComponent {
           ),
           ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
         };
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes(), {
+      embedders: this.availableEmbedders(),
+      clippers: this.availableClippers(),
+      cleaners: this.cleaners(),
+      converters: this.availableConverters,
+    });
   }
 }
