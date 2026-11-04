@@ -248,6 +248,53 @@ describe('AutoFindService', () => {
     expect(toast.success.mock.calls[0][0].detail).toContain('Sent via Webhook (HTTP POST).');
   });
 
+  describe('a failed auto-export in the dialog (#5543)', () => {
+    const failed = { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: false, error: 'Webhook URL is required.' };
+
+    it('shows it the first time the dialog opens the run', () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
+
+    it("leaves it out when the run reopens, as Browse's Back reopens it", () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_1');
+      const reopened = service.results();
+      expect(reopened?.auto_export).toBeUndefined();
+      // Only the stale line goes; the results themselves are all there.
+      expect(reopened).toEqual(run);
+    });
+
+    it("still shows another run's failure the first time", () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_2');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
+
+    it('keeps a successful export on every open, for its Open button', () => {
+      const sent = { ...failed, success: true, error: undefined, open_url: 'https://example.com/r' };
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: sent }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(sent);
+    });
+
+    it('shows it again for a run of the same id after the backend restarts', () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      serverReset$.next();
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
+  });
+
   it('says so when the results have expired', () => {
     findApi.getAutofindRun.mockReturnValue(throwError(() => new Error('404')));
     service.openResults('_autofind_old');

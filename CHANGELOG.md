@@ -37,6 +37,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
+  Results dialog showed the run's failed export again ("Sending the results via Webhook (HTTP POST) failed: Webhook
+  URL is required."), as if the export had been tried again. It hadn't: the line repeats what happened when the run
+  finished, and reopening the dialog sends nothing. The dialog now shows the failure the first time it opens a run
+  and leaves it out after that. Each new run still reports its own failure. A successful export still shows every
+  time, with its **Open** button.
 - **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
   Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
   with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,

@@ -683,7 +683,9 @@ centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too, unless you untick **Export results when AutoFind
-finishes** there to pause it. If none of your AutoFind detectors can run on the new
+finishes** there to pause it. If that export failed, the dialog says so
+the first time it opens the run. It doesn't repeat it when you open the
+run again, since opening it sends nothing. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
 of embedder the dataset doesn't have - a notice says so instead.
 

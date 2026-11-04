@@ -42,7 +42,8 @@ import { ToastService } from './toast.service';
  * the same per detector.
  *
  * The dialog itself is mounted once in `AppComponent`, reading {@link results},
- * so a run's results can be opened from any view. Failed runs need nothing
+ * so a run's results can be opened from any view. A run's failed auto-export
+ * shows there only the first time the run is opened (#5543). Failed runs need nothing
  * here: `ToastService` already turns a failed task row into an error toast.
  */
 @Injectable({ providedIn: 'root' })
@@ -66,6 +67,9 @@ export class AutoFindService {
    *  {@link results} is set: two runs landing in one SSE batch must not both
    *  open it, the second replacing the first. */
   private opening = false;
+  /** Runs whose failed auto-export the dialog has already shown; see
+   *  {@link reportExportFailureOnce}. */
+  private readonly exportFailureShown = new Set<string>();
 
   constructor() {
     this.auth.status$.subscribe((status) => (this.currentUser = status?.user ?? ''));
@@ -74,6 +78,7 @@ export class AutoFindService {
     this.progressEvents.serverReset$.subscribe(() => {
       this.openWhenDone.clear();
       this.handled.clear();
+      this.exportFailureShown.clear();
     });
   }
 
@@ -104,7 +109,7 @@ export class AutoFindService {
     this.findApi.getAutofindRun(runId, context).subscribe({
       next: (run) => {
         this.opening = false;
-        this.results.set(run);
+        this.results.set(this.reportExportFailureOnce(runId, run));
       },
       error: () => {
         this.opening = false;
@@ -118,6 +123,26 @@ export class AutoFindService {
 
   closeResults(): void {
     this.results.set(null);
+  }
+
+  /**
+   * *run* as the dialog should show it: with its failed auto-export the first
+   * time the dialog opens run *runId*, and without it after that (#5543).
+   *
+   * The failure is the record of the one export the run made when it
+   * finished. Opening the run again, from Browse's Back or a second View
+   * Results, re-reads that record and sends nothing. Shown again, the line
+   * reads as a new failure. A successful export stays: its line and its
+   * **Open** button are still worth having.
+   */
+  private reportExportFailureOnce(runId: string, run: AutoDetectResultsData): AutoDetectResultsData {
+    if (run.auto_export?.success !== false) return run;
+    if (!this.exportFailureShown.has(runId)) {
+      this.exportFailureShown.add(runId);
+      return run;
+    }
+    const { auto_export: _shown, ...rest } = run;
+    return rest;
   }
 
   private onTasks(tasks: LoadingTask[]): void {
