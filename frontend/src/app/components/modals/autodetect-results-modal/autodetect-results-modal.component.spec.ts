@@ -187,9 +187,9 @@ describe('AutoDetectResultsModalComponent', () => {
     const notes = fixture.nativeElement.querySelectorAll('.domain-note');
     expect(notes.length).toBe(1);
     expect(notes[0].textContent).toContain('68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift');
+    // Every example is there, so it says no count; its next step is the Browse button (#5545).
     expect(notes[0].textContent).toContain(
-      'Mammal learned from Caltech-101 (S) (39 of its 39 labelled examples are there). ' +
-        'Check its calls on Caltech-256 (S) by hand before relying on them.',
+      '"Mammal" learned from "Caltech-101 (S)". Check its matches with Browse, or test it in Tune.',
     );
   });
 

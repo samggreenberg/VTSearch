@@ -626,15 +626,16 @@ export class AutoDetectResultsModalComponent implements OnInit {
 
   /**
    * Tune's training-domain warning, for each detector whose check says this
-   * dataset looks unlike the one it was trained on (#5501): the same line and
-   * advice, so the warning reaches the results the user acts on, not only the
-   * view where they check calls by hand.
+   * dataset looks unlike the one it was trained on (#5501): the same line, so
+   * the warning reaches the results the user acts on, not only the view where
+   * they check calls by hand. Its next step is the Browse button under the
+   * list (#5545).
    */
   readonly domainWarnings = computed(() => {
-    const dataset = this.data().dataset_name || 'this dataset';
+    const dataset = this.data().dataset_name;
     const warnings: DomainShiftWarning[] = [];
     for (const [name, result] of Object.entries(this.data().results || {})) {
-      const warning = domainShiftWarning(result.training_domain, result.detector_name || name, dataset);
+      const warning = domainShiftWarning(result.training_domain, result.detector_name || name, dataset, 'results');
       if (warning) warnings.push(warning);
     }
     return warnings;

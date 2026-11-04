@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
+  to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls
+  on Caltech-101 (M) by hand before relying on them.` It now quotes every name, gives the count as one word (none
+  when every example is there, else `mostly` or `partly`), and points at a button you can see: `"Mammal detector"
+  learned from "Caltech-256 (S)". Tune it to check its calls on "Caltech-101 (M)".` On Tune it points at the
+  Autopilot tab, and in Find Results at **Browse** or Tune.
+
 - **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
   sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
   names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
