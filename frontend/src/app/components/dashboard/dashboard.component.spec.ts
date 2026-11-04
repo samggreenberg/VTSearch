@@ -1172,10 +1172,10 @@ describe('DashboardComponent', () => {
   });
 
   // #4380: the bulk-delete confirmation ran the question, the enumerated
-  // names and the parenthetical together on one line. The names now sit on
-  // their own line below the question (the detail gets its own line from
-  // confirmDestructive).
-  it('puts the names in a bulk delete confirmation on their own line', async () => {
+  // names and the parenthetical together on one line. #5532: the names, a
+  // comma-joined row of them, are now a bulleted list under the question,
+  // one per line (the detail gets its own line from confirmDestructive).
+  it('lists the names in a bulk delete confirmation, one per item', async () => {
     const datasets = [
       { id: 'd1', name: 'DS1', media_type: 'audio' },
       { id: 'd2', name: 'DS2', media_type: 'audio' },
@@ -1192,15 +1192,41 @@ describe('DashboardComponent', () => {
 
     await component.deleteSelectedDetectors();
     expect(confirm).toHaveBeenLastCalledWith(
-      'Delete 2 detectors?\n"detector1", "detector2"',
+      'Delete 2 detectors?',
       '(This deletes your labels. The underlying media is unaffected.)',
+      'Delete',
+      ['detector1', 'detector2'],
     );
 
     await component.deleteSelectedDatasets();
     expect(confirm).toHaveBeenLastCalledWith(
-      'Delete 2 datasets from your list?\n"DS1", "DS2"',
+      'Delete 2 datasets from your list?',
       '(Detectors are unaffected.)',
+      'Delete',
+      ['DS1', 'DS2'],
     );
+  });
+
+  it('names a single bulk-delete target in the question, with no list', async () => {
+    flushInitialRequests(
+      [{ id: 'd1', name: 'DS1', media_type: 'audio' }],
+      [{ id: 'm1', name: 'detector1', media_type: 'audio' }],
+    );
+    selection.selectOnly('dataset', ['d1']);
+    selection.selectOnly('detector', ['m1']);
+
+    const confirm = vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
+
+    await component.deleteSelectedDetectors();
+    expect(confirm).toHaveBeenLastCalledWith(
+      'Delete detector "detector1"?',
+      '(This deletes your labels. The underlying media is unaffected.)',
+      'Delete',
+      [],
+    );
+
+    await component.deleteSelectedDatasets();
+    expect(confirm).toHaveBeenLastCalledWith('Delete dataset "DS1" from your list?', '(Detectors are unaffected.)', 'Delete', []);
   });
 
   it('should open and close importer modal via NewThingFlowsService', () => {

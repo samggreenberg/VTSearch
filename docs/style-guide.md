@@ -202,6 +202,8 @@ Text utility classes (use directly on `<p>` / `<span>`):
 
 All four `<p>`-based utilities explicitly zero the UA `<p>` margin so the surrounding layout's flex `gap` owns inter-row spacing (§5, anti-pattern 15).
 
+**`.name-list`** (on a `<ul>`) sets names out one per line, bulleted: the datasets a bulk delete is about to remove, the detectors a run skipped. Use it wherever text would otherwise enumerate things the user named (datasets, detectors) as a comma-joined row, which is hard to scan and splits a name that has a comma in it (#5532). It inherits colour and size from the text it sits under, and drops its bottom margin when it ends its container. A short run of fixed labels ("Image, Document") can stay a comma list. A list inside a confirmation goes through `confirmDestructive()`'s `items` rather than the question string; the dialog host renders it with this class.
+
 **`.empty-state`** is the canonical placeholder shown wherever a list, table, or panel has no content yet. The common case is a bare `<p class="empty-state">No datasets yet.</p>`; the richer form stacks an optional icon, the message, and an optional action:
 
 ```html
