@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static SCSS (and template) audit for the VTSearch frontend.
 
-Scans `frontend/src/**/*.scss` - and, for the one template rule (§3.5, a
+Scans `frontend/src/**/*.scss` - and, for the one template rule (§3.6, a
 disabled button says why), `frontend/src/**/*.html` - for violations of the
 rules in `docs/style-guide.md`.  Designed to be invoked by the `/style-check`
 skill: prints findings grouped by rule, with file:line and a one-line
@@ -604,22 +604,22 @@ def check_deleted_alias(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §5.17 / §3.5 A disabled button that doesn't say why (templates)
+# §5.18 / §3.6 A disabled button that doesn't say why (templates)
 # ---------------------------------------------------------------------------
 BUTTON_TAG = re.compile(r"<button\b([^>]*)>", re.S)
 DISABLED_BINDING = re.compile(r'\[disabled\]="([^"]*)"')
 BOUND_TITLE = re.compile(r"\[(?:attr\.)?title\]=")
 # A button disabled only while its own work is in flight has a label that says
-# so (`Importing…`), the one exemption §3.5 allows.
+# so (`Importing…`), the one exemption §3.6 allows.
 BUSY_NAME = re.compile(r"(?i)submitting|loading|busy|saving|exporting|retrying|adding")
 
 
 def check_disabled_without_reason(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§5.17 Disabled button with no reason on hover (templates)",
+        rule="§5.18 Disabled button with no reason on hover (templates)",
         description=(
             "A <button> whose [disabled] is bound must say why while disabled: "
-            "a bound [title] naming the next step that enables it (§3.5). Hits "
+            "a bound [title] naming the next step that enables it (§3.6). Hits "
             "have a static or missing title. A button disabled only while its "
             "own label reads `Importing…` is exempt and is skipped when its "
             "[disabled] names nothing but in-flight flags."

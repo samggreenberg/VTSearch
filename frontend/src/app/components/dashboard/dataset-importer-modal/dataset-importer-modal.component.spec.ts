@@ -929,7 +929,7 @@ describe('DatasetImporterModalComponent', () => {
       // Offered once the import has started, as every picker does.
       expect(offer).not.toHaveBeenCalled();
       httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
-      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
+      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything(), expect.anything());
     });
 
     it('offers a one-dataset demo import as the default too, and starts from a saved embedder', async () => {
@@ -953,7 +953,7 @@ describe('DatasetImporterModalComponent', () => {
       demo.selectDemo(mockDemos[1] as any);
       demo.submit();
       httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
-      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
+      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything(), expect.anything());
     });
 
     it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', async () => {

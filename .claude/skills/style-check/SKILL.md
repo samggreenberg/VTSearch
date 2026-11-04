@@ -7,7 +7,7 @@ description: Run a systematic frontend style audit. Use when the user asks for a
 
 Static audit of `frontend/src/**/*.scss` against the rules in
 `docs/style-guide.md`: the mistakes behind "spacing looks off / fonts
-inconsistent" bugs. One rule (§5.17) reads the templates instead: a
+inconsistent" bugs. One rule (§5.18) reads the templates instead: a
 disabled button that doesn't say why.
 
 ## How to run it
@@ -39,7 +39,7 @@ your job is to review them and decide which to fix.
 | §5.13  | `font: inherit` inside component SCSS (specificity trap) | Regex |
 | §5.14  | `flex-direction: column` blocks without an explicit `gap` | Brace-depth aware SCSS parser |
 | §5.15  | Shared utility classes redeclared locally | Top-level `.{class} {` outside shared files |
-| §5.17  | A `<button>` with a bound `[disabled]` and no bound `[title]` to say why (§3.5) | Template scan of `frontend/src/**/*.html`; skips a button disabled only by in-flight flags (`submitting()`, `loading()`, …), whose label already says so |
+| §5.18  | A `<button>` with a bound `[disabled]` and no bound `[title]` to say why (§3.6) | Template scan of `frontend/src/**/*.html`; skips a button disabled only by in-flight flags (`submitting()`, `loading()`, …), whose label already says so |
 
 ## Curating findings
 
@@ -57,7 +57,7 @@ patterns alongside real bugs. Apply judgement before fixing:
   `.center-panel`, `.app-shell`, etc.) usually fall in this bucket.
   Flag a hit only when stacked siblings look like form rows / labelled
   sections (`.form-group`, `<label>`, `.section-title`, `<p>`).
-- **§5.17 disabled button with no reason** is real unless the button's
+- **§5.18 disabled button with no reason** is real unless the button's
   own label turns into its progress (`Importing…`) under a flag the
   scanner doesn't recognise as in-flight. A bound `[title]` that only
   describes the action still passes the scan, so a reviewer reads the

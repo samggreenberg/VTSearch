@@ -260,7 +260,7 @@ Nor is a muted, link-like text button - a secondary affordance that sits beside 
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
-- **A field label ends in a colon**: `Media type:`, `Threshold:`. The colon follows the text and comes before the required `*` and any hint icon (`Example: *`). A checkbox's caption takes none: the text beside a box names the option, it doesn't head a field below it. Labels rendered from plugin field specs add the colon in the template, so a plugin author's `label` stays bare.
+- **A field label ends in a colon**: `Media type:`, `Threshold:`. The colon follows the text and comes before the required `*` and any hint icon (`Example: *`). A label with a hint icon also carries a short `title` of its own (§3.5). A checkbox's caption takes none: the text beside a box names the option, it doesn't head a field below it. Labels rendered from plugin field specs add the colon in the template, so a plugin author's `label` stays bare.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
 - **Required fields are marked twice: on the question and on the answer.** `.required` puts a `--color-bad` `*` after the label; the control itself carries `required` (`[required]="!!field.required"` on a plugin field), and `.form-input` / `.form-select` then give an unanswered required field a red well (`--color-bad` border over a `--bad-bg` tint) via `:required:invalid`. The well clears the moment the field has a value, yields to the accent border while focused, and never shows on a disabled control. A star without `required` on its control is the regression this rule exists to stop. Mark only what the *user* has to supply: a field the app fills in for them is not required of the user, even when submit needs a value, so it gets neither the star nor `required`. New Detector's **Detector name** is the example: it is derived from the example, and a name left blank falls back to that default on Create, so an empty form must not flag it. Required answers that aren't native controls opt in explicitly: `<vt-file-browser [required]>` forwards it to its path input, and `<vt-drop-zone [missing]>` takes the parent's "nothing picked yet" flag (the zone forgets each pick once emitted, so it can't tell on its own).
 - **`.browse-row` + `.browse-panel`** are the canonical "type a path, or pick one" field. `.browse-row` lays a `.form-input` and its `Browse` `.btn` on one line (the input flexes, the button hugs its label) so the pair reads as a single control rather than two stacked fields; `.browse-panel` frames the `<vt-folder-browser>` that the button reveals below it as a recessed sub-surface. Both `<vt-file-browser>` (pick a file) and the Add Dataset server-folder field (pick a folder) use them - a new "browse the server" field should too, rather than stacking a bare button under an input.
@@ -550,13 +550,27 @@ Don't write per-component focus / disabled CSS. The base classes handle both:
 - `.btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }` (`.btn--primary` swaps to a neutral fill + dimmed text instead, since opacity can't hold contrast over the accent)
 - `.form-input:focus { border-color: var(--accent); }`
 
-A disabled button also has to say *why* it is disabled; see §3.5.
+A disabled button also has to say *why* it is disabled; see §3.6.
 
 ### 3.4 Theme overrides inside a component
 
 Avoid them. The right answer is almost always "use a theme variable." If a component genuinely needs a per-theme tweak (rare), wrap the override in `[data-theme="light"]` or `[data-theme="highviz"]` and add a comment explaining why a token-based solution didn't work.
 
-### 3.5 Disabled buttons say why
+### 3.5 Tooltips: the text answers too, not only its (?)
+
+A `<vt-field-hint-icon>` (the (?)) explains the label or heading it follows. **The text it explains carries a `title` of its own as well.** A user points at the words before they point at the (?), so a tooltip only on the (?) means the words show nothing.
+
+```html
+<span class="balance-label" title="Where to draw the line: more matches, or surer ones">Threshold:</span>
+<vt-field-hint-icon hint="Where to draw the line. Toward False Positives returns more, with more wrong ones in it; toward False Negatives returns only the surest, and misses more." />
+```
+
+- **Short on the text, long on the (?).** The text's `title` is a phrase that says what the field or section is for. The (?)'s `hint` is the full explanation: what each choice does, the caveats, the edge cases. Putting the same text on both is the fallback, not the pattern; there is almost always a shorter version to write.
+- **Put the `title` on the element that holds the words**: the `<label>`, the heading, the `<p>`, or the label's own `<span>` when the row also holds other controls (Threshold's `.balance-label`). A native tooltip is inherited, so a `title` on a row would also show over every control in it that has none of its own.
+- **Hovering the (?) shows only the long version.** The icon sets `title=""`, which stops it inheriting the label's `title`, so the two tooltips never show at once. Don't remove it.
+- `tests_lib/meta/test_hint_icon_titles.py` checks every template: each (?) needs a titled holder (its block, or an inline element between) or a titled element just before it.
+
+### 3.6 Disabled buttons say why
 
 A greyed-out button with no explanation leaves the user hunting through the dialog for what they missed. So **every button that can be disabled carries a tooltip, while it is disabled, naming the next step that would enable it** (#5533).
 
@@ -576,7 +590,7 @@ A greyed-out button with no explanation leaves the user hunting through the dial
 
 This covers anything that looks clickable and isn't: a `.disabled` context-menu item (its `title`), a disabled demo row, a locked segmented toggle, a disabled tab.
 
-**Finding the ones that don't.** `.claude/scripts/style-check.py` lists every `<button>` in a template whose `[disabled]` is bound but whose `title` is missing or static (§5 item 17). It cannot tell a reason from a description, so read each hit; the in-progress-label exemption above is the usual false positive.
+**Finding the ones that don't.** `.claude/scripts/style-check.py` lists every `<button>` in a template whose `[disabled]` is bound but whose `title` is missing or static (§5 item 18). It cannot tell a reason from a description, so read each hit; the in-progress-label exemption above is the usual false positive.
 
 ---
 
@@ -700,9 +714,10 @@ detector-stats table (standard ML terminology in that context).
 14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
 15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.link-btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 16. **Hand-writing modal markup instead of using `<vt-modal>`.** Copying `.modal-backdrop` / `.modal-content` / `.modal-header` into a component drops the modal `<dialog>` (focus handling, the inert page behind, the top layer), the Escape stack, and backdrop dismissal. See §2.4.
-17. **A disabled button that doesn't say why.** Its tooltip, while disabled, names the next step that enables it. See §3.5.
+17. **A (?) beside text with no tooltip of its own.** The label or heading takes a short `title`; the (?) keeps the long version. See §3.5.
+18. **A disabled button that doesn't say why.** Its tooltip, while disabled, names the next step that enables it. See §3.6.
 
-> A static scan for items 1-3, 6-7, 10, 13-15 and 17 lives at
+> A static scan for items 1-3, 6-7, 10, 13-15 and 18 lives at
 > `.claude/scripts/style-check.py` (invoked via the `/style-check`
 > skill). It also checks the token-level rules that aren't anti-pattern
 > items: raw `z-index` (§1.8), raw decorative-dim opacity (§1.10),
