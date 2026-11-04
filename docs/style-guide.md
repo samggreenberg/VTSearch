@@ -312,8 +312,8 @@ sets none:
 | Token          | Width | Use |
 |----------------|-------|-----|
 | `--modal-w-sm` | 480px | Single-column forms: label importer, combine detectors, the blank new-detector form. |
-| `--modal-w-md` | 720px | Picker / table / settings dialogs: dataset importer, export, settings, keyboard help. |
-| `--modal-w-lg` | 900px | Wide views that need room for a table + browser side by side: the new-detector / dataset media-picker view. |
+| `--modal-w-md` | 720px | Picker / table / settings dialogs: export, settings, keyboard help. |
+| `--modal-w-lg` | 900px | Wide views that need room for the demo-dataset table or a folder browser: Add Dataset, and the new-detector media-picker view. |
 
 Set the width on `.modal-content` (via `::ng-deep`, since the element belongs to
 `vt-modal`), not on an inner wrapper, so inner content can `width: 100%` and fill

@@ -94,7 +94,6 @@
               @for (demo of filteredDemos(); track demo.name) {
                 <tr
                   class="demo-row"
-                  [class.ready]="demo.status === 'ready'"
                   [class.selected]="selectedDemoName() === demo.name"
                   [class.disabled]="demoRowDisabled(demo)"
                   role="button"
@@ -117,7 +116,7 @@
                         <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
                       }
                       @case ('status') {
-                        <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                        <td class="col-status" [title]="statusBadgeTitle(demo.status)"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
                       }
                     }
                   }

@@ -37,6 +37,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
+  Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
+  with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,
+  which nothing explained. Description now takes the room the other columns leave and ends in "…" (hover for
+  the full text), so Readiness always shows. Each badge also explains itself on hover. The green tint is
+  gone, and the dialog is wider (900px, the width already used for the same table in New Detector). The first
+  drag of a column divider in any resizable table also no longer clips the longest cell of a column sized
+  exactly to its content.
 - **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
   (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
   pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version
