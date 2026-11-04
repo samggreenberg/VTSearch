@@ -667,7 +667,12 @@ calibrates and scores, and counts the labels and then the items it has
 scored, so it moves even when there is only one detector. When it finishes, a notice tells you how many hits
 it found; its **View Results** button opens the **Find Results**
 dialog, which lists every item each detector called Good. The controls above
-the list change what it shows: **Good**, **Bad** or **Both**; **Sort by**
+the list change what it shows, left to right in the order each acts on it:
+the **Threshold**, whose three radios show what each notch of
+[Tune's Threshold](#tuning-a-detector) would have called Good - the same
+scores, split where that notch draws the line, with nothing retrained and no
+detector's own Threshold changed (the radios are frozen when no notch would
+list anything different); **Good**, **Bad** or **Both**; **Sort by**
 **Score** (highest first, across every detector) or **Similarity**
 (look-alikes side by side, by a one-dimensional map of the whole dataset
 that VTSearch builds along with its Browse map, so a dataset you have not

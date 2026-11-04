@@ -34,6 +34,7 @@ kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections import OrderedDict
@@ -435,7 +436,9 @@ def score_detector(
         )
         if mlp is None:
             return None
-        balance = _line_state(name, trained[0] if trained else None)
+        det_ctx = trained[0] if trained else None
+        balance = _line_state(name, det_ctx)
+        beta, lines = _balance_lines(det_ctx, threshold)
 
         from vtscore.detectors.query_head import query_head_embedder  # noqa: PLC0415
 
@@ -472,6 +475,11 @@ def score_detector(
             # The balance's state on that cut: unchecked, headless (#4247,
             # #4272, #4413).
             "balance": balance,
+            # The balance the cut was drawn at, and the cut at each of the
+            # Threshold's presets, so the Find Results dialog can show what
+            # the other notches would have kept without a retrain (#5540).
+            "beta": beta,
+            "lines": lines,
             # Which detector the labels gave: under the quota, the Goods'
             # centroid rather than a trained head (#4643), or a typed-query
             # detector's own query (#4758).
@@ -483,6 +491,34 @@ def score_detector(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+def _balance_lines(det_ctx: Any, threshold: float) -> tuple[float | None, list[dict[str, float]]]:
+    """*det_ctx*'s balance, and its cut at each Threshold preset (#5540): ``(beta, [{beta, threshold}, ...])``.
+
+    Each preset's cut is :func:`~vtscore.state.core.recut_detector_threshold`'s,
+    re-derived from the estimators the train cached, so nothing is retrained or
+    re-scored: the scores the run already holds are split at another line.  The
+    detector's own balance keeps *threshold*, the cut its hits were split at, so
+    its notch reproduces the run exactly.  A cut the estimators cannot re-derive
+    (no context to ask, a head whose line no balance moves, or a cut that is
+    not a number) is *threshold* too: that notch keeps what the run kept.  Presets run from false positives
+    to false negatives (beta 4, 1, 1/4), as the control lays them out.
+    """
+    from vtscore.state import detector_beta  # noqa: PLC0415
+    from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_PRESETS, PRECISION_FLOOR_FALLBACK_INCLUSION  # noqa: PLC0415
+
+    own = detector_beta(det_ctx) if det_ctx is not None else None
+    lines: list[dict[str, float]] = []
+    for preset in sorted(BALANCE_PRESETS, reverse=True):
+        cut = None
+        if det_ctx is not None and preset != own:
+            cut = recut_detector_threshold(det_ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=preset)
+        if cut is None or not math.isfinite(cut):
+            cut = threshold
+        lines.append({"beta": preset, "threshold": round(float(cut), 4)})
+    return own, lines
 
 
 def _line_state(name: str, det_ctx: Any) -> dict | None:

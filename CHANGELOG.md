@@ -41,6 +41,16 @@ what is on `dev` but not yet on `main`; each release dates that section
   match are left out, and a list longer than four ends in "…" with a count of the rest. See
   [Save as default](docs/user/USER_GUIDE.md#save-as-default).
 
+### Added
+
+- **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
+  controls now run left to right in the order each acts on the list: the **Threshold**, then **Good** / **Bad** /
+  **Both**, then **Sort by**. The Threshold's three radios start on the notch the run was cut at; pick another and
+  the list, its Good and Bad counts, **Browse** and **Export** all split the run's scores where that notch draws the
+  line. Nothing is retrained, and no detector's own Threshold changes. An export from another notch sends that
+  notch's cut as the detector's `threshold`. The radios are frozen when no notch would list anything different,
+  for example a detector with too few labels for its line to move.
+
 ### Fixed
 
 - **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
