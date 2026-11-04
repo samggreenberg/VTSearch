@@ -935,8 +935,8 @@ raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
 buttons: asking for your first vote, then, through the run that trains the
-detector, saying what the current phase is after and how many Goods or Bads
-it still needs. See [Toasty's hints](#toastys-hints).
+detector, saying in a few words what Autopilot is doing at each step, Spot
+Check included, and to keep clicking. See [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays the current step, checked, for as
 long as you keep labeling: no step follows it. A new vote can knock an
@@ -1917,9 +1917,10 @@ In the Train view he asks for your first vote over **Good** / **Bad** while
 Autopilot runs on a detector with no labels. Once you have voted, he moves
 beside the **Labels** panel until your next vote, saying that your votes go
 there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
-that trains the detector, saying what each phase is after and how far along it
-is (how many Goods and Bads it still needs, then that the detector retrains on
-every vote until the lights go green). On any run, when you click an item you
+that trains the detector, saying at every step what Autopilot is doing
+(looking for Goods, then Bads, then sharpening and double-checking your
+detector) and to keep clicking. He speaks as Autopilot, in the first person:
+"I'm looking for Goods now. Keep clicking." On any run, when you click an item you
 have already labeled, he says what it is labeled, which button changes it, and
 that clicking Autopilot's current step on the left (or `↑`) goes back to
 Autopilot's pick. He explains the **Update Sort

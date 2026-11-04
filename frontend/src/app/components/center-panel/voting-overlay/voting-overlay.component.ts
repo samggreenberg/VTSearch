@@ -6,12 +6,12 @@ import { HintId } from '../../../services/hints.service';
 /**
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
  * picks one: Train's label view walks `start-voting` and the Autopilot phase
- * hints, and shows `revote` on an item the user picked to change (#4824); the
- * Tune view's stage shows `test-vote`.
+ * hints, Spot Check's included (#5538), and shows `revote` on an item the user
+ * picked to change (#4824); the Tune view's stage shows `test-vote`.
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
+  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
 >;
 
 @Component({

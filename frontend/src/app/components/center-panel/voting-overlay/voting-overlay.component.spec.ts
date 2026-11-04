@@ -85,17 +85,18 @@ describe('VotingOverlayComponent', () => {
     const hint = fixture.nativeElement.querySelector('vt-toasty-hint');
     expect(hint).toBeTruthy();
     expect(hint.classList).toContain('toasty-hint--above');
-    expect(hint.textContent).toContain('Autopilot picked this for you');
+    expect(hint.textContent).toContain('I picked this for you');
   });
 
-  it("says what each Autopilot phase is after, in plain words, and what a test's pick is (#4807, #5143)", async () => {
+  it("says what each Autopilot phase is after, in plain words, and what a test's pick is (#4807, #5143, #5538)", async () => {
     const text = () => (fixture.nativeElement.querySelector('vt-toasty-hint')?.textContent ?? '').replace(/\s+/g, ' ');
     const phases = [
       ['start-voting', 'Click Good if'],
-      ['find-goods', 'Autopilot is looking for Goods now. Keep clicking.'],
-      ['find-bads', 'Autopilot is looking for Bads now. Keep clicking.'],
-      ['find-more', 'Autopilot is looking for more Goods now. Keep clicking.'],
-      ['keep-voting', 'Autopilot is sharpening your detector now. Keep clicking.'],
+      ['find-goods', "I'm looking for Goods now. Keep clicking."],
+      ['find-bads', "I'm looking for Bads now. Keep clicking."],
+      ['find-more', "I'm looking for more Goods now. Keep clicking."],
+      ['keep-voting', "I'm sharpening your detector now. Keep clicking."],
+      ['spot-check', "I'm double-checking your detector now. Keep clicking."],
     ] as const;
     for (const [hint, says] of phases) {
       fixture.componentRef.setInput('hint', hint);
@@ -103,6 +104,8 @@ describe('VotingOverlayComponent', () => {
       expect(text()).toContain(says);
       // Autopilot is for clicking: no counts, targets or keys to take in (#5143).
       expect(text()).not.toMatch(/\d|arrow key/);
+      // Toasty speaks as Autopilot, in the first person (#5538).
+      expect(text()).not.toMatch(/Autopilot|VTSearch/);
     }
 
     fixture.componentRef.setInput('hint', 'test-vote');
@@ -120,7 +123,7 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('isGood', true);
     await settleZoneless(fixture);
     expect(text()).toContain('You already labeled this Good. Click Bad to change it');
-    expect(text()).toContain("or Autopilot's step on the left to carry on.");
+    expect(text()).toContain('or my step on the left to carry on.');
 
     fixture.componentRef.setInput('isGood', false);
     fixture.componentRef.setInput('isBad', true);

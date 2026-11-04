@@ -20,6 +20,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
+
 ### Fixed
 
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,
