@@ -115,7 +115,10 @@ describe('SourcePickerComponent', () => {
         const title = component.statusBadgeTitle(status);
         expect(title.startsWith(`${component.statusBadgeLabel(status)}: `)).toBe(true);
       }
-      expect(component.statusBadgeTitle('needs_embedding')).toContain('already downloaded');
+      expect(component.statusBadgeTitle('needs_embedding')).toContain('nothing left to download');
+      // A locally generated demo reaches Ready and Needs setup without a download (#5546).
+      expect(component.statusBadgeTitle('ready')).not.toContain('downloaded');
+      expect(component.statusBadgeTitle('needs_embedding')).not.toContain('downloaded');
       expect(component.statusBadgeTitle('needs_download')).toContain('downloaded, then analysed');
     });
   });

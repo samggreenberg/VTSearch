@@ -67,6 +67,11 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **The Synthetic World Map demos no longer read "Needs Download"** (issue #5546). Both demos make their media on
+  your machine and download nothing, yet Add Dataset › Demo's Readiness column called them **Needs Download** until
+  they had been loaded once, beside a description saying "no download". They now read **Needs setup**, which is all
+  that is left. The Ready and Needs setup hover text no longer says "already downloaded", which was never true of
+  these two.
 - **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
   Results dialog showed the run's failed export again ("Sending the results via Webhook (HTTP POST) failed: Webhook
   URL is required."), as if the export had been tried again. It hadn't: the line repeats what happened when the run

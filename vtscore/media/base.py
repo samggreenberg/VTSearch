@@ -207,7 +207,19 @@ class DemoDataset:
 
     Used by the frontend to display the expected download size before the
     user starts loading.  Set to ``0`` for datasets that don't require a
-    network download (e.g. scikit-learn datasets that download automatically)."""
+    network download (e.g. scikit-learn datasets that download automatically).
+    It is an advertised size, not a statement that nothing is fetched: that is
+    :attr:`requires_download`."""
+
+    requires_download: bool = True
+    """Whether loading this demo fetches its source media from somewhere.
+
+    ``True`` (the default) covers every demo whose media comes from a download,
+    a hub, or a folder a downloader fills.  Set ``False`` only for a demo that
+    generates its media locally at load time and fetches nothing (the Synthetic
+    World Map demos).  The demo list then reports such a demo as
+    ``needs_embedding`` ("Needs setup") rather than ``needs_download`` before
+    its first load, since building the dataset is all that is left."""
 
 
 def demo_slice(items, slice_start, slice_end, slice_frac_start=None, slice_frac_end=None):

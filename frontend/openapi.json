@@ -9806,7 +9806,7 @@
     },
     "/api/dataset/demo-list": {
       "get": {
-        "description": "Each dataset has a ``status`` field with one of three values:\n\n* ``\"ready\"`` \u2013 embeddings are cached and source data is present.\n* ``\"needs_embedding\"`` \u2013 source data is downloaded but not yet embedded.\n* ``\"needs_download\"`` \u2013 source data must be downloaded (and then embedded).",
+        "description": "Each dataset has a ``status`` field with one of three values:\n\n* ``\"ready\"`` \u2013 embeddings are cached and source data is present.\n* ``\"needs_embedding\"`` \u2013 nothing is left to download (the source data is on\n  disk, or the demo generates its media locally), but it is not yet embedded.\n* ``\"needs_download\"`` \u2013 source data must be downloaded (and then embedded).",
         "operationId": "demo_dataset_list",
         "parameters": [
           {

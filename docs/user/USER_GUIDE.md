@@ -419,8 +419,8 @@ plugin guide, `docs/EXTENDING-plugins.md`.
 The **Downloaded Media** catalogue is a table: pick a media type from the
 dropdown, click the dataset you want to choose it, then click **Import**.
 Each row carries a readiness badge: **Ready** (cached and analysed),
-**Needs setup** (cached, but still to be analysed with the embedder you
-chose) or **Needs Download**. See [Load a ready-made demo dataset](howto/load-a-demo.md).
+**Needs setup** (nothing left to download, but still to be analysed with the
+embedder you chose) or **Needs Download**. See [Load a ready-made demo dataset](howto/load-a-demo.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.webp" />
