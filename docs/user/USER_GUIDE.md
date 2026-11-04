@@ -530,8 +530,10 @@ datasets of the same type reuse the downloaded model.
 
 The **Advanced** section starts from your saved defaults for the kind of media
 being imported. When an import's settings differ from them, the notification
-that follows it offers **Save as Default**: click it, and the next import of
-that kind starts the same way. It covers the embedder, clipper, included media
+that follows it offers **Save as Default** and lists what saving would change,
+one setting at a time (`Embedder: DINOv3, Merge near-duplicates: on`), cut short
+with "…" when there are more than four. Click it, and the next import of that
+kind starts the same way. It covers the embedder, clipper, included media
 and cleanup, **Build Browse map now** and **Merge near-duplicates**, and, for a
 [Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder) import,
 **Multi-Dataset** itself with the rows you ticked. A Multi-Dataset import is

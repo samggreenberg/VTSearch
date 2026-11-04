@@ -78,7 +78,7 @@
           [disabled]="busy() && row.kind === 'file'"
           (click)="selectRow(i)"
           (dblclick)="onRowDblClick(row)"
-          [title]="row.path"
+          [title]="busy() && row.kind === 'file' ? 'Wait for the picked file to load' : row.path"
         >
           <span class="vfb-icon">
             @if (row.kind === 'dir') {

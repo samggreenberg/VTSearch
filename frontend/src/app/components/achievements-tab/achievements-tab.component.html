@@ -74,7 +74,8 @@
                 <button
                   type="submit"
                   class="docs-phrase-submit"
-                  [disabled]="submitting || !phraseInput.trim()">
+                  [disabled]="submitting || !phraseInput.trim()"
+                  [title]="!submitting && !phraseInput.trim() ? 'Paste a phrase first' : ''">
                   {{ submitting ? 'Checking…' : 'Submit' }}
                 </button>
               </form>

@@ -35,7 +35,8 @@
 </div>
 
 <div class="actions">
-  <button type="button" class="primary" [disabled]="duration <= 0 || end <= start" (click)="apply()">
+  <button type="button" class="primary" [disabled]="duration <= 0 || end <= start" (click)="apply()"
+    [title]="duration <= 0 ? 'Wait for the audio to load' : end <= start ? 'Drag the blue handles to select part of the clip first' : 'Crop the clip to the selection'">
     Apply crop
   </button>
   <button type="button" class="cancel" (click)="cancel()">Back</button>

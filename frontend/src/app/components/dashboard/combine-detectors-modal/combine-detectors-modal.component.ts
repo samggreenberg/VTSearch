@@ -80,17 +80,21 @@ export class CombineDetectorsModalComponent implements OnInit {
   get nameValidationMessage(): string {
     const trimmed = this.newName.trim();
     if (!trimmed) return '';
-    if (this.nameCollision) return `A model named "${trimmed}" already exists.`;
+    if (this.nameCollision) return `A detector named "${trimmed}" already exists.`;
+    return '';
+  }
+
+  /** The next step before Combine can run, or ``''`` once it can: the
+   *  button's disabled state and its tooltip both read this (#5533). */
+  get submitBlocker(): string {
+    if (this.rows.length < 2) return 'Select at least two detectors to combine';
+    if (!this.newName.trim()) return 'New name is required';
+    if (this.nameCollision) return this.nameValidationMessage;
     return '';
   }
 
   get canSubmit(): boolean {
-    return (
-      !this.submitting() &&
-      this.rows.length >= 2 &&
-      !!this.newName.trim() &&
-      !this.nameCollision
-    );
+    return !this.submitting() && !this.submitBlocker;
   }
 
   submit(): void {
