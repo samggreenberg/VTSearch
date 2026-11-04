@@ -11,6 +11,7 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { DATASET_OVERRIDE } from '../../../interceptors/active-context.interceptor';
 import { settleResource, settleZoneless } from '../../../testing/settle-resource';
+import type { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -1190,6 +1191,45 @@ describe('NewDetectorModalComponent', () => {
     const req = httpMock.expectOne('/api/browse-media-files/select');
     req.flush({ ok: true, filename: 'ex.wav', original_name: 'blues.00000.wav' });
     expect(component.mediaExamples().length).toBe(1);
+  });
+
+  // The row gate reads the server's `browsable`, never `status`: a hub or
+  // generated demo has no source folder, so a ready one 404'd on every typed
+  // path (#5558).
+  describe('demo rows are gated on a browsable source folder (#5558)', () => {
+    const demo = (fields: Partial<DemoDatasetEntry>): DemoDatasetEntry =>
+      ({ name: 'd', label: 'Demo', status: 'ready', ...fields }) as DemoDatasetEntry;
+    const loadedHubDemo = demo({ label: 'GTZAN', status: 'ready', has_source_folder: false, browsable: false });
+    const unloadedSynthetic = demo({ status: 'needs_embedding', has_source_folder: false, browsable: false });
+    const notDownloaded = demo({ status: 'needs_download', has_source_folder: true, browsable: false });
+    const onDisk = demo({ label: 'ESC-50', status: 'needs_embedding', has_source_folder: true, browsable: true });
+
+    it('disables a ready or needs-embedding demo that has no source folder', () => {
+      expect(component.demoRowDisabledFn(loadedHubDemo)).toBe(true);
+      expect(component.demoRowDisabledFn(unloadedSynthetic)).toBe(true);
+      expect(component.demoRowDisabledFn(notDownloaded)).toBe(true);
+      expect(component.demoRowDisabledFn(onDisk)).toBe(false);
+    });
+
+    it('tells a folderless demo apart from one that is not downloaded yet', () => {
+      expect(component.demoRowTitleFn(onDisk)).toBe('Browse files in ESC-50');
+      expect(component.demoRowTitleFn(notDownloaded)).toBe(
+        'This demo has not been downloaded. Use the Add Dataset window to fetch it first.',
+      );
+      const noFolder =
+        'This demo has no files on disk to browse: its media is fetched or generated when the dataset loads.';
+      expect(component.demoRowTitleFn(loadedHubDemo)).toBe(noFolder);
+      expect(component.demoRowTitleFn(unloadedSynthetic)).toBe(noFolder);
+    });
+
+    it('does not open the path view for a ready demo it cannot browse', () => {
+      component.selectDemo(loadedHubDemo);
+      expect(component.demoFileBrowsing).toBe(false);
+
+      component.selectDemo(onDisk);
+      expect(component.demoFileBrowsing).toBe(true);
+      expect(component.demoFileBrowseSource).toBe('demo:d');
+    });
   });
 
   // A Face dataset can't search by text, so before this the only way in was a

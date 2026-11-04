@@ -486,6 +486,10 @@ user is about to load with; each entry's `status` is computed against them
 built with another embedder / clipper) or `"needs_download"`; `pkl_embedder`
 / `pkl_clipper` name what the cached pickle was built with, and
 `available_converters` the converters that apply to the demo's media type.
+`browsable` says whether [`source=demo:<name>`](#browse-media-files) resolves:
+the demo declares a source folder (`has_source_folder`) and that folder is
+populated. It does not follow `status`: a hub-fetched or generated demo has no
+source folder, so it reads `ready` once loaded and is still not browsable.
 
 ### Demo categories
 
