@@ -192,7 +192,7 @@ class TestImporterReportsSkippedLines:
         assert toast.level == "warning"
         assert "Skipped 3 manifest line(s)" in toast.message
         assert "2 line(s) were CSV rows" in (toast.detail or "")
-        assert toast.items == [
+        assert list(toast.items) == [
             "line 1: looks like a CSV header row — path,landmark",
             "line 3: looks like a CSV header row — path,landmark",
             f'line 5: {QUOTE_FRAGMENT} — at night"',
@@ -227,7 +227,7 @@ class TestImporterReportsSkippedLines:
         chunks = list(imp.run_chunked({"paths_file": str(listing), "media_type": "audio"}, chunk_size=10))
         assert sum(len(c) for c in chunks) == 1
         (toast,) = [n for n in collected if n.source == "Manifest"]
-        assert toast.items == ["line 2: names no existing file or folder — not-a-file"]
+        assert list(toast.items) == ["line 2: names no existing file or folder — not-a-file"]
 
 
 class TestExpandPathsSurvivesHostileEntries:

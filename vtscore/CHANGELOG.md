@@ -3128,6 +3128,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **The `server_files` importer judges each text-manifest line on its own** (issue #5561). A line that names no
+  existing file or folder is skipped instead of failing the import: before, a line too long to be a filename raised
+  `OSError` and a non-UTF-8 byte raised `UnicodeDecodeError` out of `run` / `run_chunked`. Skipped lines go out in
+  one warning notification (`PluginBase.notify`, source `"Manifest"`), one item per line with its number and reason,
+  and when no line names a file the `ValueError` lists the first ones. A CSV row is read for its path column (a
+  header row's `path` / `filepath` / `image` …, else the first). Directory entries are walked with each real
+  folder entered once, so a symlink cycle no longer makes the walk exponential. `.npz` manifests read as before.
+
 - **Rank frames on the Goods' centroid's clicks** (issue #5527). `simulate_voting_iterations` records a `step`
   rank frame on a listed click whose Test is the Goods' centroid, as it does on the trained head's; before, such a
   click left none, so a face-ball session (#5478, on the centroid for the whole session from beta 1 up) had only

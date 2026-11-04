@@ -401,7 +401,13 @@ VTSearch ships two populated categories, which boil down to two choices:
   importer; media must already be somewhere the server can see):
   - **Folder** - browse the server's filesystem and import a directory of
     media files, or an archive to unpack.
-  - **Manifest** - point at a `.txt`/`.list` file of media paths. It also
+  - **Manifest** - point at a `.txt`/`.list` file of media paths, one per
+    line. A line that names no file (a stray CSV header, the tail of a
+    quoted value that held a line break, a typo) is skipped and listed in
+    a warning toast with its line number and reason; the rest still
+    import. A CSV row is read for its path column (the column a header row
+    names `path`, `filepath`, `image`, …, else the first), and its other
+    columns are ignored. It also
     accepts a `.npz` archive of pre-computed fingerprints, so you can
     import media you have already processed offline without doing the work
     twice (see [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz)),

@@ -446,7 +446,10 @@ sent); optional `dataset_name` (default `"Local files upload"`), `embedder` /
 `embedders`, `clipper`, `clipper_params` (JSON string), `source_specs`,
 `cleaners`, `build_projection`, `merge_near_duplicates`, `outputs` (as for
 `import-local-folder`). Runs the `server_files` importer in the background.
-Same response shape as `import-local-folder`.
+Same response shape as `import-local-folder`. Text-file lines that name no
+file are skipped and reported in a warning notification, not failed on; the
+task fails only when no line names one, and its `error` then lists the first
+skipped lines.
 
 → `{"ok": true, "message": "...", "task_id": "...", "task_ids": ["..."]}`
 
