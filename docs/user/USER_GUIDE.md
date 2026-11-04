@@ -683,7 +683,9 @@ centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too, unless you untick **Export results when AutoFind
-finishes** there to pause it. If none of your AutoFind detectors can run on the new
+finishes** there to pause it. If that export failed, the dialog says so
+the first time it opens the run. It doesn't repeat it when you open the
+run again, since opening it sends nothing. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
 of embedder the dataset doesn't have - a notice says so instead.
 
@@ -943,9 +945,10 @@ raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
 buttons: asking for your first vote, then, through the run that trains the
-detector, saying what the current phase is after. While Autopilot sharpens
-the detector it also says how long that usually takes: most detectors are
-trained within 50 votes, and Autopilot never asks for more than 200. See
+detector, saying in a few words what Autopilot is doing at each step, Spot
+Check included, and to keep clicking. While Autopilot sharpens the detector
+he also says how long that usually takes: most detectors are trained within
+50 votes, and Autopilot never asks for more than 200. See
 [Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays the current step, checked, for as
@@ -1927,9 +1930,12 @@ In the Train view he asks for your first vote over **Good** / **Bad** while
 Autopilot runs on a detector with no labels. Once you have voted, he moves
 beside the **Labels** panel until your next vote, saying that your votes go
 there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
-that trains the detector, saying what each phase is after: Goods, then Bads,
-then sharpening the detector, where he adds that most detectors are trained
-within 50 votes and Autopilot never asks for more than 200. On any run, when you click an item you
+that trains the detector, saying at every step what Autopilot is doing
+(looking for Goods, then Bads, then sharpening and double-checking your
+detector) and to keep clicking. While it sharpens the detector he adds that
+most detectors are trained within 50 votes, and that it never asks for more
+than 200. He speaks as Autopilot, in the first person:
+"I'm looking for Goods now. Keep clicking." On any run, when you click an item you
 have already labeled, he says what it is labeled, which button changes it, and
 that clicking Autopilot's current step on the left (or `↑`) goes back to
 Autopilot's pick. He explains the **Update Sort

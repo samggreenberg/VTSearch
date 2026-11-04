@@ -29,6 +29,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
+
 - **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
   sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
   names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
@@ -44,6 +50,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
+  Results dialog showed the run's failed export again ("Sending the results via Webhook (HTTP POST) failed: Webhook
+  URL is required."), as if the export had been tried again. It hadn't: the line repeats what happened when the run
+  finished, and reopening the dialog sends nothing. The dialog now shows the failure the first time it opens a run
+  and leaves it out after that. Each new run still reports its own failure. A successful export still shows every
+  time, with its **Open** button.
 - **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
   Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
   with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,
