@@ -30,6 +30,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
+  Results dialog showed the run's failed export again ("Sending the results via Webhook (HTTP POST) failed: Webhook
+  URL is required."), as if the export had been tried again. It hadn't: the line repeats what happened when the run
+  finished, and reopening the dialog sends nothing. The dialog now shows the failure the first time it opens a run
+  and leaves it out after that. Each new run still reports its own failure. A successful export still shows every
+  time, with its **Open** button.
 - **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
   (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
   pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version
