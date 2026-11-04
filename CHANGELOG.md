@@ -20,6 +20,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
 ### Fixed
 
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,

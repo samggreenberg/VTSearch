@@ -30,6 +30,23 @@ describe('ClipboardCopyComponent', () => {
     const btn = fixture.nativeElement.querySelector('button.btn') as HTMLButtonElement;
     expect(btn.textContent?.trim()).toBe('Copy');
     expect(btn.disabled).toBe(false);
+    expect(btn.title).toBe('Copy to clipboard');
+  });
+
+  // #5533: a disabled Copy says why on hover; a host's reason wins over the default.
+  it("says why Copy is disabled, taking the host's reason when it gives one", async () => {
+    const btn = () => fixture.nativeElement.querySelector('button.btn') as HTMLButtonElement;
+    fixture.componentRef.setInput('rows', []);
+    await settleZoneless(fixture);
+    expect(btn().disabled).toBe(true);
+    expect(btn().title).toBe('Nothing to copy yet');
+
+    fixture.componentRef.setInput('rows', [{ a: '1' }]);
+    fixture.componentRef.setInput('disabled', true);
+    fixture.componentRef.setInput('disabledReason', 'Tick at least one column to copy');
+    await settleZoneless(fixture);
+    expect(btn().disabled).toBe(true);
+    expect(btn().title).toBe('Tick at least one column to copy');
   });
 
   // #5103: each dropdown carries a visible label tied to it by `for`/`id`,

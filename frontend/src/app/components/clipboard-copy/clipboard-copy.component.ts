@@ -42,6 +42,9 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   readonly columns = input<ClipboardColumn[]>([]);
   /** Extra disable condition layered on top of the empty-data guards. */
   readonly disabled = input(false);
+  /** What the Copy button's tooltip says while {@link disabled} holds: the
+   *  step that would enable it, which only the host knows (#5533). */
+  readonly disabledReason = input('');
   readonly copyLabel = input('Copy');
   readonly buttonVariant = input<'primary' | 'secondary'>('primary');
   /** Whether the control has its own Copy button. A host whose own action
@@ -86,10 +89,16 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   }
 
   get isDisabled(): boolean {
-    if (this.disabled()) return true;
-    if (this.rows().length === 0) return true;
-    if (this.mode() === 'table') return this.columns().length === 0;
-    return !this.selectedColumnKey;
+    return !!this.copyBlocker;
+  }
+
+  /** Why the Copy button is disabled, or ``''`` while it is not: the
+   *  button's tooltip, so a disabled Copy says what would enable it (#5533). */
+  get copyBlocker(): string {
+    if (this.disabled()) return this.disabledReason() || 'Nothing to copy yet';
+    if (this.rows().length === 0) return 'Nothing to copy yet';
+    if (this.mode() === 'table') return this.columns().length === 0 ? 'Tick at least one column to copy' : '';
+    return this.selectedColumnKey ? '' : 'Choose a column to copy';
   }
 
   ngOnChanges(changes: SimpleChanges): void {

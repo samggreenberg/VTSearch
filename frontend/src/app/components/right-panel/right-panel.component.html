@@ -7,7 +7,7 @@
 
   @if (mode() !== 'find') {
     <div class="import-row">
-      <button class="btn btn--toolbar import-btn" [disabled]="disabled()" (click)="onImportLabels()" title="Import good/bad labels from a file or add media directly to the good or bad pile">Import Labels</button>
+      <button class="btn btn--toolbar import-btn" [disabled]="disabled()" (click)="onImportLabels()" [title]="waitReason || 'Import good/bad labels from a file or add media directly to the good or bad pile'">Import Labels</button>
     </div>
   }
 
@@ -68,13 +68,13 @@
     >
       @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onBrowse()" aria-label="Browse" title="Browse positive items (verified and unverified).">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onBrowse()" aria-label="Browse" [title]="goodActionsBlocker || 'Browse positive items (verified and unverified).'">
             <vt-icon type="eye" [size]="14"></vt-icon>
           </button>
-          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the full good set (verified + unverified) into their own dataset">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onToDataset()" aria-label="To Dataset" [title]="goodActionsBlocker || 'Promote the full good set (verified + unverified) into their own dataset'">
             <vt-icon type="cubes" [size]="14"></vt-icon>
           </button>
-          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onExportGood()" aria-label="Export" title="Export the full good set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onExportGood()" aria-label="Export" [title]="goodActionsBlocker || 'Export the full good set (verified + unverified) to clipboard, file, email, or webhook'">
             <vt-icon type="export" [size]="14"></vt-icon>
           </button>
         </div>
@@ -100,7 +100,7 @@
     >
       @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="card-icon-btn" [disabled]="disabled() || findBadTotal === 0" (click)="onExportBad()" aria-label="Export" title="Export the full bad set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="card-icon-btn" [disabled]="disabled() || findBadTotal === 0" (click)="onExportBad()" aria-label="Export" [title]="badActionsBlocker || 'Export the full bad set (verified + unverified) to clipboard, file, email, or webhook'">
             <vt-icon type="export" [size]="14"></vt-icon>
           </button>
         </div>
@@ -114,7 +114,7 @@
         class="btn btn--toolbar corrections-btn"
         [disabled]="disabled()"
         (click)="onAddCorrections()"
-        title="Add the corrections you've made (items you changed from the detector's call) into this detector's labelset and retrain it. This changes the detector, so the current evaluation no longer applies."
+        [title]="waitReason || 'Add the corrections you\'ve made (items you changed from the detector\'s call) into this detector\'s labelset and retrain it. This changes the detector, so the current evaluation no longer applies.'"
       >
         <vt-icon type="graduation" [size]="16"></vt-icon>
         Add Corrections to Detector
@@ -124,7 +124,7 @@
 
   @if (mode() !== 'find') {
     <div class="export-row">
-      <button class="btn btn--toolbar export-btn" [disabled]="disabled()" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">
+      <button class="btn btn--toolbar export-btn" [disabled]="disabled()" (click)="onExport()" [title]="waitReason || 'Export labeled items to clipboard, file, email, or webhook'">
         <vt-icon type="export" [size]="16"></vt-icon>
         Export
       </button>

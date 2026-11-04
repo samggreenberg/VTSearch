@@ -179,6 +179,22 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     return this.badDisplayIds.length + this.unverifiedBadCount();
   }
 
+  /** What a button disabled by {@link disabled} says on hover, or ``''``:
+   *  a disabled button always says why (#5533). */
+  get waitReason(): string {
+    return this.disabled() ? 'Wait for the current run to finish' : '';
+  }
+
+  /** Why the Good pile's Browse / To Dataset / Export buttons are disabled, or ``''``. */
+  get goodActionsBlocker(): string {
+    return this.waitReason || (this.findGoodTotal === 0 ? 'No Good items yet' : '');
+  }
+
+  /** Why the Bad pile's Export button is disabled, or ``''``. */
+  get badActionsBlocker(): string {
+    return this.waitReason || (this.findBadTotal === 0 ? 'No Bad items yet' : '');
+  }
+
   ngOnInit(): void {
     this.settingsState.load();
     // The votes poll is the view's, not the panel's: the panel unmounts while

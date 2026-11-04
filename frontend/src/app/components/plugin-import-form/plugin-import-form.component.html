@@ -148,7 +148,7 @@
     class="btn btn--primary load-btn"
     [disabled]="!canSubmit"
     (click)="submit()"
-    [title]="submitTitle()"
+    [title]="submitBlocker || submitTitle()"
   >
     @if (submitting()) { Loading… } @else { {{ submitLabel() }} }
   </button>

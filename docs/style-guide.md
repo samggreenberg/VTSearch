@@ -550,9 +550,33 @@ Don't write per-component focus / disabled CSS. The base classes handle both:
 - `.btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }` (`.btn--primary` swaps to a neutral fill + dimmed text instead, since opacity can't hold contrast over the accent)
 - `.form-input:focus { border-color: var(--accent); }`
 
+A disabled button also has to say *why* it is disabled; see §3.5.
+
 ### 3.4 Theme overrides inside a component
 
 Avoid them. The right answer is almost always "use a theme variable." If a component genuinely needs a per-theme tweak (rare), wrap the override in `[data-theme="light"]` or `[data-theme="highviz"]` and add a comment explaining why a token-based solution didn't work.
+
+### 3.5 Disabled buttons say why
+
+A greyed-out button with no explanation leaves the user hunting through the dialog for what they missed. So **every button that can be disabled carries a tooltip, while it is disabled, naming the next step that would enable it** (#5533).
+
+- **Name one step, the first one still owed.** When A, B and C are all required and none is done, say `A is required`, not all three; the tooltip changes as the user works through them. A required form field reads `<Field label> is required` (`Folder to import is required`); anything else is an imperative (`Select a demo dataset from the list`, `Tick at least one column to copy`, `Wait for the current load to finish`). When nothing can enable it right now, say what holds it (`Already the smallest thumbnails`, `No Good items yet`).
+- **Sentence case, no trailing period**, like every tooltip (§4.1).
+- **One getter drives both bindings**, so the state and its reason cannot drift apart: a `…Blocker` getter (or `computed`) returns `''` when the action can run and the reason when it cannot, and the template reads it twice.
+
+  ```html
+  <button class="btn btn--primary" (click)="submit()"
+    [disabled]="submitting() || !!submitBlocker"
+    [title]="submitBlocker || 'Combine the selected detectors into a new one'">
+  ```
+
+  When the button has no tooltip of its own while enabled, bind the blocker alone (`[title]="submitBlocker"`): an empty `title` shows nothing. A `can…` boolean the component already exposes becomes `!this.…Blocker`, so it keeps its callers.
+- **A shared component that is disabled by its host takes the reason from its host.** `vt-clipboard-copy` has a `disabledReason` input beside `disabled`; a host that sets one sets the other.
+- **The one exemption: an in-progress label.** A button whose own label has turned into its progress (`Importing…`, `Loading…`, `Logging in…`) already says why it is disabled, so it needs no tooltip for that state. A *sibling* disabled by the same work does not get the exemption: Cancel beside `Combining…` says `Wait for the combine to finish`.
+
+This covers anything that looks clickable and isn't: a `.disabled` context-menu item (its `title`), a disabled demo row, a locked segmented toggle, a disabled tab.
+
+**Finding the ones that don't.** `.claude/scripts/style-check.py` lists every `<button>` in a template whose `[disabled]` is bound but whose `title` is missing or static (§5 item 17). It cannot tell a reason from a description, so read each hit; the in-progress-label exemption above is the usual false positive.
 
 ---
 
@@ -676,8 +700,9 @@ detector-stats table (standard ML terminology in that context).
 14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
 15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.link-btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 16. **Hand-writing modal markup instead of using `<vt-modal>`.** Copying `.modal-backdrop` / `.modal-content` / `.modal-header` into a component drops the modal `<dialog>` (focus handling, the inert page behind, the top layer), the Escape stack, and backdrop dismissal. See §2.4.
+17. **A disabled button that doesn't say why.** Its tooltip, while disabled, names the next step that enables it. See §3.5.
 
-> A static scan for items 1-3, 6-7, 10, 13-15 lives at
+> A static scan for items 1-3, 6-7, 10, 13-15 and 17 lives at
 > `.claude/scripts/style-check.py` (invoked via the `/style-check`
 > skill). It also checks the token-level rules that aren't anti-pattern
 > items: raw `z-index` (§1.8), raw decorative-dim opacity (§1.10),
