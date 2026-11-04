@@ -11,6 +11,7 @@ import { DemoDatasetEntry } from '../../../../../generated/api-client/models/dem
 import { apiErrorMessage } from '../../../../../utils/api-error';
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
+import { ImportOptionLists } from '../shared/import-defaults-summary.util';
 import { composeEmbedders, getTabLabel, mediaTypeIconsById, mediaTypeLabels } from '../shared/media-type.util';
 import { OutputDraft, checkedKindsSummary, demoOutputDrafts, outputsFromDrafts } from '../shared/multi-output.util';
 import { sortRowsByColumn } from '../../../../../utils/sort-rows';
@@ -619,7 +620,7 @@ export class DemoPickerComponent {
         this.buildProjection(),
         this.mergeNearDuplicates(),
       );
-      this.importDefaults.maybeOfferSaveImportDefaults(tab, cfg, this.mediaTypes());
+      this.importDefaults.maybeOfferSaveImportDefaults(tab, cfg, this.mediaTypes(), this.offeredOptionLists());
       return;
     }
     const typeId = this.selectedConverterTarget() || this.activeTab();
@@ -640,6 +641,12 @@ export class DemoPickerComponent {
     // A demo has no Include-media rows to pick; keep the saved ones.
     const savedSpecs = this.importDefaults.savedSourceSpecs(typeId, this.mediaTypes());
     if (savedSpecs) cfg.source_specs = savedSpecs;
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes(), this.offeredOptionLists());
+  }
+
+  /** The option lists the offer names its changes from.  A demo has no
+   *  Include-media rows, so it never changes them and offers no converters. */
+  private offeredOptionLists(): ImportOptionLists {
+    return { embedders: this.demoEmbedders(), clippers: this.demoClippers(), cleaners: this.cleaners() };
   }
 }

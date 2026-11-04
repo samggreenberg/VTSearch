@@ -624,6 +624,11 @@ export class ServerFolderPickerComponent {
           ),
           ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
         };
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes(), {
+      embedders: this.embedders(),
+      clippers: this.clippers(),
+      cleaners: this.cleaners(),
+      converters: this.availableConverters,
+    });
   }
 }

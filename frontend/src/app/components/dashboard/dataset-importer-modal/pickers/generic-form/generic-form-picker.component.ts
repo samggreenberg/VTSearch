@@ -667,6 +667,11 @@ export class GenericFormPickerComponent {
           ),
           ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
         };
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes(), {
+      embedders: this.availableEmbedders(),
+      clippers: this.availableClippers(),
+      cleaners: this.cleaners(),
+      converters: this.availableConverters,
+    });
   }
 }
