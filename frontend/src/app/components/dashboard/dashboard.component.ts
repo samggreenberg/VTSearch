@@ -678,16 +678,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
     if (targets.length === 0) return;
-    const names = targets.map((d) => `"${d.name}"`).join(', ');
     this.deletingSelectedDatasetsConfirm.set(true);
     let ok = false;
     try {
-      const question =
-        targets.length === 1
-          ? `Delete dataset ${names} from your list?`
-          : `Delete ${targets.length} datasets from your list?\n${names}`;
+      // One target is named in the question; several are counted there and
+      // listed under it, one per line (#5532).
+      const single = targets.length === 1;
+      const question = single
+        ? `Delete dataset "${targets[0].name}" from your list?`
+        : `Delete ${targets.length} datasets from your list?`;
       const detail = '(Detectors are unaffected.)';
-      ok = await this.dialog.confirmDestructive(question, detail);
+      ok = await this.dialog.confirmDestructive(question, detail, 'Delete', single ? [] : targets.map((d) => d.name));
     } finally {
       this.deletingSelectedDatasetsConfirm.set(false);
       this.wasDeletingSelectedDatasetsConfirm.set(true);
@@ -787,16 +788,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (targets.length === 0) return;
-    const names = targets.map((m) => `"${m.name}"`).join(', ');
     this.deletingSelectedDetectorsConfirm.set(true);
     let ok = false;
     try {
-      const question =
-        targets.length === 1
-          ? `Delete detector ${names}?`
-          : `Delete ${targets.length} detectors?\n${names}`;
+      // As for datasets: one named in the question, several listed under it.
+      const single = targets.length === 1;
+      const question = single ? `Delete detector "${targets[0].name}"?` : `Delete ${targets.length} detectors?`;
       const detail = '(This deletes your labels. The underlying media is unaffected.)';
-      ok = await this.dialog.confirmDestructive(question, detail);
+      ok = await this.dialog.confirmDestructive(question, detail, 'Delete', single ? [] : targets.map((m) => m.name));
     } finally {
       this.deletingSelectedDetectorsConfirm.set(false);
       this.wasDeletingSelectedDetectorsConfirm.set(true);

@@ -926,6 +926,30 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   color: var(--text-secondary);
 }
 
+// Names set out one per line, bulleted, in place of a comma-joined run: the
+// datasets a bulk delete is about to remove, the detectors a run skipped. A
+// row of long names ("Celebrities in Context (S) – Image", …) is hard to
+// read, and a name with a comma in it splits in two (#5532). Inherits its
+// colour and size from the text it sits under.
+.name-list {
+  margin: var(--space-sm) 0;
+  padding-left: var(--space-2xl);
+  list-style: disc;
+
+  li {
+    overflow-wrap: anywhere;
+  }
+
+  li + li {
+    margin-top: var(--space-xs);
+  }
+
+  // Ending its container, the list leaves the space below to the container.
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
 // Canonical empty-state primitive: the centered, muted placeholder shown
 // wherever a list, table, or panel has no content yet ("No datasets yet",
 // "No results", a "Loading…" notice, etc.). Stacks an optional icon, the

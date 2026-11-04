@@ -15,9 +15,10 @@ export interface DialogButton<T = unknown> {
  * modal alert.
  *
  * A message may contain `\n`; the dialog host renders each one as a line
- * break. Use them to keep a question on its own line, apart from the list
- * it enumerates and the detail that explains it, rather than running all
- * three together into one sentence.
+ * break. A confirmation lays itself out as three parts, top to bottom: the
+ * question, the names it is about as a bulleted list (`items`), and the
+ * detail that explains it, rather than running all three together into one
+ * sentence (#4380, #5532).
  */
 @Injectable({ providedIn: 'root' })
 export class VtDialogService {
@@ -31,6 +32,10 @@ export class VtDialogService {
   readonly dialogOpen = signal(false);
   readonly dialogTitle = signal('');
   readonly dialogMessage = signal('');
+  /** The names the message is about, one bullet each, under the message. */
+  readonly dialogItems = signal<readonly string[]>([]);
+  /** A line under the message (and its items) that explains it, or `''`. */
+  readonly dialogDetail = signal('');
   readonly dialogType = signal<DialogType>('info');
   readonly dialogShowInput = signal(false);
   readonly dialogInputValue = signal('');
@@ -64,16 +69,24 @@ export class VtDialogService {
    *
    * `question` should name the operation and its target, e.g.
    *   "Delete detector 'cats'?"
-   * When it enumerates several targets, put the list on a line of its own:
-   *   "Delete 2 detectors?\n'cats', 'dogs'"
+   * When it acts on several targets, count them in the question and pass
+   * their names as `items`, which are shown as a bulleted list under it:
+   *   confirmDestructive('Delete 2 detectors?', detail, 'Delete', ['cats', 'dogs'])
    * `detail` should explain what is removed and what is unaffected, e.g.
    *   "(This deletes your labels. The underlying media is unaffected.)"
-   * It is shown on its own line below the question.
+   * It is shown on its own line below the question and any items.
    * `actionLabel` is the verb on the primary button (default "Delete").
    */
-  confirmDestructive(question: string, detail: string, actionLabel = 'Delete'): Promise<boolean> {
+  confirmDestructive(
+    question: string,
+    detail: string,
+    actionLabel = 'Delete',
+    items: readonly string[] = [],
+  ): Promise<boolean> {
     return this.show({
-      message: VtDialogService.questionWithDetail(question, detail),
+      message: question,
+      items,
+      detail,
       type: 'warning',
       showInput: false,
       buttons: [
@@ -100,7 +113,8 @@ export class VtDialogService {
     escapeLabel: string,
   ): Promise<'confirm' | 'escape' | 'cancel'> {
     return this.show({
-      message: VtDialogService.questionWithDetail(question, detail),
+      message: question,
+      detail,
       type: 'warning',
       showInput: false,
       buttons: [
@@ -134,11 +148,6 @@ export class VtDialogService {
     }) as Promise<string | null>;
   }
 
-  /** The question on one line, the detail on the next. */
-  private static questionWithDetail(question: string, detail: string): string {
-    return `${question}\n${detail}`;
-  }
-
   /** Resolve the current dialog with a value. Called by dialog host component. */
   resolve(value: unknown): void {
     if (this.activeResolve) {
@@ -163,6 +172,8 @@ export class VtDialogService {
 
   private show(config: {
     message: string;
+    items?: readonly string[];
+    detail?: string;
     type: DialogType;
     showInput: boolean;
     inputDefault?: string;
@@ -178,6 +189,8 @@ export class VtDialogService {
       this.activeResolve = resolve;
       this.dialogTitle.set('');
       this.dialogMessage.set(config.message);
+      this.dialogItems.set(config.items ?? []);
+      this.dialogDetail.set(config.detail ?? '');
       this.dialogType.set(config.type);
       this.dialogShowInput.set(config.showInput);
       this.dialogInputValue.set(config.inputDefault || '');
