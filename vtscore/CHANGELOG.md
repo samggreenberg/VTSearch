@@ -20,6 +20,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A typed-query detector hands over to the trained head at the label quota** (issue #5556).
+  `vtscore.detectors.label_quota.QUERY_HOLD_LABELS` is `0` (was `30`, #4736), so `query_holds` is false at the
+  app's count and `served_quota`'s `hold_owed` is `0`. `query_holds`' `hold` keyword now defaults to `None`, which
+  reads `QUERY_HOLD_LABELS` at call time. `simulate_voting_iterations`' `query_hold` default follows (`0`);
+  `query_hold=30` is the arm before.
+
 - **Smart and Stable can read fewer than 5 Goods after a dry run** (issue #5477). New in
   `vtscore.detectors.stability`: `HARD_DRY_RUN` (16), `HardDryRun` (the run of votes past the opening with no
   Good, latched) and `goods_minimum`. `stable_status_from_entries`, `rising_status_from_scores` and
