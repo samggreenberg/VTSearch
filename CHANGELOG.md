@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
+
 - **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
   sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
   names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
