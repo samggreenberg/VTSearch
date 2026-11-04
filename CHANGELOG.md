@@ -29,6 +29,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
+  to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls
+  on Caltech-101 (M) by hand before relying on them.` It now quotes every name, gives the count as one word (none
+  when every example is there, else `mostly` or `partly`), and points at a button you can see: `"Mammal detector"
+  learned from "Caltech-256 (S)". Tune it to check its calls on "Caltech-101 (M)".` On Tune it points at the
+  Autopilot tab, and in Find Results at **Browse** or Tune.
+
 - **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
   to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
   "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
