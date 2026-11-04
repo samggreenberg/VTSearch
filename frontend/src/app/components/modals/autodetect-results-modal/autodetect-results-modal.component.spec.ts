@@ -500,6 +500,138 @@ describe('AutoDetectResultsModalComponent', () => {
   });
 
   // The controls that change the list sit above it (#5464).
+  // What the other notches of the Threshold would have returned (#5540): the
+  // run's scores split at each preset's cut, with no retrain.
+  describe('the Threshold', () => {
+    const lines = (four: number, one: number, quarter: number) => [
+      { beta: 4, threshold: four },
+      { beta: 1, threshold: one },
+      { beta: 0.25, threshold: quarter },
+    ];
+    const cats = {
+      detector_name: 'Cats',
+      threshold: 0.5,
+      beta: 1,
+      lines: lines(0.3, 0.5, 0.9),
+      balance: { status: 'unchecked', beta: 1, count: 2 },
+      hits: [
+        { id: 1, md5: 'a', score: 0.95 },
+        { id: 2, md5: 'b', score: 0.6 },
+      ],
+      negative_hits: [
+        { id: 3, md5: 'c', score: 0.4 },
+        { id: 4, md5: 'd', score: 0.1 },
+      ],
+    };
+    const runOf = (results: Record<string, unknown>) =>
+      ({ media_type: 'image', dataset_id: 'ds1', detectors_run: Object.keys(results).length, results }) as any;
+    const radios = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.results-threshold input[type="radio"]')) as HTMLInputElement[];
+    const note = () => fixture.nativeElement.querySelector('.notch-note') as HTMLElement | null;
+
+    beforeEach(() => fixture.componentRef.setInput('data', runOf({ cats })));
+
+    it('leads the row, before Good / Bad / Both and the sort', async () => {
+      await flushInit();
+      const row = fixture.nativeElement.querySelector('.results-controls-row') as HTMLElement;
+      const order = Array.from(row.children).map((el) =>
+        el.matches('vt-balance') ? 'threshold' : el.matches('.results-sides') ? 'sides' : el.querySelector('.results-sort') ? 'sort' : 'other',
+      );
+      expect(order.slice(0, 3)).toEqual(['threshold', 'sides', 'sort']);
+    });
+
+    it('shows the notch the run was cut at, and lists it as the run came', async () => {
+      await flushInit();
+      expect(radios().map((r) => r.checked)).toEqual([false, true, false]);
+      expect([component.goodCount, component.badCount]).toEqual([2, 2]);
+      expect(note()).toBeNull();
+    });
+
+    it('splits the run at another notch, Good and Bad alike, and says so', async () => {
+      await flushInit();
+      radios()[0].checked = true;
+      radios()[0].dispatchEvent(new Event('change'));
+      await settleZoneless(fixture);
+
+      expect(component.notch()).toBe(4);
+      expect(radios().map((r) => r.checked)).toEqual([true, false, false]);
+      expect([component.goodCount, component.badCount]).toEqual([3, 1]);
+      expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 3]);
+      expect(note()?.textContent).toContain("No detector's own Threshold changes");
+
+      component.setNotch(0.25);
+      component.sides.set('bad');
+      expect(component.displayHits().map((h) => h.id)).toEqual([2, 3, 4]);
+    });
+
+    it("goes back to the run as it came at the run's own notch", async () => {
+      await flushInit();
+      component.setNotch(4);
+      component.setNotch(1);
+      await settleZoneless(fixture);
+      expect(component.notch()).toBeNull();
+      expect(note()).toBeNull();
+    });
+
+    it("exports the listed notch: its cut as threshold, its balance as beta, and not the run's balance", async () => {
+      await flushInit();
+      component.setNotch(4);
+      const sent = component.exportPayload().results['cats'];
+      expect(sent.hits.map((h) => h.id)).toEqual([1, 2, 3]);
+      expect(sent.total_hits).toBe(3);
+      expect(sent.threshold).toBe(0.3);
+      expect(sent.beta).toBe(4);
+      expect(sent.balance).toBeUndefined();
+
+      component.setNotch(1);
+      const own = component.exportPayload().results['cats'];
+      expect([own.threshold, own.beta, own.balance?.count]).toEqual([0.5, 1, 2]);
+    });
+
+    it('is frozen, and says why, when no notch would list anything else', async () => {
+      fixture.componentRef.setInput('data', runOf({ cats: { ...cats, lines: lines(0.5, 0.5, 0.5) } }));
+      await flushInit();
+      expect(radios().every((r) => r.disabled)).toBe(true);
+      expect((radios()[0].parentElement as HTMLElement).title).toBe(component.notchFrozenHint);
+    });
+
+    it('is frozen for results that carry no cut at the other notches', async () => {
+      const { lines: _none, ...bare } = cats;
+      fixture.componentRef.setInput('data', runOf({ cats: bare }));
+      await flushInit();
+      expect(radios().every((r) => r.disabled)).toBe(true);
+      expect([component.goodCount, component.badCount]).toEqual([2, 2]);
+    });
+
+    it('checks no notch for detectors cut at different balances, until one is picked', async () => {
+      const dogs = {
+        detector_name: 'Dogs',
+        threshold: 0.2,
+        beta: 4,
+        lines: lines(0.2, 0.7, 0.9),
+        hits: [{ id: 5, md5: 'e', score: 0.5 }],
+        negative_hits: [],
+      };
+      fixture.componentRef.setInput('data', runOf({ cats, dogs }));
+      await flushInit();
+      expect(radios().map((r) => r.checked)).toEqual([false, false, false]);
+
+      // Cats keeps its own cut at its own notch; Dogs is split at that notch's.
+      component.setNotch(1);
+      await settleZoneless(fixture);
+      expect(radios().map((r) => r.checked)).toEqual([false, true, false]);
+      expect([component.goodCount, component.badCount]).toEqual([2, 3]);
+    });
+
+    it('lists another run at its own notch', async () => {
+      await flushInit();
+      component.setNotch(4);
+      fixture.componentRef.setInput('data', runOf({ cats: { ...cats, md5: 'other' } }));
+      await settleZoneless(fixture);
+      expect(component.notch()).toBeNull();
+    });
+  });
+
   describe('what the list shows', () => {
     const scored = {
       media_type: 'image',
@@ -726,6 +858,44 @@ describe('AutoDetectResultsModalComponent Browse', () => {
       'ds1',
       [3],
       { kind: 'results', runId: '_autofind_7', sides: 'bad' },
+      expect.any(Function),
+    );
+  });
+
+  // A list split at another notch of the Threshold (#5540) browses that
+  // split, and the URL names the notch so a reload lays out the same map.
+  it('browses the notch the list is split at, and names it in the browse origin', () => {
+    const lines = [
+      { beta: 4, threshold: 0.1 },
+      { beta: 1, threshold: 0.5 },
+      { beta: 0.25, threshold: 0.9 },
+    ];
+    fixture.componentRef.setInput('data', {
+      ...run,
+      results: {
+        owl: {
+          beta: 1,
+          threshold: 0.5,
+          lines,
+          hits: [
+            { id: 1, md5: 'a', score: 0.95 },
+            { id: 2, md5: 'b', score: 0.6 },
+          ],
+          negative_hits: [{ id: 3, md5: 'c', score: 0.2 }],
+        },
+      },
+    } as any);
+    component.setNotch(0.25);
+    expect(component.browseIds).toEqual([1]);
+    component.setNotch(4);
+    expect(component.browseIds).toEqual([1, 2, 3]);
+
+    component.browse();
+    switched.next();
+    expect(browsePrep.start).toHaveBeenCalledWith(
+      'ds1',
+      [1, 2, 3],
+      { kind: 'results', runId: '_autofind_7', sides: 'good', notch: 4 },
       expect.any(Function),
     );
   });

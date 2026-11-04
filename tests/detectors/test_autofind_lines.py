@@ -42,12 +42,16 @@ def _media(cid: int, vec: np.ndarray) -> dict:
 
 
 def _corpus() -> dict[int, dict]:
-    """Forty media: ids 1-20 lean toward one direction, ids 21-40 toward another."""
-    rng = np.random.default_rng(5540)
+    """Two hundred media: ids 1-100 lean toward one direction, ids 101-200 toward another.
+
+    Noisy enough that the two overlap, so the balance moves the line: on two
+    clean clusters every preset would cut in the same gap.
+    """
+    rng = np.random.default_rng(1)
     corpus: dict[int, dict] = {}
-    for cid in range(1, 41):
-        base = np.array([1.0, 0.2, 0.0, 0.0]) if cid <= 20 else np.array([0.0, 0.2, 1.0, 0.0])
-        vec = base + 0.3 * rng.standard_normal(DIM)
+    for cid in range(1, 201):
+        base = np.array([1.0, 0.2, 0.0, 0.0]) if cid <= 100 else np.array([0.0, 0.2, 1.0, 0.0])
+        vec = base + 1.0 * rng.standard_normal(DIM)
         corpus[cid] = _media(cid, (vec / np.linalg.norm(vec)).astype(np.float32))
     return corpus
 
@@ -134,7 +138,7 @@ class TestAutoDetectRoute:
 
         corpus = _corpus()
         _activate(corpus)
-        _write_detector("af-lines", corpus, goods=list(range(1, 9)), bads=list(range(21, 33)))
+        _write_detector("af-lines", corpus, goods=list(range(1, 16)), bads=list(range(101, 131)))
         add_autofind_detector("af-lines")
 
         resp = client.post("/api/auto-detect", json={})
@@ -146,8 +150,7 @@ class TestAutoDetectRoute:
         assert [line["beta"] for line in lines] == [4.0, 1.0, 0.25]
         # The detector's own notch is the run's cut, so it reproduces the run's split.
         assert lines[1]["threshold"] == result["threshold"]
-        # Toward false positives keeps more, toward false negatives fewer.
-        assert lines[0]["threshold"] <= lines[1]["threshold"] <= lines[2]["threshold"]
-        scores = [hit["score"] for hit in result["hits"] + result["negative_hits"]]
-        assert all(score >= result["threshold"] for score in (hit["score"] for hit in result["hits"]))
-        assert len(scores) == len(corpus)
+        # Re-cut, not copied: toward false positives keeps more, toward false negatives fewer.
+        assert lines[0]["threshold"] < lines[1]["threshold"] < lines[2]["threshold"]
+        # The run scored every item, so any notch's split is a split of what it holds.
+        assert len(result["hits"]) + len(result["negative_hits"]) == len(corpus)

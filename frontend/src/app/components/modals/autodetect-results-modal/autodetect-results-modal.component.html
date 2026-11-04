@@ -81,9 +81,19 @@
   }
 
   <!-- What the list shows. Each of these changes the list, so they sit above
-       it (#5464). -->
+       it (#5464), in the order each acts on it (#5540): the Threshold splits
+       the run into Good and Bad, Good / Bad / Both picks the side, and the
+       sort orders what is listed. -->
   <div class="results-controls">
     <div class="results-controls-row">
+      <vt-balance
+        class="results-threshold"
+        [value]="shownNotch()"
+        [formLabel]="true"
+        [locked]="!notchMoves()"
+        [lockedHint]="notchFrozenHint"
+        (valueChange)="setNotch($event)"
+      />
       <div class="segmented-toggle segmented-toggle--compact results-sides" role="radiogroup" aria-label="Which predictions to list">
         <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sides() === 'good'"
           [attr.aria-checked]="sides() === 'good'" (click)="sides.set('good')" title="List the items predicted Good">
@@ -116,6 +126,12 @@
         <vt-view-controls class="results-size" side="results" [currentMediaType]="mediaType()" [showFocus]="false" />
       }
     </div>
+    @if (notchMoved()) {
+      <p class="info-text notch-note" role="note">
+        Listed at another notch than the run's: the same scores, split where that Threshold draws the line. No
+        detector's own Threshold changes.
+      </p>
+    }
     <vt-column-chooser [columns]="columns()" (toggled)="setColumnEnabled($event.key, $event.enabled)" (allToggled)="toggleAllColumns()">
       <span class="results-control-label" title="What the list shows, and what Export copies or sends">Columns</span>
     </vt-column-chooser>
