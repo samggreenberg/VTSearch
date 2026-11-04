@@ -26,7 +26,7 @@ dialog), never a native tooltip, so it never counts.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -37,9 +37,7 @@ HINT_TAG = "vt-field-hint-icon"
 HINT_COMPONENT = FRONTEND_SRC / "components/field-hint-icon/field-hint-icon.component.ts"
 
 #: Elements that never hold children, so never go on the open-element stack.
-VOID = frozenset(
-    "area base br col embed hr img input link meta param source track wbr".split()
-)
+VOID = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 
 #: Elements the climb passes through on its way to the block holding the text.
 INLINE = frozenset("span strong em b i small a code abbr".split())
@@ -51,7 +49,6 @@ class _Element:
     titled: bool
     #: Whether the last element child closed so far carried a title.
     last_child_titled: bool = False
-    children: list[str] = field(default_factory=list)
 
 
 def _has_native_title(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
@@ -119,9 +116,7 @@ class _HintScanner(HTMLParser):
 
 def _templates_with_hints() -> list[Path]:
     found = [
-        path
-        for path in sorted(FRONTEND_SRC.rglob("*.html"))
-        if f"<{HINT_TAG}" in path.read_text(encoding="utf-8")
+        path for path in sorted(FRONTEND_SRC.rglob("*.html")) if f"<{HINT_TAG}" in path.read_text(encoding="utf-8")
     ]
     assert found, f"no template uses <{HINT_TAG}> — has the SPA moved?"
     return found
