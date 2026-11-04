@@ -313,6 +313,16 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(hints()[0].querySelector('.field-hint-icon')!.getAttribute('aria-label')).toBe('What the threshold means');
     });
 
+    it('has a short tooltip on the word itself, the long one staying with the (?) (#5536)', () => {
+      const label = root().querySelector('.balance-label') as HTMLElement;
+      expect(label.textContent).toBe('Threshold:');
+      expect(label.title).toBe(component.shortHint);
+      expect(component.shortHint.length).toBeLessThan(component.hint.length / 2);
+      // On the label, not the row: the row also holds Find's projected actions,
+      // which would inherit a native tooltip set on it.
+      expect((root().querySelector('.balance-head') as HTMLElement).hasAttribute('title')).toBe(false);
+    });
+
     it('is one sentence pair, not a page (#4317)', () => {
       expect(component.hint.length).toBeLessThan(200);
       expect(component.hint.match(/\./g)!.length).toBeLessThanOrEqual(2);

@@ -20,6 +20,21 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
+- **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
+  say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
+  differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
+  match are left out, and a list longer than four ends in "…" with a count of the rest. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
 ### Added
 
 - **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
@@ -32,6 +47,18 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
+  Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
+  with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,
+  which nothing explained. Description now takes the room the other columns leave and ends in "…" (hover for
+  the full text), so Readiness always shows. Each badge also explains itself on hover. The green tint is
+  gone, and the dialog is wider (900px, the width already used for the same table in New Detector). The first
+  drag of a column divider in any resizable table also no longer clips the longest cell of a column sized
+  exactly to its content.
+- **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
+  (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
+  pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version
+  still on the (?). Hovering a (?) inside a label that already had a tooltip no longer shows both at once.
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,
   but every item in a city got the same tile or tone, byte for byte, so the import merged them as duplicates and
   kept one item per city. That left nothing for the finest signpost tier, the cities, to cluster. Each item's tile

@@ -222,6 +222,28 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.centroid-note')?.textContent).not.toContain('Typed');
   });
 
+  // #5532: a note's detectors are a bulleted list, one per line, not a row
+  // joined with semicolons.
+  it('lists the detectors under each note one per item', async () => {
+    const quota = { tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4, good_quota: 3, bad_quota: 4, dry_bad_quota: 16 };
+    fixture.componentRef.setInput('data', {
+      ...mockData,
+      results: {
+        a: { detector_name: 'Alpha', hits: [], label_quota: quota },
+        b: { detector_name: 'Beta', hits: [], label_quota: quota },
+      },
+      missing_detectors: ['Gone, the first', 'Gone too'],
+    } as any);
+    await flushInit();
+    const items = (selector: string) =>
+      Array.from(fixture.nativeElement.querySelectorAll(`${selector} ul.name-list li`)).map((li) =>
+        (li as HTMLElement).textContent?.trim(),
+      );
+    expect(items('.query-note')).toEqual(['Alpha (3 more Goods and 4 more Bads)', 'Beta (3 more Goods and 4 more Bads)']);
+    expect(items('.missing-note')).toEqual(['Gone, the first', 'Gone too']);
+    expect(fixture.nativeElement.querySelector('.query-note')?.textContent).not.toContain(';');
+  });
+
   it('names the detectors held on their typed query past the quota apart from those short of it (#4889)', async () => {
     const quota = (nGood: number, nBad: number, holdOwed: number) => ({
       tier: 'query',

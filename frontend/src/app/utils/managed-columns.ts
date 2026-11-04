@@ -116,12 +116,18 @@ export class ManagedColumns<TCol extends string = string> {
 
   // --- Resize ---
 
+  /** Record each column's current width as a percentage of the table, the
+   *  moment the table switches to fixed layout.  Reads the fractional
+   *  `getBoundingClientRect()` width, not `offsetWidth`: an auto-layout
+   *  column sized exactly to its content is often a fraction of a pixel
+   *  wider than its rounded `offsetWidth`, so rounding it down here made the
+   *  first divider drag ellipsize that column's longest cell (#5534). */
   private captureColumnPercentages(tableEl: HTMLTableElement): void {
     const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    const tableWidth = tableEl.offsetWidth || 1;
+    const tableWidth = tableEl.getBoundingClientRect().width || 1;
     ths.forEach((t) => {
       const colKey = t.getAttribute('data-col');
-      if (colKey) this.colWidths[colKey] = (t.offsetWidth / tableWidth) * 100;
+      if (colKey) this.colWidths[colKey] = (t.getBoundingClientRect().width / tableWidth) * 100;
     });
   }
 

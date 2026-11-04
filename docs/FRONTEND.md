@@ -967,7 +967,9 @@ the seams `vt-modal` adds:
   a click outside the box lands on it as before.
 
 - `dialog-host` + `VtDialogService` provide promise-returning `confirm()` /
-  `prompt()`, including the standardised `confirmDestructive()` phrasing.
+  `prompt()`, including the standardised `confirmDestructive()` phrasing: the
+  question, then the names it acts on as a bulleted list (its `items`, never a
+  comma-joined row in the question), then the detail line.
   Purely informational messages go to `ToastService`, never a modal.
 - **Back vs Cancel is a rule, not a preference.** An inner view that *replaces*
   an outer one gets a left-aligned `← Back` chevron; `Cancel` in the footer
