@@ -130,11 +130,83 @@ python "$PRUNE"
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,
 # so added/removed packages are always in sync.
+#
+# Every attempt is bounded and a failed one is retried (#5549). Unbounded, one
+# stalled install ate the whole 30-minute run-tests.sh cap, printing nothing
+# after "Installing frontend dependencies...", and the cap's banner then blamed
+# a wedged run. npm's own per-request timeout is 5 minutes, tried three times,
+# so a single hung socket can outlast a run by itself: --fetch-timeout fails it
+# within an attempt instead, and `timeout` caps the attempt for a stall npm does
+# not see as a fetch. npm shrugs off SIGTERM, hence --kill-after.
+#
+# A failed attempt leaves a partial node_modules that is newer than the lockfile,
+# which the -nt check below would trust on every later run. So each failure
+# removes it: the retry starts clean, and a final failure is retried next run.
+NPM_INSTALL_TIMEOUT="${VTSEARCH_NPM_INSTALL_TIMEOUT:-300}"
+NPM_INSTALL_ATTEMPTS=2
+# npm's own default, passed explicitly so a failure can name it. Asking npm is
+# no good: `npm config get cache` refuses when the cache comes from the
+# environment ("The cache option is protected"), and writes a log of its own.
+NPM_LOGS_DIR="${npm_config_logs_dir:-${npm_config_cache:-$HOME/.npm}/_logs}"
+
+# npm names each run's log after the time it started, so the newest sorts last.
+# Comparing names, not mtimes, sidesteps the filesystem's timestamp granularity.
+newest_npm_log() {
+  find "$1" -maxdepth 1 -name '*-debug-*.log' 2>/dev/null | sort | tail -n 1 || true
+}
+
+# Runs from inside frontend/. Returns non-zero after the last failed attempt,
+# having printed a TESTS BLOCKED banner that names the step and npm's logs.
+install_frontend_deps() {
+  local attempt status started elapsed outcome before log
+  local -a outcomes=()
+  for ((attempt = 1; attempt <= NPM_INSTALL_ATTEMPTS; attempt++)); do
+    echo "Installing frontend dependencies (attempt $attempt of $NPM_INSTALL_ATTEMPTS, capped at ${NPM_INSTALL_TIMEOUT}s)..."
+    before="$(newest_npm_log "$NPM_LOGS_DIR")"
+    started=$SECONDS
+    status=0
+    timeout --kill-after=10 "$NPM_INSTALL_TIMEOUT" \
+      npm install --no-audit --no-fund -q --fetch-timeout=60000 --logs-dir="$NPM_LOGS_DIR" || status=$?
+    if [ "$status" -eq 0 ]; then
+      return 0
+    fi
+    elapsed=$((SECONDS - started))
+    # 124: `timeout` sent TERM; 137: TERM was ignored and it sent KILL.
+    if [ "$status" -eq 124 ] || { [ "$status" -eq 137 ] && [ "$elapsed" -ge "$NPM_INSTALL_TIMEOUT" ]; }; then
+      outcome="timed out after ${NPM_INSTALL_TIMEOUT}s"
+    else
+      outcome="failed (exit $status) after ${elapsed}s"
+    fi
+    outcomes+=("attempt $attempt: $outcome")
+    echo "npm install $outcome." >&2
+    # A killed npm prints nothing, but its debug log is written as it goes, and
+    # its last lines show where the install stopped.
+    log="$(newest_npm_log "$NPM_LOGS_DIR")"
+    if [ -n "$log" ] && [ "$log" != "$before" ]; then
+      echo "Last lines of its debug log, $log:" >&2
+      tail -n 5 "$log" | sed 's/^/    /' >&2
+    fi
+    rm -rf node_modules
+  done
+  {
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: npm install in frontend/ did not finish"
+    echo "============================================================"
+    printf '  %s\n' "${outcomes[@]}"
+    echo "npm's debug logs are in $NPM_LOGS_DIR (newest last)."
+    echo "frontend/node_modules was removed, so the next run installs it again."
+    echo "A stalled fetch is usually transient: re-run, or install by hand with"
+    echo "  cd frontend && npm install --no-audit --no-fund"
+    echo "VTSEARCH_NPM_INSTALL_TIMEOUT=<seconds> raises the per-attempt cap."
+  } >&2
+  return 1
+}
+
 if [ -f "frontend/package.json" ]; then
   if [ ! -d "frontend/node_modules" ] || \
      [ "frontend/package-lock.json" -nt "frontend/node_modules" ]; then
-    echo "Installing frontend dependencies..."
-    (cd frontend && npm install --no-audit --no-fund -q)
+    (cd frontend && install_frontend_deps)
   fi
 fi
 
