@@ -924,6 +924,12 @@ shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal; Spot Check stays
 yellow until the check ends. Hover the light for the details.
 
+Above the phases, the panel counts your votes on this dataset so far
+(**42 votes**), Goods and Bads together. No phase can say how many votes
+are left, since nobody knows how many your detector will need, but most
+detectors are trained within 50, and Autopilot never asks for more than
+200. Hover the count for the same reminder.
+
 When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
 trained: click **Dashboard** to export it or run it over another dataset.
@@ -935,8 +941,10 @@ raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
 buttons: asking for your first vote, then, through the run that trains the
-detector, saying what the current phase is after and how many Goods or Bads
-it still needs. See [Toasty's hints](#toastys-hints).
+detector, saying what the current phase is after. While Autopilot sharpens
+the detector it also says how long that usually takes: most detectors are
+trained within 50 votes, and Autopilot never asks for more than 200. See
+[Toasty's hints](#toastys-hints).
 
 Once **Done!** is reached it stays the current step, checked, for as
 long as you keep labeling: no step follows it. A new vote can knock an
@@ -991,7 +999,7 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
   without enough matches before it asks whether to sort by something else
   (default 10; see [Get Autopilot unstuck](howto/unstick-autopilot.md)).
 - **Goal diversity** - how much of your collection phase 4 must cover
-  before finishing (default 40).
+  before finishing (default 0, which skips the phase).
 
 Raising these numbers trains a more thorough detector at the cost of
 more labelling effort.
@@ -1917,9 +1925,9 @@ In the Train view he asks for your first vote over **Good** / **Bad** while
 Autopilot runs on a detector with no labels. Once you have voted, he moves
 beside the **Labels** panel until your next vote, saying that your votes go
 there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
-that trains the detector, saying what each phase is after and how far along it
-is (how many Goods and Bads it still needs, then that the detector retrains on
-every vote until the lights go green). On any run, when you click an item you
+that trains the detector, saying what each phase is after: Goods, then Bads,
+then sharpening the detector, where he adds that most detectors are trained
+within 50 votes and Autopilot never asks for more than 200. On any run, when you click an item you
 have already labeled, he says what it is labeled, which button changes it, and
 that clicking Autopilot's current step on the left (or `↑`) goes back to
 Autopilot's pick. He explains the **Update Sort

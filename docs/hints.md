@@ -36,7 +36,10 @@ and **Bad** stay bold when they name a vote ("You already labeled this
 No semicolons: each instruction is its own sentence. Autopilot's hints are for
 someone who just wants to click (#5143): no counts, targets, scores or metric
 names, and no keyboard shortcuts. Say what Autopilot is doing and what to do
-next, and leave the details to its panel.
+next, and leave the details to its panel. The one exception is `keep-voting`,
+which says how many votes a detector usually takes and the most Autopilot asks
+for (#5539): deep in a run, the user wants to know roughly how far is left, and
+no light can tell them.
 
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
@@ -120,13 +123,15 @@ an item the user picked, so it shows on any run.
 | `find-goods` | happy | Autopilot is looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
 | `find-bads` | happy | Autopilot is looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
 | `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
-| `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
+| `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. Most detectors are trained within {typical} votes, and Autopilot never asks for more than {cap}. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
 | `resort-prompt` | happy | This example isn't finding many Goods. Try a different one or keep clicking. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
 | `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work. You can keep voting, but you don't need to. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it, and so does leaving the Train view (#5354). |
 | `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item, before it finishes or as it reaches Done (#5151): with nothing left to label, this one takes over from `autopilot-done`. The next vote ends it, and so does leaving the Train view. |
 
 In `revote`, `{label}` is the item's label ("Good" or "Bad") and `{other}`
-the other one.
+the other one. In `keep-voting`, `{typical}` is about how many votes a run
+takes to reach Done, 50 (`TYPICAL_DONE_VOTES`), and `{cap}` is Autopilot's vote
+cap, 200 (`STOP_CAP_VOTES`), both in `autopilot-state.service.ts`.
 
 ## Tune view
 

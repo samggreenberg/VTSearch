@@ -3,6 +3,10 @@ import { VotingOverlayComponent } from './voting-overlay.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { STOP_CAP_VOTES, TYPICAL_DONE_VOTES } from '../../../services/autopilot-state.service';
+
+/** `keep-voting`'s one line with numbers in it (#5539), the exception to #5143's rule. */
+const KEEP_VOTING_HOW_LONG = /Most detectors are trained within \d+ votes, and Autopilot never asks for more than \d+\./;
 
 describe('VotingOverlayComponent', () => {
   let component: VotingOverlayComponent;
@@ -101,8 +105,10 @@ describe('VotingOverlayComponent', () => {
       fixture.componentRef.setInput('hint', hint);
       await settleZoneless(fixture);
       expect(text()).toContain(says);
-      // Autopilot is for clicking: no counts, targets or keys to take in (#5143).
-      expect(text()).not.toMatch(/\d|arrow key/);
+      // Autopilot is for clicking: no counts, targets or keys to take in
+      // (#5143), bar the one line on how long a run takes (#5539).
+      const rest = hint === 'keep-voting' ? text().replace(KEEP_VOTING_HOW_LONG, '') : text();
+      expect(rest).not.toMatch(/\d|arrow key/);
     }
 
     fixture.componentRef.setInput('hint', 'test-vote');
@@ -112,6 +118,16 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('hint', null);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
+  });
+
+  it('says, while Autopilot sharpens the detector, how many votes a run takes (#5539)', async () => {
+    fixture.componentRef.setInput('hint', 'keep-voting');
+    await settleZoneless(fixture);
+    const text = fixture.nativeElement.querySelector('vt-toasty-hint').textContent.replace(/\s+/g, ' ');
+    expect(text).toContain(
+      `Most detectors are trained within ${TYPICAL_DONE_VOTES} votes, and Autopilot never asks for more than ${STOP_CAP_VOTES}.`,
+    );
+    expect(text).toContain('Most detectors are trained within 50 votes, and Autopilot never asks for more than 200.');
   });
 
   it("names a picked item's label, the button that changes it, and the way back (#4824)", async () => {

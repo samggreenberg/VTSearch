@@ -52,7 +52,8 @@
   }
   @case ('keep-voting') {
     <vt-toasty-hint hintId="keep-voting" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot is sharpening your detector now. Keep clicking.
+      Autopilot is sharpening your detector now. Keep clicking. Most detectors are trained within
+      {{ typicalVotes }} votes, and Autopilot never asks for more than {{ stopCap }}.
     </vt-toasty-hint>
   }
   @case ('test-vote') {
