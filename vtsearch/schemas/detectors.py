@@ -759,6 +759,16 @@ class FindTrainingDomainResponseSchema(Schema):
     reason = fields.String(required=True)
 
 
+class _BalanceLineSchema(Schema):
+    """A detector's cut at one of the Threshold's presets (#5540)."""
+
+    beta = fields.Float(required=True, metadata={"description": "The preset: F-beta's beta (4, 1 or 1/4)."})
+    threshold = fields.Float(
+        required=True,
+        metadata={"description": "The score at or above which an item is Good at this preset."},
+    )
+
+
 class _AutoDetectResultSchema(Schema):
     """One entry in ``AutoDetectResponseSchema.results``."""
 
@@ -767,6 +777,22 @@ class _AutoDetectResultSchema(Schema):
     # What the balance says about ``threshold`` (#4272, #4413); ``null`` for a
     # detector with no trained context to ask.
     balance = fields.Nested(BalanceStateSchema, allow_none=True)
+    beta = fields.Float(
+        allow_none=True,
+        metadata={"description": "The balance ``threshold`` was cut at; null for a detector with no balance to ask."},
+    )
+    lines = fields.List(
+        fields.Nested(_BalanceLineSchema),
+        metadata={
+            "description": (
+                "The cut at each Threshold preset, from false positives to false negatives "
+                "(#5540): re-derived without a retrain, so the Find Results dialog can split "
+                "``hits`` and ``negative_hits`` at another notch. The detector's own balance "
+                "keeps ``threshold``; a preset no balance moves does too. Absent from a "
+                "caller that does not report it (the CLI)."
+            )
+        },
+    )
     # Which detector the labels gave (#4643): under the quota, the Goods'
     # centroid, or a typed-query detector's own query (#4758); ``null`` from a
     # caller that does not report it.
