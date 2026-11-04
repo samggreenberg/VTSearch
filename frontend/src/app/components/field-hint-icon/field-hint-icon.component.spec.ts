@@ -29,6 +29,12 @@ describe('FieldHintIconComponent', () => {
     expect(tooltip()).toBeNull();
   });
 
+  it('masks the title of the label it sits in, so hovering it shows only the long version (#5536)', () => {
+    // A native tooltip comes from the nearest ancestor with a title; an empty
+    // one on the icon ends the search there.
+    expect(iconSpan().getAttribute('title')).toBe('');
+  });
+
   it('fixes the tooltip to the window, kept inside its left edge (#5226)', async () => {
     // An icon 20px from the window's left edge, as the Add Dataset dialog's
     // Multi-Dataset hint is: centred on it, the tooltip would start left of 0.

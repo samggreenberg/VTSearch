@@ -22,6 +22,10 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
+  (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
+  pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version
+  still on the (?). Hovering a (?) inside a label that already had a tooltip no longer shows both at once.
 - **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,
   but every item in a city got the same tile or tone, byte for byte, so the import merged them as duplicates and
   kept one item per city. That left nothing for the finest signpost tier, the cities, to cluster. Each item's tile
