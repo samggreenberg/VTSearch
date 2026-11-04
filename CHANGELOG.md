@@ -29,6 +29,10 @@ what is on `dev` but not yet on `main`; each release dates that section
   so every item survives the import. A copy of either demo cached before this fix still holds the old media and
   still loads 108 items; delete `data/embeddings/synthetic_world_image.pkl` or `synthetic_world_audio.pkl` to
   rebuild it.
+- **A Toasty hint dragged off the Dashboard's centre column stays in view** (issue #5531). The Dashboard is a
+  centred column with blank space on either side, and the column cut off anything that crossed its edge, so a
+  hint dragged into that space was clipped and then vanished. The hint now shows wherever you drag it in the
+  window.
 
 ## 2026-11-03
 
