@@ -8054,6 +8054,11 @@
             "$ref": "#/components/schemas/BalanceState",
             "nullable": true
           },
+          "beta": {
+            "description": "The balance ``threshold`` was cut at; null for a detector with no balance to ask.",
+            "nullable": true,
+            "type": "number"
+          },
           "detector_name": {
             "type": "string"
           },
@@ -8066,6 +8071,13 @@
           "label_quota": {
             "$ref": "#/components/schemas/LabelQuota",
             "nullable": true
+          },
+          "lines": {
+            "description": "The cut at each Threshold preset, from false positives to false negatives (#5540): re-derived without a retrain, so the Find Results dialog can split ``hits`` and ``negative_hits`` at another notch. The detector's own balance keeps ``threshold``; a preset no balance moves does too. Absent from a caller that does not report it (the CLI).",
+            "items": {
+              "$ref": "#/components/schemas/_BalanceLine"
+            },
+            "type": "array"
           },
           "negative_hits": {
             "items": {
@@ -8143,6 +8155,24 @@
           "name",
           "path",
           "size_mb"
+        ],
+        "type": "object"
+      },
+      "_BalanceLine": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "description": "The preset: F-beta's beta (4, 1 or 1/4).",
+            "type": "number"
+          },
+          "threshold": {
+            "description": "The score at or above which an item is Good at this preset.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "beta",
+          "threshold"
         ],
         "type": "object"
       },

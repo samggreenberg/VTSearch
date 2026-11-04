@@ -1089,8 +1089,8 @@ describe('LabelViewComponent', () => {
     votes([1, 3, 4], [5, 6, 7, 8]);
     expect(component.voteHint()).toBe('keep-voting');
 
-    // The Spot Check step has no hint (#5136): its picks are just the next
-    // items, and there is nothing to do differently.
+    // The Spot Check step has its own hint (#5538). Its picks are just the
+    // next items (#5136), so the hint stays over Good / Bad, as the others do.
     TestBed.inject(AutopilotStateService).beginSpotCheck('weak');
     TestBed.tick();
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
@@ -1101,12 +1101,13 @@ describe('LabelViewComponent', () => {
       },
     });
     TestBed.tick();
-    expect(component.voteHint()).toBeNull();
+    expect(component.voteHint()).toBe('spot-check');
     component.onNavigate('forward');
     TestBed.tick();
     expect(component.mediaState.selectedId()).toBe(9);
-    expect(component.voteHint()).toBeNull();
-    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
+    expect(component.voteHint()).toBe('spot-check');
+    const spotHint = fixture.nativeElement.querySelector('vt-toasty-hint') as HTMLElement | null;
+    expect(spotHint?.textContent?.replace(/\s+/g, ' ')).toContain("I'm double-checking your detector now.");
   });
 
   it("walks Toasty's hints from the user's first vote on a detector made from an example (#5229)", async () => {

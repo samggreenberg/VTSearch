@@ -20,7 +20,20 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **Autopilot counts your votes** (issue #5539). The top of the Autopilot panel, folded or open, now reads how many
+  votes you have cast on this dataset. No step can say how many are left, since nobody knows how many a detector
+  will need, so the count's tooltip, and Toasty while Autopilot sharpens the detector, say how many it tends to
+  take: most detectors are trained within 50 votes, and Autopilot never asks for more than 200.
+
 ### Changed
+
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
 
 - **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
   sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
@@ -34,6 +47,16 @@ what is on `dev` but not yet on `main`; each release dates that section
   differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
   match are left out, and a list longer than four ends in "…" with a count of the rest. See
   [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
+### Added
+
+- **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
+  controls now run left to right in the order each acts on the list: the **Threshold**, then **Good** / **Bad** /
+  **Both**, then **Sort by**. The Threshold's three radios start on the notch the run was cut at; pick another and
+  the list, its Good and Bad counts, **Browse** and **Export** all split the run's scores where that notch draws the
+  line. Nothing is retrained, and no detector's own Threshold changes. An export from another notch sends that
+  notch's cut as the detector's `threshold`. The radios are frozen when no notch would list anything different,
+  for example a detector with too few labels for its line to move.
 
 ### Fixed
 

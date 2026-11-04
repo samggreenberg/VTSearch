@@ -2,16 +2,17 @@ import { ChangeDetectionStrategy, Component, computed, input, OnDestroy, output,
 import { IconComponent } from '../../icon/icon.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { HintId } from '../../../services/hints.service';
+import { STOP_CAP_VOTES, TYPICAL_DONE_VOTES } from '../../../services/autopilot-state.service';
 
 /**
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
  * picks one: Train's label view walks `start-voting` and the Autopilot phase
- * hints, and shows `revote` on an item the user picked to change (#4824); the
- * Tune view's stage shows `test-vote`.
+ * hints, Spot Check's included (#5538), and shows `revote` on an item the user
+ * picked to change (#4824); the Tune view's stage shows `test-vote`.
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
+  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
 >;
 
 @Component({
@@ -45,6 +46,10 @@ export class VotingOverlayComponent implements OnDestroy {
    *  the hint the moment the label moves, so these never name the label a vote just set. */
   readonly revoteLabel = computed(() => (this.isGood() ? 'Good' : 'Bad'));
   readonly revoteOther = computed(() => (this.isGood() ? 'Bad' : 'Good'));
+
+  /** How many votes `keep-voting` says a detector usually takes, and the most Autopilot asks for (#5539). */
+  readonly typicalVotes = TYPICAL_DONE_VOTES;
+  readonly stopCap = STOP_CAP_VOTES;
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */
