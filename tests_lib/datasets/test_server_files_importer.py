@@ -25,22 +25,30 @@ from vtscore.embedding.media_vectors import media_embedding
 
 class TestReadPathsFile:
     def test_reads_one_path_per_line(self, tmp_path):
+        a, b = tmp_path / "c.wav", tmp_path / "f.wav"
+        a.write_bytes(b"A")
+        b.write_bytes(b"B")
+        f = tmp_path / "paths.txt"
+        f.write_text(f"{a}\n{b}\n")
+        assert _read_paths_file(f) == [a, b]
+
+    def test_drops_lines_that_name_nothing(self, tmp_path):
+        # Reported, not returned: see tests_lib/datasets/test_text_manifest.py (#5561).
         f = tmp_path / "paths.txt"
         f.write_text("/a/b/c.wav\n/d/e/f.wav\n")
-        assert _read_paths_file(f) == [Path("/a/b/c.wav"), Path("/d/e/f.wav")]
+        assert _read_paths_file(f) == []
 
     def test_skips_blank_lines_and_comments(self, tmp_path):
+        a, b = tmp_path / "a.wav", tmp_path / "b.wav"
+        a.write_bytes(b"A")
+        b.write_bytes(b"B")
         f = tmp_path / "paths.txt"
         f.write_text(
-            "# this is a comment\n/a.wav\n\n  # indented comment\n/b.wav\n",
+            f"# this is a comment\n{a}\n\n  # indented comment\n{b}\n",
         )
-        # The "  # indented comment" line is *not* skipped because it
-        # has leading whitespace before the ``#``; the importer only
-        # treats lines starting with ``#`` as comments.  Document the
-        # actual behaviour so users know to put comments at column 0.
-        paths = _read_paths_file(f)
-        assert Path("/a.wav") in paths
-        assert Path("/b.wav") in paths
+        # Lines are stripped before the ``#`` test, so an indented comment
+        # is a comment too.
+        assert _read_paths_file(f) == [a, b]
 
     def test_relative_paths_resolved_against_paths_file_dir(self, tmp_path):
         media = tmp_path / "data" / "x.wav"

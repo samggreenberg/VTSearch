@@ -67,6 +67,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A malformed manifest imports what it can and says what it couldn't** (issue #5561). In a **Manifest** text file
+  (one path per line), a single line too long to be a filename, or a single byte that isn't UTF-8, used to fail the
+  whole import, while a stray CSV header row or the tail of a quoted value that held a line break was dropped without
+  a word. Now every line is judged on its own: the import goes ahead on the lines that name media, and a warning toast
+  lists each skipped line with its number and reason. A CSV row is read for its path column (the one a header row
+  names `path`, `filepath`, `image`, …, else the first); its other columns are ignored, and the toast says so. When no
+  line names a file, the error lists the first lines that were skipped. A listed folder that holds symlinks back up its
+  own tree is now walked once, where two such links used to hang the import.
 - **The Synthetic World Map demos no longer read "Needs Download"** (issue #5546). Both demos make their media on
   your machine and download nothing, yet Add Dataset › Demo's Readiness column called them **Needs Download** until
   they had been loaded once, beside a description saying "no download". They now read **Needs setup**, which is all

@@ -335,9 +335,12 @@ class TestServerFilesFieldsAdvertiseNpz:
 class TestServerFilesNpzPathsFile:
     def test_read_paths_file_dispatches_on_suffix(self, tmp_path):
         # txt path still works
+        a, b = tmp_path / "a.wav", tmp_path / "b.wav"
+        a.write_bytes(b"A")
+        b.write_bytes(b"B")
         txt = tmp_path / "list.txt"
-        txt.write_text("/a.wav\n/b.wav\n")
-        assert _read_paths_file(txt) == [Path("/a.wav"), Path("/b.wav")]
+        txt.write_text(f"{a}\n{b}\n")
+        assert _read_paths_file(txt) == [a, b]
 
         # npz with absolute paths
         npz = tmp_path / "list.npz"
@@ -382,10 +385,12 @@ class TestServerFilesNpzPathsFile:
         assert embedder_name == ""
 
     def test_read_paths_and_vectors_txt_returns_empty_vectors(self, tmp_path):
+        media = tmp_path / "a.wav"
+        media.write_bytes(b"A")
         txt = tmp_path / "list.txt"
-        txt.write_text("/a.wav\n")
+        txt.write_text(f"{media}\n")
         paths, vecs, embedder_name = _read_paths_and_vectors(txt)
-        assert paths == [Path("/a.wav")]
+        assert paths == [media]
         assert vecs == {}
         assert embedder_name == ""
 

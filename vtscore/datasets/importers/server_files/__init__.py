@@ -5,7 +5,10 @@ identifies the media files to import.  Two file formats are accepted:
 
 - **Text** (``.txt`` / ``.list``) - a UTF-8 text file with one media
   path per non-empty, non-comment line.  Lines beginning with ``#`` are
-  comments.  The listed files are embedded by the server.
+  comments.  The listed files are embedded by the server.  Each line is
+  judged on its own (:mod:`._text_manifest`): one that names nothing
+  is skipped and reported rather than failing the import, and a CSV row
+  is read for its path column.
 - **NumPy archive** (``.npz``) - a ``.npz`` file holding both the media
   paths and their pre-computed embedding vectors.  See
   :mod:`vtscore.datasets.importers._npz_vectors` for the supported
@@ -29,7 +32,9 @@ import logging
 import os
 import shutil
 import tempfile
+from collections import Counter
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -41,9 +46,13 @@ from vtscore.datasets.importers._npz_vectors import (
     validate_manifest_embedder_name,
 )
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
+from vtscore.datasets.importers.server_files._text_manifest import SkippedLine, read_text_manifest
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 logger = logging.getLogger(__name__)
+
+#: How many skipped lines an error message names before it says "and N more".
+_SKIPPED_IN_ERROR = 5
 
 
 def _cleanup_staging(staging: Path) -> None:
@@ -61,18 +70,12 @@ def _cleanup_staging(staging: Path) -> None:
 
 
 def _read_text_paths_file(paths_file: Path) -> list[Path]:
-    """Read media file paths from a UTF-8 text file, one per line."""
-    base_dir = paths_file.resolve().parent
-    paths: list[Path] = []
-    for raw in paths_file.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        candidate = Path(line)
-        if not candidate.is_absolute():
-            candidate = (base_dir / candidate).resolve()
-        paths.append(candidate)
-    return paths
+    """Read the existing media paths a UTF-8 text file lists, one per line.
+
+    Lines that name nothing are dropped here; :func:`_read_manifest` keeps
+    them, with reasons, for the importer to report.
+    """
+    return read_text_manifest(paths_file).paths
 
 
 def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any], str]:
@@ -152,11 +155,76 @@ def _read_paths_and_vectors(paths_file: Path) -> tuple[list[Path], dict[str, Any
     embedding vector, and the third element is the embedder name (``""``
     if the archive doesn't record one).
     """
+    read = _read_manifest(paths_file)
+    return read.paths, read.path_to_vector, read.embedder_name
+
+
+@dataclass
+class _ManifestRead:
+    """Everything :func:`_read_manifest` got out of a paths file."""
+
+    paths: list[Path]
+    path_to_vector: dict[str, Any] = field(default_factory=dict)
+    embedder_name: str = ""
+    #: Text-manifest lines that named nothing (always empty for ``.npz``).
+    skipped: list[SkippedLine] = field(default_factory=list)
+    #: Text-manifest lines read as CSV rows, other columns ignored.
+    csv_rows: int = 0
+
+
+def _read_manifest(paths_file: Path) -> _ManifestRead:
+    """Read *paths_file* in whichever format its suffix names."""
     if not paths_file.is_file():
         raise FileNotFoundError(f"Paths file not found: {paths_file}")
     if paths_file.suffix.lower() == ".npz":
-        return _read_npz_paths_file(paths_file)
-    return _read_text_paths_file(paths_file), {}, ""
+        return _ManifestRead(*_read_npz_paths_file(paths_file))
+    text = read_text_manifest(paths_file)
+    return _ManifestRead(text.paths, skipped=text.skipped, csv_rows=text.csv_rows)
+
+
+def _with_skipped(message: str, skipped: list[SkippedLine]) -> str:
+    """Append the first few skipped lines to *message*, so an error says what was wrong."""
+    if not skipped:
+        return message
+    named = "; ".join(s.describe() for s in skipped[:_SKIPPED_IN_ERROR])
+    more = f"; and {len(skipped) - _SKIPPED_IN_ERROR} more" if len(skipped) > _SKIPPED_IN_ERROR else ""
+    return f"{message}. Skipped {len(skipped)} line(s): {named}{more}"
+
+
+def _exists_as(path: Path, kind: str) -> bool:
+    """``Path.is_file`` / ``is_dir`` that answer ``False`` for a name the OS refuses.
+
+    A name past the filesystem's length limit raises ``ENAMETOOLONG`` out of
+    ``is_file`` rather than answering ``False``, which used to fail a whole
+    import over one bad ``.npz`` entry.
+    """
+    try:
+        return path.is_file() if kind == "file" else path.is_dir()
+    except (OSError, ValueError):
+        return False
+
+
+def _walk_files(root: Path) -> Iterator[Path]:
+    """Yield every file under *root*, following symlinks but entering each real folder once.
+
+    ``os.walk(followlinks=True)`` alone re-enters a folder through every
+    symlink that points back up the tree.  One such link lists each file
+    dozens of times over (until ``ELOOP``); two make the walk exponential,
+    which wedged the import thread for good (#5561).
+    """
+    seen: set[tuple[int, int]] = set()
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        try:
+            st = os.stat(dirpath)
+        except OSError:
+            dirnames[:] = []
+            continue
+        if (st.st_dev, st.st_ino) in seen:
+            dirnames[:] = []
+            continue
+        seen.add((st.st_dev, st.st_ino))
+        for name in filenames:
+            yield Path(dirpath) / name
 
 
 def _expand_paths(paths: list[Path]) -> list[Path]:
@@ -165,17 +233,15 @@ def _expand_paths(paths: list[Path]) -> list[Path]:
     Both ``Path.is_file`` and ``Path.is_dir`` follow symlinks by default, so
     a list entry that's a symlink to a file or to a directory is treated
     just like the underlying target.  Directory entries are walked
-    recursively with ``followlinks=True`` so symlinked sub-directories are
-    also descended.
+    recursively, symlinked sub-directories included (:func:`_walk_files`).
+    An entry that names nothing is dropped.
     """
     expanded: list[Path] = []
     for src in paths:
-        if src.is_file():
+        if _exists_as(src, "file"):
             expanded.append(src)
-        elif src.is_dir():
-            for dirpath, _dirnames, filenames in os.walk(src, followlinks=True):
-                for name in filenames:
-                    expanded.append(Path(dirpath) / name)
+        elif _exists_as(src, "dir"):
+            expanded.extend(_walk_files(src))
     return expanded
 
 
@@ -189,7 +255,7 @@ def _symlink_paths(paths: list[Path], target_dir: Path) -> dict[str, Path]:
     target_dir.mkdir(parents=True, exist_ok=True)
     name_to_source: dict[str, Path] = {}
     for src in _expand_paths(paths):
-        if not src.is_file():
+        if not _exists_as(src, "file"):
             continue
         # Disambiguate identical basenames by appending an index.
         base = src.name
@@ -256,6 +322,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             hint=(
                 "Accepted formats:\n"
                 " • .txt / .list - UTF-8 text, one path per line (lines starting with # are comments).\n"
+                "   A line naming no file is skipped and reported; a CSV row is read for its path column.\n"
                 " • .npz (paths) - NumPy archive of paths plus pre-computed embedding vectors;\n"
                 "   listed files skip re-embedding and use the supplied vectors. Supply a single\n"
                 "   'vectors' array, or one 'vectors_<embedder>' array per bound embedder to\n"
@@ -348,8 +415,11 @@ class ServerFilesDatasetImporter(DatasetImporter):
           archives that don't record an embedder name).
         """
         paths_file = Path(field_values["paths_file"])
-        paths, path_to_vector, embedder_name = _read_paths_and_vectors(paths_file)
+        read = _read_manifest(paths_file)
+        paths, path_to_vector, embedder_name = read.paths, read.path_to_vector, read.embedder_name
         if not paths:
+            if read.skipped:
+                raise ValueError(_with_skipped(f"No line of {paths_file.name} names an existing file", read.skipped))
             raise ValueError(f"No paths found in {paths_file}")
         # Reject an unroutable NPZ embedder name before staging anything, so the
         # failure is an actionable import-time error rather than a confusing
@@ -363,7 +433,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
         name_to_source = _symlink_paths(paths, staging)
         if not name_to_source:
             _cleanup_staging(staging)
-            raise ValueError(f"None of the paths in {paths_file} resolved to existing files")
+            raise ValueError(
+                _with_skipped(f"None of the paths in {paths_file} resolved to existing files", read.skipped)
+            )
+        self._report_manifest_lines(read)
 
         # Rekey npz vectors from the original absolute path to the
         # staged symlink basename, which is what ``server_folder``'s
@@ -375,6 +448,29 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 if vec is not None:
                     content_vectors[name] = vec
         return staging, name_to_source, content_vectors, embedder_name
+
+    def _report_manifest_lines(self, read: _ManifestRead) -> None:
+        """Say which manifest lines were skipped, and that CSV columns were ignored.
+
+        The import goes ahead on the lines that named media; this toast is the
+        only way a GUI user learns that the others didn't (#5561).
+        """
+        csv_note = f" {read.csv_rows} line(s) were CSV rows: only their path column was read." if read.csv_rows else ""
+        if read.skipped:
+            reasons = Counter(s.reason for s in read.skipped)
+            summary = ", ".join(f"{reason} ({n})" for reason, n in reasons.most_common())
+            self.notify(
+                f"Skipped {len(read.skipped)} manifest line(s) that name no media",
+                level="warning",
+                detail=f"Importing the {len(read.paths)} line(s) that do. Skipped: {summary}.{csv_note}",
+                items=[s.describe() for s in read.skipped],
+            )
+        elif read.csv_rows:
+            self.notify(
+                f"Read {read.csv_rows} manifest line(s) as CSV rows",
+                detail="A manifest lists media paths only, so each row's path column was imported "
+                "and its other columns were ignored.",
+            )
 
     def _rewrite_origins(
         self,
