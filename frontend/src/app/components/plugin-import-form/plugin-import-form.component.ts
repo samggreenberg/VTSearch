@@ -150,17 +150,20 @@ export class PluginImportFormComponent {
     this.values[fieldKey] = path;
   }
 
-  get canSubmit(): boolean {
-    if (this.submitting()) return false;
+  /** The first required field still without a value (``"Path is
+   *  required"``), or ``''`` once every one has one: the submit button's
+   *  disabled state and its tooltip both read this (#5533). */
+  get submitBlocker(): string {
     for (const field of this.importerFields) {
       if (!field.required) continue;
-      if (field.field_type === 'file') {
-        if (!this.selectedFile) return false;
-      } else if (!(this.values[field.key] || '').trim()) {
-        return false;
-      }
+      const missing = field.field_type === 'file' ? !this.selectedFile : !(this.values[field.key] || '').trim();
+      if (missing) return `${field.label || field.key} is required`;
     }
-    return true;
+    return '';
+  }
+
+  get canSubmit(): boolean {
+    return !this.submitting() && !this.submitBlocker;
   }
 
   submit(): void {

@@ -509,6 +509,15 @@ export class DemoPickerComponent {
     return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
   }
 
+  /** The next step before the footer's Import button can run, or ``''`` once
+   *  it can: the button's disabled state and its tooltip both read this, so
+   *  a disabled Import always says why (#5533). */
+  get submitBlocker(): string {
+    if (!this.selectedDemo()) return 'Select a demo dataset from the list';
+    if (!this.hasOutputs) return 'Tick at least one kind of media to import';
+    return '';
+  }
+
   /** The ticked rows' kinds (``"Image, Document"``) for the line that stands
    *  in for the media-type dropdown in multi mode, the list itself being
    *  under Advanced (#5230). */

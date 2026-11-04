@@ -244,10 +244,14 @@ export class DatasetCardComponent {
 
   /** Tooltip for the name: which datasets came from the same import, or none
    *  when the dataset has no siblings. The name already ends in its kind of
-   *  media and the Type column shows it too, so the name carries no badge (#5461). */
+   *  media and the Type column shows it too, so the name carries no badge (#5461).
+   *  Several siblings are a bulleted list, one per line, not a comma-joined
+   *  row of long names (#5532). */
   get importSiblingsTitle(): string | null {
     const siblings = this.importSiblings() ?? [];
-    return siblings.length ? `Imported together with ${siblings.join(', ')}` : null;
+    if (siblings.length === 0) return null;
+    if (siblings.length === 1) return `Imported together with ${siblings[0]}`;
+    return ['Imported together with:', ...siblings.map((name) => `• ${name}`)].join('\n');
   }
 
   /** The Type cell's icon, as the media-type registry serves it (the

@@ -257,4 +257,14 @@ export class SourcePickerComponent {
     if (status === 'needs_embedding') return 'Needs setup';
     return 'Needs Download';
   }
+
+  /** Hover text for a Readiness badge: what the one- or two-word label means
+   *  for loading the demo (the same wording as `docs/user/howto/load-a-demo.md`). */
+  statusBadgeTitle(status: string): string {
+    if (status === 'ready') return 'Ready: already downloaded and analysed, so it loads straight away';
+    if (status === 'needs_embedding') {
+      return 'Needs setup: already downloaded, but it has to be analysed with the chosen embedder before it can be searched';
+    }
+    return 'Needs Download: it has to be downloaded, then analysed, before it can be searched';
+  }
 }

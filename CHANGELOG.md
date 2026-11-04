@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
 - **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
   say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
   differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
@@ -36,6 +43,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   finished, and reopening the dialog sends nothing. The dialog now shows the failure the first time it opens a run
   and leaves it out after that. Each new run still reports its own failure. A successful export still shows every
   time, with its **Open** button.
+- **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
+  Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
+  with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,
+  which nothing explained. Description now takes the room the other columns leave and ends in "…" (hover for
+  the full text), so Readiness always shows. Each badge also explains itself on hover. The green tint is
+  gone, and the dialog is wider (900px, the width already used for the same table in New Detector). The first
+  drag of a column divider in any resizable table also no longer clips the longest cell of a column sized
+  exactly to its content.
 - **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
   (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
   pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version

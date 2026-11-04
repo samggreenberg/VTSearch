@@ -288,4 +288,13 @@ describe('DatasetCardComponent', () => {
     expect(el.querySelector('.name-cell')?.textContent).not.toMatch(/Face\s*Face/);
     expect(name.title).toBe('Imported together with Photos – Image');
   });
+
+  it('lists several siblings in the tooltip one per line (#5532)', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, name: 'Photos – Face', import_group: 'g1' });
+    fixture.componentRef.setInput('importSiblings', ['Photos – Image', 'Photos – Document']);
+    await settleZoneless(fixture);
+
+    const name = (fixture.nativeElement as HTMLElement).querySelector('.dataset-name') as HTMLElement;
+    expect(name.title).toBe('Imported together with:\n• Photos – Image\n• Photos – Document');
+  });
 });

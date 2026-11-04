@@ -357,6 +357,13 @@ export class LeftPanelComponent implements OnInit {
    * the unverified positives. Gates the Find work-queue action buttons —
    * Browse / To Dataset / Export all operate on exactly this set.
    */
+  /** Why the work queue's Browse / To Dataset / Export buttons are disabled,
+   *  or ``''`` while they are not: a disabled button always says why (#5533). */
+  get queueActionsBlocker(): string {
+    if (this.disabled()) return 'Wait for the current run to finish';
+    return this.unverifiedGoodCount === 0 ? 'No unreviewed likely matches left' : '';
+  }
+
   get unverifiedGoodCount(): number {
     const order = this.sortOrder();
     const threshold = this.threshold();
