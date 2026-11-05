@@ -1,4 +1,5 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
+import { isLinked, sharingNote, type SharingEntry } from '../../utils/detector-sharing';
 
 /**
  * Builds the action menu for the dashboard's dataset and detector rows. The
@@ -9,7 +10,8 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * Rename, Stats, dataset-only Run AutoFind, and detector-only Import Labels /
  * Export labels, plus Edit-access in multi-user mode — rather than repeating
  * icons already visible in the row, plus Auto-export… on a detector whose
- * labels sync to a labelset source.
+ * labels sync to a labelset source, and the detector-sharing verbs (Share…,
+ * Check for updates, Fork) where they apply.
  * Rename is additionally surfaced as a pencil next to the row name. Availability
  * rules: Load only shows when the item is unloaded; Edit-access only shows in
  * multi-user mode and is disabled for non-owners.
@@ -63,6 +65,21 @@ const ICON = {
   autoExport: svg(
     '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8a4 4 0 0 1 0 8"/>' +
       '<polyline points="9 15 12 12 15 15"/><line x1="12" y1="12" x2="12" y2="21"/>',
+  ),
+  // Three linked nodes: the detector handed to other people.
+  share: svg(
+    '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>' +
+      '<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+  ),
+  // Two arrows round a circle: fetch the owner's latest.
+  refresh: svg(
+    '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>' +
+      '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  ),
+  // A branch leaving a line: a copy of one's own, which remembers where it came from.
+  fork: svg(
+    '<circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="7" r="2.5"/>' +
+      '<line x1="6" y1="7.5" x2="6" y2="16.5"/><path d="M18 9.5c0 4-6 3.5-11 7"/>',
   ),
   // A bolt: AutoFind is the detectors that run by themselves.
   autofind: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
@@ -150,20 +167,51 @@ export function buildDatasetCardMenuItems(
   return items;
 }
 
+/** What the deployment's detector sharing makes available to a detector menu. */
+export interface DetectorMenuSharing {
+  /** Sharing is on here (`GET /api/detectors/sharing`): offers Share… and a
+   *  Fork of a detector of one's own. Off, a deployment that never shared
+   *  sees today's menu. A received detector's verbs do not wait on it: such a
+   *  row only exists because sharing was on once, and Fork is its way out. */
+  enabled: boolean;
+}
+
+/** The detector fields the menu reads. */
+export type DetectorMenuEntry = SharingEntry & {
+  detector_loaded?: boolean;
+  autofind?: boolean;
+  labelset_source_status?: { display_name?: string; source_name?: string } | null;
+};
+
 /**
  * Detector menu. An AutoFind detector (``autofind``) is frozen: the editing
  * verbs (Rename, Import Labels, Delete) are omitted entirely — the only way
  * to change it is "Move to Drafts" first — while the read/use verbs (Load,
  * Browse, Export labels, Stats) stay. A draft detector instead offers
  * "Move to AutoFind" to finalize it.
+ *
+ * A received detector (``sync_mode: linked``) gets the same frozen treatment
+ * for its labels and name — no Rename, Import Labels, Auto-export… or Share…
+ * — and offers "Check for updates" and "Fork" instead. Delete stays on it (it
+ * removes the local copy only), and so do Move to AutoFind / Drafts, since
+ * that flag is the user's own. A detector of the user's own offers "Share…"
+ * and "Fork" when sharing is on; "Share…" takes the place of "Auto-export…"
+ * when the detector already syncs to its shared container. A row whose
+ * container belongs to a source that is not in use here (``sharing_note``)
+ * keeps those verbs but disables the sharing ones, with the note as the
+ * reason; Fork needs only the local copy, so it stays.
  */
 export function buildDetectorCardMenuItems(
-  detector:
-    | { detector_loaded?: boolean; autofind?: boolean; labelset_source_status?: { display_name?: string } | null }
-    | undefined,
+  detector: DetectorMenuEntry | undefined,
   access: CardMenuAccess,
+  sharing: DetectorMenuSharing = { enabled: false },
 ): ContextMenuItem[] {
   const frozen = !!detector?.autofind;
+  const linked = isLinked(detector);
+  const note = sharingNote(detector);
+  // The detector syncs to a shared container: its binding is the sharing
+  // one, edited through Share…, never Auto-export….
+  const sharedBinding = !!detector?.sharing?.remote_ref;
   const items: ContextMenuItem[] = [];
   if (!detector?.detector_loaded) {
     items.push({ id: 'load', label: 'Load detector', title: 'Load detector', iconSvg: ICON.load });
@@ -172,7 +220,7 @@ export function buildDetectorCardMenuItems(
   if (!access.isDefaultLogin) {
     items.push(securityItem(access));
   }
-  if (!frozen) {
+  if (!frozen && !linked) {
     items.push({ id: 'rename', label: 'Rename', title: 'Rename', iconSvg: ICON.rename });
     items.push({ id: 'add-labels', label: 'Import Labels', title: 'Import Labels', iconSvg: ICON.addLabels });
   }
@@ -191,8 +239,10 @@ export function buildDetectorCardMenuItems(
   });
   // Only for a detector whose labels sync somewhere (its own link, or the
   // deployment default it follows): this edits the values that link needs.
+  // Not for a received copy, which never syncs, nor for one that syncs to its
+  // shared container, whose link Share… edits.
   const autoExport = detector?.labelset_source_status;
-  if (autoExport) {
+  if (autoExport && !linked && !sharedBinding) {
     items.push({
       id: 'auto-export',
       label: 'Auto-export…',
@@ -203,12 +253,46 @@ export function buildDetectorCardMenuItems(
       disabled: !access.isOwner,
     });
   }
+  if (!linked && (sharing.enabled || sharedBinding)) {
+    items.push({
+      id: 'share',
+      label: 'Share…',
+      title:
+        note ||
+        (access.isOwner
+          ? 'Share this detector with other people; your saves keep their copies current'
+          : 'Only the creator can share this detector'),
+      iconSvg: ICON.share,
+      disabled: !!note || !access.isOwner,
+    });
+  }
+  if (linked) {
+    items.push({
+      id: 'check-updates',
+      label: 'Check for updates',
+      title: note || "Fetch the owner's latest labels for this detector",
+      iconSvg: ICON.refresh,
+      disabled: !!note,
+    });
+  }
+  if (linked || sharing.enabled) {
+    items.push({
+      id: 'fork',
+      label: 'Fork',
+      title: linked
+        ? 'Make a copy of your own that you can edit; this one stays as it is'
+        : 'Make a copy of this detector that records where it came from',
+      iconSvg: ICON.fork,
+    });
+  }
   items.push({ id: 'stats', label: 'Stats', title: 'Stats', iconSvg: ICON.stats });
   if (frozen) {
     items.push({
       id: 'move-to-drafts',
       label: 'Move to Drafts',
-      title: 'Unfreeze this detector: stop auto-running it and allow editing again',
+      title: linked
+        ? 'Stop auto-running this detector (a received copy stays read-only)'
+        : 'Unfreeze this detector: stop auto-running it and allow editing again',
       iconSvg: ICON.unlock,
     });
   } else {
@@ -218,7 +302,12 @@ export function buildDetectorCardMenuItems(
       title: 'Finalize this detector: freeze it against edits and auto-run it on every dataset as it is imported',
       iconSvg: ICON.lock,
     });
-    items.push({ id: 'delete', label: 'Delete', title: 'Delete', iconSvg: ICON.delete });
+    items.push({
+      id: 'delete',
+      label: 'Delete',
+      title: linked ? "Delete your local copy only; the owner's detector is unaffected" : 'Delete',
+      iconSvg: ICON.delete,
+    });
   }
   return items;
 }

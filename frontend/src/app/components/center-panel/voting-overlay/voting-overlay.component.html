@@ -1,28 +1,34 @@
 <div class="vote-buttons" #voteButtons>
   <button
     class="btn-bad"
-    [disabled]="unavailable()"
+    [disabled]="unavailable() || readOnly()"
     [class.voted]="isBad()"
     [class.vote-flash]="badFlash()"
     (click)="onVoteBad($event)"
-    [title]="unavailable() ? 'Nothing left to vote on here' : 'Mark this media as a Bad example.'"
+    [title]="blockedTitle() || 'Mark this media as a Bad example.'"
   >
     <vt-icon type="thumbs-down" [size]="18" [class.icon-spinning]="spinningVote() === 'bad'"></vt-icon>
     Bad
   </button>
   <button
     class="btn-good"
-    [disabled]="unavailable()"
+    [disabled]="unavailable() || readOnly()"
     [class.voted]="isGood()"
     [class.vote-flash]="goodFlash()"
     (click)="onVoteGood($event)"
-    [title]="unavailable() ? 'Nothing left to vote on here' : 'Mark this media as a Good example.'"
+    [title]="blockedTitle() || 'Mark this media as a Good example.'"
   >
     <vt-icon type="thumbs-up" [size]="18" [class.icon-spinning]="spinningVote() === 'good'"></vt-icon>
     Good
   </button>
 </div>
-@switch (hint()) {
+@if (readOnly()) {
+  <p class="read-only-hint" role="note">
+    {{ readOnlyHint }}
+    <button type="button" class="link-btn fork-btn" (click)="fork.emit()" title="Make a copy of your own that you can vote on">Fork</button>
+  </p>
+}
+@switch (readOnly() ? null : hint()) {
   @case ('start-voting') {
     <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
       I picked this for you. Click <strong>Good</strong> if it's what you're looking for, or

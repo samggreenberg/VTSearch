@@ -127,6 +127,9 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
+  /** The detector is a received, read-only copy: the host also sets
+   *  {@link autopilotDisabled}, and this says why instead of the no-seed reason. */
+  readonly readOnly = input(false);
   /**
    * The server's `autopilot_only` lock (#4666): Train has no Manual tab and
    * Tune no Review tab, and neither renders its tab bar. Train stays on

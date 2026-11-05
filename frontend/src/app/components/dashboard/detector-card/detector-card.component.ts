@@ -17,6 +17,15 @@ import { DashboardLoadingTasksService } from '../../../services/dashboard-loadin
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import type { LineTestVerdict } from '../../../generated/api-client/models/line-test-verdict';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
+import {
+  integrityLine,
+  isLinked,
+  isSharedOwned,
+  receivedTitle,
+  sharedTitle,
+  sharingNote,
+  sharingSyncError,
+} from '../../../utils/detector-sharing';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,6 +52,9 @@ export class DetectorCardComponent {
   readonly selected = input(false);
   readonly dimmed = input(false);
   readonly loadingTask = input<LoadingTask | undefined>(undefined);
+  /** Detector sharing is on for this deployment: the menu offers Share… and
+   *  Fork on a detector of the user's own (`DetectorMenuSharing`). */
+  readonly sharingEnabled = input(false);
 
   /** True while this row's delete-confirm dialog is open (driven by the
    *  dashboard's `deletingDetectorId`). Spins the trash icon to 90° while open;
@@ -99,12 +111,75 @@ export class DetectorCardComponent {
   /** Emits the new AutoFind membership: true for "Move to AutoFind", false for
    *  "Move to Drafts". */
   readonly setAutofind = output<boolean>();
+  /** "Share…" (and the "Remote sync failed" link): who this detector is shared with. */
+  readonly share = output<void>();
+  /** "Check for updates" on a received detector: fetch the owner's latest. */
+  readonly checkUpdates = output<void>();
+  /** "Fork": a copy of the user's own, with provenance. */
+  readonly fork = output<void>();
 
   /** True for an AutoFind detector (``autofind``): the row is frozen, so the
    *  editing affordances (rename pencil, inline Delete) are hidden and the
    *  menu omits the editing verbs — Move to Drafts first to edit. */
   get frozen(): boolean {
     return !!this.detector()?.autofind;
+  }
+
+  /** True for a received, read-only copy (`sync_mode: linked`): its name and
+   *  labels change only through Check for updates, so the rename pencil is
+   *  hidden and the menu offers Fork instead of the editing verbs. Its inline
+   *  Delete stays, and removes the local copy only. */
+  get linked(): boolean {
+    return isLinked(this.detector());
+  }
+
+  /** No rename pencil: an AutoFind detector, or a received one. */
+  get nameLocked(): boolean {
+    return this.frozen || this.linked;
+  }
+
+  /** True for a detector of the user's own bound to a shared container. */
+  get sharedOwned(): boolean {
+    return isSharedOwned(this.detector());
+  }
+
+  /** Why this row's container is not in use here, or `''` (the listing's `sharing_note`). */
+  get sharingNote(): string {
+    return sharingNote(this.detector());
+  }
+
+  /** The badge's title: who, when, and what the last check found. */
+  get sharingBadgeTitle(): string {
+    const d = this.detector();
+    return this.linked ? receivedTitle(d) : sharedTitle(d);
+  }
+
+  /** The badge turns amber when something about the container is off: a note
+   *  (local-only here), or a received container someone else has written to. */
+  get sharingBadgeWarns(): boolean {
+    if (this.sharingNote) return true;
+    return this.linked && integrityLine(this.detector()).startsWith('⚠');
+  }
+
+  /** The last owner push's failure, shown as the "Remote sync failed" link. */
+  get syncError(): string {
+    return sharingSyncError(this.detector());
+  }
+
+  get syncErrorTitle(): string {
+    return this.isOwner
+      ? `The last save to the shared copy failed: ${this.syncError}. Click to open Share…`
+      : `The last save to the shared copy failed: ${this.syncError}`;
+  }
+
+  onSyncError(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.isOwner) this.share.emit();
+  }
+
+  /** The inline trash button's title: a received copy's delete leaves the owner's alone. */
+  get deleteTitle(): string {
+    return this.linked ? "Delete your local copy (the owner's detector is unaffected)" : 'Delete detector';
   }
 
   /** The newest test verdict an AutoFind detector keeps (#4526), which its row
@@ -191,10 +266,11 @@ export class DetectorCardComponent {
    *  Browse, Delete) so the ⋯ button reads as "more" while right-click stays
    *  complete. */
   private openMenuAt(x: number, y: number, overflow: boolean): void {
-    const items = buildDetectorCardMenuItems(this.detector(), {
-      isDefaultLogin: this.isDefaultLogin(),
-      isOwner: this.isOwner,
-    });
+    const items = buildDetectorCardMenuItems(
+      this.detector(),
+      { isDefaultLogin: this.isDefaultLogin(), isOwner: this.isOwner },
+      { enabled: this.sharingEnabled() },
+    );
     this.contextMenuItems = overflow ? overflowMenuItems(items) : items;
     this.contextMenuX = x;
     this.contextMenuY = y;
@@ -235,6 +311,15 @@ export class DetectorCardComponent {
         break;
       case 'auto-export':
         this.autoExport.emit();
+        break;
+      case 'share':
+        this.share.emit();
+        break;
+      case 'check-updates':
+        this.checkUpdates.emit();
+        break;
+      case 'fork':
+        this.fork.emit();
         break;
       case 'move-to-autofind':
         this.setAutofind.emit(true);
