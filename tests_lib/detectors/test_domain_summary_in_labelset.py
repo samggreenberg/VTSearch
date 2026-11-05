@@ -30,6 +30,8 @@ from vtscore.detectors.domain_summary import (
 from vtscore.detectors.input_spec import apply_detector_meta, build_detector_meta
 from vtscore.detectors.store import _read_detector, _write_detector
 from vtscore.detectors.training_domain import TRAINING_DATASET_KEY, training_dataset_record
+from vtscore.exporters import get_exporter
+from vtscore.labels.importers import get_label_importer
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
 _EMBEDDER = "emb"
@@ -200,25 +202,26 @@ class TestImportersHandTheBlockOver:
         assert importer.run_labelset_cli({"filepath": "x"}) == {"labels": _labels()}
 
     def test_the_json_exporter_writes_it_and_the_json_importer_reads_it_back(self, tmp_path):
-        from vtscore.exporters.server_json_file import EXPORTER
-        from vtscore.labels.importers.server_json_file import LABEL_IMPORTER
+        exporter = get_exporter("server_json_file")
+        importer = get_label_importer("server_json_file")
+        assert exporter is not None and importer is not None
 
         summary = _summary()
         path = tmp_path / "shared.labels.json"
         payload = labelset_for_export({"labels": _labels(), "detector_meta": {DOMAIN_SUMMARY_KEY: summary}})
-        EXPORTER.export_labelset({**payload, "selected_columns": ["md5", "label", "origin"]}, {"filepath": str(path)})
+        exporter.export_labelset({**payload, "selected_columns": ["md5", "label", "origin"]}, {"filepath": str(path)})
 
         assert json.loads(path.read_text())["detector_meta"] == {DOMAIN_SUMMARY_KEY: summary}
-        read = LABEL_IMPORTER.run_labelset({"filepath": str(path)})
+        read = importer.run_labelset({"filepath": str(path)})
         assert read["detector_meta"] == {DOMAIN_SUMMARY_KEY: summary}
         assert [e["md5"] for e in read["labels"]] == ["md5-a-0", "md5-a-1"]
-        assert LABEL_IMPORTER.run_labelset_cli({"filepath": str(path)}) == read
+        assert importer.run_labelset_cli({"filepath": str(path)}) == read
         # ``run`` keeps returning the labels alone, for callers of the old contract.
-        assert LABEL_IMPORTER.run({"filepath": str(path)}) == read["labels"]
+        assert importer.run({"filepath": str(path)}) == read["labels"]
 
     def test_a_file_without_the_block_imports_labels_alone(self, tmp_path):
-        from vtscore.labels.importers.server_json_file import LABEL_IMPORTER
-
+        importer = get_label_importer("server_json_file")
+        assert importer is not None
         path = tmp_path / "plain.labels.json"
         path.write_text(json.dumps({"labels": _labels()}))
-        assert LABEL_IMPORTER.run_labelset({"filepath": str(path)}) == {"labels": _labels()}
+        assert importer.run_labelset({"filepath": str(path)}) == {"labels": _labels()}
