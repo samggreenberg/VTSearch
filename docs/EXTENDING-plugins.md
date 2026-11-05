@@ -58,7 +58,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
 | Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
 | Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
-| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 2 |
 | Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
 | Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
 | Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |
@@ -2616,5 +2616,33 @@ The same "a sync target is a side channel" stance as
 [settings sources](ARCHITECTURE.md#failure-semantics) holds: a source that raises is
 logged and retried on the next change, and the detector file stays the
 record.
+
+### Sharing detectors
+
+A labelset source can also **share** detectors through an external
+collaboration service: one container per shared detector, with an owner and
+recipients. Sharing is an optional capability of this same plugin family -
+no new registry, sentinel or entry-point group. Override the `_do_share_*`
+hooks (all nine required ones, plus `_do_share_search_recipients` for
+recipient autocomplete); the library guide's [The sharing
+contract](../vtscore/docs/extending/labelset-sources.md#the-sharing-contract)
+lists them with the types they exchange (`vtscore/labels/sharing.py`) and
+the identity and manifest rules. What it means for the app:
+
+- `GET /api/labelset-sources` reports three derived flags per source:
+  `supports_sync` (it implements `_do_save` and a load hook, so it can be a
+  plain sync target), `supports_sharing` and `supports_recipient_search`.
+  A sharing-only source is legal; with `supports_sync` false it is never a
+  plain-binding target.
+- Sharing is switched on by the `detector_sharing_source` server setting
+  (see [SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)), never by
+  installing a source: `vtscore.labels.sharing.active_sharing_source()`
+  resolves it, and treats an unknown name or a source that cannot share as
+  off, with a warning.
+- The built-in `vtscore/labels/sources/shared_folder/` implements the whole
+  contract over a directory of JSON files, for tests and local development,
+  and `tests_lib/labels/test_sharing_conformance.py` runs the contract tests
+  against every registered source that can share. Add a driver there for a
+  new in-tree sharing source.
 
 ---

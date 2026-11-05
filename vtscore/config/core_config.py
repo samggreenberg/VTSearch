@@ -181,6 +181,16 @@ class CoreConfig:
     # (the default) means no deployment-wide source.
     default_labelset_source: dict[str, Any] | None = None
 
+    # The labelset source detector sharing goes through (server-tier
+    # ``detector_sharing_source``): ``{"source_name": ..., "field_values":
+    # {...}}``, the same shape as ``default_labelset_source``, its non-empty
+    # values fixed by the admin.  The source must implement sharing
+    # (``LabelsetSource.supports_sharing``).  Read by
+    # :func:`vtscore.labels.sharing.active_sharing_source`.  ``None`` (the
+    # default) means sharing is off: a source that can share is never active
+    # merely because it is installed.
+    detector_sharing_source: dict[str, Any] | None = None
+
     # Shortest gap, in seconds, between two pushes of one detector's labels to
     # its labelset source (server-tier ``labelset_source_push_interval_seconds``).
     # Read by :mod:`vtscore.labels.sync`.  Defaulted here so library-only

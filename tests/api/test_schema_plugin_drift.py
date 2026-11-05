@@ -40,6 +40,19 @@ from vtsearch.schemas.datasets.listings import (
     ImporterInfoSchema,
     MediaTypeInfoSchema,
 )
+from vtsearch.schemas.settings_io import LabelsetSourceEntrySchema, SyncSourceEntrySchema
+
+
+def _labelset_sources():
+    from vtscore.labels.sources import list_labelset_sources
+
+    return list_labelset_sources()
+
+
+def _settings_sources():
+    from vtsearch.settings_io.sources import list_settings_sources
+
+    return list_settings_sources()
 
 
 def _wire_keys(schema: Schema) -> set[str]:
@@ -73,6 +86,10 @@ def test_importer_field_schema_matches_plugin_field_exactly():
         pytest.param(EmbedderInfoSchema, lambda: all_embedders_dict(), id="embedders"),
         pytest.param(ConverterInfoSchema, lambda: [c.to_dict() for c in list_converters()], id="converters"),
         pytest.param(ImporterInfoSchema, lambda: [i.to_dict() for i in list_importers()], id="importers"),
+        pytest.param(
+            LabelsetSourceEntrySchema, lambda: [s.to_dict() for s in _labelset_sources()], id="labelset_sources"
+        ),
+        pytest.param(SyncSourceEntrySchema, lambda: [s.to_dict() for s in _settings_sources()], id="settings_sources"),
     ],
 )
 def test_fixed_shape_schemas_declare_every_emitted_key(schema, payloads):

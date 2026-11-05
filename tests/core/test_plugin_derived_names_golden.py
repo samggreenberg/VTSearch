@@ -163,6 +163,12 @@ GOLDEN: dict[str, tuple[str, str | None, str | None, str | None]] = {
         "Server JSON File",
         "🖥",
     ),
+    "vtscore.labels.sources.shared_folder.SharedFolderLabelsetSource": (
+        "shared_folder",
+        "shared_folder",
+        "Shared Folder",
+        "📂",
+    ),
     "vtscore.seed_importers.base.SeedImporter": ("seed", None, None, "🌱"),
     "vtscore.sync.SyncSource": ("sync", None, None, "🔄"),
     "vtsearch.settings_io.exporters.base.SettingsExporter": ("settings", None, None, "📤"),

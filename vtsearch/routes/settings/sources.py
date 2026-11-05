@@ -32,6 +32,7 @@ from flask_smorest import Blueprint, abort
 from vtsearch.schemas.settings_io import (
     DefaultLabelsetSourceSchema,
     DetectorLabelsetSourceSchema,
+    LabelsetSourceEntrySchema,
     OkMessageSchema,
     SetSyncSourceRequestSchema,
     SyncFromLabelsetSourceResponseSchema,
@@ -153,9 +154,14 @@ def sync_settings_from_source():
 
 
 @sync_sources_bp.route("/api/labelset-sources", methods=["GET"])
-@sync_sources_bp.response(200, SyncSourceEntrySchema(many=True))
+@sync_sources_bp.response(200, LabelsetSourceEntrySchema(many=True))
 def list_labelset_sources_route():
-    """Return a list of all registered labelset source plugins."""
+    """Return a list of all registered labelset source plugins.
+
+    Each entry carries the source's derived capability flags:
+    ``supports_sync`` (it can be a plain sync target), ``supports_sharing``
+    and ``supports_recipient_search``.
+    """
     from vtscore.labels.sources import list_labelset_sources
     from vtsearch.settings import filter_visible_plugins
 

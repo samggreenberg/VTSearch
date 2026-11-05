@@ -11,7 +11,7 @@ Covers:
 * ``PUT  /api/settings-sources/active``   -> :class:`SetSyncSourceRequestSchema` ->
                                              :class:`OkMessageSchema`
 * ``POST /api/settings-sources/sync``     -> :class:`SyncFromSourceResponseSchema`
-* ``GET  /api/labelset-sources``          -> :class:`SyncSourceEntrySchema`
+* ``GET  /api/labelset-sources``          -> :class:`LabelsetSourceEntrySchema`
 * ``GET  /api/labelset-sources/default``  -> :class:`DefaultLabelsetSourceSchema`
 * ``GET  /api/detectors/<n>/labelset-source``      -> :class:`DetectorLabelsetSourceSchema`
 * ``PUT  /api/detectors/<n>/labelset-source``      -> :class:`SetSyncSourceRequestSchema` ->
@@ -68,7 +68,24 @@ class SettingsExporterEntrySchema(_PluginEntrySchema):
 
 
 class SyncSourceEntrySchema(_PluginEntrySchema):
-    """One entry in ``GET /api/settings-sources`` and ``GET /api/labelset-sources``."""
+    """One entry in ``GET /api/settings-sources``."""
+
+
+class LabelsetSourceEntrySchema(_PluginEntrySchema):
+    """One entry in ``GET /api/labelset-sources``.
+
+    Mirrors :meth:`vtscore.labels.sources.base.LabelsetSource.to_dict`: the
+    plugin entry plus three capability flags, each derived from the hooks the
+    source overrides.  ``supports_sync`` says it can be a plain sync target
+    (the New Detector and Auto-export pickers offer only those);
+    ``supports_sharing`` that it implements detector sharing; and
+    ``supports_recipient_search`` that its sharing can also search for
+    recipients.
+    """
+
+    supports_sync = fields.Boolean(required=True)
+    supports_sharing = fields.Boolean(required=True)
+    supports_recipient_search = fields.Boolean(required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +266,7 @@ class SyncFromLabelsetSourceResponseSchema(Schema):
 __all__ = [
     "DefaultLabelsetSourceSchema",
     "DetectorLabelsetSourceSchema",
+    "LabelsetSourceEntrySchema",
     "LabelsetSourceStatusSchema",
     "OkMessageSchema",
     "RunSettingsExportRequestSchema",

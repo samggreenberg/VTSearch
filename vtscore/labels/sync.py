@@ -49,8 +49,6 @@ that was behind catches up.
 from __future__ import annotations
 
 import atexit
-import hashlib
-import json
 import logging
 import threading
 import time
@@ -159,9 +157,14 @@ def _owner(entry: dict[str, Any] | None) -> str | None:
 
 
 def _digest(labelset: LabelSet) -> str:
-    """A content digest of *labelset*'s serialised form."""
-    text = json.dumps(labelset.to_dict(), sort_keys=True, default=str)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    """A content digest of *labelset*, the same one a sharing manifest records.
+
+    Order-independent (:func:`~vtscore.labels.sharing.labelset_digest`), so a
+    source that hands labels back reordered is not pushed to again for it.
+    """
+    from vtscore.labels.sharing import labelset_digest  # noqa: PLC0415
+
+    return labelset_digest(labelset)
 
 
 def _push_interval() -> float:

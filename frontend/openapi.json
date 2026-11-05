@@ -5119,6 +5119,58 @@
         ],
         "type": "object"
       },
+      "LabelsetSourceEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "supports_recipient_search": {
+            "type": "boolean"
+          },
+          "supports_sharing": {
+            "type": "boolean"
+          },
+          "supports_sync": {
+            "type": "boolean"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "fields",
+          "hidden_from_picker",
+          "icon",
+          "name",
+          "supports_recipient_search",
+          "supports_sharing",
+          "supports_sync",
+          "ui_mode"
+        ],
+        "type": "object"
+      },
       "LabelsetSourceStatus": {
         "additionalProperties": false,
         "properties": {
@@ -13997,6 +14049,7 @@
     },
     "/api/labelset-sources": {
       "get": {
+        "description": "Each entry carries the source's derived capability flags:\n``supports_sync`` (it can be a plain sync target), ``supports_sharing``\nand ``supports_recipient_search``.",
         "operationId": "list_labelset_sources_route",
         "responses": {
           "200": {
@@ -14004,7 +14057,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/SyncSourceEntry"
+                    "$ref": "#/components/schemas/LabelsetSourceEntry"
                   },
                   "type": "array"
                 }
