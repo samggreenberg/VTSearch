@@ -25,6 +25,7 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
 | `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
 | `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
+| `vtscore/datasets/co_occurrence.py` | The photo index: which faces of a dataset were cut from one photo, read off each face's own converter refs (no sibling needed), and which groups of faces (people) share photos |
 | `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped, less its rank and score on export; nothing acts on it yet) |
 
 **Loading and persistence**
@@ -676,6 +677,13 @@ builds on it: `group_by_source` turns a descending ranking of outputs into one
 of their source items (a group per photo, scored as its best face; an output
 whose source cannot be named is a group of its own), and raises
 `SourceNotLoadedError` naming a sibling that is registered but not loaded.
+`vtscore.datasets.co_occurrence` asks the same join of the Face dataset alone:
+`PhotoIndex(medias)` keys each face by its photo (`source_path`, else
+`source_file`, unioned across a `dupe_set` face's members, so collapsed copies
+of one photo are one photo, the item `SourceResolver` finds), and over people
+given as face-id lists answers `photos_of`, `appears_with` (the other groups
+sharing a photo, most shared first) and `shared_photos` (each with every face
+cut from it). Ids only; cache it on `media_revision`, never persist it.
 Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
 `update_readers`, and its `(ok, err)` form `set_readers`) implement
