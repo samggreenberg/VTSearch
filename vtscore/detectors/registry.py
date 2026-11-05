@@ -297,7 +297,8 @@ def detector_name_taken(name: str, *, own_path: Any = None, exclude_id: str = ""
     if new_path.exists():
         return True
     return any(
-        entry.get("id") != exclude_id and _detector_path(entry.get("name", "")) == new_path for entry in list_detectors()
+        entry.get("id") != exclude_id and _detector_path(entry.get("name", "")) == new_path
+        for entry in list_detectors()
     )
 
 
