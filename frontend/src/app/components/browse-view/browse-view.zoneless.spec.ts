@@ -674,6 +674,47 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
   });
 
+  describe('the People button (#5590)', () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    async function openMapOf(mediaType: string): Promise<HTMLElement> {
+      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
+        of({ display_name: 'Photos', media_type: mediaType }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it("sits in a Face dataset's toolbar, and opens that dataset's People", async () => {
+      const el = await openMapOf('face');
+      const button = el.querySelector<HTMLButtonElement>('.browse-people');
+      expect(button?.textContent?.trim()).toBe('People');
+      button!.click();
+      expect(navigate).toHaveBeenCalledWith(['/people', 'ds1']);
+    });
+
+    it('is not offered on any other dataset', async () => {
+      const el = await openMapOf('image');
+      expect(el.querySelector('.browse-people')).toBeNull();
+    });
+
+    it('is not offered on a subset map, which People is not about', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
+      await openMapOf('face');
+      expect(fixture.componentInstance.peopleOffered()).toBe(false);
+    });
+  });
+
   describe("Toasty's hint ladder (#5360)", () => {
     const ready = {
       projection_id: 'p1',

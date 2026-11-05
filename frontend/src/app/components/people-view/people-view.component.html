@@ -108,7 +108,12 @@
           @if (rows().length === 0) {
             <p class="people-empty">No faces were found to merge into people.</p>
           } @else {
-            <cdk-virtual-scroll-viewport [itemSize]="ROW_PX" class="people-list-scroll">
+            <cdk-virtual-scroll-viewport
+              [itemSize]="ROW_PX"
+              [minBufferPx]="ROW_PX * 10"
+              [maxBufferPx]="ROW_PX * 20"
+              class="people-list-scroll"
+            >
               <button
                 *cdkVirtualFor="let row of rows(); trackBy: trackRow"
                 type="button"
