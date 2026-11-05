@@ -706,6 +706,42 @@ class TestDetectorSourceRoutes:
         assert "labelset_source" not in row
 
 
+class TestSharedDetectorSyncRoute:
+    """The manual sync pulls into a plain binding only (#5576); a shared detector's owner gets a 409."""
+
+    @pytest.fixture
+    def owned(self, tmp_path) -> dict:
+        settings.set_detector_sharing_source(
+            {"source_name": "shared_folder", "field_values": {"folder": str(tmp_path / "shared")}}
+        )
+        return _make_detector(
+            "owned",
+            [GOOD_A],
+            binding={"source_name": "shared_folder", "field_values": {}, "remote_ref": "ref-1", "sync_error": None},
+        )
+
+    def test_an_owner_has_nothing_to_pull(self, client, owned):
+        from vtsearch.errors import DETECTOR_SHARED
+
+        before = _detector_path("owned").read_bytes()
+        resp = client.post(f"/api/detectors/{owned['id']}/labelset-source/sync")
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["error_code"] == DETECTOR_SHARED
+        assert "pushed to its shared copy" in body["message"]
+        assert _detector_path("owned").read_bytes() == before
+
+    def test_a_source_that_is_not_active_answers_with_the_note(self, client, owned):
+        from vtsearch.errors import SHARING_UNAVAILABLE
+
+        settings.set_detector_sharing_source(None)
+        resp = client.post(f"/api/detectors/{owned['id']}/labelset-source/sync")
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["error_code"] == SHARING_UNAVAILABLE
+        assert "sharing is off" in body["message"]
+
+
 class TestRecoveryOnLoad:
     def test_recreating_a_lost_detector_restores_its_labels_on_load(self, client, tmp_path):
         """The server lost the detector; its source kept the labels.  Re-create, load, done."""
