@@ -6,6 +6,31 @@ labels kept at that source as well as in its own JSON file, so the copy
 outside the server is current rather than only as fresh as the last time
 someone remembered to export (#4913).
 
+**Roles.**  One engine - one slot and one pace per detector - serves plain
+bindings and detector sharing alike; what a push or a pull does depends on
+the detector's registry entry (:func:`sync_role`):
+
+* :data:`SYNC_ROLE_PLAIN` - a binding without a ``remote_ref``, or the
+  inherited deployment default: the paced ``save`` and the merging pulls
+  described below.
+* :data:`SYNC_ROLE_OWNER` - a ``local`` or ``forked`` detector whose
+  binding names a shared container (a ``remote_ref``) at the active sharing
+  source.  The push is ``share_save``: the container is *rewritten* to hold
+  exactly the file's labelset, with its manifest.  Nothing is ever pulled
+  into the file, not even before the first push - merging the container in
+  would import exactly the foreign records tamper detection exists to
+  catch; the owner's file is authoritative.  Each push's outcome lands on
+  the binding: ``sync_error`` (a failure's message, cleared by the next
+  success) and ``last_synced`` (moved by a success only), so a failure
+  outlives a reload, which a toast would not.
+* :data:`SYNC_ROLE_LINKED` - a received, read-only mirror: never pushed,
+  never pulled.  Its file changes only through a refresh, and that write is
+  the pull, so it schedules nothing.
+* :data:`SYNC_ROLE_UNAVAILABLE` - a sharing binding whose source is not the
+  active one, or not installed: nothing, logged once per detector.  It is
+  never pointed at a different source.
+* :data:`SYNC_ROLE_NONE` - nothing to sync with.
+
 **Push** (:func:`schedule_labelset_push`).  Every write of a detector JSON
 file schedules one - :mod:`vtscore.detectors.store` calls
 :func:`note_detector_written` - so votes, label imports, corrections and
@@ -25,17 +50,19 @@ per detector:
 * never sooner than ``_DEBOUNCE_DELAY`` after the change that scheduled it,
   so a burst inside that window is one push;
 * a push whose payload matches what the source is known to hold is skipped;
-* a detector's first push in a process pulls first (see below), so a push
-  never overwrites labels only the source held - the backup of a detector this
-  server lost - and a source that cannot be read is not pushed to at all.
+* a plain detector's first push in a process pulls first (see below), so a
+  push never overwrites labels only the source held - the backup of a
+  detector this server lost - and a source that cannot be read is not pushed
+  to at all.
 
-A failed push is logged and leaves the source as it was; the next change
-schedules another.  :func:`flush_pending_label_syncs` lands every pending push
+A failed push is logged and leaves the source as it was (an owner's is also
+recorded on its binding); the next change schedules another.  :func:`flush_pending_label_syncs` lands every pending push
 now, ignoring the pace - tests use it, and an ``atexit`` hook calls it so the
 newest labels reach the source on a normal shutdown (a SIGKILL still loses
 whatever was waiting).
 
-**Pull** (:func:`sync_from_labelset_source`, :func:`reconcile_labelset_source`).
+**Pull** (:func:`sync_from_labelset_source`, :func:`reconcile_labelset_source`;
+plain bindings only - both return early for every other role).
 Reads the source and **merges** its labels into the detector file: labels the
 source has and the file lacks are added, and when both hold one item with
 different labels the caller's ``prefer`` decides.  A pull never removes a
@@ -52,24 +79,46 @@ import atexit
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.labels.binding import ResolvedLabelsetSource
+    from vtscore.labels.sharing import ActiveSharingSource
     from vtscore.state.core import DetectorContext
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "SYNC_ROLES",
+    "SYNC_ROLE_LINKED",
+    "SYNC_ROLE_NONE",
+    "SYNC_ROLE_OWNER",
+    "SYNC_ROLE_PLAIN",
+    "SYNC_ROLE_UNAVAILABLE",
     "flush_pending_label_syncs",
     "note_detector_written",
     "reconcile_labelset_source",
     "reset_label_sync_for_tests",
     "schedule_labelset_push",
     "sync_from_labelset_source",
+    "sync_role",
     "sync_to_labelset_source",
 ]
+
+#: :func:`sync_role` of a detector that syncs nowhere.
+SYNC_ROLE_NONE = "none"
+#: An ordinary binding (or the inherited default): paced ``save``, merging pulls.
+SYNC_ROLE_PLAIN = "plain"
+#: The owner of a shared container at the active sharing source: paced ``share_save``, no pull.
+SYNC_ROLE_OWNER = "owner"
+#: A received, read-only mirror: never pushed, never pulled.
+SYNC_ROLE_LINKED = "linked"
+#: A sharing binding whose source is not the active one, or not installed: nothing.
+SYNC_ROLE_UNAVAILABLE = "unavailable"
+#: Every :func:`sync_role`.
+SYNC_ROLES = frozenset({SYNC_ROLE_NONE, SYNC_ROLE_PLAIN, SYNC_ROLE_OWNER, SYNC_ROLE_LINKED, SYNC_ROLE_UNAVAILABLE})
 
 # The shortest wait between a change and the push it schedules.  200ms
 # coalesces a rapid voting burst into one push while staying short enough that
@@ -96,13 +145,21 @@ class _Slot:
     last_started: float | None = None
 
 
-# Guards ``_slots``, every slot's fields, and ``_last_synced``.  A leaf lock:
-# nothing is called out to while it is held except ``Timer.start``.
+# Guards ``_slots``, every slot's fields, ``_last_synced``, ``_last_shared``
+# and ``_unavailable_noted``.  A leaf lock: nothing is called out to while it
+# is held except ``Timer.start``.
 _slots_cv = threading.Condition()
 _slots: dict[str, _Slot] = {}
-# Detector name → digest of the payload the source is known to hold (the last
-# push, or the last pull).  A push of the same payload is skipped.
+# Detector name → digest of the payload a plain source is known to hold (the
+# last push, or the last pull).  A push of the same payload is skipped.
 _last_synced: dict[str, str] = {}
+# Detector name → (source name, remote_ref, digest) of an owner's last
+# successful container push.  Kept apart from ``_last_synced`` so a detector
+# that moves from a plain binding to a container (or to another container) is
+# never skipped on the strength of what a different target holds.
+_last_shared: dict[str, tuple[str, str, str]] = {}
+# Ids of detectors whose sharing binding was already logged as unavailable.
+_unavailable_noted: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +235,106 @@ def _push_interval() -> float:
 
 
 # ---------------------------------------------------------------------------
+# Roles
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Target:
+    """Where a detector's sync goes, resolved: its role and what that role needs."""
+
+    role: str
+    #: :data:`SYNC_ROLE_PLAIN`: the resolved binding.
+    resolved: ResolvedLabelsetSource | None = None
+    #: :data:`SYNC_ROLE_OWNER`: the active sharing source, the container, and
+    #: the binding's own field values with the setting's fixed ones laid over.
+    active: ActiveSharingSource | None = None
+    remote_ref: str = ""
+    field_values: dict[str, Any] = field(default_factory=dict)
+    missing_fields: tuple[str, ...] = ()
+
+    @property
+    def ready(self) -> bool:
+        """Whether there is something to push to, with every required field filled in."""
+        if self.role == SYNC_ROLE_PLAIN:
+            return self.resolved is not None and self.resolved.ready
+        return self.role == SYNC_ROLE_OWNER and not self.missing_fields
+
+
+def _target_for(entry: dict[str, Any] | None, detector_id: str = "") -> _Target:
+    """Resolve the role of the detector with registry *entry* (see :func:`sync_role`)."""
+    from vtscore.detectors.registry import is_linked  # noqa: PLC0415
+    from vtscore.labels.binding import (  # noqa: PLC0415
+        _missing_required,
+        binding_matches_active_source,
+        resolve_labelset_source,
+        sharing_binding,
+    )
+
+    if is_linked(entry):
+        return _Target(SYNC_ROLE_LINKED)
+    binding = sharing_binding(entry)
+    if binding is not None:
+        from vtscore.labels.sharing import _field_values, active_sharing_source  # noqa: PLC0415
+
+        active = active_sharing_source() if binding_matches_active_source(entry) else None
+        if active is None:
+            return _Target(SYNC_ROLE_UNAVAILABLE)
+        values = _field_values(binding, active)
+        return _Target(
+            SYNC_ROLE_OWNER,
+            active=active,
+            remote_ref=str(binding["remote_ref"]),
+            field_values=values,
+            missing_fields=_missing_required(active.source, values),
+        )
+    resolved = resolve_labelset_source(entry, detector_id=detector_id)
+    if resolved is None:
+        return _Target(SYNC_ROLE_NONE)
+    return _Target(SYNC_ROLE_PLAIN, resolved=resolved)
+
+
+def sync_role(entry: dict[str, Any] | None, *, detector_id: str = "") -> str:
+    """What the sync engine does for the detector whose registry entry is *entry*: one of :data:`SYNC_ROLES`.
+
+    In order: a ``linked`` entry is :data:`SYNC_ROLE_LINKED` whatever its
+    binding; an entry whose binding carries a ``remote_ref`` is
+    :data:`SYNC_ROLE_OWNER` when that binding's source is the active sharing
+    source (:func:`~vtscore.labels.binding.binding_matches_active_source`) and
+    :data:`SYNC_ROLE_UNAVAILABLE` otherwise
+    (:func:`~vtscore.labels.binding.sharing_note` says why); anything else is
+    :data:`SYNC_ROLE_PLAIN` when
+    :func:`~vtscore.labels.binding.resolve_labelset_source` finds a source,
+    else :data:`SYNC_ROLE_NONE`.  The module docstring says what each role's
+    push and pull do.
+
+    Args:
+        entry: The detector's registry entry, or ``None`` for a detector with
+            no entry (only an in-memory context binding can make that one
+            plain).
+        detector_id: The detector's id, for that context binding; defaults to
+            ``entry["id"]``.
+    """
+    return _target_for(entry, detector_id).role
+
+
+def _note_unavailable(entry: dict[str, Any] | None) -> None:
+    """Log, once per detector, that its sharing binding is not in use and why."""
+    from vtscore.labels.binding import sharing_note  # noqa: PLC0415
+
+    key = str((entry or {}).get("id") or (entry or {}).get("name") or "")
+    with _slots_cv:
+        if key in _unavailable_noted:
+            return
+        _unavailable_noted.add(key)
+    logger.warning(
+        "Not syncing detector %r: %s",
+        (entry or {}).get("name", ""),
+        sharing_note(entry) or "its sharing source is not available",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Push scheduling
 # ---------------------------------------------------------------------------
 
@@ -200,21 +357,28 @@ def _arm_locked(name: str, slot: _Slot, delay: float) -> None:
 def schedule_labelset_push(detector_name: str, *, detector_id: str = "") -> None:
     """Schedule a paced push of *detector_name*'s labels to its labelset source.
 
-    Returns immediately.  A no-op when the detector syncs nowhere, or when its
-    source is missing a required field value.  Otherwise the push runs on a
-    background timer as soon as the pace allows (see the module docstring);
-    calls made while one is already scheduled or in flight are folded into it.
+    Returns immediately.  A no-op when the detector syncs nowhere, is a
+    received (linked) detector, has a sharing binding whose source is not the
+    active one (logged once per detector), or its source is missing a
+    required field value.  Otherwise the push - a plain ``save``, or an
+    owner's ``share_save`` (see :func:`sync_role`) - runs on a background
+    timer as soon as the pace allows (see the module docstring); calls made
+    while one is already scheduled or in flight are folded into it.
     """
     if not detector_name:
         return
-    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
-
     entry, detector_id = _identify(detector_name, detector_id)
-    resolved = resolve_labelset_source(entry, detector_id=detector_id)
-    if resolved is None or not resolved.ready:
+    target = _target_for(entry, detector_id)
+    if target.role == SYNC_ROLE_UNAVAILABLE:
+        _note_unavailable(entry)
+        return
+    if not target.ready:
         return
     interval = _push_interval()
     with _slots_cv:
+        if target.role == SYNC_ROLE_OWNER and entry is not None:
+            # In use again: a later lapse is worth logging again.
+            _unavailable_noted.discard(str(entry.get("id") or ""))
         slot = _slots.setdefault(detector_name, _Slot())
         if slot.in_flight:
             slot.dirty = True
@@ -229,9 +393,18 @@ def schedule_labelset_push(detector_name: str, *, detector_id: str = "") -> None
 def note_detector_written(data: dict[str, Any]) -> None:
     """Hook for :mod:`vtscore.detectors.store`: a detector file was (re)written.
 
-    Never raises - losing a sync must not fail the write that triggered it.
+    A write inside :func:`~vtscore.detectors.store.allow_linked_write` - a
+    received detector's mirror being received or refreshed - schedules
+    nothing: that write *is* the pull.  Checked here rather than left to the
+    role, because a receive writes the file before the entry that makes it
+    ``linked`` exists.  Never raises - losing a sync must not fail the write
+    that triggered it.
     """
     try:
+        from vtscore.detectors.store import _in_linked_write  # noqa: PLC0415
+
+        if _in_linked_write():
+            return
         name = data.get("name") if isinstance(data, dict) else None
         if isinstance(name, str) and name:
             schedule_labelset_push(name)
@@ -305,16 +478,28 @@ def _push_payload(data: dict[str, Any]) -> LabelSet:
 
 
 def _push_detector(name: str) -> None:
-    """Push the detector file's labelset to its source, synchronously."""
+    """Push the detector file's labelset wherever its role sends it, synchronously.
+
+    The role is resolved again here, when the push runs, not when it was
+    scheduled: an entry that was received, shared or unshared in between is
+    pushed as it is now.
+    """
+    entry, detector_id = _identify(name)
+    target = _target_for(entry, detector_id)
+    if target.role == SYNC_ROLE_PLAIN and target.resolved is not None:
+        _push_plain(name, entry, detector_id, target.resolved)
+    elif target.role == SYNC_ROLE_OWNER and entry is not None:
+        _push_container(name, entry, detector_id, target)
+    elif target.role == SYNC_ROLE_UNAVAILABLE:
+        _note_unavailable(entry)
+
+
+def _push_plain(name: str, entry: dict[str, Any] | None, detector_id: str, resolved: ResolvedLabelsetSource) -> None:
+    """A plain binding's push: pull first once per process, then ``save`` unless the source holds it already."""
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
-    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
     from vtscore.state.core import override_detector_context  # noqa: PLC0415
     from vtscore.state.current_user import thread_user  # noqa: PLC0415
 
-    entry, detector_id = _identify(name)
-    resolved = resolve_labelset_source(entry, detector_id=detector_id)
-    if resolved is None:
-        return
     if not resolved.ready:
         logger.warning(
             "Not syncing detector %r to %s: missing %s", name, resolved.source_name, ", ".join(resolved.missing_fields)
@@ -355,6 +540,74 @@ def _push_detector(name: str) -> None:
         _last_synced[name] = digest
 
 
+def _push_container(name: str, entry: dict[str, Any], detector_id: str, target: _Target) -> None:
+    """An owner's push: rewrite its container to hold exactly the file's labelset, and record how it went.
+
+    No pull first and no merge: the owner's file is authoritative, and a
+    record a recipient added to the container is meant to be *gone* after
+    this push, not imported.  The payload is the plain push's
+    (:func:`_push_payload`) with its manifest (:func:`~vtscore.labels.sharing.share_payload`).
+    """
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.labels.sharing import SharingError, share_payload  # noqa: PLC0415
+    from vtscore.state.core import override_detector_context  # noqa: PLC0415
+    from vtscore.state.current_user import thread_user  # noqa: PLC0415
+
+    active = target.active
+    if active is None:
+        return
+    if target.missing_fields:
+        logger.warning(
+            "Not pushing detector %r to its shared copy at %s: missing %s",
+            name,
+            active.source_name,
+            ", ".join(target.missing_fields),
+        )
+        return
+    data = _read_detector(_detector_path(name))
+    if data is None:
+        return
+    labelset, meta = share_payload(data)
+    sent = (active.source_name, target.remote_ref, meta.manifest.digest)
+    with _slots_cv:
+        if _last_shared.get(name) == sent:
+            return
+    try:
+        # As the detector's creator, whoever voted: the source resolves the
+        # caller itself, and a container only its owner may rewrite.
+        with thread_user(_owner(entry)), override_detector_context(_template_context(name, detector_id)):
+            active.source.share_save(target.remote_ref, labelset, meta, dict(target.field_values))
+    except Exception as exc:  # noqa: BLE001 - a sync target is a side channel; the file is the record
+        if isinstance(exc, SharingError):
+            logger.warning("Failed to push detector %r to its shared copy at %s: %s", name, active.source_name, exc)
+        else:
+            logger.exception("Failed to push detector %r to its shared copy at %s", name, active.source_name)
+        _record_push_outcome(entry, target.remote_ref, error=str(exc) or type(exc).__name__)
+        return
+    with _slots_cv:
+        _last_shared[name] = sent
+    _record_push_outcome(entry, target.remote_ref, error=None)
+
+
+def _record_push_outcome(entry: dict[str, Any], remote_ref: str, *, error: str | None) -> None:
+    """Record an owner push's outcome on the entry's binding: ``sync_error``, and ``last_synced`` on success.
+
+    Merged into the binding as it is on disk now
+    (:func:`~vtscore.detectors.registry.update_sharing_binding`), so a rename
+    or an unshare that landed during the push is not undone.  A failure to
+    record is logged; the push itself already happened (or did not).
+    """
+    from vtscore.detectors.registry import update_sharing_binding  # noqa: PLC0415
+
+    changes: dict[str, Any] = {"sync_error": error}
+    if error is None:
+        changes["last_synced"] = time.time()
+    try:
+        update_sharing_binding(str(entry.get("id") or ""), remote_ref, **changes)
+    except Exception:  # noqa: BLE001 - bookkeeping must not fail the push thread
+        logger.exception("Failed to record the outcome of detector %r's push", entry.get("name", ""))
+
+
 def _flush(timeout: float | None) -> None:
     deadline = None if timeout is None else time.monotonic() + timeout
     while True:
@@ -382,7 +635,9 @@ def _flush(timeout: float | None) -> None:
 def flush_pending_label_syncs() -> None:
     """Run every scheduled push now, ignoring the pace, and wait for in-flight ones.
 
-    Used by tests (to assert on what the source holds) and at interpreter exit.
+    Covers every role that pushes - a plain ``save`` and an owner's container
+    push alike.  Used by tests (to assert on what the source holds) and at
+    interpreter exit.
     """
     _flush(None)
 
@@ -403,6 +658,8 @@ def reset_label_sync_for_tests() -> None:
                 slot.timer.cancel()
         _slots.clear()
         _last_synced.clear()
+        _last_shared.clear()
+        _unavailable_noted.clear()
 
 
 # Land the newest labels at their sources on a normal exit (Ctrl-C, gunicorn
@@ -466,20 +723,21 @@ def _pull(name: str, detector_id: str, *, prefer: str) -> tuple[LabelSet | None,
     """Read *name*'s source and merge it into the detector file.
 
     Returns ``(what the source held, labels added or changed)``; the first is
-    ``None`` when the detector syncs nowhere, its source is missing a field,
-    or the read failed.
+    ``None`` when the detector syncs nowhere, is not a plain binding (only a
+    plain binding is ever pulled - see :func:`sync_role`), its source is
+    missing a field, or the read failed.
     """
     from vtscore.detectors.input_spec import apply_detector_meta  # noqa: PLC0415
     from vtscore.detectors.label_sync import label_sync_write_lock  # noqa: PLC0415
     from vtscore.detectors.registry import update_detector  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector  # noqa: PLC0415
-    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
     from vtscore.state.core import override_detector_context  # noqa: PLC0415
     from vtscore.state.current_user import thread_user  # noqa: PLC0415
 
     entry, detector_id = _identify(name, detector_id)
-    resolved = resolve_labelset_source(entry, detector_id=detector_id)
-    if resolved is None or not resolved.ready or resolved.source is None:
+    target = _target_for(entry, detector_id)
+    resolved = target.resolved
+    if target.role != SYNC_ROLE_PLAIN or resolved is None or not resolved.ready or resolved.source is None:
         return None, 0
     try:
         with thread_user(_owner(entry)), override_detector_context(_template_context(name, detector_id)):
@@ -549,10 +807,16 @@ def sync_from_labelset_source(
         detector_id: The detector to sync; the active detector when omitted.
         prefer: ``"source"`` or ``"local"`` - which label wins a disagreement.
 
+    Only a plain binding is pulled.  An owner's container is never pulled
+    into its file (the file is authoritative), a received detector changes
+    only through a refresh, and a sharing binding whose source is not active
+    is left alone; for each of those this returns ``None`` at once, touching
+    nothing.  A route tells them apart with :func:`sync_role`.
+
     Returns:
         The label dicts the source held, or ``None`` when the detector syncs
-        nowhere, its source is missing a field value, the read failed, or the
-        source holds nothing.
+        nowhere, is not a plain binding, its source is missing a field value,
+        the read failed, or the source holds nothing.
     """
     if prefer not in ("source", "local"):
         raise ValueError(f"prefer must be 'source' or 'local', got {prefer!r}")
@@ -564,6 +828,8 @@ def sync_from_labelset_source(
     entry = get_detector(did) if did else None
     name = (entry or {}).get("name") or (ctx.name if ctx is not None else "")
     if not name:
+        return None
+    if sync_role(entry, detector_id=did) != SYNC_ROLE_PLAIN:
         return None
 
     remote, changes = _pull(name, did, prefer=prefer)
@@ -590,10 +856,21 @@ def reconcile_labelset_source(detector_name: str, *, detector_id: str = "") -> i
     data comes back: re-create it under the same name and the pull restores
     the labels its source kept.  Never raises.
 
+    Does nothing at all for every role but a plain binding
+    (:func:`sync_role`): an owner's file is authoritative and only ever pushed
+    as it changes, a received detector is levelled by a refresh, and a
+    sharing binding whose source is not active is left alone.
+
     Returns:
         How many labels the pull added or changed.
     """
     try:
+        entry, did = _identify(detector_name, detector_id)
+        role = sync_role(entry, detector_id=did)
+        if role == SYNC_ROLE_UNAVAILABLE:
+            _note_unavailable(entry)
+        if role != SYNC_ROLE_PLAIN:
+            return 0
         _remote, changes = _pull(detector_name, detector_id, prefer="local")
         schedule_labelset_push(detector_name, detector_id=detector_id)
         return changes
