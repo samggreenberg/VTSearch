@@ -165,7 +165,8 @@ class TestBuildingItForADataset:
         assert len(calls) == 1
         # New media: built again.
         medias[500] = _media(500, medias[0]["embeddings"][_EMBEDDER])
-        assert domain_summary_for(entry["id"], medias)["n_reference"] == 201
+        rebuilt = domain_summary_for(entry["id"], medias)
+        assert rebuilt is not None and rebuilt["n_reference"] == 201
         assert len(calls) == 2
 
     def test_a_rename_relabels_the_reused_build(self):
@@ -175,7 +176,8 @@ class TestBuildingItForADataset:
         entry = _registered(medias)
         domain_summary_for(entry["id"], medias)
         rename_dataset(entry["id"], "B")
-        assert domain_summary_for(entry["id"], medias)["dataset_name"] == "B"
+        renamed = domain_summary_for(entry["id"], medias)
+        assert renamed is not None and renamed["dataset_name"] == "B"
 
     def test_an_unregistered_dataset_has_no_embedder_to_stamp(self):
         assert domain_summary_for("no-such-dataset", _medias()) is None
