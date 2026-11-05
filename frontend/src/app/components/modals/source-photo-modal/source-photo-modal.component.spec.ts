@@ -2,8 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 
 import { SourcePhotoModalComponent } from './source-photo-modal.component';
-import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
+import { ImageViewerComponent, type OutlineBox } from '../../center-panel/image-viewer/image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
+import type { SourcePhotoRequest } from '../../../services/source-photo.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { DATASET_OVERRIDE } from '../../../interceptors/active-context.interceptor';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
@@ -62,6 +63,15 @@ describe('SourcePhotoModalComponent', () => {
     await settleResource();
   }
 
+  /** Open the overlay afresh on *request*, dropping the one `beforeEach` opened. */
+  async function reopen(request: SourcePhotoRequest): Promise<void> {
+    fixture.destroy();
+    httpMock.match('/api/medias/4/source');
+    fixture = TestBed.createComponent(SourcePhotoModalComponent);
+    fixture.componentRef.setInput('request', request);
+    await settleResource();
+  }
+
   async function answerPhoto(): Promise<void> {
     const req = httpMock.expectOne('/api/medias/batch');
     expect(req.request.body).toEqual({ ids: [2] });
@@ -84,6 +94,36 @@ describe('SourcePhotoModalComponent', () => {
     expect(viewer.imageSrc()).toBe('/api/medias/2/image?dataset_id=photos');
     expect(text()).toContain('Photos – Image');
     expect(text()).toContain('b.jpg');
+  });
+
+  // Co-face Browse (#5588): a photo two people share, from the People view.
+  it("passes a request's boxes to the viewer, in place of the lookup's one", async () => {
+    const boxes: OutlineBox[] = [
+      { box: [0.1, 0.2, 0.3, 0.4], role: 'primary' },
+      { box: [0.5, 0.2, 0.7, 0.4], role: 'secondary' },
+      { box: [0.8, 0.1, 0.9, 0.3], role: 'other' },
+    ];
+    await reopen({ mediaId: 4, fromName: 'Photos – Face', boxes });
+    await answerSource({ dataset_id: 'photos', media_id: 2, box: [0.1, 0.2, 0.3, 0.4] });
+    await answerPhoto();
+
+    const viewer = fixture.debugElement.query((d) => d.componentInstance instanceof ImageViewerComponent)
+      .componentInstance as ImageViewerComponent;
+    expect(viewer.outlineBoxes()).toEqual(boxes);
+    // The lookup's box is the focus person's face, already in the list.
+    expect(viewer.outlineBox()).toBeNull();
+    expect(text()).not.toContain('no box was recorded');
+  });
+
+  it('outlines the one face as ever when the request brings no boxes, or an empty list', async () => {
+    await reopen({ mediaId: 4, fromName: 'Photos – Face', boxes: [] });
+    await answerSource({ dataset_id: 'photos', media_id: 2, box: [0.1, 0.2, 0.3, 0.4] });
+    await answerPhoto();
+
+    const viewer = fixture.debugElement.query((d) => d.componentInstance instanceof ImageViewerComponent)
+      .componentInstance as ImageViewerComponent;
+    expect(viewer.outlineBoxes()).toBeNull();
+    expect(viewer.outlineBox()).toEqual([0.1, 0.2, 0.3, 0.4]);
   });
 
   it("gives the photo the centre panel's toolbar and zoom/rotate keys (#5227)", async () => {
