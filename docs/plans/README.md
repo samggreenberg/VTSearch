@@ -50,6 +50,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 ## Plugins and I/O
 
 - [`exporter-payload-contract.md`](exporter-payload-contract.md)
+- [`detector-sharing.md`](detector-sharing.md)
 
 ## Cross-cutting audits
 
