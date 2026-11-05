@@ -718,7 +718,11 @@ def receive_container(remote_ref: str, *, foreign: str = FOREIGN_ABORT) -> dict[
         "embedder_type": "",
         "labelset": _LabelSet(elements).to_dict(),
     }
-    apply_detector_meta(data, dict(container.detector_meta))
+    apply_detector_meta(
+        data,
+        dict(container.detector_meta),
+        labels_held=sum(1 for el in elements if el.label in ("good", "bad")),
+    )
     path = _detector_path(name)
     with allow_linked_write():
         _write_detector(path, data)
@@ -799,7 +803,11 @@ def refresh_linked_detector(detector_id: str, *, foreign: str = FOREIGN_ABORT) -
         data = _read_detector(path) or {"name": entry["name"], "media_type": entry.get("media_type", "")}
         added, changed, removed = _diff(_LabelSet.from_dict(data.get("labelset") or {}), new)
         data["labelset"] = new.to_dict()
-        apply_detector_meta(data, dict(container.detector_meta))
+        apply_detector_meta(
+            data,
+            dict(container.detector_meta),
+            labels_held=sum(1 for el in new.elements if el.label in ("good", "bad")),
+        )
         _write_detector(path, data)
     _update_binding(
         detector_id,

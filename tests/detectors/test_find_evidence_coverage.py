@@ -95,7 +95,9 @@ class TestTheTrainingBaseline:
         """Make the training dataset another one, as on a dataset the detector meets after a handoff."""
         import vtsearch.domain_overlap as domain_overlap
 
-        monkeypatch.setattr(domain_overlap, "infer_training_reference", lambda _labelset, _active: ("elsewhere", {}))
+        monkeypatch.setattr(
+            domain_overlap, "infer_training_reference", lambda _labelset, _active, **_kw: ("elsewhere", {})
+        )
 
     def test_on_its_training_dataset_the_baseline_is_drawn_and_recorded(self, client, detector_path):
         data = client.get("/api/find/evidence-coverage").get_json()

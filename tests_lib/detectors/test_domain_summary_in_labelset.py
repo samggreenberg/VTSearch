@@ -8,6 +8,8 @@ receiving detector keeps it.  Pinned here, at the library tier:
 - the export block carries it, and the #5131 strip lets it through;
 - the import keeps it only when the detector has no training dataset of its
   own, or its own is the same dataset, and never merges two;
+- the import records a pointer beside it, holding the labels that came with
+  it, unless the detector already has one (#5572);
 - the sync push sends it and the pull keeps it;
 - label importers hand the block over (``run_labelset``), the JSON importer
   and exporter included, and an importer that returns labels alone still works.
@@ -141,12 +143,32 @@ class TestTheImportKeepsIt:
         data = {TRAINING_DATASET_KEY: training_dataset_record("ds-a", "A", 5)}
         assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: _summary("ds-a")}) is True
 
+    def test_the_labels_that_came_with_it_are_recorded_as_its_pointer(self):
+        """#5572: the summarised dataset holds the imported labels, and no more of the detector's."""
+        summary = _summary("ds-a")
+        data: dict = {"name": "copy"}
+        assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: summary}, labels_held=2) is True
+        assert data[TRAINING_DATASET_KEY] == training_dataset_record("ds-a", "A", 2)
+        assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: summary}, labels_held=2) is False
+
+    def test_a_pointer_already_there_keeps_its_count(self):
+        """The detector's own record: a sync source sending back every label must not inflate it."""
+        data = {TRAINING_DATASET_KEY: training_dataset_record("ds-a", "Mine", 5), DOMAIN_SUMMARY_KEY: _summary("ds-a")}
+        assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: _summary("ds-a")}, labels_held=40) is False
+        assert data[TRAINING_DATASET_KEY] == training_dataset_record("ds-a", "Mine", 5)
+
+    def test_a_refused_summary_records_no_pointer(self):
+        data = {DOMAIN_SUMMARY_KEY: _summary("ds-own", dataset="own")}
+        assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: _summary("ds-a")}, labels_held=2) is False
+        assert TRAINING_DATASET_KEY not in data
+
     def test_nothing_missing_or_malformed_is_stored(self):
         data: dict = {}
         assert adopt_domain_summary(data, None) is False
         assert adopt_domain_summary(data, {}) is False
         assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: "x"}) is False
         assert adopt_domain_summary(data, {DOMAIN_SUMMARY_KEY: {**_summary(), "calibration": []}}) is False
+        assert adopt_domain_summary(data, None, labels_held=3) is False
         assert data == {}
 
     def test_apply_detector_meta_keeps_it_beside_the_input_spec(self):
@@ -157,6 +179,9 @@ class TestTheImportKeepsIt:
         assert data["input_spec"] == {"clipper": "sound_tiling"}
         assert stored_domain_summary(data) == summary
         assert apply_detector_meta(data, meta) is False
+        assert TRAINING_DATASET_KEY not in data
+        assert apply_detector_meta(data, meta, labels_held=2) is True
+        assert data[TRAINING_DATASET_KEY] == training_dataset_record("ds-a", "A", 2)
 
     def test_on_file_it_writes_once(self, tmp_path):
         path = tmp_path / "copy.json"

@@ -497,7 +497,11 @@ def _pull(name: str, detector_id: str, *, prefer: str) -> tuple[LabelSet | None,
                 # The meta's input_spec (and media_type, when the file has
                 # none) comes across; its threshold never does - the receiver
                 # retrains and derives its own.
-                changed = apply_detector_meta(data, remote.detector_meta)
+                changed = apply_detector_meta(
+                    data,
+                    remote.detector_meta,
+                    labels_held=sum(1 for el in remote.elements if el.label in ("good", "bad")),
+                )
                 from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
 
                 local = LabelSet.from_dict(data.get("labelset") or {})

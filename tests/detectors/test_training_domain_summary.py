@@ -16,7 +16,9 @@ through Tune's route:
   summary steps in when its saved file is gone;
 - the summary travels in an exported labelset without the pointer (#5571):
   Export → JSON file → New detector › Trained gives the receiver the same
-  report the sender had, and a summary drawn in another embedder refuses.
+  report the sender had, and a summary drawn in another embedder refuses;
+- the dataset that import copies the labels' media into is not taken for the
+  training dataset, by the check or by the Evidence chip's baseline (#5572).
 """
 
 from __future__ import annotations
@@ -412,7 +414,12 @@ class TestTheHandoffByLabelset:
 
         received = self._import_as_new(client, shipped_path, "mammal-copy")
         assert stored_domain_summary(received) == summary
-        assert TRAINING_DATASET_KEY not in received
+        # The receiver's own pointer, at the labels that came with the summary (#5572).
+        assert received[TRAINING_DATASET_KEY] == {
+            "dataset_id": "elsewhere-photos",
+            "dataset_name": "photos",
+            "labels_held": 10,
+        }
 
         on_the_receiver = _autofind_check(target_ctx, "mammal-copy")
         assert on_the_sender["reason"] == "" and on_the_receiver["reason"] == ""
@@ -513,3 +520,240 @@ class TestTheHandoffByLabelset:
         assert res.status_code == 200, res.get_json()
         assert res.get_json()["applied"] == 10
         assert stored_domain_summary(_read_detector(_detector_path("blank"))) == summary
+
+
+class TestTheDatasetTheImportLandedIn:
+    """#5572: an import that copies the labels' media into the active dataset does not make it the training one.
+
+    New detector › Trained, run with a dataset active, pulls the labelled
+    media into it (``_start_imported_labelset_ingest``), so that dataset holds
+    every label.  The detector records what was copied in, and a label on a
+    copied-in media is no evidence of where it was cast.  The imported summary
+    is weighed at the labels that came with it, so the receiver's own votes
+    there outweigh it once they outnumber those.  The Evidence chip's baseline
+    picks its training dataset by the same rule, so a learned sort on a
+    dataset holding a minority of the labels cannot move the pointer there and
+    replace the summary.
+    """
+
+    @staticmethod
+    def _sender(client, tmp_path, photos: dict[int, dict]) -> tuple[Path, LabelSet]:
+        """Steps 1-2: ``mammal``, trained on another instance's ``photos``, exported to a Server JSON File."""
+        training, summary = _from_another_instance(photos)
+        labelset = _labels(photos, range(10))
+        source_id = _detector_on_disk("mammal", labelset, training=training, summary=summary)
+        return TestTheHandoffByLabelset._export(client, tmp_path, source_id, labelset), labelset
+
+    @staticmethod
+    def _copy_in(monkeypatch, photos: dict[int, dict], target_ctx: DatasetContext) -> list[dict]:
+        """Land the ingest at once: each missing label's media, fetched from its origin, joins *target_ctx*."""
+        import vtsearch.routes.detectors.registry.listing as listing_mod
+
+        by_name = {m["origin_name"]: m for m in photos.values()}
+        copied: list[dict] = []
+
+        def ingest(missing, _entry):
+            for entry in missing:
+                cid = 1000 + len(copied)
+                target_ctx.medias[cid] = {**by_name[entry["origin_name"]], "id": cid}
+                copied.append(entry)
+            return ""
+
+        monkeypatch.setattr(listing_mod, "_start_imported_labelset_ingest", ingest)
+        return copied
+
+    @staticmethod
+    def _import_on(client, path: Path, name: str, dataset_entry: dict) -> dict:
+        """Step 3: New detector › Trained from that file, with *dataset_entry* active."""
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": name, "filepath": str(path)},
+            headers={"X-Dataset-Id": dataset_entry["id"]},
+        )
+        assert res.status_code == 201, res.get_json()
+        return _read_detector(_detector_path(name)) or {}
+
+    @staticmethod
+    def _vote_on(name: str, medias: dict[int, dict], ids) -> None:
+        """The receiver's own votes on *medias*, landed in the detector's file."""
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        path = _detector_path(name)
+        data = _read_detector(path) or {}
+        own = _labels(medias, ids)
+        data["labelset"] = LabelSet(LabelSet.from_dict(data["labelset"]).elements + own.elements).to_dict()
+        _write_detector(path, data)
+
+    @staticmethod
+    def _home(name: str, active_ctx: DatasetContext) -> dict:
+        """Where the Evidence chip would draw its baseline, and record the pointer and summary (#5089, #5501)."""
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.detectors.store import _detector_path, _read_detector
+        from vtsearch.routes.detectors.scoring import _evidence_baseline_home
+
+        entry = find_by_name(name)
+        assert entry is not None
+        set_thread_dataset_context(active_ctx)
+        labelset = LabelSet.from_dict((_read_detector(_detector_path(name)) or {})["labelset"])
+        home = _evidence_baseline_home(DetectorContext(entry["id"], name=name), labelset, _EMBEDDER, 64)
+        assert home is not None
+        return home
+
+    def test_the_two_instance_case_is_checked_against_the_summary(self, client, monkeypatch, tmp_path):
+        """Steps 1-4 of #5572: on ``screens``, which the import copied the labels into, the check still runs."""
+        from vtscore.detectors.training_domain import TRAINING_DATASET_KEY, recorded_ingests, training_dataset_record
+
+        _stub_scoring(monkeypatch)
+        photos = _medias("photos", 200)
+        _fetchable(monkeypatch, photos)
+        shipped, _labelset = self._sender(client, tmp_path, photos)
+        screens_entry, screens_ctx = _loaded("screens", _medias("screens", 80, shifted=True))
+        copied = self._copy_in(monkeypatch, photos, screens_ctx)
+
+        received = self._import_on(client, shipped, "mammal-copy", screens_entry)
+
+        assert len(copied) == 10, "the import pulls every labelled media into screens"
+        assert {dataset_id: len(entries) for dataset_id, entries in recorded_ingests(received).items()} == {
+            screens_entry["id"]: 10
+        }
+        assert received[TRAINING_DATASET_KEY] == training_dataset_record("elsewhere-photos", "photos", 10)
+        check = _autofind_check(screens_ctx, "mammal-copy")
+        assert check["reason"] == ""
+        assert check["reference_dataset_id"] == "elsewhere-photos"
+        assert check["reference_dataset_name"] == "photos"
+        assert check["labels_in_reference"] == 10
+        assert check["labels_in_active"] == 0
+        assert check["domain_shift"]["shifted"] is True
+
+    def test_tunes_route_reads_the_record_too(self, client, monkeypatch, tmp_path):
+        from vtscore.detectors.registry import find_by_name
+
+        photos = _medias("photos", 200)
+        _fetchable(monkeypatch, photos)
+        shipped, labelset = self._sender(client, tmp_path, photos)
+        screens_entry, screens_ctx = _loaded("screens", _medias("screens", 80, shifted=True))
+        self._copy_in(monkeypatch, photos, screens_ctx)
+        self._import_on(client, shipped, "mammal-copy", screens_entry)
+        entry = find_by_name("mammal-copy")
+        assert entry is not None
+        det = DetectorContext(entry["id"], name="mammal-copy")
+        det.cached_labelset = labelset
+        register_detector_context(det)
+        set_thread_dataset_context(screens_ctx)
+
+        resp = client.get(
+            "/api/find/training-domain", headers={"X-Dataset-Id": screens_entry["id"], "X-Detector-Id": entry["id"]}
+        )
+
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["reason"] == ""
+        assert data["reference_dataset_name"] == "photos"
+        assert data["domain_shift"]["shifted"] is True
+
+    def test_labels_the_active_dataset_already_held_still_read_as_from_it(self, client, monkeypatch, tmp_path):
+        """Nothing copied in: the active dataset holds the labels on its own, and there is nothing to compare."""
+        from vtscore.detectors.training_domain import INGESTED_LABELS_KEY
+
+        _stub_scoring(monkeypatch)
+        photos = _medias("photos", 200)
+        shipped, _labelset = self._sender(client, tmp_path, photos)
+        here_entry, here_ctx = _loaded("photos-here", photos)
+        copied = self._copy_in(monkeypatch, photos, here_ctx)
+
+        received = self._import_on(client, shipped, "mammal-copy", here_entry)
+
+        assert copied == [] and INGESTED_LABELS_KEY not in received
+        check = _autofind_check(here_ctx, "mammal-copy")
+        assert check["domain_shift"] is None
+        assert check["reason"] == "The detector's labelled examples are from this dataset"
+        assert check["labels_in_active"] == 10
+
+    def test_the_receivers_own_votes_count_and_win_once_they_outnumber_the_import(self, client, monkeypatch, tmp_path):
+        _stub_scoring(monkeypatch)
+        photos = _medias("photos", 200)
+        _fetchable(monkeypatch, photos)
+        shipped, _labelset = self._sender(client, tmp_path, photos)
+        screens = _medias("screens", 80, shifted=True)
+        screens_entry, screens_ctx = _loaded("screens", screens)
+        self._copy_in(monkeypatch, photos, screens_ctx)
+        self._import_on(client, shipped, "mammal-copy", screens_entry)
+
+        self._vote_on("mammal-copy", screens, range(4))
+        fewer = _autofind_check(screens_ctx, "mammal-copy")
+        assert fewer["reference_dataset_id"] == "elsewhere-photos"
+        assert (fewer["labels_in_active"], fewer["labels_in_reference"], fewer["labels_total"]) == (4, 10, 14)
+        assert fewer["domain_shift"]["shifted"] is True
+        assert self._home("mammal-copy", screens_ctx)["training_id"] == "elsewhere-photos"
+
+        self._vote_on("mammal-copy", screens, range(4, 11))
+        more = _autofind_check(screens_ctx, "mammal-copy")
+        assert more["domain_shift"] is None
+        assert more["reason"] == "The detector's labelled examples are from this dataset"
+        assert more["labels_in_active"] == 11
+        home = self._home("mammal-copy", screens_ctx)
+        assert (home["training_id"], home["labels_held"]) == (screens_entry["id"], 11)
+
+    def test_right_after_the_import_the_evidence_baseline_is_not_drawn_on_it(self, client, monkeypatch, tmp_path):
+        """A sort there would have recorded ``screens`` as the training dataset and replaced the summary."""
+        photos = _medias("photos", 200)
+        shipped, _labelset = self._sender(client, tmp_path, photos)
+        screens_entry, screens_ctx = _loaded("screens", _medias("screens", 80, shifted=True))
+        self._copy_in(monkeypatch, photos, screens_ctx)
+        self._import_on(client, shipped, "mammal-copy", screens_entry)
+
+        home = self._home("mammal-copy", screens_ctx)
+
+        assert home["training_id"] == "elsewhere-photos"
+        assert home["training_id"] != screens_entry["id"]
+
+    def test_a_few_votes_elsewhere_do_not_move_a_local_pointer(self, client, tmp_path):
+        """Not only imports: a training dataset that is registered but unloaded still outweighs a minority."""
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.training_domain import training_dataset_record
+
+        photos = _medias("photos", 200)
+        photos_entry = register_dataset(
+            name="photos", media_type="audio", num_items=200, pkl_path=str(tmp_path / "photos.pkl"), embedder=_EMBEDDER
+        )
+        screens = _medias("screens", 80, shifted=True)
+        _screens_entry, screens_ctx = _loaded("screens", screens)
+        labelset = LabelSet(_labels(photos, range(10)).elements + _labels(screens, range(2)).elements)
+        _detector_on_disk(
+            "mammal", labelset, training=training_dataset_record(photos_entry["id"], "photos", 10), summary=None
+        )
+
+        home = self._home("mammal", screens_ctx)
+
+        assert (home["training_id"], home["labels_held"]) == (photos_entry["id"], 10)
+
+    def test_importing_into_the_active_detector_records_what_it_copies_in(self, client, monkeypatch, tmp_path):
+        """The in-session label import pulls missing media into the active dataset too, and says so."""
+        import vtsearch.routes.labels.importers as importers_mod
+        from vtscore.detectors.store import _detector_path, _read_detector
+        from vtscore.detectors.training_domain import TRAINING_DATASET_KEY, recorded_ingests, training_dataset_record
+
+        photos = _medias("photos", 200)
+        shipped, _labelset = self._sender(client, tmp_path, photos)
+        blank_id = _detector_on_disk("blank", LabelSet(), training=None, summary=None)
+        register_detector_context(DetectorContext(blank_id, name="blank"))
+        screens_entry, screens_ctx = _loaded("screens", _medias("screens", 80, shifted=True))
+        set_thread_dataset_context(screens_ctx)
+        started: list[int] = []
+        monkeypatch.setattr(importers_mod, "_start_auto_resolve", lambda missing: started.append(len(missing)) or "")
+
+        res = client.post(
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(shipped)},
+            headers={"X-Dataset-Id": screens_entry["id"], "X-Detector-Id": blank_id},
+        )
+
+        assert res.status_code == 200, res.get_json()
+        assert started == [10]
+        on_disk = _read_detector(_detector_path("blank")) or {}
+        assert {dataset_id: len(entries) for dataset_id, entries in recorded_ingests(on_disk).items()} == {
+            screens_entry["id"]: 10
+        }
+        assert on_disk[TRAINING_DATASET_KEY] == training_dataset_record("elsewhere-photos", "photos", 10)

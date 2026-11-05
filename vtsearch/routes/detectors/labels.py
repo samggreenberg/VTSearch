@@ -296,12 +296,13 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict], dete
     file is re-read inside the lock (the route's earlier read only served its
     404 check).  The training-domain summary *detector_meta* carries is kept
     too, when the detector may take it
-    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571).
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571),
+    counted as holding the labels imported with it (#5572).
     Returns ``(existing_ls, applied, skipped, new_entries)``, or ``None`` if
     the detector file vanished.
     """
     from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.domain_summary import adopt_domain_summary
+    from vtscore.detectors.domain_summary import adopt_domain_summary, count_imported_labels
     from vtscore.detectors.labelset_ops import label_sync_write_lock
 
     with label_sync_write_lock:
@@ -311,7 +312,7 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict], dete
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
         applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
         data["labelset"] = existing_ls.to_dict()
-        adopt_domain_summary(data, detector_meta)
+        adopt_domain_summary(data, detector_meta, labels_held=count_imported_labels(label_entries))
         _write_detector(path, data)
     return existing_ls, applied, skipped, new_entries
 
