@@ -39,12 +39,8 @@
   gap: var(--space-md) var(--space-xl);
 }
 
-.results-control {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
+// The one label style of the dialog: the summary's, Columns, and the
+// Threshold's (`.balance-label--form`) alike, as a form label (#5584).
 .results-control-label {
   font-size: var(--font-md);
   font-weight: var(--weight-medium);
@@ -55,12 +51,7 @@
   flex: 0 0 15rem;
 }
 
-// The size buttons sit at the far end of the row.
-.results-size {
-  margin-left: auto;
-}
-
-// The Similarity sort waiting on its fit: message, bar, Cancel on one line.
+// The Similarity column waiting on its fit: message, bar, Cancel on one line.
 .similarity-wait {
   display: flex;
   align-items: center;
@@ -78,6 +69,9 @@
 }
 
 .similarity-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
   margin: 0;
 }
 
@@ -111,10 +105,23 @@
   overflow: hidden;
   scrollbar-gutter: stable;
   padding-block: var(--space-xs);
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
+}
+
+// A heading: the shared `.grid-col-head` chrome (sort, drag, the resize
+// handle) on a grid cell. The cell itself must not clip, or the handle on its
+// left edge is cut off; the label inside it ellipsizes instead.
+.results-col-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.results-col-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 // A CDK viewport lays out with `contain: strict`, so it needs a definite
@@ -221,6 +228,33 @@
 
   .info-text {
     margin: 0;
+  }
+}
+
+// The AutoFind tab (#5584): what Export will do, read-only, on the full width.
+.autofind-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 100%;
+  gap: var(--space-md);
+}
+
+// The exporter's saved settings, a label and its value per line.
+.autofind-readout {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  font-size: var(--font-md);
+
+  dt {
+    font-weight: var(--weight-medium);
+  }
+
+  dd {
+    margin: 0;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
   }
 }
 

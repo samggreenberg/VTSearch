@@ -38,7 +38,15 @@
 .column-checkboxes {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-lg);
+}
+
+// The host's end-of-row controls, pushed to the far end of the last line.
+.column-chooser-end {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
 }
 
 .column-toggle {
