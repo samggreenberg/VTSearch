@@ -67,7 +67,7 @@ def import_labels_into_detector(
     *create_media_type* and is merged into as usual.
     """
     from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.domain_summary import adopt_domain_summary
+    from vtscore.detectors.domain_summary import adopt_domain_summary, count_imported_labels
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 
     path = _detector_path(det_name)
@@ -91,7 +91,7 @@ def import_labels_into_detector(
     data["labelset"] = existing.to_dict()
     # The sending detector's training-domain summary, when the labelset
     # carries one and this detector may take it (#5571).
-    adopt_domain_summary(data, detector_meta)
+    adopt_domain_summary(data, detector_meta, labels_held=count_imported_labels(label_entries))
     _write_detector(path, data)
     if created:
         _register_created_detector(det_name, create_media_type, applied, imported=import_record)

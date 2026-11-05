@@ -906,7 +906,7 @@ so the CLI can re-clip a dataset whose clipping doesn't match.
 ```python
 def extract_input_spec_from_medias(medias) -> dict | None: ...
 def build_detector_meta(detector_data, *, threshold=None) -> dict: ...  # threshold: deprecated, ignored
-def apply_detector_meta(detector_data, detector_meta) -> bool: ...
+def apply_detector_meta(detector_data, detector_meta, *, labels_held=0) -> bool: ...
 def clipper_matches(detector_spec, dataset_spec) -> bool: ...
 def resolve_clipper_spec(name, params=None) -> dict: ...
 ```
@@ -932,8 +932,9 @@ incoming summary only as `adopt_domain_summary` allows (below).
 `vtscore/detectors/domain_summary.py` holds the receiving half:
 
 ```python
-def adopt_domain_summary(detector_data, detector_meta) -> bool: ...
-def adopt_domain_summary_on_file(path, detector_meta, *, det_ctx=None) -> bool: ...
+def adopt_domain_summary(detector_data, detector_meta, *, labels_held=0) -> bool: ...
+def adopt_domain_summary_on_file(path, detector_meta, *, det_ctx=None, labels_held=0) -> bool: ...
+def count_imported_labels(label_entries) -> int: ...
 ```
 
 `adopt_domain_summary` stores the summary an imported labelset's
@@ -944,7 +945,33 @@ merged. Every import path calls it: a `LabelsetSource` pull (through
 `apply_detector_meta`), the app's New detector › Trained and label imports
 (through `LabelImporter.run_labelset`), and the CLI's `--import-labels-into`.
 `adopt_domain_summary_on_file` does the same to a detector file under the
-detector-JSON write lock.
+detector-JSON write lock. `labels_held`, the import's Good / Bad labels
+(`count_imported_labels`), is recorded beside the summary as the detector's
+own training-dataset pointer to the summarised dataset, when it has none
+(#5572): the overlap check then weighs the summary at the labels that came
+with it, so the receiver's own votes on another dataset win once they
+outnumber those. A pointer already there is left alone, since a labelset
+source the detector syncs with sends back every label it holds.
+
+`vtscore/detectors/training_domain.py` also records where an import put the
+labels' media (#5572):
+
+```python
+INGESTED_LABELS_KEY = "labels_ingested"
+def record_ingested_labels(detector_data, dataset_id, entries) -> bool: ...
+def record_ingested_labels_on_file(path, dataset_id, entries, *, det_ctx=None) -> bool: ...
+def recorded_ingests(detector_data) -> dict[str, list[dict]]: ...
+def count_labels_held(labelset, ctx, *, ingested=None) -> int: ...
+def labels_held_by_dataset(labelset, contexts, *, ingested=None) -> dict[str, int]: ...
+```
+
+An import run with a dataset active copies the media its labels name into
+that dataset, so the dataset holds every label without one having been cast
+there. `record_ingested_labels` keeps, per dataset, the entries whose media
+were copied in, named by origin and MD5 like a labelset's elements (never a
+vector), and `count_labels_held` given that dataset's entries does not count
+a label naming only copied-in media. A label on the dataset's own media still
+counts.
 
 `resolve_clipper_spec` turns a clipper choice into an input spec, the way the
 CLI's clipper override (`--override-clipper`, #5282) takes one. It refuses an

@@ -155,8 +155,12 @@ a fresh head is trained with a cross-validated threshold.
 A labelset whose `detector_meta` carries a training-domain summary (one this
 app exported, #5571) gives it to the detector when the detector has no
 training dataset of its own, or its own is the same dataset; a detector
-trained elsewhere keeps its own summary. The same holds for
-`POST /api/label-importers/import/{importer_name}`, into the active detector.
+trained elsewhere keeps its own summary. With it comes a training-dataset
+pointer counting the imported labels, when the detector has none (#5572). The
+same holds for `POST /api/label-importers/import/{importer_name}`, into the
+active detector, which also records under `labels_ingested` the labels whose
+media it pulls into the active dataset, so that dataset is not taken for the
+one the detector was trained on.
 
 → `{"applied": 12, "skipped": 3, "resolved": 12, "trained": true, "num_labels": 62, "message": "..."}`
 
@@ -402,7 +406,10 @@ imported as `imported` (the importer, its fields, the time), which
 `detector_meta` carries the sending detector's training-domain summary (a
 file the `server_json_file` exporter wrote, #5571), the new detector keeps it,
 so its [training-domain check](find.md#training-domain-overlap) runs without
-the training dataset.
+the training dataset, weighed at the labels that came with it (#5572). The
+labels whose media the route pulls into the active dataset are recorded on the
+new detector (`labels_ingested`), so that dataset holding them does not read
+as the one the detector was trained on.
 
 → (201)
 ```json

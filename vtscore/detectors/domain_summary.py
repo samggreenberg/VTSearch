@@ -31,11 +31,14 @@ carries the record too (#5571).  The export writes it into the labelset's
 ``detector_meta`` under the same key
 (:func:`~vtscore.detectors.input_spec.build_detector_meta`), and the import
 stores it on the receiving detector (:func:`adopt_domain_summary`).  The
-pointer stays behind, since it names a dataset of the sending instance; the
-reader counts a summary that arrived without one as holding every label.  An
-exported labelset is otherwise embedder-free (#5131), and this block is let
-through because it says which embedder drew it, a reader in any other refuses
-it, and nothing trains on it.
+sender's pointer stays behind, but the import records one of its own beside
+the summary when it has none, naming the summarised dataset as holding the
+labels that arrived with it (#5572): the receiver's later votes elsewhere then
+outweigh it once they outnumber those, as they would a training dataset handed
+over with its file.  A summary with no pointer at all (stored before #5572) is read as
+holding every label.  An exported labelset is otherwise embedder-free (#5131),
+and this block is let through because it says which embedder drew it, a
+reader in any other refuses it, and nothing trains on it.
 
 Two process-scoped caches, nothing persisted but the record itself.  Building
 a summary clusters up to 20 000 vectors and every draw on the training dataset
@@ -54,7 +57,7 @@ import logging
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -234,7 +237,9 @@ def stored_domain_summary(detector_data: Mapping[str, Any] | None) -> dict[str, 
     }
 
 
-def adopt_domain_summary(detector_data: dict[str, Any], detector_meta: Mapping[str, Any] | None) -> bool:
+def adopt_domain_summary(
+    detector_data: dict[str, Any], detector_meta: Mapping[str, Any] | None, *, labels_held: int = 0
+) -> bool:
     """Record the summary an imported labelset's *detector_meta* carries on *detector_data*; whether it did (#5571).
 
     How a detector shared through an exported labelset keeps its overlap
@@ -248,22 +253,54 @@ def adopt_domain_summary(detector_data: dict[str, Any], detector_meta: Mapping[s
     says where this detector's labels were drawn, which a summary from
     elsewhere does not overrule.  A block that is missing, malformed or of
     another format version is ignored.
+
+    *labels_held*, the number of Good / Bad labels the import brought
+    (:func:`count_imported_labels`), is recorded beside the summary as the
+    training-dataset pointer to the summarised dataset when the detector has
+    none (#5572): those labels were cast on it, and the overlap check weighs
+    it at that many and no more.  A pointer already there is left as it is:
+    it is this detector's own record of how many of its labels the dataset
+    held, and a labelset source it syncs with sends back every label it has.
+    Without *labels_held* the summary is stored alone and read as holding
+    every label.
     """
-    from vtscore.detectors.training_domain import recorded_training_dataset  # noqa: PLC0415
+    from vtscore.detectors.training_domain import (  # noqa: PLC0415
+        TRAINING_DATASET_KEY,
+        recorded_training_dataset,
+        training_dataset_record,
+    )
 
     incoming = _incoming_summary(detector_meta)
     if incoming is None:
         return False
     own = stored_domain_summary(detector_data)
-    own_ids = {rec["dataset_id"] for rec in (own, recorded_training_dataset(detector_data)) if rec is not None}
-    if own_ids - {incoming["dataset_id"]} or own == incoming:
+    pointer = recorded_training_dataset(detector_data)
+    own_ids = {rec["dataset_id"] for rec in (own, pointer) if rec is not None}
+    if own_ids - {incoming["dataset_id"]}:
         return False
-    detector_data[DOMAIN_SUMMARY_KEY] = incoming
-    return True
+    changed = False
+    if own != incoming:
+        detector_data[DOMAIN_SUMMARY_KEY] = incoming
+        changed = True
+    if labels_held > 0 and pointer is None:
+        detector_data[TRAINING_DATASET_KEY] = training_dataset_record(
+            incoming["dataset_id"], incoming["dataset_name"], int(labels_held)
+        )
+        changed = True
+    return changed
+
+
+def count_imported_labels(label_entries: Iterable[Mapping[str, Any]]) -> int:
+    """How many of an import's *label_entries* are Good / Bad labels: :func:`adopt_domain_summary`'s *labels_held*."""
+    return sum(1 for entry in label_entries if entry.get("label") in ("good", "bad"))
 
 
 def adopt_domain_summary_on_file(
-    path: Path, detector_meta: Mapping[str, Any] | None, *, det_ctx: DetectorContext | None = None
+    path: Path,
+    detector_meta: Mapping[str, Any] | None,
+    *,
+    det_ctx: DetectorContext | None = None,
+    labels_held: int = 0,
 ) -> bool:
     """:func:`adopt_domain_summary` on the detector file at *path*; whether it wrote.
 
@@ -280,7 +317,7 @@ def adopt_domain_summary_on_file(
 
     with label_sync_write_lock:
         data = _read_detector(path)
-        if data is None or not adopt_domain_summary(data, detector_meta):
+        if data is None or not adopt_domain_summary(data, detector_meta, labels_held=labels_held):
             return False
         _write_detector(path, data)
     if det_ctx is not None:

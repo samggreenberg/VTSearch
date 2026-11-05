@@ -553,31 +553,37 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     Returns the baseline's ``stamp``
     (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
     file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
-    the dataset the detector was trained on as the overlap check infers it
-    (the loaded dataset holding most of its labels), ``""`` when none is, with
-    ``labels_held``, how many of the labels it holds: the training-dataset
-    pointer recorded with the baseline (#5501).  ``None`` with no embedder name
-    to stamp it with or no detector file.
+    the dataset the detector was trained on as the overlap check picks it
+    (:func:`~vtsearch.domain_overlap.detector_training_reference`), ``""`` when
+    none is, with ``labels_held``, how many of the labels it holds: the
+    training-dataset pointer recorded with the baseline (#5501).  The same
+    rule as the check, pointer, summary and copied-in media included (#5572):
+    a dataset holding fewer of the labels than the one the pointer names is
+    not the training dataset, so a draw there does not move the pointer to it
+    and replace the summary.  ``None`` with no embedder name to stamp it with
+    or no detector file.
     """
     from vtscore.datasets.registry import get_dataset
     from vtscore.detectors.evidence_baseline import baseline_stamp
     from vtscore.detectors.registry import get_detector
-    from vtscore.detectors.store import _detector_path
+    from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.state.core import get_active_context
-    from vtsearch.domain_overlap import infer_training_reference
+    from vtsearch.domain_overlap import detector_training_reference
 
     active_id = get_active_context().dataset_id
     stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
     entry = get_detector(det_ctx.detector_id) or {}
     if stamp is None or not entry.get("name"):
         return None
-    training_id, counts = infer_training_reference(labelset, active_id)
+    path = _detector_path(entry["name"])
+    reference = detector_training_reference(labelset, active_id, _read_detector(path))
+    training_id = reference.dataset_id
     return {
         "stamp": stamp,
-        "path": _detector_path(entry["name"]),
+        "path": path,
         "training_id": training_id,
         "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
-        "labels_held": counts.get(training_id, 0) if training_id else 0,
+        "labels_held": reference.counts.get(training_id, 0) if training_id else 0,
     }
 
 

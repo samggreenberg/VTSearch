@@ -529,11 +529,20 @@ it holds them and otherwise fetched from their origins and embedded, once per
 process. The report has the same shape and the same null (about `alpha` of an
 in-domain dataset reads atypical), with less power than the full comparison.
 An anchor that cannot be fetched, or another embedder, gives `domain_shift:
-null` with the reason. A detector created from an exported labelset carries the
-summary without the pointer (#5571); the summarised dataset then counts as
-holding every labelled example, while a pointer to another dataset still says
-where the labels were drawn, and the summary is set aside. The active dataset wins a tie, so a detector used on the dataset it was trained on has nothing to
-compare. It needs no scored Find run: the SPA calls it whenever a
+null` with the reason. A detector created from an exported labelset gets the
+summary (#5571) and a pointer of its own beside it, naming the summarised
+dataset as holding the labels that came with it (#5572); a summary stored with
+no pointer at all counts as holding every labelled example, while a pointer to
+another dataset still says where the labels were drawn, and the summary is set
+aside. A loaded dataset's count leaves out the labels on media an import
+copied into it (the detector's `labels_ingested`, #5572): importing labels
+with a dataset active pulls their media into it, which says nothing about
+where they were cast, so `labels_in_active` counts only the labels on the
+dataset's own media. The active dataset wins a tie, so a detector used on the
+dataset it was trained on has nothing to compare. The
+[Evidence chip's baseline](#evidence-coverage) is drawn only on the dataset
+this rule picks, so a learned sort or Tune on a dataset holding fewer of the
+labels does not record it as the training dataset. It needs no scored Find run: the SPA calls it whenever a
 (dataset, detector) pair becomes active, and raises a warning when the verdict
 is *likely domain shift*. Every Find and AutoFind result carries the same
 report per detector, as `training_domain` (see [auto-detect](#auto-detect)).

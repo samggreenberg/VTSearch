@@ -121,6 +121,8 @@ def build_detector_meta(
 def apply_detector_meta(
     detector_data: dict[str, Any],
     detector_meta: dict[str, Any] | None,
+    *,
+    labels_held: int = 0,
 ) -> bool:
     """Apply an inbound ``detector_meta`` block to a detector JSON dict.
 
@@ -128,7 +130,9 @@ def apply_detector_meta(
     already have one) so the receiving detector picks up the originating
     detector's expected input format, and the training-domain summary when
     the receiver may take it
-    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571).
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571),
+    counted as holding *labels_held*, the Good / Bad labels that arrived with
+    it (#5572).
     Does **not** persist a ``threshold`` (which this server no longer sends,
     but an older one or another producer may) - the receiver retrains its own
     head from the imported labels, so the threshold is rederived on the next
@@ -140,7 +144,7 @@ def apply_detector_meta(
         return False
     from vtscore.detectors.domain_summary import adopt_domain_summary  # noqa: PLC0415
 
-    changed = adopt_domain_summary(detector_data, detector_meta)
+    changed = adopt_domain_summary(detector_data, detector_meta, labels_held=labels_held)
     spec = detector_meta.get("input_spec")
     if isinstance(spec, dict) and spec:
         existing = detector_data.get("input_spec")

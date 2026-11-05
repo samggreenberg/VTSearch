@@ -171,25 +171,36 @@ def _sync_after_import() -> None:
     record_detector_import(get_active_detector_context().detector_id)
 
 
-def _adopt_imported_summary(detector_meta: dict | None) -> None:
-    """Keep the training-domain summary an imported labelset carries on the active detector's file (#5571).
+def _record_import_on_detector(detector_meta: dict | None, label_entries: list[dict], missing: list[dict]) -> None:
+    """Record what an import into the active detector says about where its labels were cast (#5571, #5572).
 
-    So labels imported into the active detector bring the overlap check's
-    reference with them, as they do through the Dashboard's import
+    The training-domain summary an imported labelset carries is kept on the
+    active detector's file, so labels imported into it bring the overlap
+    check's reference with them, as they do through the Dashboard's import
     (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, which
-    decides whether the detector may take it).
+    decides whether the detector may take it), weighed at the labels
+    imported with it.  And *missing*, the entries whose media the import is
+    copying into the active dataset, is recorded against that dataset
+    (:func:`~vtscore.detectors.training_domain.record_ingested_labels`): the
+    dataset holding them says nothing about where the detector was trained.
     """
-    if not detector_meta:
-        return
-    from vtscore.detectors.domain_summary import adopt_domain_summary_on_file
+    from vtscore.detectors.domain_summary import adopt_domain_summary_on_file, count_imported_labels
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path
-    from vtscore.state.core import get_active_detector_context
+    from vtscore.detectors.training_domain import record_ingested_labels_on_file
+    from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
     name = (get_detector(det_ctx.detector_id) or {}).get("name") if det_ctx.detector_id else None
-    if name:
-        adopt_domain_summary_on_file(_detector_path(name), detector_meta, det_ctx=det_ctx)
+    if not name:
+        return
+    path = _detector_path(name)
+    if detector_meta:
+        adopt_domain_summary_on_file(
+            path, detector_meta, det_ctx=det_ctx, labels_held=count_imported_labels(label_entries)
+        )
+    if missing:
+        record_ingested_labels_on_file(path, get_active_context().dataset_id, missing, det_ctx=det_ctx)
 
 
 def _apply_ingested_labels(missing: list[dict], ingested: int) -> dict:
@@ -377,17 +388,19 @@ def run_label_import(importer_name: str):  # noqa: C901
     # by _apply_labels, but we report them separately now.
     skipped -= len(missing)
 
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count (num_training) immediately.
+    if applied > 0:
+        _sync_after_import()
+    # Before the ingest starts, so no check can count the copied-in media as
+    # the dataset's own (#5572).
+    _record_import_on_detector(detector_meta, label_entries, missing)
+
     # Auto-resolve: pull the missing medias in from their origins.  The fetch
     # + embed runs on a background task (issue #2703) and re-applies those
     # labels when it lands, so the counts below describe only the in-request
     # pass; the task publishes its own numbers as ``ingest_result``.
     ingest_task_id = _start_auto_resolve(missing) if missing else ""
-
-    # Sync updated votes into the loaded model so the dashboard reflects
-    # the new label count (num_training) immediately.
-    if applied > 0:
-        _sync_after_import()
-    _adopt_imported_summary(detector_meta)
 
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingest_task_id:
