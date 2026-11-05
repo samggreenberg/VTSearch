@@ -2803,6 +2803,42 @@
         ],
         "type": "object"
       },
+      "DetectorForkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "default": null,
+            "maxLength": 128,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorForkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "remote_sync": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector",
+          "message",
+          "ok"
+        ],
+        "type": "object"
+      },
       "DetectorForkedFrom": {
         "additionalProperties": false,
         "properties": {
@@ -3432,6 +3468,129 @@
         ],
         "type": "object"
       },
+      "DetectorShareRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "add": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "public": {
+            "default": null,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "remove": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorShareResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "description": "This call created the container",
+            "type": "boolean"
+          },
+          "detector_id": {
+            "type": "string"
+          },
+          "is_owner": {
+            "description": "The caller owns the container: it is their detector, not a received one",
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "public": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState"
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "created",
+          "detector_id",
+          "is_owner",
+          "message",
+          "ok",
+          "sharing",
+          "sync_mode"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingCapability": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "icon": {
+            "nullable": true,
+            "type": "string"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The active sharing source's registered name",
+            "nullable": true,
+            "type": "string"
+          },
+          "supports_recipient_search": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "missing_fields",
+          "supports_recipient_search"
+        ],
+        "type": "object"
+      },
       "DetectorSharingIntegrity": {
         "additionalProperties": false,
         "properties": {
@@ -3447,6 +3606,194 @@
         "required": [
           "count",
           "status"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceiveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreign": {
+            "default": "abort",
+            "description": "What to do when someone other than the owner wrote to the container: ``abort`` (the default) reports it and changes nothing, ``import`` takes every record, ``skip`` only the owner's.",
+            "enum": [
+              "abort",
+              "import",
+              "skip"
+            ],
+            "type": "string"
+          },
+          "remote_ref": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote_ref"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceiveResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry",
+            "nullable": true
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity"
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "description": "The container's name",
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "owner": {
+            "description": "The container's owner",
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "integrity",
+          "message",
+          "name",
+          "ok",
+          "owner",
+          "remote_ref"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceivedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "received": {
+            "items": {
+              "$ref": "#/components/schemas/DetectorSharingSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "received"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "description": "The identity to pass in ``add``",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "group"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreign": {
+            "default": "abort",
+            "description": "What to do when someone other than the owner wrote to the container: ``abort`` (the default) reports it and changes nothing, ``import`` takes every record, ``skip`` only the owner's.",
+            "enum": [
+              "abort",
+              "import",
+              "skip"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorSharingRefreshResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "type": "integer"
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "integer"
+          },
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "removed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "applied",
+          "changed",
+          "detector",
+          "integrity",
+          "message",
+          "ok",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/DetectorSharingRecipient"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions"
         ],
         "type": "object"
       },
@@ -3479,6 +3826,125 @@
         "required": [
           "remote_ref",
           "source_name"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "description": "The caller's detector that already holds this container, or null",
+            "nullable": true,
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "description": "Its owner, as the sharing source names people",
+            "type": "string"
+          },
+          "record_count": {
+            "type": "integer"
+          },
+          "remote_ref": {
+            "description": "The container's opaque reference",
+            "type": "string"
+          },
+          "shared_via": {
+            "description": "How the caller can see it: ``direct``, ``group`` or ``public``",
+            "enum": [
+              "owner",
+              "direct",
+              "group",
+              "public"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "media_type",
+          "name",
+          "owner",
+          "record_count",
+          "remote_ref",
+          "shared_via",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingView": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "type": "string"
+          },
+          "is_owner": {
+            "description": "The caller owns the container: it is their detector, not a received one",
+            "type": "boolean"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "public": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState"
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_id",
+          "is_owner",
+          "sharing",
+          "sync_mode"
+        ],
+        "type": "object"
+      },
+      "DetectorUnshareResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detector",
+          "message",
+          "ok"
         ],
         "type": "object"
       },
@@ -12251,6 +12717,64 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/fork": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Works on any detector the caller can see, and is how a received one is\nmade editable: its local copy is what is forked.  The fork is ``forked``,\nwith ``forked_from`` provenance.  When sharing is on, a container is made\nfor it too, so it is shared from the start (with nobody yet); when that is\nnot possible - sharing is off, or creating the container failed -\n``remote_sync`` says why and the fork is local only.  Works while sharing\nis off.",
+        "operationId": "fork_registered_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorForkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorForkResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "403": {
+            "description": "The caller cannot access this detector."
+          },
+          "404": {
+            "description": "The detector does not exist, or has no labelset file."
+          },
+          "409": {
+            "description": "A detector with that name already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Copy a detector into a new, editable one owned by the caller.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/readers": {
       "parameters": [
         {
@@ -12303,6 +12827,70 @@
         "summary": "Update a detector's access list. Only the creator may call this.",
         "tags": [
           "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/refresh": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The local labels are replaced by the container's, under the ``foreign``\npolicy; ``abort`` (the default) changes nothing when someone other than the\nowner wrote to it, and says so (``applied: false``), recording the\nintegrity on the detector so the listing can warn.",
+        "operationId": "refresh_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingRefreshResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can refresh it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist. The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector is not a received copy (``error_code: detector_not_linked``). The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Bring a received detector level with its container (\"Check for updates\").",
+        "tags": [
+          "detectors_sharing"
         ]
       }
     },
@@ -12366,6 +12954,159 @@
           "detectors_registry"
         ]
       }
+    },
+    "/api/detectors/registry/{detector_id}/share": {
+      "delete": {
+        "description": "The detector keeps its labels and becomes a plain local one; recipients'\ncopies stop receiving updates.  A container the service no longer has is\nunbound all the same.",
+        "operationId": "unshare_detector",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorUnshareResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can stop sharing it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist, or shares nothing (``error_code: detector_not_shared``)."
+          },
+          "409": {
+            "description": "The detector is a received copy (``error_code: detector_read_only``): delete it instead, which removes only the local copy. The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stop sharing a detector: archive its container and unbind it.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The first call creates its container from the detector's labels and binds\nthe detector to it; a plain auto-export binding (its own, or the\ndeployment default it inherited) is replaced, and the message says so.\nFrom then on every change to its labels is pushed to the container.  Then\n``remove``, ``add`` and ``public`` are applied, in that order.  The\nresponse is the container as ``GET .../sharing`` shows it, read afterwards.",
+        "operationId": "share_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorShareResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can share it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist. The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to share it. The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Share a detector of the caller's, and change who it is shared with.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/sharing": {
+      "get": {
+        "description": "``recipients`` and ``public`` are read from the container now.  When the\ndetector's sharing source is not the active one, ``sharing_note`` says why\nand they are null: the container is not read.",
+        "operationId": "get_detector_sharing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The caller cannot access this detector. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist, or shares nothing (``error_code: detector_not_shared``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "A shared or received detector's container: its state, who it is shared with, and whether publicly.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
@@ -12447,6 +13188,187 @@
         "summary": "Unload a detector from memory (frees its DetectorContext).",
         "tags": [
           "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/sharing": {
+      "get": {
+        "description": "Always 200: ``enabled`` is false while the ``detector_sharing_source``\nsetting is null (or names a source that is not installed or cannot\nshare), and the dashboard hides its sharing surfaces.",
+        "operationId": "get_sharing_capability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingCapability"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Whether detector sharing is on here, and through which source.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/receive": {
+      "post": {
+        "description": "Its labels are the container's records, under the ``foreign`` policy; its\nname is the container's, suffixed when another detector holds it.  A\nreceived detector changes only by refresh, and can be forked.",
+        "operationId": "receive_shared_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingReceiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceiveResponse"
+                }
+              }
+            },
+            "description": "The ``abort`` policy met records someone other than the owner wrote: ``applied: false``, nothing was created, and ``integrity`` says how many, so the client can ask whether to import or skip them."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceiveResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The caller already holds this container (``error_code: already_received``; ``detector_id`` names their copy). The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Make a container shared with the caller a local, read-only (``linked``) detector of theirs.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/received": {
+      "get": {
+        "description": "Each carries ``detector_id``: the caller's detector that already holds it,\nor null when they have not received it yet.",
+        "operationId": "list_received_detectors",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceivedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The containers shared with the caller (directly, through a group, or publicly) that they do not own.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/search-recipients": {
+      "post": {
+        "description": "An empty query returns no suggestions without asking the source.",
+        "operationId": "search_sharing_recipients",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingSearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The active sharing source has no recipient search (``error_code: sharing_unsupported``): ``supports_recipient_search`` is false on ``GET /api/detectors/sharing``."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "People and groups matching ``query``, for a share dialog's recipient picker.",
+        "tags": [
+          "detectors_sharing"
         ]
       }
     },
@@ -17767,6 +18689,10 @@
     {
       "description": "Register, load, unload, rename, and toggle AutoFind on detectors.",
       "name": "detectors_registry"
+    },
+    {
+      "description": "Share detectors through the active sharing source: share, receive, refresh and fork.",
+      "name": "detectors_sharing"
     },
     {
       "description": "Run a detector against the active dataset (find-label) or run every AutoFind detector at once (auto-detect).",
