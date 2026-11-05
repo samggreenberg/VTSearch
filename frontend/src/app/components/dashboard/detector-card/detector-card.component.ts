@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -15,6 +16,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
+import { DetectorsSharingApiService } from '../../../services/detectors-sharing-api.service';
 import type { LineTestVerdict } from '../../../generated/api-client/models/line-test-verdict';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 import {
@@ -44,6 +46,8 @@ import {
 export class DetectorCardComponent {
   private readonly loadingTasksSvc = inject(DashboardLoadingTasksService);
   private readonly mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private readonly sharingApi = inject(DetectorsSharingApiService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly detector = input<any>(undefined);
   readonly currentUser = input('');
@@ -148,10 +152,35 @@ export class DetectorCardComponent {
     return sharingNote(this.detector());
   }
 
+  /** Who a shared detector reaches, read from its container on the badge's
+   *  first hover (the listing does not carry it); `null` until then. */
+  private readonly audience = signal<{ recipients: number | null; isPublic: boolean } | null>(null);
+  private audienceAsked = false;
+
   /** The badge's title: who, when, and what the last check found. */
   get sharingBadgeTitle(): string {
     const d = this.detector();
-    return this.linked ? receivedTitle(d) : sharedTitle(d);
+    if (this.linked) return receivedTitle(d);
+    const audience = this.audience();
+    return sharedTitle(d, audience?.recipients ?? null, audience?.isPublic ?? false);
+  }
+
+  /** Ask the container who it is shared with, once per row, for the Shared badge's title. */
+  onSharedBadgeHover(): void {
+    if (this.audienceAsked || !this.sharedOwned || this.sharingNote) return;
+    this.audienceAsked = true;
+    this.sharingApi
+      .getSharingView(this.detector().id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (view) =>
+          this.audience.set({
+            recipients: Array.isArray(view.recipients) ? view.recipients.length : null,
+            isPublic: view.public === true,
+          }),
+        // No title line is better than a wrong one; the next row hover may retry.
+        error: () => (this.audienceAsked = false),
+      });
   }
 
   /** The badge turns amber when something about the container is off: a note

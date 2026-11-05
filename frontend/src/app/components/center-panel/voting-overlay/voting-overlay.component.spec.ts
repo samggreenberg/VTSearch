@@ -162,4 +162,45 @@ describe('VotingOverlayComponent', () => {
     await fixture.whenStable();
     expect(good.classList.contains('vote-flash')).toBe(false);
   });
+
+  describe('read-only (a received detector, #5578)', () => {
+    beforeEach(async () => {
+      fixture.componentRef.setInput('readOnly', true);
+      fixture.componentRef.setInput('hint', 'start-voting');
+      await settleZoneless(fixture);
+    });
+
+    it('disables both buttons, says why, and offers Fork', () => {
+      const el = fixture.nativeElement as HTMLElement;
+      const good = el.querySelector('.btn-good') as HTMLButtonElement;
+      const bad = el.querySelector('.btn-bad') as HTMLButtonElement;
+      expect(good.disabled).toBe(true);
+      expect(bad.disabled).toBe(true);
+      expect(good.title).toContain('Read-only: fork to edit');
+      expect(el.querySelector('.read-only-hint')?.textContent).toContain('Read-only: fork to edit');
+      // Toasty's hints step aside: none of them can be acted on.
+      expect(el.querySelector('vt-toasty-hint')).toBeNull();
+
+      let forked = 0;
+      component.fork.subscribe(() => forked++);
+      (el.querySelector('.fork-btn') as HTMLButtonElement).click();
+      expect(forked).toBe(1);
+    });
+
+    it('casts no vote even when called directly', () => {
+      let emitted = 0;
+      component.voted.subscribe(() => emitted++);
+      component.onVoteGood();
+      component.onVoteBad();
+      expect(emitted).toBe(0);
+    });
+
+    it('opens again once the detector is no longer read-only', async () => {
+      fixture.componentRef.setInput('readOnly', false);
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect((el.querySelector('.btn-good') as HTMLButtonElement).disabled).toBe(false);
+      expect(el.querySelector('.read-only-hint')).toBeNull();
+    });
+  });
 });

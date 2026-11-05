@@ -270,9 +270,13 @@ export function buildDetectorCardMenuItems(
     items.push({
       id: 'check-updates',
       label: 'Check for updates',
-      title: note || "Fetch the owner's latest labels for this detector",
+      title:
+        note ||
+        (access.isOwner
+          ? "Fetch the owner's latest labels for this detector"
+          : 'Only the user who received this detector can check it for updates'),
       iconSvg: ICON.refresh,
-      disabled: !!note,
+      disabled: !!note || !access.isOwner,
     });
   }
   if (linked || sharing.enabled) {

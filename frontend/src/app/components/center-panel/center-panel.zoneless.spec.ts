@@ -113,6 +113,25 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     expect(votingOverlay().querySelector('.btn-good.voted')).not.toBeNull();
   });
 
+  // #5578: a received detector's labels are its owner's. The vote keys and
+  // undo do nothing, and the overlay says so with a Fork the host answers.
+  it('takes no keyboard vote or undo on a read-only detector, and forwards the Fork', async () => {
+    fixture.componentRef.setInput('readOnly', true);
+    await settleZoneless(fixture);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    await settleZoneless(fixture);
+    httpMock.expectNone('/api/medias/1/vote');
+
+    expect((votingOverlay().querySelector('.btn-good') as HTMLButtonElement).disabled).toBe(true);
+    expect(votingOverlay().querySelector('.read-only-hint')?.textContent).toContain('Read-only: fork to edit');
+    let forked = 0;
+    component.forkRequested.subscribe(() => forked++);
+    (votingOverlay().querySelector('.fork-btn') as HTMLButtonElement).click();
+    expect(forked).toBe(1);
+  });
+
   it('shows the undo toast after a keyboard Cmd/Ctrl-Z, with no manual detectChanges', async () => {
     // Land a vote first so the undo stack has an entry to pop.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));

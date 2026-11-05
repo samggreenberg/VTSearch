@@ -27,7 +27,7 @@
       @if (linked) {
         <span class="sharing-badge" [class.badge-download]="!sharingBadgeWarns" [class.badge-warning]="sharingBadgeWarns" [title]="sharingBadgeTitle">Received</span>
       } @else if (sharedOwned) {
-        <span class="sharing-badge" [class.badge-download]="!sharingBadgeWarns" [class.badge-warning]="sharingBadgeWarns" [title]="sharingBadgeTitle">Shared</span>
+        <span class="sharing-badge" [class.badge-download]="!sharingBadgeWarns" [class.badge-warning]="sharingBadgeWarns" [title]="sharingBadgeTitle" (mouseenter)="onSharedBadgeHover()">Shared</span>
       }
       @if (!nameLocked) {
       <button class="card-icon-btn edit-btn name-edit-btn" (click)="startRename($event)" aria-label="Rename detector" title="Rename">

@@ -17,7 +17,8 @@ export interface SharingCapability {
   name?: string | null;
   display_name?: string | null;
   icon?: string | null;
-  supports_recipient_search?: boolean;
+  supports_recipient_search: boolean;
+  missing_fields: string[];
 }
 
 /** What a container's foreign records get on a receive or refresh. */
@@ -25,20 +26,36 @@ export type ForeignPolicy = 'abort' | 'import' | 'skip';
 
 /** `POST .../refresh`: applied or not, what the container held, and the entry after. */
 export interface SharingRefreshResponse {
+  ok: boolean;
   applied: boolean;
+  message: string;
   integrity: DetectorSharingIntegrity;
-  entry?: DetectorRegistryEntry;
-  message?: string;
+  added: number;
+  changed: number;
+  removed: number;
+  detector: DetectorRegistryEntry;
 }
 
-/** `POST .../fork`: the new entry, and a note when the copy could not be shared. */
+/** `POST .../fork`: the new entry, and a note when the copy is local only. */
 export interface SharingForkResponse {
-  entry: DetectorRegistryEntry;
+  ok: boolean;
+  message: string;
+  detector: DetectorRegistryEntry;
   remote_sync?: string | null;
-  message?: string;
 }
 
-/** Detector sharing: the capability, Check for updates, Fork. */
+/** `GET .../sharing`: a detector's container as it is now (null fields when not read). */
+export interface SharingView {
+  detector_id: string;
+  sync_mode: string;
+  is_owner: boolean;
+  sharing_note?: string | null;
+  owner?: string | null;
+  recipients?: string[] | null;
+  public?: boolean | null;
+}
+
+/** Detector sharing: the capability, a detector's container, Check for updates, Fork. */
 @Injectable({ providedIn: 'root' })
 export class DetectorsSharingApiService {
   private http = inject(HttpClient);
@@ -53,6 +70,14 @@ export class DetectorsSharingApiService {
     return this.http.get<SharingCapability>(this.url('/api/detectors/sharing'), {
       context: new HttpContext().set(SKIP_ERROR_TOAST, true),
     });
+  }
+
+  /** Never toasts: the Shared badge's title asks on hover, and goes without on failure. */
+  getSharingView(detectorId: string): Observable<SharingView> {
+    return this.http.get<SharingView>(
+      this.url(`/api/detectors/registry/${encodeURIComponent(detectorId)}/sharing`),
+      { context: new HttpContext().set(SKIP_ERROR_TOAST, true) },
+    );
   }
 
   refresh(detectorId: string, foreign: ForeignPolicy): Observable<SharingRefreshResponse> {

@@ -44,7 +44,7 @@ export class SharingCapabilityService {
       .pipe(
         filter((status) => !!status && (status.authenticated || !status.login_required)),
         take(1),
-        switchMap(() => this.api.getCapability().pipe(catchError(() => of({ enabled: false })))),
+        switchMap(() => this.api.getCapability().pipe(catchError(() => of(null)))),
       )
       .subscribe((capability) => this.capability.set(capability));
   }

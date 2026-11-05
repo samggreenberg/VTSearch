@@ -9,6 +9,7 @@ import {
   type ForeignPolicy,
   type SharingRefreshResponse,
 } from './detectors-sharing-api.service';
+import { SharingCapabilityService } from './sharing-capability.service';
 import { ToastService } from './toast.service';
 
 /** The detector a flow acts on: its id, and the name its messages use. */
@@ -47,6 +48,7 @@ export class DetectorSharingFlowsService {
   private readonly dialog = inject(VtDialogService);
   private readonly toast = inject(ToastService);
   private readonly datasetState = inject(DatasetStateService);
+  private readonly sharing = inject(SharingCapabilityService);
   private readonly forkedSubject = new Subject<ForkLanded>();
 
   /**
@@ -66,14 +68,18 @@ export class DetectorSharingFlowsService {
   async checkForUpdates(target: SharingFlowTarget): Promise<RefreshOutcome> {
     let response = await this.refresh(target.id, 'abort');
     if (!response) return 'failed';
+    // An abort that found foreign records changed nothing but the integrity
+    // it recorded, which the row's badge shows whatever the user picks next.
+    this.landRefresh(target.id, response);
     if (!response.applied) {
       const choice = await this.askAboutForeignRecords(target, response.integrity?.count ?? 0);
       if (choice === 'cancel') return 'cancelled';
       response = await this.refresh(target.id, choice);
       if (!response) return 'failed';
+      this.landRefresh(target.id, response);
     }
-    this.landRefresh(target.id, response);
-    this.toast.success({ message: response.message || `"${target.name ?? 'Detector'}" is up to date.` });
+    // The server's sentence carries the counts: added, changed, removed.
+    this.toast.success({ message: response.message });
     return 'applied';
   }
 
@@ -86,12 +92,14 @@ export class DetectorSharingFlowsService {
   async fork(target: SharingFlowTarget, options: { askName?: boolean } = {}): Promise<DetectorRegistryEntry | null> {
     let name: string | undefined;
     if (options.askName) {
-      const answer = await this.dialog.prompt(
-        `Name your copy of "${target.name ?? 'this detector'}":`,
-        target.name ? `${target.name} (fork)` : '',
-      );
+      // The server's own default, shown so the user can keep it. Kept as is,
+      // or left blank, no name is sent: the server suffixes its default
+      // until it is free, where a name sent that is taken answers 409.
+      const suggested = target.name ? `${target.name} (fork)` : '';
+      const answer = await this.dialog.prompt(`Name your copy of "${target.name ?? 'this detector'}":`, suggested);
       if (answer === null) return null;
-      name = answer.trim() || undefined;
+      const typed = answer.trim();
+      name = typed && typed !== suggested ? typed : undefined;
     }
     let response;
     try {
@@ -99,12 +107,15 @@ export class DetectorSharingFlowsService {
     } catch {
       return null;
     }
-    const entry = response.entry;
+    const entry = response.detector;
     this.datasetState.refresh();
-    if (response.remote_sync) {
-      this.toast.warning({ message: response.remote_sync });
+    if (!response.remote_sync) {
+      this.toast.success({ message: response.message });
+    } else if (this.sharing.enabled()) {
+      // Sharing is on and the copy could not be shared: not what was asked.
+      this.toast.warning({ message: `${response.message} ${response.remote_sync}` });
     } else {
-      this.toast.success({ message: `Forked "${target.name ?? 'the detector'}" as "${entry.name}".` });
+      this.toast.info({ message: `${response.message} ${response.remote_sync}` });
     }
     this.forkedSubject.next({ sourceId: target.id, entry });
     return entry;
@@ -136,6 +147,6 @@ export class DetectorSharingFlowsService {
 
   /** Write what the refresh says about the row into the store, without a reload. */
   private landRefresh(id: string, response: SharingRefreshResponse): void {
-    if (response.entry) this.datasetState.patchDetector(id, response.entry);
+    if (response.detector) this.datasetState.patchDetector(id, response.detector);
   }
 }
