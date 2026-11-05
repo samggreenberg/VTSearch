@@ -359,6 +359,37 @@ def update_detector(detector_id: str, **fields: Any) -> bool:
     return _read_modify_write(mutate)
 
 
+def update_sharing_binding(detector_id: str, remote_ref: str, **changes: Any) -> dict[str, Any] | None:
+    """Merge *changes* into the entry's ``labelset_source`` binding while it still names *remote_ref*.
+
+    For the sharing state the core records on a binding as work finishes - a
+    push's ``sync_error`` and ``last_synced``, a refresh's ``integrity``.  The
+    merge runs under the registry's read-modify-write, onto the binding as it
+    is on disk *now*: a change made since the caller read the entry (a rename,
+    another field of the binding) is kept, and a binding that was unshared or
+    pointed at another container meanwhile is left alone rather than given
+    back a stale ``remote_ref``.
+
+    Returns:
+        The binding as stored after the merge, or ``None`` when no entry has
+        that id or its binding no longer names *remote_ref*.
+    """
+
+    def mutate(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+        for entry in entries:
+            if entry["id"] != detector_id:
+                continue
+            binding = entry.get("labelset_source")
+            if not isinstance(binding, dict) or binding.get("remote_ref") != remote_ref:
+                return None
+            merged = {**binding, **changes}
+            entry["labelset_source"] = merged
+            return dict(merged)
+        return None
+
+    return _read_modify_write(mutate)
+
+
 def record_detector_training(
     detector_id: str,
     num_training: int,

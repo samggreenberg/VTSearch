@@ -332,22 +332,52 @@ def set_detector_labelset_source(body: dict, detector_ref: str):
 @sync_sources_bp.response(200, SyncFromLabelsetSourceResponseSchema)
 @sync_sources_bp.alt_response(403, description="Access denied for the current user.")
 @sync_sources_bp.alt_response(404, description="Detector not found.")
-@sync_sources_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@sync_sources_bp.alt_response(
+    409,
+    description=(
+        f"{READ_ONLY_DESCRIPTION} Also when the detector shares its labels through a container it owns "
+        "(``error_code: detector_shared``: they are pushed there, never pulled back), or its sharing source "
+        "is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+    ),
+)
 @refuse_linked("detector_ref")
 def sync_detector_labelset_from_source(detector_ref: str):
     """Pull the labels at the detector's labelset source into it now.
 
     Labels the source holds and the detector lacks are added, and where the
     two disagree the source's label wins; nothing is removed.  The merged
-    labels are then pushed back to the source.
+    labels are then pushed back to the source.  Only a plain binding pulls: a
+    shared detector's owner has nothing to pull (its file is what the
+    container is rewritten from), and a received one changes only by refresh.
     """
     from vtscore.detectors.registry import can_user_access_detector
-    from vtscore.labels.sync import sync_from_labelset_source
+    from vtscore.labels.binding import sharing_note
+    from vtscore.labels.sync import SYNC_ROLE_OWNER, SYNC_ROLE_UNAVAILABLE, sync_from_labelset_source, sync_role
     from vtsearch.auth import get_current_user
+    from vtsearch.errors import DETECTOR_SHARED, SHARING_UNAVAILABLE
 
     entry = _registered_detector(detector_ref)
     if not can_user_access_detector(entry["id"], get_current_user()):
         abort(403, message="You do not have access to this detector")
+
+    role = sync_role(entry)
+    if role == SYNC_ROLE_OWNER:
+        abort(
+            409,
+            message=(
+                f"Detector '{entry['name']}' is shared from here: its labels are pushed to its shared copy "
+                "as they change, and nothing is pulled back into it."
+            ),
+            error_code=DETECTOR_SHARED,
+            detector_id=entry["id"],
+        )
+    if role == SYNC_ROLE_UNAVAILABLE:
+        abort(
+            409,
+            message=sharing_note(entry) or "This detector's sharing source is not available on this server.",
+            error_code=SHARING_UNAVAILABLE,
+            detector_id=entry["id"],
+        )
 
     from vtscore.detectors.store import _detector_path, _read_detector
 

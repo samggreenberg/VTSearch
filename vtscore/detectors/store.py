@@ -174,6 +174,16 @@ def allow_linked_write():
         _linked_writes.depth = depth
 
 
+def _in_linked_write() -> bool:
+    """Whether the calling thread is inside :func:`allow_linked_write`.
+
+    The label sync reads it too: a mirror's write is the pull, and never
+    schedules a push - not even before the entry that would say so is
+    registered (a receive writes the file first).
+    """
+    return bool(getattr(_linked_writes, "depth", 0))
+
+
 def _same_labelset(old: Any, new: Any) -> bool:
     """Whether two serialised labelsets hold the same labels (order aside)."""
     if old == new:
@@ -198,7 +208,7 @@ def _linked_entry_for(path: Path, name: Any) -> dict[str, Any] | None:
 
 def _refuse_linked_write(path: Path, data: dict) -> None:
     """Raise :class:`DetectorReadOnlyError` when *data* would change a linked detector's name or labelset."""
-    if getattr(_linked_writes, "depth", 0):
+    if _in_linked_write():
         return
     entry = _linked_entry_for(path, data.get("name"))
     if entry is None:

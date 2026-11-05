@@ -184,6 +184,13 @@ Everything about the container lives inside the entry's `labelset_source`
 binding (`remote_ref`, `remote_owner`, `last_synced`, `integrity`,
 `sync_error`), so the reference and the source it belongs to cannot come
 apart; `vtscore.labels.binding.sharing_binding(entry)` returns it.
+`update_sharing_binding(detector_id, remote_ref, **changes)` records state
+on it as work finishes - an owner push's `sync_error` / `last_synced`
+([labels.md](labels.md#roles)), a refresh's `integrity` - merged under the
+registry's read-modify-write into the binding as it is on disk, and only
+while it still names `remote_ref`, so a concurrent rename or unshare is not
+undone. It returns the stored binding, or `None` when it no longer names
+that container.
 
 ### Find mode
 

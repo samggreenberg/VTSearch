@@ -56,6 +56,15 @@ from vtscore.state.core import (
 #: The frontend keys its "fork it instead" prompt on it.
 DETECTOR_READ_ONLY = "detector_read_only"
 
+#: ``error_code`` of the 409 a manual pull into a shared detector's owner
+#: gets: its labels are pushed to its container, never pulled back.
+DETECTOR_SHARED = "detector_shared"
+
+#: ``error_code`` of the 409 an operation on a detector whose sharing binding
+#: names a source other than the active one (or one not installed) gets; the
+#: message is the detector's ``sharing_note``.
+SHARING_UNAVAILABLE = "sharing_unavailable"
+
 #: ``abort()`` kwargs the framework consumes itself: the first four are read by
 #: flask-smorest's handler, and ``schema`` / ``exc`` are webargs internals it
 #: attaches on a validation failure (the live marshmallow ``Schema`` and the

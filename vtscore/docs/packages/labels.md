@@ -24,7 +24,7 @@ back whenever they change. Both produce / consume the same
 | `vtscore/labels/sharing.py` | The sharing capability's types, errors, manifest and `active_sharing_source` |
 | `vtscore/labels/json_format.py` | Shared shape checks for the label-JSON format (`require_label_object`, `extract_labels`) |
 | `vtscore/labels/binding.py` | Which source a detector syncs with: its registry binding, a context binding, or the deployment default |
-| `vtscore/labels/sync.py` | The sync engine: paced push on every detector write, merging pull |
+| `vtscore/labels/sync.py` | The sync engine: paced push on every detector write (to a plain source, or an owner's container), merging pull for plain bindings |
 
 `vtscore/labels/__init__.py` re-exports nothing; import from the
 submodules (see [architecture.md](../architecture.md#import-paths-read-before-copy-pasting)).
@@ -214,11 +214,41 @@ is the source author's view of the same contract.
 
 | Function | When called |
 |----------|-------------|
-| `note_detector_written(data)` | By `vtscore.detectors.store` on every detector-file write. Schedules a push; never raises. |
-| `schedule_labelset_push(detector_name, *, detector_id="")` | Schedule a paced push of that detector's labels. A no-op when it syncs nowhere or its source is missing a field value. |
+| `note_detector_written(data)` | By `vtscore.detectors.store` on every detector-file write. Schedules a push; never raises. A write inside `allow_linked_write()` (a received detector's mirror) schedules nothing. |
+| `schedule_labelset_push(detector_name, *, detector_id="")` | Schedule a paced push of that detector's labels. A no-op when it syncs nowhere, is received, its sharing source is not active, or its source is missing a field value. |
 | `sync_to_labelset_source()` | Schedule a push for the active detector (every write already does; this is for library code that linked a source on a bare `DetectorContext`). |
-| `sync_from_labelset_source(detector_id=None, *, prefer="source")` | The manual "sync now": pull and merge, the source winning a disagreement. Returns the label dicts the source held, or `None` when the detector syncs nowhere, a field value is missing, the read failed, or the source is empty. |
-| `reconcile_labelset_source(detector_name, *, detector_id="")` | On detector load and when its link changes: pull and merge with the file winning, then schedule a push. Returns how many labels it added or changed; never raises. |
+| `sync_from_labelset_source(detector_id=None, *, prefer="source")` | The manual "sync now": pull and merge, the source winning a disagreement. Returns the label dicts the source held, or `None` when the detector syncs nowhere, is not a plain binding, a field value is missing, the read failed, or the source is empty. |
+| `reconcile_labelset_source(detector_name, *, detector_id="")` | On detector load and when its link changes: pull and merge with the file winning, then schedule a push - for a plain binding only; every other role is left alone. Returns how many labels it added or changed; never raises. |
+| `sync_role(entry, *, detector_id="")` | Which of the roles below a detector has, so a caller can say why a pull does nothing. |
+
+### Roles
+
+One engine serves plain bindings and [detector sharing](#sharing): one slot
+and one pace per detector, with what a push and a pull do decided by the
+entry's **role** (`sync_role`, constants `SYNC_ROLE_*`), resolved again each
+time a push runs:
+
+| Role | Entry | On a detector-file write | On load / manual sync |
+|------|-------|--------------------------|-----------------------|
+| `"plain"` | A binding without a `remote_ref`, or the inherited default | Paced `save` | Pull and merge |
+| `"owner"` | `sync_mode` `local` or `forked`, a binding with a `remote_ref` at the active sharing source | Paced `share_save` of the whole labelset with its manifest; **no pull first** | Nothing (`None` / `0`) |
+| `"linked"` | `sync_mode` `linked`, whatever its binding | Nothing | Nothing |
+| `"unavailable"` | A binding with a `remote_ref` whose source is not the active one, or not installed | Nothing, logged once per detector | Nothing |
+| `"none"` | No binding and no default | Nothing | Nothing |
+
+An owner's push **rewrites** the container to hold exactly the file's
+labelset: a record a recipient added is gone afterwards and one a recipient
+relabelled is the owner's again. Nothing is ever merged back - the pull-first
+merge that protects a plain binding (a backup the server lost) would import
+exactly the foreign records the integrity check exists to catch, so the
+owner's file is authoritative. A received detector changes only by
+`refresh_linked_detector`, whose write is the pull. Each owner push records
+its outcome on the binding through
+`vtscore.detectors.registry.update_sharing_binding` (merged into the binding
+as it is on disk, so a rename or an unshare during the push stands):
+`sync_error` holds a failure's message and is cleared by the next success,
+and `last_synced` moves on success only. A reload keeps it, which a toast
+would not.
 
 ### Binding
 
@@ -263,21 +293,24 @@ Pacing is per detector name:
   seconds apart (default 60), and never sooner than 200ms
   (`_DEBOUNCE_DELAY`) after the change that scheduled them;
 - a payload whose digest matches what the source is known to hold (the
-  last push, or the last pull) is skipped;
-- a detector's first push in a process pulls first, so it never
+  last push, or the last pull; for an owner, the last push that landed at
+  that container) is skipped;
+- a plain detector's first push in a process pulls first, so it never
   overwrites labels only the source held, and a source that cannot be
-  read is not pushed to.
+  read is not pushed to. An owner's never does.
 
-The push runs on a background timer as the detector's creator, with a
-context carrying the detector's id and name so `{detector_*}` templates
-resolve to it. `flush_pending_label_syncs()` runs every pending push now
-(ignoring the pace) and waits for in-flight ones; an `atexit` hook does
-the same on a normal exit, so only a hard kill loses what was waiting.
-`reset_label_sync_for_tests()` *cancels* pending pushes instead.
+The push runs on a background timer as the detector's creator - an owner's
+too, however many readers vote on it, so the sharing source sees the owner
+- with a context carrying the detector's id and name so `{detector_*}`
+templates resolve to it. `flush_pending_label_syncs()` runs every pending
+push, plain and container alike, now (ignoring the pace) and waits for
+in-flight ones; an `atexit` hook does the same on a normal exit, so only a
+hard kill loses what was waiting. `reset_label_sync_for_tests()` *cancels*
+pending pushes instead.
 
 ### Pull
 
-A pull reads `load_full()` and merges it into the detector file under
+Only a plain binding is pulled. A pull reads `load_full()` and merges it into the detector file under
 `label_sync_write_lock`: labels the source has and the file lacks are
 appended, and on a disagreement the `prefer` side wins (`"local"` for
 `reconcile_labelset_source`, `"source"` for the manual sync). No label

@@ -641,12 +641,11 @@ def _diff(old: LabelSet, new: LabelSet) -> tuple[int, int, int]:
     return added, changed, removed
 
 
-def _update_binding(detector_id: str, binding: Mapping[str, Any], **changes: Any) -> dict[str, Any]:
-    from vtscore.detectors.registry import update_detector  # noqa: PLC0415
+def _update_binding(detector_id: str, binding: Mapping[str, Any], **changes: Any) -> None:
+    """Record *changes* on the entry's binding, merged into it as it is on disk (a concurrent push's outcome survives)."""
+    from vtscore.detectors.registry import update_sharing_binding  # noqa: PLC0415
 
-    updated = {**binding, **changes}
-    update_detector(detector_id, labelset_source=updated)
-    return updated
+    update_sharing_binding(detector_id, str(binding["remote_ref"]), **changes)
 
 
 def receive_container(remote_ref: str, *, foreign: str = FOREIGN_ABORT) -> dict[str, Any]:

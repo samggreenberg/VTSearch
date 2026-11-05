@@ -35,6 +35,20 @@ instead, since every commit on `dev` is effectively a new app release.)
   every face cut from it). Every face of one photo resolves to one item of the Image sibling through
   `SourceResolver`. Additive; nothing is persisted.
 
+- **The label-sync engine is role-aware: owners push to their container, received detectors never sync** (issue
+  #5576). `vtscore.labels.sync` keeps one slot and one pace per detector, and now decides what a push and a pull do
+  by the entry's role, read with the new `sync_role(entry, *, detector_id="")` (constants `SYNC_ROLE_NONE`,
+  `SYNC_ROLE_PLAIN`, `SYNC_ROLE_OWNER`, `SYNC_ROLE_LINKED`, `SYNC_ROLE_UNAVAILABLE`, `SYNC_ROLES`). The owner of a
+  shared container (a `local` or `forked` entry whose binding has a `remote_ref` at the active sharing source) pushes
+  through `share_save`: the whole labelset with its manifest, as its creator, rewriting the container with no
+  pull-first merge. Each push records `sync_error` (cleared on success) and `last_synced` (moved on success only)
+  on the binding, through the new `vtscore.detectors.registry.update_sharing_binding(detector_id, remote_ref,
+  **changes)`, which merges into the binding as it is on disk and only while it still names that container. A
+  `linked` entry is never pushed or pulled, and a write inside `allow_linked_write()` schedules nothing; a sharing
+  binding whose source is not the active one does nothing, logged once per detector. `reconcile_labelset_source`
+  and `sync_from_labelset_source` return early (`0` / `None`) for every role but a plain binding. A plain binding
+  behaves exactly as before. See `vtscore/docs/packages/labels.md` (Roles).
+
 - **Received detectors are read-only, and can be received, refreshed and forked** (issue #5575). A registry entry
   now carries a `sync_mode` - `"local"` (the default, and an entry with no key), `"linked"` (a received, read-only
   mirror of someone else's container) or `"forked"` - read with `vtscore.detectors.registry.sync_mode_of` /

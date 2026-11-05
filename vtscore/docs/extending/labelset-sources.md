@@ -307,6 +307,19 @@ Each hook runs **as the caller**: the core scopes the right user with
 `thread_user`, so resolve them with
 `vtscore.state.current_user.get_current_user()`.
 
+`_do_share_save` is called by the same engine as `_do_save` (see [When your
+`_do_save` and `_do_load_full` run](#when-your-_do_save-and-_do_load_full-run)),
+with the same guarantees: every write of an owner's detector file schedules
+one, paced per detector, never two at once, never twice with the same
+payload, on a background thread **as the detector's creator** - the owner,
+not whichever reader voted. There is no pull before it and no merge after
+it: the owner's file is authoritative, so rewrite the container to hold
+exactly `labelset`, dropping records a recipient added. Nothing calls
+`_do_share_refresh` for an owner, and a received detector never calls
+`_do_share_save`. Raising is not fatal: the core records the message on the
+detector's binding as `sync_error`, keeps the file, and pushes again on the
+next change, so raise a `SharingError` whose message a user can act on.
+
 ### Identities are yours
 
 VTSearch usernames and the service's accounts are different namespaces.
