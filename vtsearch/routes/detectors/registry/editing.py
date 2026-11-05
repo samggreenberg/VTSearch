@@ -28,6 +28,7 @@ from vtsearch.schemas.detectors import (
     DetectorRegistryRenameRequestSchema,
     DetectorRegistryRenameResponseSchema,
 )
+from vtsearch.routes._read_only import refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,14 @@ logger = logging.getLogger(__name__)
 @detectors_registry_bp.alt_response(400, description="Empty name after stripping.")
 @detectors_registry_bp.alt_response(403, description="Only the detector creator can rename it.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
-@detectors_registry_bp.alt_response(409, description="A detector with the new name already exists.")
+@detectors_registry_bp.alt_response(
+    409,
+    description=(
+        "A detector with the new name already exists, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
+@refuse_linked("detector_id")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file.
 

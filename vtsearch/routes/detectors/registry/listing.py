@@ -85,6 +85,18 @@ def _fill_type_and_examples(entry: dict) -> None:
         logger.warning("Failed to persist %s for detector %s: %s", sorted(learned), entry["id"], exc)
 
 
+#: The sharing binding's keys a listing may show: everything about the
+#: container, none of the binding's field values.
+_SHARING_STATE_KEYS = ("source_name", "remote_ref", "remote_owner", "last_synced", "integrity", "sync_error")
+
+
+def _sharing_state(binding: dict | None) -> dict | None:
+    """The listing's view of a sharing binding, or ``None`` for a detector that shares nothing."""
+    if binding is None:
+        return None
+    return {key: binding.get(key) for key in _SHARING_STATE_KEYS}
+
+
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
@@ -97,6 +109,11 @@ def list_registered_detectors():
     An AutoFind detector also carries ``test_verdict``, the newest test
     verdict it keeps (#4526), for the AutoFind tab to show beside it; drafts
     leave it out, so the listing reads no detector file it does not need.
+    Every entry carries its sharing state: ``sync_mode`` (``local``,
+    ``linked`` for a received read-only copy, ``forked``), ``sharing`` (the
+    container it mirrors or owns, without the binding's field values),
+    ``sharing_note`` (why that container is not in use here, when it is not)
+    and ``forked_from``.
     """
     from vtscore.detectors.line_verdicts import verdict_summaries
     from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors_for_user
@@ -104,7 +121,13 @@ def list_registered_detectors():
 
     from vtscore.state.core import get_detector_context
 
-    from vtscore.labels.binding import deployment_default_labelset_source, labelset_source_status
+    from vtscore.detectors.registry import sync_mode_of
+    from vtscore.labels.binding import (
+        deployment_default_labelset_source,
+        labelset_source_status,
+        sharing_binding,
+        sharing_note,
+    )
 
     current_user = get_current_user()
     entries = list_detectors_for_user(current_user)
@@ -115,6 +138,13 @@ def list_registered_detectors():
         # Where the detector's labels sync to (#4913) - status only, never the
         # binding's field values, which the entry's ``labelset_source`` holds.
         entry["labelset_source_status"] = labelset_source_status(entry, default=default_source)
+        # Detector sharing: the mode, the container's state (never the
+        # binding's field values) and, when the container's source is not the
+        # active one, the note saying why the detector is local-only.
+        entry["sync_mode"] = sync_mode_of(entry)
+        entry["sharing"] = _sharing_state(sharing_binding(entry))
+        entry["sharing_note"] = sharing_note(entry)
+        entry["forked_from"] = entry.get("forked_from") or None
         did = entry["id"]
         entry["loaded"] = did in loaded_ids
         entry["autofind"] = entry.get("name", "") in autofind_names

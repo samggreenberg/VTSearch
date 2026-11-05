@@ -28,6 +28,7 @@ from vtsearch.state import (
     next_media_id,
     snapshot_medias,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 
 def _resolve_embedder(dataset_embedder_name: str, dataset_media_type: str):
@@ -161,8 +162,10 @@ def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[i
         "invalid label), no dataset loaded, or no embedder available."
     ),
 )
+@medias_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active", find_mode_ok=True)
 def add_media_to_pile():
     """Upload a media file and add it directly to the Good or Bad pile.
 

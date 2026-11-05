@@ -112,13 +112,120 @@ def _atomic_write_text(path: Path, text: str) -> None:
         raise
 
 
+# ---------------------------------------------------------------------------
+# The read-only guarantee for received (linked) detectors
+#
+# A received detector is a mirror of a container someone else owns, so its
+# labelset and its name change only through a refresh.  Every detector write
+# passes through ``_write_detector`` or ``queue_detector_write``, and both
+# refuse one that would change a linked detector's name or labelset.  A write
+# that leaves both as they are on disk goes through: thresholds, the balance,
+# test verdicts and the training-domain summary are derived or local, and a
+# linked detector still trains its head (in RAM) from its labelset.  The
+# refresh and receive paths write inside ``allow_linked_write()``.  Routes
+# check before any side effect as well (``vtsearch.routes._read_only``),
+# since a vote lands in RAM before the file follows.
+# ---------------------------------------------------------------------------
+
+
+class DetectorReadOnlyError(RuntimeError):
+    """A write would change the labels or the identity of a received, read-only detector.
+
+    Attributes:
+        detector_id: The registry id of the received detector.
+        name: Its name.
+        owner: The container's owner as the sharing source reports it, or
+            ``None`` when the entry does not record one.
+    """
+
+    def __init__(self, detector_id: str, name: str, owner: str | None = None) -> None:
+        self.detector_id = detector_id
+        self.name = name
+        self.owner = owner
+        whose = f"it was shared with you by {owner}" if owner else "it is a received copy"
+        super().__init__(f"Detector '{name}' is read-only: {whose}. Fork it to make changes of your own.")
+
+    @classmethod
+    def for_entry(cls, entry: dict[str, Any]) -> DetectorReadOnlyError:
+        """The error for the linked registry *entry*, naming its container's owner."""
+        from vtscore.labels.binding import sharing_binding  # noqa: PLC0415
+
+        owner = (sharing_binding(entry) or {}).get("remote_owner") or None
+        return cls(str(entry.get("id") or ""), str(entry.get("name") or ""), owner if isinstance(owner, str) else None)
+
+
+_linked_writes = threading.local()
+
+
+@contextlib.contextmanager
+def allow_linked_write():
+    """Let writes inside the block change a received detector's file.
+
+    For the paths that keep a mirror current - receiving a container and
+    refreshing one - and nothing else.  Scoped to the calling thread and
+    nestable; a write queued inside the block is checked when it is queued,
+    so it is admitted too.
+    """
+    depth = getattr(_linked_writes, "depth", 0)
+    _linked_writes.depth = depth + 1
+    try:
+        yield
+    finally:
+        _linked_writes.depth = depth
+
+
+def _same_labelset(old: Any, new: Any) -> bool:
+    """Whether two serialised labelsets hold the same labels (order aside)."""
+    if old == new:
+        return True
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return False
+    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
+    from vtscore.labels.sharing import labelset_digest  # noqa: PLC0415
+
+    return labelset_digest(LabelSet.from_dict(old)) == labelset_digest(LabelSet.from_dict(new))
+
+
+def _linked_entry_for(path: Path, name: Any) -> dict[str, Any] | None:
+    """The linked registry entry whose labelset file is *path*, or whose name is *name*."""
+    from vtscore.detectors.registry import is_linked, list_detectors  # noqa: PLC0415
+
+    for entry in list_detectors():
+        if is_linked(entry) and (entry.get("name") == name or _detector_path(entry.get("name", "")) == path):
+            return entry
+    return None
+
+
+def _refuse_linked_write(path: Path, data: dict) -> None:
+    """Raise :class:`DetectorReadOnlyError` when *data* would change a linked detector's name or labelset."""
+    if getattr(_linked_writes, "depth", 0):
+        return
+    entry = _linked_entry_for(path, data.get("name"))
+    if entry is None:
+        return
+    current = _read_detector(path)
+    if (
+        current is not None
+        and current.get("name") == data.get("name") == entry.get("name")
+        and _same_labelset(current.get("labelset"), data.get("labelset"))
+    ):
+        return
+    raise DetectorReadOnlyError.for_entry(entry)
+
+
 def _write_detector(path: Path, data: dict) -> None:
     """Write *data* to *path* now, on the calling thread, atomically.
 
     Any write still queued for *path* lands first (in order), so a caller
     that read the queued state through :func:`_read_detector`, modified it
     and writes it back can never be overtaken by the older queued text.
+
+    Raises:
+        DetectorReadOnlyError: *path* is a received detector's file and the
+            write would change its name or labelset (outside
+            :func:`allow_linked_write`).
     """
+    _refuse_linked_write(path, data)
     text = json.dumps(data, indent=2)
     with _writer_lock:
         _drain_pending(path)
@@ -228,7 +335,13 @@ def queue_detector_write(path: Path, data: dict, *, after: Callable[[], None] | 
     Raises :class:`DetectorWriteError` when the previous queued write for
     *path* failed, after queueing this one (whose text supersedes the lost
     one, so a later success repairs the file).
+
+    Raises :class:`DetectorReadOnlyError`, synchronously and before queueing
+    anything, when the write would change a received detector's name or
+    labelset - so a caller never sees a success followed by a background
+    failure.
     """
+    _refuse_linked_write(path, data)
     text = json.dumps(data, indent=2)
     if detector_write_mode() == "sync":
         with _writer_lock:

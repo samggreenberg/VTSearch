@@ -23,8 +23,9 @@ quotable in a bug report.
 
 The module also holds the ``@app.errorhandler`` functions: JSON 404/405 for
 ``/api/`` paths, the dataset/detector
-not-loaded -> 409 mappings, the request-missing-context -> 400 mapping, and
-the catch-all uncaught-exception -> 500.
+not-loaded -> 409 mappings, the received-detector read-only -> 409 mapping
+(``error_code: "detector_read_only"``), the request-missing-context -> 400
+mapping, and the catch-all uncaught-exception -> 500.
 
 ``app.py`` calls :func:`register_error_handlers` to wire them onto its
 module-level ``app``. Registration is explicit (rather than via
@@ -44,11 +45,16 @@ from flask_smorest.error_handler import ErrorSchema as _SmorestErrorSchema
 from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound
 from werkzeug.http import HTTP_STATUS_CODES
 
+from vtscore.detectors.store import DetectorReadOnlyError
 from vtscore.state.core import (
     DatasetNotLoadedError,
     DetectorNotLoadedError,
     RequestMissingContextError,
 )
+
+#: ``error_code`` of the 409 a write to a received, read-only detector gets.
+#: The frontend keys its "fork it instead" prompt on it.
+DETECTOR_READ_ONLY = "detector_read_only"
 
 #: ``abort()`` kwargs the framework consumes itself: the first four are read by
 #: flask-smorest's handler, and ``schema`` / ``exc`` are webargs internals it
@@ -263,6 +269,22 @@ def _handle_detector_not_loaded(exc):
     )
 
 
+def _handle_detector_read_only(exc: DetectorReadOnlyError):
+    """409 for a write the store refused: the detector is a received, read-only copy.
+
+    The route-layer guard (``vtsearch.routes._read_only``) answers the same
+    409 before any side effect; this handler is the backstop for a write that
+    reached the store without passing one.
+    """
+    return error_response(
+        str(exc),
+        409,
+        detector_id=exc.detector_id,
+        remote_owner=exc.owner,
+        error_code=DETECTOR_READ_ONLY,
+    )
+
+
 def _is_registered(kind: str, item_id: str) -> bool:
     """Whether *item_id* still has a ``kind`` ("dataset"/"detector") registry entry.
 
@@ -334,5 +356,6 @@ def register_error_handlers(app) -> None:
     app.errorhandler(MethodNotAllowed)(_handle_405)
     app.errorhandler(DatasetNotLoadedError)(_handle_dataset_not_loaded)
     app.errorhandler(DetectorNotLoadedError)(_handle_detector_not_loaded)
+    app.errorhandler(DetectorReadOnlyError)(_handle_detector_read_only)
     app.errorhandler(RequestMissingContextError)(_handle_request_missing_context)
     app.errorhandler(Exception)(_handle_uncaught_exception)

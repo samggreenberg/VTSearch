@@ -135,35 +135,13 @@ Three questions decided the shape, and one nuance refined the binding:
 | **sync mode** | `local` (the default and the absent value), `linked` (a received, read-only mirror) or `forked` (`local` in every rule, with `forked_from` provenance). |
 | **active sharing source** | The `LabelsetSource` the `detector_sharing_source` server setting names. `null` means sharing is off. |
 
-A registry entry gains, beside `labelset_source`:
-
-```json
-{
-  "sync_mode": "linked",
-  "labelset_source": {
-    "source_name": "shared_folder",
-    "field_values": {"folder": "/mnt/share/detectors"},
-    "remote_ref": "9f1c...",
-    "remote_owner": "alice",
-    "last_synced": 1762300000.0,
-    "integrity": {"status": "foreign_modifications", "count": 3},
-    "sync_error": null
-  },
-  "forked_from": null
-}
-```
-
-`sync_mode` is top-level because the write guard and every mutating route
-read it; everything about the remote lives inside the binding, so the
-`remote_ref` and the source it belongs to can never come apart. `integrity`
-is set by the last refresh (linked), `sync_error` by the last push (owner),
-`last_synced` by whichever ran. A plain binding has none of the sharing keys
-and behaves exactly as it does today.
-
-The setting mirrors `default_labelset_source`:
-`detector_sharing_source: {"source_name": ..., "field_values": {...}} | null`.
-Its `field_values` are the admin-fixed connection values, laid into each new
-binding the way the default's fixed keys are today.
+The entry shape shipped in #5575 and is documented in
+`vtscore/docs/packages/detectors.md` ("Sharing state"): a top-level
+`sync_mode`, the container's state inside the `labelset_source` binding
+(`remote_ref`, `remote_owner`, `last_synced`, `integrity`, `sync_error`; the
+setting's fixed field values are laid in at call time, never stored), and
+`forked_from`. `GET /api/detectors/registry` lists `sync_mode`, `sharing`
+(the binding without its field values), `sharing_note` and `forked_from`.
 
 ### The sharing contract
 
@@ -193,28 +171,19 @@ is the wrong policy for an owner: merging the container into the owner's file
 would import exactly the foreign records tamper detection exists to catch.
 The owner's file is authoritative.
 
-### Integrity
+### Integrity and the read-only guarantee
 
-A refresh returns the container's records with `created_by` and
-`last_modified_by`, its owner, and its manifest with the manifest's own
-`last_modified_by`. A record is **foreign** when either identity is not the
-owner's; the manifest is foreign when it was not last written by the owner or
-its count disagrees with the record count. The result is `clean` or
-`foreign_modifications` with a count. A refresh is applied under one of three
-policies the caller names: `abort` (the default: report and change nothing),
-`import` (take every record) or `skip` (take only the owner's records). The
-dashboard turns an `abort` result with foreign records into the dialog the
-request describes.
-
-### The read-only guarantee
-
-Enforced where every write goes: `_write_detector` and `queue_detector_write`
-refuse a write to a detector whose entry is `linked` unless the write is
-inside the refresh/receive path (`allow_linked_write()`) or leaves the file's
-`name` and `labelset` unchanged. Mutating routes check first and answer 409
-`detector_read_only` before any side effect (a vote lands in RAM before the
-file is written, so the store guard alone would reject it too late). The
-frontend reads the same error code to offer a fork.
+Shipped in #5575: `compute_integrity`, the `abort` / `import` / `skip`
+refresh policies, `receive_container`, `refresh_linked_detector` and
+`fork_detector` are in `vtscore/docs/packages/labels.md` ("Receive, refresh,
+fork"); the store guard (`DetectorReadOnlyError`, `allow_linked_write`) is in
+`vtscore/docs/packages/detectors.md` ("The read-only guarantee"), and every
+route that changes a labelset or an identity answers 409
+`detector_read_only` before any side effect
+(`vtsearch/routes/_read_only.py`). What the later slices build on: the
+routes map `SharingUnavailable` to the note's 409, `ForeignModifications`
+from a receive to the integrity dialog, and `LookupError` to 404; the
+dashboard offers a fork on the `detector_read_only` code.
 
 ### Routes
 

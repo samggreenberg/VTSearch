@@ -50,7 +50,10 @@ __all__ = [
     "deployment_default_labelset_source",
     "fixed_field_values",
     "labelset_source_status",
+    "binding_matches_active_source",
     "resolve_labelset_source",
+    "sharing_binding",
+    "sharing_note",
     "stored_labelset_source",
     "unfixed_fields",
 ]
@@ -158,6 +161,69 @@ def stored_labelset_source(entry: dict[str, Any] | None) -> dict[str, Any] | Non
     if not entry:
         return None
     return _valid_config(entry.get("labelset_source"))
+
+
+def sharing_binding(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The entry's binding when it names a shared container (it carries a ``remote_ref``), else ``None``.
+
+    A sharing binding is an ordinary ``labelset_source`` binding plus the
+    container's state: ``remote_ref`` (which container, at the binding's
+    source), ``remote_owner`` (a received detector's owner, as the source
+    reports identities), ``last_synced``, ``integrity`` (set by the last
+    refresh) and ``sync_error`` (set by the last owner push).  Keeping them in
+    one dict means the ``remote_ref`` and the source it belongs to can never
+    come apart.  A plain binding has none of these keys.
+    """
+    binding = stored_labelset_source(entry)
+    if binding is None:
+        return None
+    ref = binding.get("remote_ref")
+    return binding if isinstance(ref, str) and ref else None
+
+
+def binding_matches_active_source(entry: dict[str, Any] | None) -> bool:
+    """Whether the entry's sharing binding belongs to the active sharing source.
+
+    True only when the entry has a :func:`sharing_binding` whose source is the
+    one ``detector_sharing_source`` names
+    (:func:`~vtscore.labels.sharing.active_sharing_source`).  Otherwise -
+    sharing is off, the deployment now shares through a different source, or
+    the binding's source is not installed - the entry is local-only, with
+    :func:`sharing_note` saying why, and is never pointed at a different
+    source.
+    """
+    binding = sharing_binding(entry)
+    if binding is None:
+        return False
+    from vtscore.labels.sharing import active_sharing_source  # noqa: PLC0415
+
+    active = active_sharing_source()
+    return active is not None and active.source_name == binding["source_name"].strip()
+
+
+def sharing_note(entry: dict[str, Any] | None) -> str | None:
+    """Why the entry's sharing binding is not in use, or ``None`` when it is (or it has none).
+
+    The listing and the dashboard show this string as it is, rather than each
+    guessing.  A received detector with a note is still read-only, and can
+    still be forked: a fork needs only the local copy.
+    """
+    binding = sharing_binding(entry)
+    if binding is None or binding_matches_active_source(entry):
+        return None
+    from vtscore.labels.sharing import active_sharing_source  # noqa: PLC0415
+    from vtscore.labels.sources import get_labelset_source  # noqa: PLC0415
+
+    name = binding["source_name"].strip()
+    source = get_labelset_source(name)
+    label = (source.display_name if source is not None else "") or name
+    if source is None:
+        reason = f"its sharing source, {name!r}, is not installed on this server"
+    elif active_sharing_source() is None:
+        reason = "detector sharing is off on this server"
+    else:
+        reason = f"this server now shares detectors through a different source than {label}"
+    return f"Shared through {label}, but {reason}; this is a local copy until that changes."
 
 
 def _missing_required(source: LabelsetSource, values: dict[str, Any]) -> tuple[str, ...]:

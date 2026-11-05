@@ -40,6 +40,7 @@ from vtsearch.schemas.settings_io import (
     SyncSourceConfigSchema,
     SyncSourceEntrySchema,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 sync_sources_bp = Blueprint(
     "sync_sources",
@@ -281,6 +282,8 @@ def _validated_binding(entry: dict, source, field_values: dict) -> dict:
 @sync_sources_bp.alt_response(400, description="A field value is missing or not allowed.")
 @sync_sources_bp.alt_response(403, description="Only the detector's creator can change where it syncs.")
 @sync_sources_bp.alt_response(404, description="Unknown detector or labelset source.")
+@sync_sources_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("detector_ref")
 def set_detector_labelset_source(body: dict, detector_ref: str):
     """Set, clear, or opt a detector out of its labelset source.
 
@@ -329,6 +332,8 @@ def set_detector_labelset_source(body: dict, detector_ref: str):
 @sync_sources_bp.response(200, SyncFromLabelsetSourceResponseSchema)
 @sync_sources_bp.alt_response(403, description="Access denied for the current user.")
 @sync_sources_bp.alt_response(404, description="Detector not found.")
+@sync_sources_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("detector_ref")
 def sync_detector_labelset_from_source(detector_ref: str):
     """Pull the labels at the detector's labelset source into it now.
 

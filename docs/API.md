@@ -149,7 +149,7 @@ extras (e.g. `available`, `missing_fields`, `dataset_id`):
 |-------|------|
 | `errors` | Schema validation failed (**422**); maps location → field → messages, e.g. `{"json": {"volume": ["Not a valid number."]}}` or `{"query": {...}}` |
 | `detail` | 500s from the catch-all handler; the exception type and its first line, e.g. `"RuntimeError: embedder X not loaded"` |
-| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted), and on the routes that reach a converter output's source item, `source_not_loaded` (409: the source dataset is registered but not loaded; `dataset_id` names it) and `not_derived` / `no_source_dataset` / `source_not_found` (404) |
+| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `detector_read_only` (409: the detector is a received, read-only copy of someone else's shared detector; the message names its owner and `remote_owner` carries it, and forking it is the cure), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted), and on the routes that reach a converter output's source item, `source_not_loaded` (409: the source dataset is registered but not loaded; `dataset_id` names it) and `not_derived` / `no_source_dataset` / `source_not_found` (404) |
 
 A schema-validation failure therefore looks like:
 

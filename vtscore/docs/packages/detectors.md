@@ -165,6 +165,25 @@ CRUD: `list_detectors`, `get_detector`, `register_detector`,
 `list_detectors_for_user`, and `update_detector_readers` (returns a
 `ReadersUpdate`; see [security.md](security.md#readers-updates)) with its
 `(ok, err)` form `set_detector_readers`. Test reset: `reset_for_tests`.
+Names: `detector_name_taken(name, *, own_path=None, exclude_id="")` is the
+collision rule (two names collide when they resolve to one labelset file, or
+an entry already holds the name), and `free_detector_name(base)` suffixes
+`" (2)"`, `" (3)"`, ... until one is free - how a received or forked copy is
+named without overwriting anything.
+
+### Sharing state
+
+Detector sharing (`vtscore.labels.sharing`; see
+[labels.md](labels.md#sharing)) keeps its state on the entry. `sync_mode` is
+`SYNC_MODE_LOCAL` (`"local"`, also an entry with no key), `SYNC_MODE_LINKED`
+(`"linked"`: a received, read-only mirror of someone else's container) or
+`SYNC_MODE_FORKED` (`"forked"`: `local` in every rule, with `forked_from`
+provenance). `sync_mode_of(entry)` and `is_linked(entry)` read it;
+`register_detector` takes `sync_mode`, `labelset_source` and `forked_from`.
+Everything about the container lives inside the entry's `labelset_source`
+binding (`remote_ref`, `remote_owner`, `last_synced`, `integrity`,
+`sync_error`), so the reference and the source it belongs to cannot come
+apart; `vtscore.labels.binding.sharing_binding(entry)` returns it.
 
 ### Find mode
 
@@ -216,6 +235,21 @@ a content hash appended so long names can't collide) and appends `.json`.
 `_write_detector(path, data)` writes atomically via a per-writer tempfile +
 `os.fsync` + `os.replace`. Despite the leading underscores these are the
 path-level API the rest of the package (and `vtscore.cli`) calls.
+
+### The read-only guarantee
+
+A received (`linked`) detector's name and labelset change only through a
+refresh. `_write_detector` and `queue_detector_write` both refuse a write that
+would change either for a linked entry (found by the file's name or path) and
+raise `DetectorReadOnlyError` (`detector_id`, `name`, `owner`) - the queue
+synchronously, before queueing anything. A write that leaves both as they are
+on disk goes through, so thresholds, the balance, kept test verdicts and the
+training-domain summary stay writable and a linked detector still trains its
+head in RAM from its labels. The receive and refresh paths write inside
+`allow_linked_write()`, a thread-scoped, nestable context. The app maps the
+error to a 409 with `error_code: "detector_read_only"`, and its mutating routes
+check before any side effect, since a vote lands in RAM before the file
+follows.
 
 ### Kept test verdicts
 
@@ -676,7 +710,11 @@ match anything in the current dataset are preserved verbatim;
 entries matching current-dataset media are reconciled against the
 active votes (replaced, flipped, or removed). Skipped entirely when
 `is_find_mode()` is True - find-mode votes are scoring hits on a
-different dataset and don't belong in the training set.
+different dataset and don't belong in the training set. A received
+(`linked`) detector is never written from votes either: re-composing its
+labelset could change an item's origin without any label changing. When
+the votes assert a label its file does not hold, the sync raises
+`DetectorReadOnlyError` instead.
 
 ### `label_sync.label_sync_write_lock`
 

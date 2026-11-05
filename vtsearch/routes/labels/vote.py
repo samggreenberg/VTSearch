@@ -30,6 +30,7 @@ from vtsearch.state import (
 )
 from vtscore.datasets.labelset import build_media_hit, hit_custom_metadata, imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -557,8 +558,10 @@ def _stream_labels_ndjson(
 @labels_bp.arguments(LabelsImportRequestSchema)
 @labels_bp.response(200, LabelsImportResponseSchema)
 @labels_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
+@labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def import_labels(body: dict):
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
     labels = body["labels"]
@@ -648,8 +651,10 @@ def _partition_candidates(
 @labels_bp.response(200, FillFromSortResponseSchema)
 @labels_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
 @labels_bp.alt_response(500, description="The labels could not be written to the detector store.")
+@labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def fill_labels_from_sort(body: dict):
     """Fill labels from the current sort results.
 
