@@ -260,6 +260,28 @@ run found nothing Good). A layout already built for these ids, or the fit
 already running for them, is reported whatever the server is doing. **404**
 as for [AutoFind results](#autofind-results).
 
+### Export AutoFind results by hand
+
+```
+POST /api/autofind/runs/{run_id}/export
+```
+
+Sends run `run_id`'s results through the AutoFind results exporter, as the
+run's finish did (#5584): the Find Results dialog's **AutoFind** tab, a way to
+try the exporter and field values set up on the Settings **AutoFind** tab
+without importing another dataset. The payload is the run's own
+[`POST /api/auto-detect`](#auto-detect) body
+(`media_type`, `detectors_run`, `results`, `missing_detectors`): every
+detector's Good at the run's own cut, whatever the dialog lists. The pause
+(`autofind_export_enabled`) holds back what finished runs send on their own,
+not this request.
+
+→ the same `{exporter, exporter_display_name, success, message?/error?,
+open_url?}` block a run records as its `auto_export`, the exporter's own
+failure included (`success: false` with its `error`, never an HTTP error).
+**404** as for [AutoFind results](#autofind-results); **409** when no
+exporter is set up for AutoFind.
+
 ### Test the line
 
 ```
