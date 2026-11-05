@@ -15,6 +15,7 @@ real one: what the routes serve is checked against people the fit has to find.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -157,10 +158,17 @@ class _Faces:
         assert resp.status_code == 200, resp.get_json()
         return resp.get_json()
 
-    def move(self, face_id: int, axis: int) -> None:
-        """Re-embed one face near another person's axis (a fit after this moves it)."""
-        photo, _axis, quality = FACES[face_id]
-        self.ctx.medias[face_id] = _face(face_id, photo, axis, quality, SPACE)
+
+def _fit_seeing(face_id: int, axis: int):
+    """A fit that sees *face_id* near another person's *axis*: a fit that finds other people than the last."""
+    real = pp.fit_people
+
+    def fit(matrix, ids, **kwargs):
+        moved = np.array(matrix, copy=True)
+        moved[list(ids).index(face_id)] = _vector(face_id, axis)
+        return real(moved, ids, **kwargs)
+
+    return fit
 
 
 @pytest.fixture
@@ -235,12 +243,10 @@ class TestBuild:
         old = faces.listing(client)
         assert faces.get(client, f"/api/people/1?partition={old['partition']}").get_json()["representative"] == 1
 
-        faces.move(3, axis=1)
-        # The stored partition still covers every face, so it serves until it is fit again.
-        assert faces.listing(client)["partition"] == old["partition"]
-        building = faces.post(client, "/api/people/build", {"force": True}).get_json()
-        assert building["status"] == "building" and building["job_id"]
-        _await_jobs()
+        with patch.object(pp, "fit_people", side_effect=_fit_seeing(3, axis=1)):
+            building = faces.post(client, "/api/people/build", {"force": True}).get_json()
+            assert building["status"] == "building" and building["job_id"]
+            _await_jobs()
 
         new = faces.listing(client)
         assert new["partition"] != old["partition"]

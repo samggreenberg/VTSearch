@@ -18,6 +18,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Labeling & Diversity](api/labeling.md) | The balance and its spot check, labeling status/progress, indicator history, train-and-score, coverage atlas |
 | [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, AutoFind toggle, loading |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, cleaners, converters, media-file browsing, VTSBrowse projection |
+| [People](api/people.md) | A Face dataset's people, one person and who appears with them, the photos two people share, Rebuild people |
 | [Import & Export](api/io.md) | Result exporters, label importers, settings importers/exporters |
 | [Settings](api/settings.md) | App settings, settings sources, labelset sources |
 | [Dashboard](api/dashboard.md) | Dashboard disk/RAM usage probes |
@@ -43,6 +44,7 @@ Every blueprint under `vtsearch/routes/` registers full paths (none sets a
 | `/api/balance`, `/api/precision-check*`, `/api/labeling-progress`, `/api/labeling-status`, `/api/indicator-score-history`, `/api/eval/*`, `/api/coverage-atlas/*` | [labeling.md](api/labeling.md) |
 | `/api/detectors*`, except `/api/detectors/{detector_name}/labelset-source*` | [detectors.md](api/detectors.md) |
 | `/api/dataset/*`, `/api/datasets/registry*`, `/api/media-types`, `/api/embed`, `/api/embedders`, `/api/clippers`, `/api/cleaners`, `/api/converters`, `/api/browse-media-files*`, `/api/projection/*` | [datasets.md](api/datasets.md) |
+| `/api/people*` | [people.md](api/people.md) |
 | `/api/exporters*`, `/api/label-importers*`, `/api/settings-importers*`, `/api/settings-exporters*` | [io.md](api/io.md) |
 | `/api/settings`, `/api/settings/defaults`, `/api/settings-sources*`, `/api/labelset-sources*`, `/api/detectors/{detector_name}/labelset-source*` | [settings.md](api/settings.md) |
 | `/api/dashboard/*` | [dashboard.md](api/dashboard.md) |
@@ -149,7 +151,7 @@ extras (e.g. `available`, `missing_fields`, `dataset_id`):
 |-------|------|
 | `errors` | Schema validation failed (**422**); maps location → field → messages, e.g. `{"json": {"volume": ["Not a valid number."]}}` or `{"query": {...}}` |
 | `detail` | 500s from the catch-all handler; the exception type and its first line, e.g. `"RuntimeError: embedder X not loaded"` |
-| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `detector_read_only` (409: the detector is a received, read-only copy of someone else's shared detector; the message names its owner and `remote_owner` carries it, and forking it is the cure), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted), and on the routes that reach a converter output's source item, `source_not_loaded` (409: the source dataset is registered but not loaded; `dataset_id` names it) and `not_derived` / `no_source_dataset` / `source_not_found` (404) |
+| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `detector_read_only` (409: the detector is a received, read-only copy of someone else's shared detector; the message names its owner and `remote_owner` carries it, and forking it is the cure), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted), and on the routes that reach a converter output's source item, `source_not_loaded` (409: the source dataset is registered but not loaded; `dataset_id` names it) and `not_derived` / `no_source_dataset` / `source_not_found` (404), and on the [People](api/people.md) routes, `no_people` (409: not a Face dataset, or no face vectors), `people_not_ready` (409: no people found yet; `GET /api/people` finds them) and `people_changed` (409: the person id was read under another partition; list the people again) |
 
 A schema-validation failure therefore looks like:
 

@@ -1284,6 +1284,29 @@
         ],
         "type": "object"
       },
+      "CoPerson": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "The other person's rank in this partition.",
+            "type": "integer"
+          },
+          "representative": {
+            "description": "The other person's representative.",
+            "type": "integer"
+          },
+          "shared": {
+            "description": "How many photos the two share.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "representative",
+          "shared"
+        ],
+        "type": "object"
+      },
       "CollapsedFace": {
         "additionalProperties": false,
         "properties": {
@@ -6667,6 +6690,235 @@
         },
         "type": "object"
       },
+      "PeopleBuildRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Fit the people again even when a partition is stored (Rebuild people).",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PeopleList": {
+        "additionalProperties": false,
+        "properties": {
+          "compat": {
+            "default": null,
+            "description": "The face space (``Face Compat``) the people were cut in, when ``ready``; the space with no cut, when ``not_calibrated`` (null when the faces carry no single one).",
+            "nullable": true,
+            "type": "string"
+          },
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "cutoff": {
+            "default": null,
+            "description": "When ``ready``: the cosine a face cleared to its person's centroid (the face ball's beta 1 floor).",
+            "nullable": true,
+            "type": "number"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "eta_seconds": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "linkage": {
+            "default": null,
+            "description": "When ``ready``: the clustering linkage the fit used.",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "description": "When ``ready``: how the people were fit.",
+            "nullable": true,
+            "type": "string"
+          },
+          "overall": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "overall_step_end": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "partition": {
+            "default": null,
+            "description": "When ``ready``: The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "nullable": true,
+            "type": "string"
+          },
+          "people": {
+            "default": null,
+            "description": "When ``ready``: every person, the most faces first.",
+            "items": {
+              "$ref": "#/components/schemas/PersonSummary"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "status": {
+            "description": "``ready``: the people are listed. ``building``: they are being found; ask ``GET /api/people`` again. ``error``: that fit failed (said once; the next ask starts over). ``not_calibrated``: the dataset's face embedder has no cut to find people at, and ``message`` says so.",
+            "enum": [
+              "ready",
+              "building",
+              "error",
+              "not_calibrated"
+            ],
+            "type": "string"
+          },
+          "step": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total_steps": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "unplaced": {
+            "default": null,
+            "description": "When ``ready``: how many faces are in no person (hard views that matched no one).",
+            "nullable": true,
+            "type": "integer"
+          },
+          "unplaced_ids": {
+            "default": null,
+            "description": "When ``ready``: the faces in no person, ascending.",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "Person": {
+        "additionalProperties": false,
+        "properties": {
+          "appears_with": {
+            "description": "The people who share a photo with this person: most shared first, ties by rank.",
+            "items": {
+              "$ref": "#/components/schemas/CoPerson"
+            },
+            "type": "array"
+          },
+          "face_ids": {
+            "description": "The person's faces: the representative first, then from the closest to them out.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "partition": {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "type": "string"
+          },
+          "photos": {
+            "description": "The photos the person is in, by photo id.",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhoto"
+            },
+            "type": "array"
+          },
+          "representative": {
+            "description": "The person's representative face.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "appears_with",
+          "face_ids",
+          "id",
+          "partition",
+          "photos",
+          "representative"
+        ],
+        "type": "object"
+      },
+      "PersonPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "face_ids": {
+            "description": "The person's faces cut from the photo, in the person's order (usually one).",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "photo": {
+            "description": "The photo's id: a number for the photo while the dataset's faces are unchanged, the same one the shared-photos route gives it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_ids",
+          "photo"
+        ],
+        "type": "object"
+      },
+      "PersonSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "face_count": {
+            "description": "How many faces the person has.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "The person's rank in this partition: 1 for the person with the most faces.",
+            "type": "integer"
+          },
+          "photo_count": {
+            "description": "How many photos the person's faces were cut from.",
+            "type": "integer"
+          },
+          "representative": {
+            "description": "The face that stands for the person: their face with the highest Face Quality.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_count",
+          "id",
+          "photo_count",
+          "representative"
+        ],
+        "type": "object"
+      },
       "PrecisionCheckResponse": {
         "additionalProperties": false,
         "properties": {
@@ -7596,6 +7848,96 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SharedPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "faces": {
+            "description": "Every face cut from the photo, not only the two people's, ascending.",
+            "items": {
+              "$ref": "#/components/schemas/SharedPhotoFace"
+            },
+            "type": "array"
+          },
+          "photo": {
+            "description": "The photo's id, as ``GET /api/people/<id>`` gives it.",
+            "type": "integer"
+          },
+          "source_dataset_id": {
+            "description": "The Image dataset holding the photo, when it could be named; null when no dataset the user can read holds it.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_media_id": {
+            "description": "The photo's media id in ``source_dataset_id``, or null with it.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "faces",
+          "photo",
+          "source_dataset_id",
+          "source_media_id"
+        ],
+        "type": "object"
+      },
+      "SharedPhotoFace": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the face sits in its photo, normalised ``[x0, y0, x1, y1]`` (its ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_id": {
+            "description": "The face's media id.",
+            "type": "integer"
+          },
+          "person": {
+            "description": "The face's person (their rank in this partition), or null when it is unplaced.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "media_id",
+          "person"
+        ],
+        "type": "object"
+      },
+      "SharedPhotos": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "other": {
+            "type": "integer"
+          },
+          "partition": {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "type": "string"
+          },
+          "photos": {
+            "description": "The photos both people have a face in, by photo id.",
+            "items": {
+              "$ref": "#/components/schemas/SharedPhoto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "other",
+          "partition",
+          "photos"
+        ],
         "type": "object"
       },
       "SmartPoint": {
@@ -15385,6 +15727,208 @@
         ]
       }
     },
+    "/api/people": {
+      "get": {
+        "description": "A Face dataset's people are its face crops merged at the face ball's cut\n(:mod:`vtscore.datasets.people`), fit when the dataset was built, or on the\nfirst ask for one built before that.  That ask answers ``building`` with\nthe fit's progress, and the client asks again until it is ``ready``.  A\nface space the ball has no cut for answers ``not_calibrated`` and is never\nfit.  ``partition`` names this partition; pass it back to name a person.",
+        "operationId": "list_people",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``): it is not a Face dataset, or its faces have no vectors."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List the dataset's people: each one's rank, face and photo counts, and representative (#5589).",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/build": {
+      "post": {
+        "description": "Answers as ``GET /api/people`` does.  Without ``force`` it is that ask; with\nit, a stored partition is fit again and the answer is ``building`` (the\nrunning fit's, when one already is).  Poll ``GET /api/people``.",
+        "operationId": "build_people",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeopleBuildRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``): it is not a Face dataset, or its faces have no vectors."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Find the dataset's people, again with ``force`` (Rebuild people).",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}": {
+      "get": {
+        "description": "``appears_with`` lists every other person with a face in one of this\nperson's photos, with how many photos the two share, most first.  Needs no\nImage sibling: which faces share a photo is read off the faces.",
+        "operationId": "get_person",
+        "parameters": [
+          {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "404": {
+            "description": "No person has this id in the partition."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``); its people are not found yet (``people_not_ready``: ask ``GET /api/people``); or the people were found again since ``partition`` was read (``people_changed``: list them again)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "One person: their faces, the photos they are in, and the people who appear with them.",
+        "tags": [
+          "people"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "person_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/people/{person_id}/with/{other_id}": {
+      "get": {
+        "description": "Each face carries its box in the photo and its person (null when it is\nunplaced), so a photo can be drawn with everyone in it outlined.  The photo\nitself is named as an item of the Image dataset the same import made\n(``source_dataset_id`` / ``source_media_id``), found as\n``GET /api/medias/<id>/source`` finds a face's.  That dataset must be\nloaded; when it is not, the 409 names it.  One the user cannot read leaves\nboth null.",
+        "operationId": "shared_photos",
+        "parameters": [
+          {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedPhotos"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "404": {
+            "description": "No person has this id in the partition."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``); its people are not found yet (``people_not_ready``: ask ``GET /api/people``); or the people were found again since ``partition`` was read (``people_changed``: list them again). Or the photos' Image dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The photos two people share, each with every face cut from it.",
+        "tags": [
+          "people"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "person_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "other_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/precision-check": {
       "get": {
         "operationId": "get_precision_check",
@@ -17243,6 +17787,10 @@
     {
       "description": "VTSBrowse projection: UMAP layout + hex/square tile pyramid.",
       "name": "projection"
+    },
+    {
+      "description": "A Face dataset's people, and the people who appear with each in the same photos.",
+      "name": "people"
     }
   ]
 }
