@@ -65,6 +65,40 @@ DETECTOR_SHARED = "detector_shared"
 #: message is the detector's ``sharing_note``.
 SHARING_UNAVAILABLE = "sharing_unavailable"
 
+# The detector-sharing routes (``vtsearch/routes/detectors/sharing.py``).
+
+#: ``error_code`` of the 404 every sharing route but the capability one (and
+#: fork, which needs only the local copy) answers while the
+#: ``detector_sharing_source`` setting is null.
+SHARING_DISABLED = "sharing_disabled"
+
+#: ``error_code`` of the 501 an optional sharing operation the active source
+#: does not implement (recipient search) gets.
+SHARING_UNSUPPORTED = "sharing_unsupported"
+
+#: ``error_code`` of the 502 a sharing operation gets when the sharing service
+#: itself failed (unreachable, a malformed reply); the message says how.
+SHARING_FAILED = "sharing_failed"
+
+#: ``error_code`` of the 404 for a ``remote_ref`` that names no container the
+#: caller can reach (never created, archived, or deleted at the service).
+REMOTE_NOT_FOUND = "remote_not_found"
+
+#: ``error_code`` of the 403 for a container the caller may not do this to.
+REMOTE_PERMISSION_DENIED = "remote_permission_denied"
+
+#: ``error_code`` of the 409 a receive gets when the caller already holds that
+#: container; ``detector_id`` names their copy.
+ALREADY_RECEIVED = "already_received"
+
+#: ``error_code`` of the 404 for a sharing view or unshare of a detector that
+#: shares nothing.
+DETECTOR_NOT_SHARED = "detector_not_shared"
+
+#: ``error_code`` of the 409 a refresh of a detector that is not a received
+#: copy gets.
+DETECTOR_NOT_LINKED = "detector_not_linked"
+
 #: ``abort()`` kwargs the framework consumes itself: the first four are read by
 #: flask-smorest's handler, and ``schema`` / ``exc`` are webargs internals it
 #: attaches on a validation failure (the live marshmallow ``Schema`` and the

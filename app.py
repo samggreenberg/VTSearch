@@ -119,6 +119,7 @@ from vtsearch.routes import (  # noqa: E402
     detectors_export_bp,
     detectors_labels_bp,
     detectors_registry_bp,
+    detectors_sharing_bp,
     embed_bp,
     eval_bp,
     events_bp,
@@ -295,6 +296,7 @@ api.register_blueprint(sync_sources_bp)
 api.register_blueprint(detectors_crud_bp)
 api.register_blueprint(detectors_labels_bp)
 api.register_blueprint(detectors_registry_bp)
+api.register_blueprint(detectors_sharing_bp)
 api.register_blueprint(detector_scoring_bp)
 api.register_blueprint(detector_find_bp)
 api.register_blueprint(detectors_export_bp)

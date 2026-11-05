@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Any, NoReturn
 
 from flask_smorest import abort
 
@@ -65,6 +65,26 @@ def _in_find_mode(detector_id: str) -> bool:
     return bool(ctx is not None and ctx.find_mode)
 
 
+def abort_read_only(entry: dict[str, Any]) -> NoReturn:
+    """Answer 409 ``detector_read_only`` for the received detector *entry*, naming its container's owner.
+
+    What :func:`refuse_linked` answers; also for a route that refuses a
+    received detector only after checks of its own (the sharing routes, which
+    answer ``sharing_disabled`` first).
+    """
+    from vtscore.detectors.store import DetectorReadOnlyError  # noqa: PLC0415
+    from vtsearch.errors import DETECTOR_READ_ONLY  # noqa: PLC0415
+
+    refusal = DetectorReadOnlyError.for_entry(entry)
+    abort(
+        409,
+        message=str(refusal),
+        error_code=DETECTOR_READ_ONLY,
+        detector_id=refusal.detector_id,
+        remote_owner=refusal.owner,
+    )
+
+
 def refuse_linked(target: str, *, find_mode_ok: bool = False) -> Callable[[Callable], Callable]:
     """Route decorator: answer 409 ``detector_read_only`` when the targeted detector is a received copy.
 
@@ -89,19 +109,10 @@ def refuse_linked(target: str, *, find_mode_ok: bool = False) -> Callable[[Calla
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             from vtscore.detectors.registry import is_linked  # noqa: PLC0415
-            from vtscore.detectors.store import DetectorReadOnlyError  # noqa: PLC0415
-            from vtsearch.errors import DETECTOR_READ_ONLY  # noqa: PLC0415
 
             entry = _entry_for(target, kwargs)
             if entry is not None and is_linked(entry) and not (find_mode_ok and _in_find_mode(entry["id"])):
-                refusal = DetectorReadOnlyError.for_entry(entry)
-                abort(
-                    409,
-                    message=str(refusal),
-                    error_code=DETECTOR_READ_ONLY,
-                    detector_id=refusal.detector_id,
-                    remote_owner=refusal.owner,
-                )
+                abort_read_only(entry)
             return fn(*args, **kwargs)
 
         wrapper.refuses_linked_detector = target  # type: ignore[attr-defined]
