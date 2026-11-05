@@ -466,12 +466,8 @@ def training_domain_for(
 
     active_id = active_ctx.dataset_id
     reference = training_reference(labelset, active_id, recorded=recorded, summary=summary, ingested=ingested)
-    reference_id, counts, stored, travelled = (
-        reference.dataset_id,
-        reference.counts,
-        reference.stored,
-        reference.travelled,
-    )
+    reference_id, counts = reference.dataset_id, reference.counts
+    stored, travelled = reference.stored, reference.travelled
     result["labels_in_active"] = counts.get(active_id, 0)
     if not reference_id:
         return unavailable("None of the loaded datasets holds the detector's labelled examples")

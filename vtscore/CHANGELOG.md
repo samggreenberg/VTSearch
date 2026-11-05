@@ -76,6 +76,16 @@ instead, since every commit on `dev` is effectively a new app release.)
   `vtscore/docs/packages/coverage.md`. `vtscore.detectors.domain_summary` records one on a detector beside its
   training-dataset pointer, under `training_domain_summary`, and resolves its anchors where it is read.
 
+- **The media a label import copies into a dataset no longer count as where its labels were cast** (issue #5572).
+  `vtscore.detectors.training_domain` gains `INGESTED_LABELS_KEY` (`"labels_ingested"`), `record_ingested_labels`,
+  `record_ingested_labels_on_file`, `recorded_ingests` and `ingested_label_entry`: per dataset, the entries whose
+  media an import pulled in, named by origin and MD5. `count_labels_held` and `labels_held_by_dataset` take an
+  `ingested` keyword and leave a label naming only those media uncounted. `adopt_domain_summary`,
+  `adopt_domain_summary_on_file` and `apply_detector_meta` take a `labels_held` keyword: the imported Good / Bad
+  labels (`count_imported_labels`), recorded beside the summary as the detector's training-dataset pointer when it
+  has none, so the summary is weighed at the labels that came with it. Additive: every keyword defaults to the
+  old behaviour.
+
 - **An exported labelset carries the detector's training-domain summary** (issue #5571).
   `build_detector_meta` adds the detector's `training_domain_summary` to the `detector_meta` block, and
   `labelset_for_export` lets it through: it names the embedder that drew it and is refused under any other, and

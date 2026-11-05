@@ -1532,7 +1532,12 @@ detector was trained on (#5571): it names the embedder that drew it, the
 overlap check refuses it under any other, and nothing trains on it. The Export
 route reads it from the exported detector's file, since the SPA posts labels
 alone; the importing detector keeps it when it has no training dataset of its
-own (`adopt_domain_summary`).
+own (`adopt_domain_summary`), with a pointer of its own counting the labels
+that came with it (#5572). An import with a dataset active also pulls the
+labels' media into that dataset, and records which (`labels_ingested`): those
+media are not the dataset's own, so the overlap check, and the Evidence
+baseline that is drawn only where the check says the detector was trained,
+do not count them as evidence of where the labels were cast.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  It answers two different questions, and the caller picks which:

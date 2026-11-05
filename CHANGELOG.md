@@ -28,6 +28,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   settings, and how many results it sends; a paused auto-export (**Export results when AutoFind finishes** off) still
   sends from here. `POST /api/autofind/runs/{run_id}/export` is the call behind it.
 
+- **The training-domain warning holds on the dataset an imported detector's labels were pulled into** (issue
+  #5572). Creating a detector from a shared labels file while a dataset is open copies the labelled items into
+  that dataset, and the warning used to take that dataset for the one the detector was trained on and stay quiet.
+  It now compares that dataset against the summary that came with the labels, until your own votes there outnumber
+  the imported ones. Training or tuning on a dataset that holds only a few of a detector's labels also no longer
+  makes it the detector's training dataset, which silenced the warning everywhere afterwards.
+
 - **A detector shared as a labels file keeps its training-domain warning** (issue #5571). Exporting a detector's
   labels to a Server JSON File now writes the summary of the dataset it was trained on beside them, and a detector
   created from that file (New detector › Trained), or a detector the labels are imported into, keeps it. So the
