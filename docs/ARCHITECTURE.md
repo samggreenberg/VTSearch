@@ -1392,6 +1392,25 @@ detector and its labels are face crops, so the photo is presentation only.
 `/api/find-label` registers its ranking for a token too, though it sends it
 whole.
 
+**People** (Co-face Browse, #5582) reads a Face dataset as the people in it.
+Two ids-only structures sit under it, both pure functions of the dataset's own
+vectors and origins. The **partition** (`vtscore.datasets.people`) merges the
+faces into people at the face ball's beta 1 floor, so a face is one of a
+person's when it passes the test Find applies; it is fit at build for a Face
+dataset, stored in the container as ids and stamps (never a vector), cached
+on `DatasetContext`, and checked against the live faces on every read. A
+face space with no calibrated floor gets no partition, only a message. The
+**photo index** (`vtscore.datasets.co_occurrence`) groups the faces by the
+photo each was cut from, read off the face's own refs, so *who appears with
+whom* needs no Image dataset loaded. `vtsearch/routes/people.py` serves both
+([API](api/people.md)). A person's id is a rank, good only under the
+partition it was read from, so every answer carries the partition's identity
+and an id read under another one is a 409, never someone else. The People
+view (`/people/:datasetId`, [FRONTEND.md](FRONTEND.md#people-view-componentspeople-view))
+lists the people, a person's faces and who they appear with; only the photos
+two people share are read out of the Image sibling. Like a collapsed photo, a
+person is presentation over faces: no votes, labels or counts move to it.
+
 ### Reference (no-copy) imports and lazy clips
 
 Server-side importers (e.g. `server_folder`, `server_files`) can import in

@@ -657,6 +657,38 @@ line above the photos reminds you. A face whose photo isn't in the Image
 dataset shows on its own, marked "photo not found". If the Image dataset isn't
 loaded, the list offers to load it.
 
+**People.** A Face dataset can also be read as the people in it: VTSearch
+merges the faces that are one person, at the same cut Find uses to say a face
+is someone's, and shows who appears with whom in the photos. Open it from the
+Face dataset's **⋯** menu on the Dashboard (**People**), or with the
+**People** button in its Browse toolbar. The first time, the dataset's row
+shows the people being found; after that, People opens at once.
+
+The view has three panes:
+
+- **People**, on the left: everyone, the person with the most faces first,
+  each with how many faces and photos they are in. People are numbered by
+  rank (`Person 1`), and **Rebuild people** can renumber them. **At least _N_
+  faces** folds away the people seen only once or twice; **+_K_ with fewer**
+  lists them again. **Unplaced**, last, holds the faces that matched no one,
+  usually faces too small, turned away or covered to say whose they are.
+- **The person**, in the middle: one face shown large, with its details and a
+  **Show in photo** button, over all their faces. Point at a face to see it
+  large, and click it to keep it there.
+- **Appears with**, on the right: the people who share a photo with them, the
+  most shared first. Click one to see the photos the two share underneath.
+  In each photo the person in the middle is outlined most heavily, the person
+  they appear with next, and anyone else faintly, with dashes; hover a box to
+  see whose face it is. Click a photo to open it large, with the same
+  outlines.
+
+The photos come from the Image dataset the import made beside the faces. If
+it isn't loaded, **Appears with** offers to load it; the people and their
+faces don't need it. A face embedder VTSearch has no cut for (one a plugin
+added) shows no people, and says so. People only shows: it adds no votes,
+labels or detectors, and two people merged by mistake (or one split in two)
+stay that way until **Rebuild people** finds them differently.
+
 ### Running AutoFind on a new dataset
 
 Once you have a detector on the Dashboard's **AutoFind** tab, every

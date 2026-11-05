@@ -22,6 +22,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **People: a Face dataset's people, and who appears with whom** (issue #5590). A new view, opened from a Face
+  dataset's **⋯** menu (**People**) or its Browse toolbar, shows the dataset's faces merged into people at the cut Find
+  uses. The left pane lists everyone, the most faces first, with a minimum-face filter and an **Unplaced** row for the
+  faces that matched no one; the middle shows a person's faces, one large with its details; the right lists who shares
+  a photo with them and, for the one picked, the photos the two share, every face outlined by whose it is (the person,
+  the one they appear with, anyone else). A photo opens large in Show in photo with the same outlines. The first
+  opening finds the people with progress on the dataset's row; **Rebuild people** finds them again. The photos need
+  the Image dataset the import made, which the view offers to load; a face embedder with no calibrated cut shows a
+  message instead of people.
+
 - **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
   run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
   setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what
