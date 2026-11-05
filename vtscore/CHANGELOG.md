@@ -12,6 +12,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.co_occurrence`: which faces share a photo, and which people appear together** (issue #5587).
+  `PhotoIndex(medias)` keys every converter output by the photo it was cut from, read off its own converter refs
+  (`photo_keys`: `source_path`, else `source_file`), with the keys of a `dupe_set` face unioned so collapsed copies
+  of one photo count once; no sibling dataset is needed. Photos are numbered in order of their lowest face id.
+  `faces_by_photo` / `photo_of` / `faces_in` read the index; over people given as plain face-id lists,
+  `photos_of(face_ids)`, `appears_with(groups, person) -> list[CoAppearance]` (the other groups sharing a photo,
+  most shared first, ties in group order) and `shared_photos(group_a, group_b) -> list[SharedPhoto]` (each with
+  every face cut from it). Every face of one photo resolves to one item of the Image sibling through
+  `SourceResolver`. Additive; nothing is persisted.
+
 - **Detector sharing, as an optional capability of `LabelsetSource`** (issue #5574). A source can now keep a
   detector's labels in a container on an external collaboration service, with an owner and recipients, by
   overriding the new `_do_share_*` hooks: `_do_share_create`, `_do_share_save`, `_do_share_refresh`,
