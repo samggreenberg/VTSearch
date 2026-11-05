@@ -94,10 +94,10 @@ photos they are in, and for each pair of people, the photos they share. This
 is cheap enough to build on demand from the partition and cache beside it;
 it need not be persisted.
 
-The photo index lives in `vtscore/datasets/`, beside `people.py`,
-`source_item.py` and `source_groups.py`, which already own the face-to-photo
-join: a new `co_occurrence.py` (the photo index and the pairwise counts).
-Flask-free, taking an explicit context, tested under `tests_lib/datasets/`.
+The photo index shipped in #5587 as `vtscore.datasets.co_occurrence`, beside
+`people.py`, `source_item.py` and `source_groups.py`, which own the
+face-to-photo join
+([`datasets.md`](../../vtscore/docs/packages/datasets.md#on-disk-dataset-registry)).
 
 ### Merging faces into people
 
