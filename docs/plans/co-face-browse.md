@@ -143,17 +143,17 @@ recoverable; two people shown as one hides someone. Where the calibration
 offers a choice, take the higher cut.
 
 **An uncalibrated compat tag** (an `ext` provider's space, #5497) has no
-floor to cut at. Proposed: no partition, and the view says People is not
+floor to cut at, so it gets no partition: the view says People is not
 calibrated for this face embedder, with the same wording as the ball's
-warning. A fixed fallback floor with a warning is the alternative; the owner's
-call.
+warning. A fixed fallback floor with a warning was the alternative; the owner
+chose the message (2026-11-05), so nothing plausible-but-wrong is shown.
 
 ### Where the view lives
 
 A **new dataset-only view**, `/people/:datasetId`, beside Browse in the route
 table, entered from the dataset card's menu (a **People** item, offered on a
 Face dataset only) and from Browse's toolbar on a Face dataset. Not a layer on
-the Browse canvas, and not a modal:
+the Browse canvas, and not a modal (the owner's call, 2026-11-05):
 
 - The Browse map already lays faces out in identity space, so a person is
   already a blob there; what the map cannot show is a relation between blobs.
@@ -212,8 +212,6 @@ partition that disagrees with Find.
   cluster; average linkage is the standard for face clustering. The
   calibration slice measures both; pick by the measurement, with the
   split-over-merge rule above as the tiebreak.
-- **Uncalibrated embedders.** No partition and a message, or a fallback
-  floor with a warning (see above).
 - **Entry points.** The dataset card's menu and Browse's toolbar are
   proposed; the Train view's face list could offer *Show person* on a face
   (the view opened on that person), which is cheap once the view exists.
