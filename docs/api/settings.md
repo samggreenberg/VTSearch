@@ -267,7 +267,11 @@ labels are pushed back.
 
 If no source is configured (or the source is empty): `{"ok": false, "message": "..."}`
 (still 200). 403 if the caller cannot access the detector, 404 if it does not
-exist.
+exist. 409 when there is nothing to pull into it: `error_code:
+"detector_read_only"` for a received detector (it changes only by refresh),
+`"detector_shared"` for one whose labels are pushed to a container it owns
+(they are never pulled back), and `"sharing_unavailable"` - the message
+saying why - when its sharing source is not this server's active one.
 
 A rename moves a `{detector_name}`-templated server file to the new name's
 path itself; see [Rename detector](detectors.md#rename-detector).

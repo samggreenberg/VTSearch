@@ -12246,7 +12246,7 @@
         }
       ],
       "post": {
-        "description": "Labels the source holds and the detector lacks are added, and where the\ntwo disagree the source's label wins; nothing is removed.  The merged\nlabels are then pushed back to the source.",
+        "description": "Labels the source holds and the detector lacks are added, and where the\ntwo disagree the source's label wins; nothing is removed.  The merged\nlabels are then pushed back to the source.  Only a plain binding pulls: a\nshared detector's owner has nothing to pull (its file is what the\ncontainer is rewritten from), and a received one changes only by refresh.",
         "operationId": "sync_detector_labelset_from_source",
         "responses": {
           "200": {
@@ -12266,7 +12266,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it. Also when the detector shares its labels through a container it owns (``error_code: detector_shared``: they are pushed there, never pulled back), or its sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

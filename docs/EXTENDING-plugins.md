@@ -2618,6 +2618,20 @@ The same "a sync target is a side channel" stance as
 logged and retried on the next change, and the detector file stays the
 record.
 
+A detector shared through a container is pushed by the same engine, by
+role (`vtscore.labels.sync.sync_role`): its **owner's** writes rewrite the
+container with `share_save` - the whole labelset and its manifest, no pull
+first and no merge, so a recipient's edits there are overwritten rather
+than imported - and each push records `sync_error` and `last_synced` on the
+entry's binding. A **received** (linked) detector never pushes and is never
+pulled; it changes only by refresh. One whose sharing source is not the
+active one does nothing, logged once. Neither the load-time pull nor
+`POST .../labelset-source/sync` touches a shared detector: the manual sync
+answers 409 (`detector_read_only` for a received one, `detector_shared` for
+an owner, `sharing_unavailable` with the reason when the source is not
+active). The library guide's [Roles](../vtscore/docs/packages/labels.md#roles)
+has the table.
+
 ### Sharing detectors
 
 A labelset source can also **share** detectors through an external

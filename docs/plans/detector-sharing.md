@@ -156,20 +156,15 @@ operation raises `SharingUnsupported`, which a route answers with 501.
 
 ### Roles in the sync engine
 
-`vtscore.labels.sync` keeps one slot per detector and one pacing policy. What
-changes is what a push does, by role:
-
-| Entry | On a detector-file write | On load | Manual sync route |
-|---|---|---|---|
-| plain binding (today) | paced `_do_save` | pull, file wins | pull, source wins |
-| owner (binding has `remote_ref`, `sync_mode` local/forked, active source) | paced `_do_share_save` with the manifest, **no pull-first merge**; failure recorded as `sync_error` | nothing | 409 (use refresh semantics: nothing to pull into an owner) |
-| linked | **nothing** | **nothing** | 409 `detector_read_only` |
-| binding names a source that is not the active one | nothing, with a note | nothing | 409 with the note |
-
-The pull-first merge that protects a plain binding (a backup the server lost)
-is the wrong policy for an owner: merging the container into the owner's file
-would import exactly the foreign records tamper detection exists to catch.
-The owner's file is authoritative.
+Shipped in #5576: the role table, the owner's rewrite-not-merge push and the
+outcome it records are in `vtscore/docs/packages/labels.md` ("Roles"). What
+the later slices build on: `vtscore.labels.sync.sync_role(entry)` names the
+role; an owner's binding carries `sync_error` (the last push's failure, or
+`null`) and `last_synced`, which the dashboard's "Remote sync failed" link
+reads; and `vtsearch.errors.SHARING_UNAVAILABLE` (`"sharing_unavailable"`)
+is the `error_code` of the note's 409, already answered by
+`POST .../labelset-source/sync` (an owner's is `"detector_shared"`), for the
+sharing routes to reuse.
 
 ### Integrity and the read-only guarantee
 
@@ -255,12 +250,11 @@ Which issues can run at once. An arrow means "needs merged first".
 | 4 | #5578 and #5579 | #5577 |
 | 5 | #5580 | #5578 and #5579 |
 
-- **#5576 and #5577 are independent in code.** The sync engine
-  (`vtscore/labels/sync.py`, the labels package doc) and the routes (a new
-  blueprint, schemas, the OpenAPI snapshot, `docs/api/`) share no file. Until
-  both are on `dev`, a detector shared through the routes pushes through the
-  engine's plain path, where a sharing-only source raises `NotImplementedError`
-  into the engine's log; harmless, and gone once #5576 lands.
+- **#5576 and #5577 are independent in code**, apart from two shared
+  files: #5576 adds `SHARING_UNAVAILABLE` and `DETECTOR_SHARED` to
+  `vtsearch/errors.py` and a 409 description to the manual-sync route, so
+  `frontend/openapi.json` moves on both; whichever lands second keeps both
+  sets of constants and regenerates the snapshot.
 - **#5578 and #5579 are independent in code**, but both regenerate the API
   client from #5577's snapshot, so neither starts before #5577 merges. They
   meet in two places: the "Share…" verb #5578 adds is what #5579's dialog
