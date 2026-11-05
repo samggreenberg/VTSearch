@@ -672,23 +672,32 @@ The run shows on the new dataset's Dashboard row while it works, and its
 calibrates and scores, and counts the labels and then the items it has
 scored, so it moves even when there is only one detector. When it finishes, a notice tells you how many hits
 it found; its **View Results** button opens the **Find Results**
-dialog, which lists every item each detector called Good. The controls above
-the list change what it shows, left to right in the order each acts on it:
-the **Threshold**, whose three radios show what each notch of
-[Tune's Threshold](#tuning-a-detector) would have called Good - the same
-scores, split where that notch draws the line, with nothing retrained and no
-detector's own Threshold changed (the radios are frozen when no notch would
-list anything different); **Good**, **Bad** or **Both**; **Sort by**
-**Score** (highest first, across every detector) or **Similarity**
-(look-alikes side by side, by a one-dimensional map of the whole dataset
-that VTSearch builds along with its Browse map, so a dataset you have not
-browsed yet takes a moment the first time); and **Columns**, a checkbox per
-column, including a **Thumbnail** of each item, whose size the two picture
-buttons set. Below the list, the tabs say where the listed rows go:
+dialog, which lists every item each detector called Good, under a line
+naming the detectors that ran (past three, their count, with every name on
+hover). The controls above the list change what it shows, left to right in
+the order each acts on it: the **Threshold**, whose three radios show what
+each notch of [Tune's Threshold](#tuning-a-detector) would have called Good -
+the same scores, split where that notch draws the line, with nothing
+retrained and no detector's own Threshold changed (the radios are frozen
+when no notch would list anything different); **Good**, **Bad** or
+**Both**; and **Columns**, a checkbox per column, including a
+**Thumbnail** of each item, whose size the two picture buttons at the end
+of that row set, and a **Similarity** column: each item's place in a
+one-dimensional map of the whole dataset that VTSearch builds along with its
+Browse map (so a dataset you have not browsed yet takes a moment the first
+time you tick it). The list itself is a grid like the Dashboard's: click a
+column heading to sort by it (Score, highest first, to start; sort by
+Similarity for look-alikes side by side), click it again to turn the order
+round, drag a heading onto another to reorder the columns, and drag the line
+between two headings to resize them (a click on the line fits the column to
+its contents). Below the list, the tabs say where the listed rows go:
 **Clipboard** first, then each exporter, with whatever it needs filled in
-under its tab. **Export** sends the rows, in the ticked columns, to the open
-tab's destination, and **Export and Close** does the same and closes the
-dialog. A detector with too few
+under its tab, and last **AutoFind**, which sends the run through the
+exporter you set up on the Settings **AutoFind** tab exactly as a finished
+run does, so you can try that setup without importing another dataset; its
+tab shows, read-only, what will go where. **Export** sends the rows, in the
+ticked columns and in the order listed, to the open tab's destination, and
+**Export and Close** does the same and closes the dialog. A detector with too few
 labels for a trained one runs as its typed description, or as the Goods'
 centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results

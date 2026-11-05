@@ -19,7 +19,9 @@ export interface ColumnChoice {
  *
  * Presentational: the host projects its own heading (each dialog heads its
  * sections its own way), owns the columns, and applies each toggle, so it can
- * keep them however it likes (a plain array, a signal).
+ * keep them however it likes (a plain array, a signal). Anything it marks
+ * `chooserEnd` sits at the far end of the checkboxes' row (Find Results'
+ * thumbnail size buttons, #5584).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

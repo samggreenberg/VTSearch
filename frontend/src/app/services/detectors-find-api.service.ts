@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import type { AutoFindExportStatus } from '../generated/api-client/models/auto-find-export-status';
 import type { AutoFindBrowsePrepResponse } from '../generated/api-client/models/auto-find-browse-prep-response';
 import type { AutoFindRunResponse } from '../generated/api-client/models/auto-find-run-response';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
@@ -22,6 +23,7 @@ import { findStats } from '../generated/api-client/fn/detector-scoring/find-stat
 import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
 import { findTrainingDomain } from '../generated/api-client/fn/detector-scoring/find-training-domain';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
+import { exportAutofindRun } from '../generated/api-client/fn/detector-scoring/export-autofind-run';
 import { getAutofindRun } from '../generated/api-client/fn/detector-scoring/get-autofind-run';
 import { prepAutofindRunBrowse } from '../generated/api-client/fn/detector-scoring/prep-autofind-run-browse';
 
@@ -100,5 +102,13 @@ export class DetectorsFindApiService {
    *  other work is in flight: `busy` means ask again later. */
   prepAutofindRunBrowse(runId: string, context?: HttpContext): Observable<AutoFindBrowsePrepResponse> {
     return prepAutofindRunBrowse(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
+  }
+
+  /** Send a finished run's results through the AutoFind exporter, as its
+   *  finish did (#5584): the Find Results dialog's AutoFind tab. Answers with
+   *  the status a run records as `auto_export`, the exporter's own failure
+   *  included; 404 once the run has aged out, 409 with no exporter set up. */
+  exportAutofindRun(runId: string): Observable<AutoFindExportStatus> {
+    return exportAutofindRun(this.http, this.config.rootUrl, { run_id: runId }).pipe(map((r) => r.body));
   }
 }

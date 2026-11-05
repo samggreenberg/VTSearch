@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
-import { AutoDetectResultsModalComponent } from './autodetect-results-modal.component';
+import { AUTOFIND_TAB, AutoDetectResultsModalComponent } from './autodetect-results-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -31,7 +31,7 @@ describe('AutoDetectResultsModalComponent', () => {
   let component: AutoDetectResultsModalComponent;
   let fixture: ComponentFixture<AutoDetectResultsModalComponent>;
   let httpMock: HttpTestingController;
-  let toast: { success: ReturnType<typeof vi.fn> };
+  let toast: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let settings: WritableSignal<AppSettings | null>;
 
   const mockData = {
@@ -51,6 +51,9 @@ describe('AutoDetectResultsModalComponent', () => {
   };
 
   beforeEach(async () => {
+    // The column order is kept across sessions; a drag in one test must not
+    // reorder the next.
+    localStorage.clear();
     const settingsState = makeSettingsStateStub();
     settings = settingsState.settings;
     await TestBed.configureTestingModule({
@@ -59,7 +62,7 @@ describe('AutoDetectResultsModalComponent', () => {
         ...provideZoneless(),
         ...provideHttpTesting(),
         { provide: MediaTypeCapabilityService, useFactory: mediaTypeCapsStub },
-        { provide: ToastService, useFactory: () => (toast = { success: vi.fn() }) },
+        { provide: ToastService, useFactory: () => (toast = { success: vi.fn(), error: vi.fn() }) },
         { provide: SettingsStateService, useValue: settingsState.stub },
       ],
     }).compileComponents();
@@ -72,6 +75,7 @@ describe('AutoDetectResultsModalComponent', () => {
 
   afterEach(() => {
     httpMock.verify();
+    localStorage.clear();
   });
 
   // Settle runs ngOnInit (issues GET /api/exporters), flush the response, settle
@@ -106,7 +110,7 @@ describe('AutoDetectResultsModalComponent', () => {
 
     it('names the run\'s media type on a server open to every type', async () => {
       await flushInit();
-      expect(summary().replace(/\s+/g, ' ')).toContain('Media Type: Audio');
+      expect(summary().replace(/\s+/g, ' ')).toContain('Media type: Audio');
     });
 
     it('shows the type with its icon, as the Dashboard does (#5464)', async () => {
@@ -118,14 +122,56 @@ describe('AutoDetectResultsModalComponent', () => {
     it('leaves it out on a server locked to that type, where it could be nothing else', async () => {
       settings.set({ solo_media_type: 'audio' } as AppSettings);
       await flushInit();
-      expect(summary()).not.toContain('Media Type');
-      expect(summary()).toContain('Detectors Run: 2');
+      expect(summary()).not.toContain('Media type');
+      expect(summary().replace(/\s+/g, ' ')).toContain('Detector: detector1');
     });
 
     it('still names a type the lock does not account for', async () => {
       settings.set({ solo_media_type: 'image' } as AppSettings);
       await flushInit();
-      expect(summary().replace(/\s+/g, ' ')).toContain('Media Type: Audio');
+      expect(summary().replace(/\s+/g, ' ')).toContain('Media type: Audio');
+    });
+  });
+
+  // The detectors that ran, by name, and the one label style for the
+  // summary, the Threshold and Columns (#5584).
+  describe('the summary names the detectors that ran', () => {
+    const line = () => fixture.nativeElement.querySelector('.results-detectors') as HTMLElement;
+    const text = () => line().textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const withDetectors = (...names: string[]) =>
+      fixture.componentRef.setInput('data', {
+        ...mockData,
+        detectors_run: names.length,
+        results: Object.fromEntries(names.map((name, i) => [`d${i}`, { detector_name: name, hits: [] }])),
+      } as any);
+
+    it('lists a few by name, singular for one, with every name on hover', async () => {
+      withDetectors('Cats');
+      await flushInit();
+      expect(text()).toBe('Detector: Cats');
+      withDetectors('Cats', 'Dogs', 'Owls');
+      await settleZoneless(fixture);
+      expect(text()).toBe('Detectors: Cats, Dogs, Owls');
+      expect(line().title).toBe('Cats\nDogs\nOwls');
+    });
+
+    it('gives a count past three, the names on hover', async () => {
+      withDetectors('A', 'B', 'C', 'D');
+      await flushInit();
+      expect(text()).toBe('Detectors: 4');
+      expect(line().title).toBe('A\nB\nC\nD');
+    });
+
+    it('styles every label as a form label, in sentence case with a colon, bold nowhere', async () => {
+      fixture.componentRef.setInput('data', { ...mockData, dataset_name: 'Birds' } as any);
+      await flushInit();
+      const labels = Array.from(
+        fixture.nativeElement.querySelectorAll('.results-summary .results-control-label'),
+      ) as HTMLElement[];
+      expect(labels.map((l) => l.textContent?.trim())).toEqual(['Dataset:', 'Media type:', 'Detector:']);
+      expect(fixture.nativeElement.querySelector('.results-summary strong')).toBeNull();
+      const columns = fixture.nativeElement.querySelector('vt-column-chooser .results-control-label') as HTMLElement;
+      expect(columns.textContent?.trim()).toBe('Columns:');
     });
   });
 
@@ -312,7 +358,7 @@ describe('AutoDetectResultsModalComponent', () => {
     expect(component.exporters().length).toBe(2);
     expect(component.activeTab()).toBe('clipboard');
     const tabs = Array.from(fixture.nativeElement.querySelectorAll('.export-tabs .tab')) as HTMLElement[];
-    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['Clipboard', 'json', 'csv']);
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['Clipboard', 'json', 'csv', 'AutoFind']);
     expect(tabs[0].classList).toContain('active');
     expect(fixture.nativeElement.querySelector('.tab-content vt-clipboard-copy')).toBeTruthy();
   });
@@ -553,13 +599,14 @@ describe('AutoDetectResultsModalComponent', () => {
 
     beforeEach(() => fixture.componentRef.setInput('data', runOf({ cats })));
 
-    it('leads the row, before Good / Bad / Both and the sort', async () => {
+    it("leads the row, before Good / Bad / Both; the sort is the headings' (#5584)", async () => {
       await flushInit();
       const row = fixture.nativeElement.querySelector('.results-controls-row') as HTMLElement;
       const order = Array.from(row.children).map((el) =>
-        el.matches('vt-balance') ? 'threshold' : el.matches('.results-sides') ? 'sides' : el.querySelector('.results-sort') ? 'sort' : 'other',
+        el.matches('vt-balance') ? 'threshold' : el.matches('.results-sides') ? 'sides' : 'other',
       );
-      expect(order.slice(0, 3)).toEqual(['threshold', 'sides', 'sort']);
+      expect(order).toEqual(['threshold', 'sides']);
+      expect(fixture.nativeElement.querySelector('.results-sort')).toBeNull();
     });
 
     it('shows the notch the run was cut at, and lists it as the run came', async () => {
@@ -579,7 +626,7 @@ describe('AutoDetectResultsModalComponent', () => {
       expect(radios().map((r) => r.checked)).toEqual([true, false, false]);
       expect([component.goodCount, component.badCount]).toEqual([3, 1]);
       expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 3]);
-      expect(note()?.textContent).toContain("No detector's Threshold changes");
+      expect(note()?.textContent).toContain("The detectors' own Thresholds are unchanged");
 
       component.setNotch(0.25);
       component.sides.set('bad');
@@ -682,8 +729,9 @@ describe('AutoDetectResultsModalComponent', () => {
 
     it('offers Label only for both sides, Detector only for several detectors, metadata unticked', async () => {
       await flushInit();
-      expect(keys()).toEqual(['thumbnail', 'origin_name', 'score', 'detector', 'filename', 'origin', 'md5', 'width']);
+      expect(keys()).toEqual(['thumbnail', 'origin_name', 'score', 'similarity', 'detector', 'filename', 'origin', 'md5', 'width']);
       expect(component.columns().find((c) => c.key === 'width')!.enabled).toBe(false);
+      expect(component.columns().find((c) => c.key === 'similarity')!.enabled).toBe(false);
       component.sides.set('both');
       expect(keys()).toContain('label');
       fixture.componentRef.setInput('data', { ...scored, results: { cats: scored.results.cats } } as any);
@@ -695,16 +743,26 @@ describe('AutoDetectResultsModalComponent', () => {
       component.setColumnEnabled('thumbnail', false);
       component.setColumnEnabled('origin', false);
       await settleZoneless(fixture);
-      const head = Array.from(fixture.nativeElement.querySelectorAll('.results-head .results-cell')) as HTMLElement[];
+      const head = Array.from(fixture.nativeElement.querySelectorAll('.results-head .results-col-label')) as HTMLElement[];
       expect(head.map((c) => c.textContent?.trim())).toEqual(['Name', 'Score', 'Detector', 'Filename', 'MD5']);
       const firstRow = fixture.nativeElement.querySelector('.results-row') as HTMLElement;
       expect(firstRow.querySelectorAll('.results-cell').length).toBe(5);
     });
 
-    it('offers no thumbnail for results that name no dataset, or a type without them', async () => {
+    it('keeps the thumbnail size buttons on the columns row, and only with thumbnails (#5584)', async () => {
+      await flushInit();
+      expect(fixture.nativeElement.querySelector('vt-column-chooser .column-chooser-end vt-view-controls')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('.results-controls-row vt-view-controls')).toBeNull();
+      component.setColumnEnabled('thumbnail', false);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('vt-view-controls')).toBeNull();
+    });
+
+    it('offers no thumbnail, and no Similarity, for results that name no dataset; no thumbnail for a type without them', async () => {
       fixture.componentRef.setInput('data', { ...scored, dataset_id: undefined } as any);
       await flushInit();
       expect(keys()).not.toContain('thumbnail');
+      expect(keys()).not.toContain('similarity');
       fixture.componentRef.setInput('data', { ...scored, media_type: 'text' } as any);
       expect(keys()).not.toContain('thumbnail');
     });
@@ -716,33 +774,154 @@ describe('AutoDetectResultsModalComponent', () => {
       expect(component.rowHeight()).toBe(30);
     });
 
-    describe('Similarity sort', () => {
-      const URL = '/api/medias/similarity-order';
+    // The headings, as the Dashboard's grids have them (#5584).
+    describe('the headings', () => {
+      const heads = () => Array.from(fixture.nativeElement.querySelectorAll('.results-head .results-col-head')) as HTMLElement[];
+      const headOf = (key: string) => heads().find((h) => h.dataset['col'] === key)!;
+      const drag = (from: string, to: string) => {
+        component.cols.onColDragStart({ dataTransfer: null } as unknown as DragEvent, from);
+        component.dropColumn({ preventDefault() {} } as unknown as DragEvent, to);
+      };
 
-      it('asks the run dataset for its order, once, and lists the rows in it', async () => {
+      it('sort the list: Score highest first to start, a click sorts by the column, another turns it round', async () => {
         await flushInit();
-        component.setSort('similarity');
+        expect(component.sort()).toEqual({ column: 'score', asc: false });
+        expect(headOf('score').getAttribute('aria-sort')).toBe('descending');
+        headOf('filename').click();
+        await settleZoneless(fixture);
+        expect(component.displayHits().map((h) => h.filename)).toEqual(['a.jpg', 'b.jpg', 'd.jpg']);
+        expect(headOf('filename').getAttribute('aria-sort')).toBe('ascending');
+        expect(headOf('score').getAttribute('aria-sort')).toBe('none');
+        headOf('filename').click();
+        expect(component.displayHits().map((h) => h.filename)).toEqual(['d.jpg', 'b.jpg', 'a.jpg']);
+        headOf('score').click();
+        expect(component.displayHits().map((h) => h.id)).toEqual([1, 4, 2]);
+        expect(headOf('thumbnail').getAttribute('aria-sort')).toBeNull();
+      });
+
+      it('sort by a metadata column as numbers, rows with none last either way', async () => {
+        await flushInit();
+        component.setColumnEnabled('width', true);
+        await settleZoneless(fixture);
+        headOf('width').click();
+        expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 4]);
+        headOf('width').click();
+        expect(component.displayHits().map((h) => h.id)).toEqual([1, 2, 4]);
+      });
+
+      it('sort Label with Good first, and hand the sort back to Score once the column is gone', async () => {
+        await flushInit();
+        component.sides.set('both');
+        await settleZoneless(fixture);
+        headOf('label').click();
+        expect(component.displayHits().map((h) => h.id)).toEqual([2, 4, 1, 3]);
+        headOf('label').click();
+        expect(component.displayHits().map((h) => h.id)).toEqual([3, 2, 4, 1]);
+        component.sides.set('good');
+        await settleZoneless(fixture);
+        expect(component.sort()).toEqual({ column: 'score', asc: false });
+      });
+
+      it('reorder by a drag, and the clipboard and export follow', async () => {
+        await flushInit();
+        drag('md5', 'origin_name');
+        await settleZoneless(fixture);
+        expect(heads().map((h) => h.dataset['col'])).toEqual([
+          'thumbnail', 'md5', 'origin_name', 'score', 'detector', 'filename', 'origin',
+        ]);
+        expect(component.exportPayload().selected_columns).toEqual(['md5', 'origin_name', 'score', 'detector', 'filename', 'origin']);
+        expect(component.clipboardColumns().map((c) => c.label)).toEqual(['MD5', 'Name', 'Score', 'Detector', 'Filename', 'Origin']);
+        // A metadata column the controller only learned of with the run can be dragged too.
+        component.setColumnEnabled('width', true);
+        await settleZoneless(fixture);
+        drag('width', 'score');
+        await settleZoneless(fixture);
+        expect(heads().map((h) => h.dataset['col'])).toEqual([
+          'thumbnail', 'md5', 'origin_name', 'width', 'score', 'detector', 'filename', 'origin',
+        ]);
+      });
+
+      it('carry a resize handle between two columns, but not on the first nor beside the thumbnail', async () => {
+        await flushInit();
+        const handles = () => heads().map((h) => !!h.querySelector('.col-resize-handle'));
+        // thumbnail, name, score, detector, filename, origin, md5
+        expect(handles()).toEqual([false, false, true, true, true, true, true]);
+        component.setColumnEnabled('thumbnail', false);
+        await settleZoneless(fixture);
+        expect(handles()).toEqual([false, true, true, true, true, true]);
+      });
+
+      it('resize: the grid follows the drag, the thumbnail keeping its tile', async () => {
+        await flushInit();
+        const thumb = `${component.thumbPx() + 12}px`;
+        expect(component.gridTemplate().split(' ')[0]).toBe(thumb);
+        expect(component.gridTemplate()).toContain('minmax(6rem, 2fr) 5rem');
+        // jsdom lays nothing out: give each heading a width of its own.
+        for (const head of heads()) head.getBoundingClientRect = () => ({ width: 100 }) as DOMRect;
+        const handle = headOf('score').querySelector('.col-resize-handle') as HTMLElement;
+        handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 300 }));
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 370 }));
+        await settleZoneless(fixture);
+        // Seven headings of 100px: a seventh each; Name grew by 70px (ten
+        // points) and Score shrank by as much. The thumbnail is still its tile.
+        const template = component.gridTemplate();
+        expect(template.startsWith(`${thumb} `)).toBe(true);
+        const shares = [...template.matchAll(/minmax\(0, ([\d.]+)fr\)/g)].map((m) => parseFloat(m[1]));
+        expect(shares.length).toBe(6);
+        expect(shares[0]).toBeCloseTo(100 / 7 + 10, 6);
+        expect(shares[1]).toBeCloseTo(100 / 7 - 10, 6);
+        document.dispatchEvent(new MouseEvent('mouseup'));
+        expect(document.body.style.cursor).toBe('');
+        const row = fixture.nativeElement.querySelector('.results-row') as HTMLElement;
+        expect(row.style.gridTemplateColumns).toBe(component.gridTemplate());
+      });
+    });
+
+    // The Similarity column (#5584): each item's place in the dataset's 1-D
+    // order, asked for when the column is ticked; sort by it for look-alikes.
+    describe('the Similarity column', () => {
+      const URL = '/api/medias/similarity-order';
+      const tick = async () => {
+        component.setColumnEnabled('similarity', true);
+        await settleZoneless(fixture);
+      };
+      const cells = () => component.sortedRows().map((row) => component.cellValue(row, 'similarity'));
+
+      it("asks the run dataset for its order once ticked, shows each item's place, and sorts by it", async () => {
+        await flushInit();
+        httpMock.expectNone(URL);
+        await tick();
         const req = httpMock.expectOne(URL);
         // Asked of the run's dataset by id, whichever pair is active.
         expect(req.request.context.get(DATASET_OVERRIDE)).toBe('ds1');
         expect(req.request.body.ids).toEqual([1, 2, 3, 4]);
         req.flush({ status: 'ready', ids: [4, 1, 3, 2], method: 'umap' });
+        // Still the score order, with each item's place shown and copied.
+        expect(component.displayHits().map((h) => h.id)).toEqual([2, 4, 1]);
+        expect(cells()).toEqual(['4', '1', '2']);
+        expect(component.clipboardRows()[0]['similarity']).toBe('4');
+        component.cols.sortBy('similarity');
         expect(component.displayHits().map((h) => h.id)).toEqual([4, 1, 2]);
-
-        component.setSort('score');
-        component.setSort('similarity');
+        component.cols.sortBy('similarity');
+        expect(component.displayHits().map((h) => h.id)).toEqual([2, 1, 4]);
+        // Unticked and ticked again: the order is in hand.
+        component.setColumnEnabled('similarity', false);
+        await settleZoneless(fixture);
+        await tick();
         httpMock.expectNone(URL);
-        expect(component.displayHits().map((h) => h.id)).toEqual([4, 1, 2]);
       });
 
       it('waits on the fit, asking again, and keeps the score order meanwhile', async () => {
         await flushInit();
         vi.useFakeTimers();
         try {
-          component.setSort('similarity');
+          component.setColumnEnabled('similarity', true);
+          TestBed.tick();
           httpMock.expectOne(URL).flush({ status: 'building', job_id: 'j', overall: 0.4 });
           expect(component.similarity().status).toBe('building');
           expect(component.similarityFraction(component.similarity())).toBe(0.4);
+          expect(cells()).toEqual(['', '', '']);
+          component.cols.sortBy('similarity');
           expect(component.displayHits().map((h) => h.id)).toEqual([2, 4, 1]);
           await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.SIMILARITY_POLL_MS);
           httpMock.expectOne(URL).flush({ status: 'ready', ids: [1, 2, 3, 4], method: 'umap' });
@@ -752,14 +931,18 @@ describe('AutoDetectResultsModalComponent', () => {
         }
       });
 
-      it('Cancel goes back to the score order and stops asking', async () => {
+      it('Cancel drops the column, hands the sort back to Score, and stops asking', async () => {
         await flushInit();
         vi.useFakeTimers();
         try {
-          component.setSort('similarity');
+          component.setColumnEnabled('similarity', true);
+          TestBed.tick();
           httpMock.expectOne(URL).flush({ status: 'building', job_id: 'j' });
+          component.cols.sortBy('similarity');
           component.cancelSimilarity();
-          expect(component.sortMode()).toBe('score');
+          TestBed.tick();
+          expect(component.showsSimilarity()).toBe(false);
+          expect(component.sort()).toEqual({ column: 'score', asc: false });
           await vi.advanceTimersByTimeAsync(AutoDetectResultsModalComponent.SIMILARITY_POLL_MS * 2);
           httpMock.expectNone(URL);
         } finally {
@@ -767,16 +950,127 @@ describe('AutoDetectResultsModalComponent', () => {
         }
       });
 
-      it("shows why there is no order, and asks again on the next click", async () => {
+      it('shows why there is no order, and asks again on Try again', async () => {
         await flushInit();
-        component.setSort('similarity');
+        await tick();
         httpMock.expectOne(URL).flush({ message: 'Dataset ds1 is not loaded.' }, { status: 409, statusText: 'Conflict' });
         await settleZoneless(fixture);
         expect(component.similarityError()).toBe('Dataset ds1 is not loaded.');
-        expect(fixture.nativeElement.querySelector('.similarity-error')?.textContent).toContain('not loaded');
-        component.setSort('similarity');
+        const error = fixture.nativeElement.querySelector('.similarity-error') as HTMLElement;
+        expect(error.textContent).toContain('not loaded');
+        (error.querySelector('button') as HTMLButtonElement).click();
         httpMock.expectOne(URL).flush({ status: 'ready', ids: [], method: 'umap' });
       });
+    });
+  });
+
+  // The AutoFind tab (#5584): Export sends the run through the exporter set
+  // up for AutoFind, as a finished run does, with read-only lines on what
+  // that is.
+  describe('the AutoFind tab', () => {
+    // No dataset id: the Browse warm-up (#4683) needs one, and is not under test here.
+    const run = { ...mockData, run_id: '_autofind_9' };
+    const EXPORT_URL = '/api/autofind/runs/_autofind_9/export';
+    const tabs = () => Array.from(fixture.nativeElement.querySelectorAll('.export-tabs .tab')) as HTMLElement[];
+    const autofindTab = () => tabs().find((t) => t.textContent?.trim() === 'AutoFind') as HTMLButtonElement;
+    const content = () =>
+      (fixture.nativeElement.querySelector('.tab-content') as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+    const exportButton = () => Array.from(fixture.nativeElement.querySelectorAll('.form-actions button'))[1] as HTMLButtonElement;
+    const configured = (paused = false) =>
+      settings.set({
+        autofind_exporter: 'csv',
+        autofind_exporter_field_values: { csv: { path: '/out/run.csv' } },
+        autofind_export_enabled: !paused,
+      } as AppSettings);
+
+    beforeEach(() => fixture.componentRef.setInput('data', run as any));
+
+    it('is the last tab, offered once there are exporters', async () => {
+      await flushInit();
+      expect(tabs().map((t) => t.textContent?.trim())).toEqual(['Clipboard', 'json', 'csv', 'AutoFind']);
+    });
+
+    it('says to set an exporter up when none is, and holds Export', async () => {
+      settings.set({ autofind_exporter: '' } as AppSettings);
+      await flushInit();
+      autofindTab().click();
+      await settleZoneless(fixture);
+      expect(content()).toContain('No results exporter is set up for AutoFind');
+      expect(exportButton().disabled).toBe(true);
+      expect(exportButton().title).toBe('Set up a results exporter on the Settings AutoFind tab');
+    });
+
+    it('shows, read-only, what Export will send and with what settings', async () => {
+      configured(true);
+      await flushInit();
+      autofindTab().click();
+      await settleZoneless(fixture);
+      const text = content();
+      expect(text).toContain("Export sends this run's 2 results via csv, as a finished run does");
+      expect(text).toContain('Export results when AutoFind finishes');
+      const readout = Array.from(fixture.nativeElement.querySelectorAll('.autofind-readout dt, .autofind-readout dd')).map(
+        (el) => (el as HTMLElement).textContent?.trim(),
+      );
+      expect(readout).toEqual(['Path:', '/out/run.csv']);
+      expect(fixture.nativeElement.querySelector('.tab-content input')).toBeNull();
+      expect(exportButton().disabled).toBe(false);
+      expect(exportButton().title).toBe("Send this run's results via csv, as a finished run does");
+    });
+
+    it('hides a password, shows a checkbox as Yes or No, and a blank as its default', async () => {
+      configured();
+      await flushInit();
+      const field = (key: string, field_type: string, dflt?: string) => ({ key, field_type, default: dflt }) as any;
+      expect(component.autofindFieldText(field('p', 'password'))).toBe('—');
+      settings.set({
+        autofind_exporter: 'csv',
+        autofind_exporter_field_values: { csv: { p: 'hunter2', c: 'true', d: '' } },
+      } as AppSettings);
+      expect(component.autofindFieldText(field('p', 'password'))).toBe('••••••••');
+      expect(component.autofindFieldText(field('c', 'checkbox'))).toBe('Yes');
+      expect(component.autofindFieldText(field('x', 'checkbox'))).toBe('No');
+      expect(component.autofindFieldText(field('d', 'text', 'out.csv'))).toBe('out.csv');
+    });
+
+    it('sends the run through the AutoFind exporter, and confirms', async () => {
+      configured();
+      await flushInit();
+      component.selectTab(AUTOFIND_TAB);
+      component.exportResults();
+      const req = httpMock.expectOne(EXPORT_URL);
+      expect(req.request.method).toBe('POST');
+      expect(component.exporting()).toBe(true);
+      req.flush({ exporter: 'csv', exporter_display_name: 'CSV', success: true, message: 'Saved.' });
+      expect(component.exporting()).toBe(false);
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Exported 2 results to csv', detail: 'Saved.' }),
+      );
+      httpMock.expectNone('/api/exporters/export');
+    });
+
+    it("reports the exporter's failure in the run's own words, and stays open", async () => {
+      configured();
+      await flushInit();
+      const closed = vi.fn();
+      component.closed.subscribe(closed);
+      component.selectTab(AUTOFIND_TAB);
+      component.exportResults(true);
+      httpMock
+        .expectOne(EXPORT_URL)
+        .flush({ exporter: 'csv', exporter_display_name: 'CSV', success: false, error: 'Disk full' });
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: expect.stringContaining('via CSV failed: Disk full') }),
+      );
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(closed).not.toHaveBeenCalled();
+    });
+
+    it('is held for results that name no run', async () => {
+      configured();
+      fixture.componentRef.setInput('data', { ...run, run_id: undefined } as any);
+      await flushInit();
+      component.selectTab(AUTOFIND_TAB);
+      expect(component.exportBlocker).toBe('These results name no run to send');
     });
   });
 });

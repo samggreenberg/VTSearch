@@ -9169,6 +9169,48 @@
         ]
       }
     },
+    "/api/autofind/runs/{run_id}/export": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Find Results dialog's **AutoFind** tab: a way to try the exporter and\nfield values set up on the Settings AutoFind tab without importing another\ndataset.  The payload is the run's own ``POST /api/auto-detect`` body, so\nwhat goes out is what a finished run sends, whatever the dialog lists; the\npause (``autofind_export_enabled``) holds back runs, not this button.\nThe exporter's own failure is reported in the status block, not as an\nerror, as a run's ``auto_export`` reports it.",
+        "operationId": "export_autofind_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_AutoFindExportStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "409": {
+            "description": "No results exporter is set up for AutoFind."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Send a finished run's results through the AutoFind exporter, as its finish did (#5584).",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
     "/api/balance": {
       "get": {
         "operationId": "get_balance_route",

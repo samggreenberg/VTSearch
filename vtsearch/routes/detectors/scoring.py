@@ -24,6 +24,7 @@ from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
     AutoFindBrowsePrepResponseSchema,
+    AutoFindRunExportResponseSchema,
     AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
@@ -1044,3 +1045,33 @@ def prep_autofind_run_browse(run_id: str):
     if answer is None:
         abort(404, message="AutoFind results not found")
     return answer
+
+
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>/export", methods=["POST"])
+@detector_scoring_bp.response(200, AutoFindRunExportResponseSchema)
+@detector_scoring_bp.alt_response(
+    404,
+    description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
+)
+@detector_scoring_bp.alt_response(409, description="No results exporter is set up for AutoFind.")
+def export_autofind_run(run_id: str):
+    """Send a finished run's results through the AutoFind exporter, as its finish did (#5584).
+
+    The Find Results dialog's **AutoFind** tab: a way to try the exporter and
+    field values set up on the Settings AutoFind tab without importing another
+    dataset.  The payload is the run's own ``POST /api/auto-detect`` body, so
+    what goes out is what a finished run sends, whatever the dialog lists; the
+    pause (``autofind_export_enabled``) holds back runs, not this button.
+    The exporter's own failure is reported in the status block, not as an
+    error, as a run's ``auto_export`` reports it.
+    """
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.runtime.autofind import AutoFindUnavailable, export_run_now  # noqa: PLC0415
+
+    try:
+        status = export_run_now(run_id, get_current_user())
+    except AutoFindUnavailable as exc:
+        abort(exc.status, message=exc.message)
+    if status is None:
+        abort(404, message="AutoFind results not found")
+    return status

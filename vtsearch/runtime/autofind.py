@@ -730,7 +730,7 @@ def domain_shifts(response: dict) -> list[dict[str, Any]]:
     return shifts
 
 
-def run_autofind_export(response: dict) -> dict | None:
+def run_autofind_export(response: dict, *, on_demand: bool = False) -> dict | None:
     """Run the configured AutoFind results exporter on *response*.
 
     Returns ``None`` when no exporter is configured (the common case) or the
@@ -741,6 +741,11 @@ def run_autofind_export(response: dict) -> dict | None:
     Export failures are reported in the status block rather than raised: the
     scored results are valuable on their own, so a misconfigured exporter must
     not sink the whole run.
+
+    *on_demand* is the Find Results dialog's AutoFind tab asking for the export
+    by hand (#5584, :func:`export_run_now`): the pause holds back what finished
+    runs send on their own, not a test the user presses the button for, so it
+    is not consulted.
     """
     from vtsearch.settings import (  # noqa: PLC0415
         get_autofind_export_enabled,
@@ -749,7 +754,7 @@ def run_autofind_export(response: dict) -> dict | None:
     )
 
     exporter_name = get_autofind_exporter()
-    if not exporter_name or not get_autofind_export_enabled():
+    if not exporter_name or (not on_demand and not get_autofind_export_enabled()):
         return None
 
     from vtscore.exporters import get_exporter  # noqa: PLC0415
@@ -895,6 +900,37 @@ def prep_run_browse(run_id: str, user: str) -> dict[str, Any] | None:
         # NothingToProject and the matrix builder's own refusals: Browse would
         # meet the same, and its own build will say so when it is pressed.
         return {"status": "skipped", "reason": str(exc)}
+
+
+#: The keys of a kept run that make up the ``POST /api/auto-detect`` body the
+#: exporter saw when the run finished; the rest of the record (who ran it,
+#: when, on what) is the dialog's, not the exporter's.
+RUN_RESPONSE_KEYS = ("media_type", "detectors_run", "results", "missing_detectors")
+
+
+def export_run_now(run_id: str, user: str) -> dict[str, Any] | None:
+    """Send kept run *run_id*'s results through the AutoFind exporter, as its finish did (#5584).
+
+    The Find Results dialog's AutoFind tab: a way to try the exporter set up
+    on the Settings AutoFind tab without importing another dataset.  The
+    payload is the run's own ``POST /api/auto-detect`` body (every detector's
+    Good at the run's own cut, whatever the dialog lists), so what goes out is
+    what a finished run sends.  The pause (``autofind_export_enabled``) is not
+    consulted: it holds back runs, not a button the user pressed.
+
+    ``None`` for a run *user* cannot see (as :func:`get_autofind_run`).
+    Raises :class:`AutoFindUnavailable` (409) when no exporter is set up, and
+    otherwise returns the same status block a finished run records as its
+    ``auto_export``, failures included.
+    """
+    record = get_autofind_run(run_id, user)
+    if record is None:
+        return None
+    response = {key: record[key] for key in RUN_RESPONSE_KEYS if key in record}
+    status = run_autofind_export(response, on_demand=True)
+    if status is None:
+        raise AutoFindUnavailable("No results exporter is set up for AutoFind (Settings › AutoFind).", status=409)
+    return status
 
 
 def clear_autofind_runs() -> None:

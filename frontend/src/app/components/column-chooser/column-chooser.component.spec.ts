@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ColumnChoice, ColumnChooserComponent } from './column-chooser.component';
@@ -46,5 +47,30 @@ describe('ColumnChooserComponent', () => {
     fixture.componentInstance.allToggled.subscribe(allToggled);
     selectAll().click();
     expect(allToggled).toHaveBeenCalledTimes(1);
+  });
+
+  // The host's end-of-row controls (Find Results' thumbnail size buttons,
+  // #5584) sit on the checkboxes' row, after the last box.
+  it('seats what the host marks chooserEnd at the end of the checkboxes row', async () => {
+    @Component({
+      standalone: true,
+      imports: [ColumnChooserComponent],
+      template: `
+        <vt-column-chooser [columns]="columns">
+          <span class="heading">Columns:</span>
+          <button chooserEnd class="sizes" type="button">Bigger</button>
+        </vt-column-chooser>
+      `,
+    })
+    class Host {
+      columns: ColumnChoice[] = [{ key: 'a', label: 'A', enabled: true }];
+    }
+    const host = TestBed.createComponent(Host);
+    await settleZoneless(host);
+    const el: HTMLElement = host.nativeElement;
+    expect(el.querySelector('.column-chooser-header .heading')).toBeTruthy();
+    const end = el.querySelector('.column-checkboxes .column-chooser-end .sizes');
+    expect(end).toBeTruthy();
+    expect(el.querySelector('.column-chooser-header .sizes')).toBeNull();
   });
 });

@@ -842,6 +842,13 @@ class _AutoFindExportStatusSchema(PluginExtrasSchema):
     )
 
 
+#: Response for ``POST /api/autofind/runs/<run_id>/export`` (#5584): the Find
+#: Results dialog's AutoFind tab sending a kept run through the AutoFind
+#: exporter by hand gets back the same status block a finished run records as
+#: its ``auto_export``.  The same schema, so the browser reads both alike.
+AutoFindRunExportResponseSchema = _AutoFindExportStatusSchema
+
+
 class AutoDetectRequestSchema(Schema):
     """Body for ``POST /api/auto-detect``.
 
@@ -1246,6 +1253,7 @@ __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
     "AutoFindBrowsePrepResponseSchema",
+    "AutoFindRunExportResponseSchema",
     "AutoFindRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",

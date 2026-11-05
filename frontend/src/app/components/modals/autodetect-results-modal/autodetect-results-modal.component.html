@@ -3,22 +3,27 @@
     These are the detector's matches in {{ data().dataset_name || 'this dataset' }}. <strong>Export</strong>
     sends them on. <strong>Browse</strong> lays them out as a map.
   </vt-toasty-hint>
-  <!-- Summary -->
+  <!-- Summary: each value under a label styled as the form labels below it
+       (the Threshold's, Columns), medium weight with a colon (#5584). -->
   <div class="results-summary">
     @if (data().dataset_name) {
-      <span><strong>Dataset:</strong> {{ data().dataset_name }}</span>
+      <span><span class="results-control-label">Dataset:</span> {{ data().dataset_name }}</span>
     }
     @if (showMediaType) {
       <!-- With its icon, as the Dashboard's Type column shows it (#5464). -->
       <span class="type-cell">
-        <strong>Media Type:</strong>
+        <span class="results-control-label">Media type:</span>
         @if (mediaTypeIcon()) {
           <vt-icon class="type-icon" aria-hidden="true" [type]="mediaTypeIcon()" [size]="14"></vt-icon>
         }
         {{ mediaTypeName() }}
       </span>
     }
-    <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
+    <!-- The detectors that ran, by name; too many to list and it is their
+         count, with every name on hover (#5584). -->
+    <span class="results-detectors" [title]="detectorsTitle">
+      <span class="results-control-label">{{ detectorsLabel }}</span> {{ detectorsSummary }}
+    </span>
   </div>
 
   <!-- Tune's training-domain warning, for each detector this dataset looks
@@ -101,8 +106,8 @@
 
   <!-- What the list shows. Each of these changes the list, so they sit above
        it (#5464), in the order each acts on it (#5540): the Threshold splits
-       the run into Good and Bad, Good / Bad / Both picks the side, and the
-       sort orders what is listed. -->
+       the run into Good and Bad, Good / Bad / Both picks the side. The order
+       is the headings' (#5584). -->
   <div class="results-controls">
     <div class="results-controls-row">
       <vt-balance
@@ -127,48 +132,41 @@
           Both
         </button>
       </div>
-      <span class="results-control">
-        <span class="results-control-label">Sort by</span>
-        <span class="segmented-toggle segmented-toggle--compact results-sort" role="radiogroup" aria-label="Order of the list">
-          <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sortMode() === 'score'"
-            [attr.aria-checked]="sortMode() === 'score'" (click)="setSort('score')" title="Highest score first, across every detector">
-            Score
-          </button>
-          <button type="button" class="segmented-toggle__btn" role="radio" [class.segmented-toggle__btn--active]="sortMode() === 'similarity'"
-            [attr.aria-checked]="sortMode() === 'similarity'" (click)="setSort('similarity')"
-            title="Look-alikes side by side: the dataset's 1-D UMAP, fit with its Browse map">
-            Similarity
-          </button>
-        </span>
-      </span>
-      @if (showThumbs()) {
-        <vt-view-controls class="results-size" side="results" [currentMediaType]="mediaType()" [showFocus]="false" />
-      }
     </div>
     @if (notchMoved()) {
       <p class="info-text notch-note" role="note">
-        Split at another notch than the run's, from the run's own scores. No detector's Threshold changes.
+        What the run would have found at this Threshold. The detectors' own Thresholds are unchanged.
       </p>
     }
+    <!-- The columns decide what the list has; the headings order, arrange and
+         size them. The thumbnail size buttons share the checkboxes' row (#5584). -->
     <vt-column-chooser [columns]="columns()" (toggled)="setColumnEnabled($event.key, $event.enabled)" (allToggled)="toggleAllColumns()">
-      <span class="results-control-label" title="What the list shows, and what Export copies or sends">Columns</span>
+      <span class="results-control-label" title="What the list shows, and what Export copies or sends. Click a heading to sort, drag it to reorder, drag the line between two to resize">Columns:</span>
+      <span chooserEnd>
+        @if (showThumbs()) {
+          <vt-view-controls side="results" [currentMediaType]="mediaType()" [showFocus]="false" />
+        }
+      </span>
     </vt-column-chooser>
     @switch (similarity().status) {
       @case ('building') {
         <div class="similarity-wait" role="status" aria-live="polite">
-          <span class="similarity-wait-message">Ordering by similarity: fitting this dataset's 1-D UMAP with its Browse map…</span>
+          <span class="similarity-wait-message">Placing each item by similarity: fitting this dataset's 1-D UMAP with its Browse map…</span>
           <vt-progress-bar
             [indeterminate]="similarityFraction(similarity()) === null"
             [value]="similarityFraction(similarity()) ?? 0"
             [max]="1"
             [smooth]="true"
           />
-          <button type="button" class="btn btn--secondary btn--sm" (click)="cancelSimilarity()" title="Sort by score instead">Cancel</button>
+          <button type="button" class="btn btn--secondary btn--sm" (click)="cancelSimilarity()" title="Drop the Similarity column">Cancel</button>
         </div>
       }
       @case ('error') {
-        @if (sortMode() === 'similarity') {
-          <p class="error-text similarity-error" role="alert">{{ similarityError() }}</p>
+        @if (showsSimilarity()) {
+          <p class="error-text similarity-error" role="alert">
+            {{ similarityError() }}
+            <button type="button" class="btn btn--secondary btn--sm" (click)="requestSimilarity()" title="Ask for the similarity order again">Try again</button>
+          </p>
         }
       }
     }
@@ -196,9 +194,38 @@
     } @else if (displayHits().length === 0) {
       <p class="empty-state">No hits found.</p>
     } @else {
+      <!-- The headings, as the Dashboard's grids have them (#5584): a click
+           sorts, a drag reorders, the handle on a heading's left edge resizes
+           it against the one before. -->
       <div class="results-head" role="row" [style.grid-template-columns]="gridTemplate()">
-        @for (col of listedColumns(); track col.key) {
-          <span class="results-cell" role="columnheader" [title]="col.title || col.label">{{ col.label }}</span>
+        @for (col of listedColumns(); track col.key; let i = $index) {
+          <span
+            class="results-col-head grid-col-head"
+            role="columnheader"
+            [attr.data-col]="col.key"
+            [class.sortable]="col.sortable"
+            [class.col-drop-target]="cols.isDropTarget(col.key)"
+            [class.col-dragging]="cols.isDragging(col.key)"
+            [attr.tabindex]="col.sortable ? 0 : null"
+            [attr.aria-sort]="col.sortable ? cols.ariaSort(col.key) : null"
+            [title]="headerTitle(col)"
+            draggable="true"
+            (click)="onHeaderClick(col)"
+            (keydown)="onHeaderKeydown($event, col)"
+            (dragstart)="cols.onColDragStart($event, col.key)"
+            (dragover)="cols.onColDragOver($event, col.key)"
+            (dragleave)="cols.onColDragLeave($event, col.key)"
+            (drop)="dropColumn($event, col.key)"
+            (dragend)="cols.onColDragEnd($event)">
+            @if (canResize(i)) {
+              <span class="col-resize-handle" (mousedown)="startResize($event)" (click)="$event.stopPropagation()" draggable="false"
+                title="Drag to resize; click to fit the column to its content"></span>
+            }
+            <span class="results-col-label">{{ col.label }}</span>
+            @if (col.sortable) {
+              <span class="sort-indicator" [class.active]="cols.isSortActive(col.key)">{{ cols.sortIndicator(col.key) }}</span>
+            }
+          </span>
         }
       </div>
       <cdk-virtual-scroll-viewport
@@ -262,7 +289,8 @@
   </div>
 
   <!-- Where the listed rows go: a tab per destination, Clipboard first, so
-       what is chosen and what it opens are both in view (#5464). -->
+       what is chosen and what it opens are both in view (#5464); last, AutoFind
+       sends the run the way a finished run does (#5584). -->
   <div class="tab-bar export-tabs" role="tablist" aria-label="Where to send the listed rows">
     <button type="button" class="tab export-tab" role="tab" [class.active]="activeTab() === 'clipboard'"
       [attr.aria-selected]="activeTab() === 'clipboard'" (click)="selectTab('clipboard')"
@@ -276,9 +304,48 @@
         <vt-icon [type]="exporterIcon(exp)" [size]="16"></vt-icon> {{ exp.display_name || exp.name }}
       </button>
     }
+    @if (exporters().length) {
+      <button type="button" class="tab export-tab" role="tab" [class.active]="activeTab() === AUTOFIND_TAB"
+        [attr.aria-selected]="activeTab() === AUTOFIND_TAB" (click)="selectTab(AUTOFIND_TAB)"
+        title="Send this run's results through the exporter set up for AutoFind, as a finished run does">
+        <vt-icon type="lightning" [size]="16"></vt-icon> AutoFind
+      </button>
+    }
   </div>
   <div class="tab-content" role="tabpanel">
-    @if (!activeExporter) {
+    @if (activeTab() === AUTOFIND_TAB) {
+      <!-- Nothing to fill in: it mimics the export already set up. The read-only
+           lines say what Export will do (#5584). -->
+      <div class="autofind-tab">
+        @if (!autofindExporterName()) {
+          <p class="info-text">
+            No results exporter is set up for AutoFind. Pick one on the Settings <strong>AutoFind</strong> tab, and
+            Export here sends these results the way a finished run does.
+          </p>
+        } @else {
+          <p class="info-text">
+            Export sends this run's {{ autofindHitCount().toLocaleString() }} result{{ autofindHitCount() === 1 ? '' : 's' }}
+            via <strong>{{ autofindExporterLabel() }}</strong>, as a finished run does: every detector's Good at the
+            run's own Threshold, whatever is listed above.
+            @if (autofindPaused()) {
+              Finished runs send nothing on their own while <strong>Export results when AutoFind finishes</strong> is
+              off in Settings; Export here still does.
+            }
+          </p>
+          @if (autofindFields().length) {
+            <dl class="autofind-readout" aria-label="The exporter's settings, as saved on the Settings AutoFind tab">
+              @for (field of autofindFields(); track field.key) {
+                <dt [title]="field.description || field.label || field.key">{{ field.label || field.key }}:</dt>
+                <dd>{{ autofindFieldText(field) }}</dd>
+              }
+            </dl>
+          } @else {
+            <p class="info-text">{{ autofindExporterLabel() }} has no settings to show.</p>
+          }
+          <p class="info-text">Change any of this on the Settings <strong>AutoFind</strong> tab.</p>
+        }
+      </div>
+    } @else if (!activeExporter) {
       <vt-clipboard-copy
         mode="table"
         [rows]="clipboardRows()"
