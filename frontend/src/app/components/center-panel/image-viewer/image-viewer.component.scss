@@ -87,6 +87,31 @@
   pointer-events: none;
 }
 
+// Several faces on one photo, by whose they are (`outlineBoxes`): the person in
+// focus, the person they appear with, and everyone else, faintly. The dark
+// backing hairline stays from .highlight-box, so a stroke reads on any photo.
+// Colour is not the only cue: the person in focus has the heaviest stroke,
+// everyone else the dimmed dashes of a machine annotation, and every box names
+// its role in its hover title. That title is why these take the pointer: a
+// mousedown, wheel or double-click on one still bubbles to .image-wrap, so pan
+// and zoom work over a face as they do beside it.
+.role-box {
+  pointer-events: auto;
+
+  &.role-primary {
+    border: 3px solid var(--photo-outline-primary);
+  }
+
+  &.role-secondary {
+    border: 2px solid var(--photo-outline-secondary);
+  }
+
+  &.role-other {
+    border: 1.5px dashed var(--photo-outline-other);
+    opacity: var(--opacity-dim);
+  }
+}
+
 @keyframes region-box-shake {
   0%, 100% { transform: translateX(0); border-color: rgba(255, 224, 102, 0.95); }
   15% { transform: translateX(-3px); border-color: rgba(255, 110, 110, 0.95); }

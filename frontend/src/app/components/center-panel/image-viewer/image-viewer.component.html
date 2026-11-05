@@ -44,6 +44,25 @@
       <div class="highlight-box outline-box" [ngStyle]="outlineBoxStyle!" aria-hidden="true"></div>
     </div>
   }
+  @if (drawnOutlineBoxes().length > 0 && renderedW() > 0 && renderedH() > 0) {
+    <div
+      class="region-stage"
+      [style.width.px]="renderedW()"
+      [style.height.px]="renderedH()"
+      [style.transform]="'translate(-50%, -50%) ' + imageTransform"
+    >
+      @for (b of drawnOutlineBoxes(); track $index) {
+        <div
+          class="highlight-box role-box"
+          [class.role-primary]="b.role === 'primary'"
+          [class.role-secondary]="b.role === 'secondary'"
+          [class.role-other]="b.role === 'other'"
+          [ngStyle]="b.style"
+          [title]="b.title"
+        ></div>
+      }
+    </div>
+  }
   @if (regionBox() && renderedW() > 0 && renderedH() > 0) {
     <div
       class="region-stage"

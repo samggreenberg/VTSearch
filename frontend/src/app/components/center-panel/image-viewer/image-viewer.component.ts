@@ -7,6 +7,37 @@ import { ActiveContextService } from '../../../services/active-context.service';
 export type RegionBox = readonly [number, number, number, number];
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
+/**
+ * Whose face an {@link OutlineBox} outlines, on a photo several people share:
+ * `primary` is the person in focus, `secondary` the person they are seen
+ * with, and `other` anyone else in the photo, drawn faintly.
+ */
+export type OutlineRole = 'primary' | 'secondary' | 'other';
+
+/** A normalised `[x0, y0, x1, y1]` box on the image, and whose it is. */
+export interface OutlineBox {
+  readonly box: RegionBox;
+  readonly role: OutlineRole;
+}
+
+/**
+ * Each role's hover title, so colour is never the only cue; and the drawing
+ * order, faint ones first, so the person in focus is on top where faces
+ * overlap.
+ */
+const OUTLINE_ROLES: Readonly<Record<OutlineRole, { title: string; layer: number }>> = {
+  other: { title: 'Someone else in this photo', layer: 0 },
+  secondary: { title: 'Appears with the person in focus', layer: 1 },
+  primary: { title: 'The person in focus', layer: 2 },
+};
+
+/** An {@link OutlineBox} the viewer can draw: its role, title and style. */
+export interface DrawnOutlineBox {
+  readonly role: OutlineRole;
+  readonly title: string;
+  readonly style: { [k: string]: string };
+}
+
 type DragMode =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
   | { kind: 'draw'; anchor: { x: number; y: number }; previousBox: RegionBox | null }
@@ -71,6 +102,14 @@ export class ImageViewerComponent implements OnDestroy {
    * embedder, where there is no Highlight toggle to turn on.
    */
   readonly outlineBox = input<RegionBox | null>(null);
+  /**
+   * Several faces outlined on one photo, each coloured by whose it is (see
+   * {@link OutlineRole}): the People view's shared photo, where two people
+   * are outlined and everyone else in it is marked faintly. Drawn beside
+   * {@link outlineBox}, not instead of it; a box `overlayBoxStyle` rejects is
+   * skipped.
+   */
+  readonly outlineBoxes = input<readonly OutlineBox[] | null>(null);
   /**
    * Show the item out of this dataset rather than the active one (`''`, the
    * default, is the active one). Show in photo's photo lives in the Image
@@ -402,6 +441,20 @@ export class ImageViewerComponent implements OnDestroy {
   get outlineBoxStyle(): { [k: string]: string } | null {
     return overlayBoxStyle(this.outlineBox(), { dropWholeImage: false });
   }
+
+  /** {@link outlineBoxes} as drawn: malformed boxes and unknown roles left
+   *  out, the rest in drawing order (the person in focus last, so on top).
+   *  Like {@link outlineBoxStyle}, a box round the whole image still draws. */
+  readonly drawnOutlineBoxes = computed<readonly DrawnOutlineBox[]>(() => {
+    const drawn: DrawnOutlineBox[] = [];
+    for (const entry of this.outlineBoxes() ?? []) {
+      const role = Object.hasOwn(OUTLINE_ROLES, entry.role) ? OUTLINE_ROLES[entry.role] : undefined;
+      const style = role ? overlayBoxStyle(entry.box, { dropWholeImage: false }) : null;
+      if (role && style) drawn.push({ role: entry.role, title: role.title, style });
+    }
+    // Array.prototype.sort is stable, so boxes in one role keep their order.
+    return drawn.sort((a, b) => OUTLINE_ROLES[a.role].layer - OUTLINE_ROLES[b.role].layer);
+  });
 
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
