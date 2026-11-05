@@ -57,6 +57,23 @@ Label endpoints (``vtsearch/routes/detectors/labels.py``):
   their non-default JSON responses via ``alt_response``; the success body is
   not described in the spec.
 
+Sharing endpoints (``vtsearch/routes/detectors/sharing.py``):
+
+* ``GET    /api/detectors/sharing``                   -> :class:`DetectorSharingCapabilitySchema`
+* ``GET    /api/detectors/sharing/received``          -> :class:`DetectorSharingReceivedResponseSchema`
+* ``POST   /api/detectors/sharing/receive``           -> :class:`DetectorSharingReceiveRequestSchema` ->
+                                                       :class:`DetectorSharingReceiveResponseSchema`
+* ``POST   /api/detectors/sharing/search-recipients`` -> :class:`DetectorSharingSearchRequestSchema` ->
+                                                       :class:`DetectorSharingSearchResponseSchema`
+* ``GET    /api/detectors/registry/<id>/sharing``     -> :class:`DetectorSharingViewSchema`
+* ``POST   /api/detectors/registry/<id>/share``       -> :class:`DetectorShareRequestSchema` ->
+                                                       :class:`DetectorShareResponseSchema`
+* ``DELETE /api/detectors/registry/<id>/share``       -> :class:`DetectorUnshareResponseSchema`
+* ``POST   /api/detectors/registry/<id>/refresh``     -> :class:`DetectorSharingRefreshRequestSchema` ->
+                                                       :class:`DetectorSharingRefreshResponseSchema`
+* ``POST   /api/detectors/registry/<id>/fork``        -> :class:`DetectorForkRequestSchema` ->
+                                                       :class:`DetectorForkResponseSchema`
+
 The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
 ``POST /api/detectors/registry/from-labelset/<importer>`` routes declare no
 request schema: their request shape depends on the chosen label importer's
@@ -1294,6 +1311,219 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
     num_labels = fields.Integer(required=True)
 
 
+# ---------------------------------------------------------------------------
+# Sharing schemas (vtsearch/routes/detectors/sharing.py)
+# ---------------------------------------------------------------------------
+
+#: The refresh policies a receive or refresh takes, the default first
+#: (``vtscore.labels.sharing.FOREIGN_POLICIES``).
+_FOREIGN_POLICIES = ("abort", "import", "skip")
+
+
+def _foreign_field():
+    return fields.String(
+        load_default="abort",
+        validate=validate.OneOf(_FOREIGN_POLICIES),
+        metadata={
+            "description": (
+                "What to do when someone other than the owner wrote to the container: ``abort`` (the default) "
+                "reports it and changes nothing, ``import`` takes every record, ``skip`` only the owner's."
+            )
+        },
+    )
+
+
+class DetectorSharingCapabilitySchema(Schema):
+    """Response for ``GET /api/detectors/sharing``: whether detector sharing is on, and through what.
+
+    ``enabled`` is false while the ``detector_sharing_source`` setting is null
+    (or names a source that is not installed or cannot share); the other
+    fields are then null or empty.  ``missing_fields`` lists required fields
+    of the source the setting leaves without a value.
+    """
+
+    enabled = fields.Boolean(required=True)
+    name = fields.String(allow_none=True, metadata={"description": "The active sharing source's registered name"})
+    display_name = fields.String(allow_none=True)
+    icon = fields.String(allow_none=True)
+    supports_recipient_search = fields.Boolean(required=True)
+    missing_fields = fields.List(fields.String(), required=True)
+
+
+class DetectorSharingSummarySchema(Schema):
+    """One container shared with the caller, as ``GET /api/detectors/sharing/received`` lists it."""
+
+    remote_ref = fields.String(required=True, metadata={"description": "The container's opaque reference"})
+    name = fields.String(required=True)
+    owner = fields.String(required=True, metadata={"description": "Its owner, as the sharing source names people"})
+    media_type = fields.String(required=True)
+    record_count = fields.Integer(required=True)
+    updated_at = fields.Float(required=True)
+    shared_via = fields.String(
+        required=True,
+        validate=validate.OneOf(["owner", "direct", "group", "public"]),
+        metadata={"description": "How the caller can see it: ``direct``, ``group`` or ``public``"},
+    )
+    detector_id = fields.String(
+        allow_none=True,
+        metadata={"description": "The caller's detector that already holds this container, or null"},
+    )
+
+
+class DetectorSharingReceivedResponseSchema(Schema):
+    """Response for ``GET /api/detectors/sharing/received``."""
+
+    received = fields.List(fields.Nested(DetectorSharingSummarySchema), required=True)
+
+
+class DetectorSharingReceiveRequestSchema(Schema):
+    """Body for ``POST /api/detectors/sharing/receive``."""
+
+    remote_ref = fields.String(required=True, validate=validate.Length(min=1))
+    foreign = _foreign_field()
+
+
+class DetectorSharingReceiveResponseSchema(Schema):
+    """Response for ``POST /api/detectors/sharing/receive``.
+
+    201 with ``applied: true`` and the new read-only ``detector``; or 200 with
+    ``applied: false`` and ``detector: null`` when the ``abort`` policy met
+    records someone other than the owner wrote, so the client can ask the user
+    whether to ``import`` or ``skip`` them.
+    """
+
+    ok = fields.Boolean(required=True)
+    applied = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    integrity = fields.Nested(DetectorSharingIntegritySchema, required=True)
+    remote_ref = fields.String(required=True)
+    name = fields.String(required=True, metadata={"description": "The container's name"})
+    owner = fields.String(required=True, metadata={"description": "The container's owner"})
+    detector = fields.Nested(DetectorRegistryEntrySchema, allow_none=True)
+
+
+class DetectorSharingSearchRequestSchema(Schema):
+    """Body for ``POST /api/detectors/sharing/search-recipients``."""
+
+    query = fields.String(required=True)
+
+
+class DetectorSharingRecipientSchema(Schema):
+    """One person or group a recipient search found."""
+
+    id = fields.String(required=True, metadata={"description": "The identity to pass in ``add``"})
+    display_name = fields.String(required=True)
+    kind = fields.String(required=True, validate=validate.OneOf(["user", "group"]))
+
+
+class DetectorSharingSearchResponseSchema(Schema):
+    """Response for ``POST /api/detectors/sharing/search-recipients``."""
+
+    suggestions = fields.List(fields.Nested(DetectorSharingRecipientSchema), required=True)
+
+
+class DetectorSharingViewSchema(Schema):
+    """Response for ``GET /api/detectors/registry/<id>/sharing``: a detector's container.
+
+    ``sharing`` is the binding's state as the registry listing shows it (no
+    field values); ``owner``, ``recipients`` and ``public`` are read from the
+    container now.  When the binding's source is not the active one,
+    ``sharing_note`` says why and those three are null: the container is not
+    read.
+    """
+
+    detector_id = fields.String(required=True)
+    sync_mode = fields.String(required=True, validate=validate.OneOf(["local", "linked", "forked"]))
+    is_owner = fields.Boolean(
+        required=True,
+        metadata={"description": "The caller owns the container: it is their detector, not a received one"},
+    )
+    sharing = fields.Nested(DetectorSharingStateSchema, required=True)
+    sharing_note = fields.String(allow_none=True)
+    owner = fields.String(allow_none=True)
+    recipients = fields.List(fields.String(), allow_none=True)
+    public = fields.Boolean(allow_none=True)
+
+
+class DetectorShareRequestSchema(Schema):
+    """Body for ``POST /api/detectors/registry/<id>/share``.
+
+    The first call shares the detector (creating its container); any call
+    then adds and removes recipients (people or groups, as the sharing source
+    names them) and, when ``public`` is given, shares it with everyone or
+    stops.  ``{}`` only shares it.
+    """
+
+    add = fields.List(fields.String(validate=validate.Length(min=1)), load_default=list)
+    remove = fields.List(fields.String(validate=validate.Length(min=1)), load_default=list)
+    public = fields.Boolean(load_default=None, allow_none=True)
+
+
+class DetectorShareResponseSchema(DetectorSharingViewSchema):
+    """Response for ``POST /api/detectors/registry/<id>/share``: the container afterwards, and what was done."""
+
+    ok = fields.Boolean(required=True)
+    created = fields.Boolean(required=True, metadata={"description": "This call created the container"})
+    message = fields.String(required=True)
+
+
+class DetectorUnshareResponseSchema(Schema):
+    """Response for ``DELETE /api/detectors/registry/<id>/share``."""
+
+    ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    detector = fields.Nested(DetectorRegistryEntrySchema, required=True)
+
+
+class DetectorSharingRefreshRequestSchema(Schema):
+    """Body for ``POST /api/detectors/registry/<id>/refresh``."""
+
+    foreign = _foreign_field()
+
+
+class DetectorSharingRefreshResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/refresh``.
+
+    ``applied`` is false when the ``abort`` policy met records someone other
+    than the owner wrote: nothing changed, and ``integrity`` says how many.
+    ``added`` / ``changed`` / ``removed`` count the labels the local copy
+    gained, changed and lost.
+    """
+
+    ok = fields.Boolean(required=True)
+    applied = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    integrity = fields.Nested(DetectorSharingIntegritySchema, required=True)
+    added = fields.Integer(required=True)
+    changed = fields.Integer(required=True)
+    removed = fields.Integer(required=True)
+    detector = fields.Nested(DetectorRegistryEntrySchema, required=True)
+
+
+class DetectorForkRequestSchema(Schema):
+    """Body for ``POST /api/detectors/registry/<id>/fork``.
+
+    ``name`` is the fork's; omitted, null or blank, it is ``"<name> (fork)"``,
+    suffixed until free.
+    """
+
+    name = fields.String(load_default=None, allow_none=True, validate=validate.Length(max=MAX_NAME_LENGTH))
+
+
+class DetectorForkResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/fork``.
+
+    ``remote_sync`` is null when the fork was shared anew through the active
+    sharing source, and otherwise says why it is local only: sharing is off,
+    or creating its container failed.
+    """
+
+    ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    detector = fields.Nested(DetectorRegistryEntrySchema, required=True)
+    remote_sync = fields.String(allow_none=True)
+
+
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
@@ -1323,6 +1553,22 @@ __all__ = [
     "DetectorRegistryEntrySchema",
     "DetectorSharingIntegritySchema",
     "DetectorSharingStateSchema",
+    "DetectorForkRequestSchema",
+    "DetectorForkResponseSchema",
+    "DetectorShareRequestSchema",
+    "DetectorShareResponseSchema",
+    "DetectorSharingCapabilitySchema",
+    "DetectorSharingReceiveRequestSchema",
+    "DetectorSharingReceiveResponseSchema",
+    "DetectorSharingReceivedResponseSchema",
+    "DetectorSharingRecipientSchema",
+    "DetectorSharingRefreshRequestSchema",
+    "DetectorSharingRefreshResponseSchema",
+    "DetectorSharingSearchRequestSchema",
+    "DetectorSharingSearchResponseSchema",
+    "DetectorSharingSummarySchema",
+    "DetectorSharingViewSchema",
+    "DetectorUnshareResponseSchema",
     "DetectorRegistryListResponseSchema",
     "DetectorRegistryLoadRequestSchema",
     "DetectorRegistryLoadResponseSchema",
