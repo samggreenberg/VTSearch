@@ -125,7 +125,7 @@ The fit, in three steps, all on the cached matrix:
    would land in one component. Each component is re-cut with agglomerative
    clustering at the same floor (scipy, already a dependency; a component is
    small, so its distance matrix is not), centroid or average linkage,
-   which of the two the calibration below settles. A face stays in the
+   which of the two the calibration (#5591) settles. A face stays in the
    cluster whose centroid it clears the floor to.
 3. **Hard views last.** A face under `HARD_VIEW_QUALITY` is poor evidence of
    identity and is left out of steps 1 and 2. It is then attached to the
@@ -206,154 +206,56 @@ partition that disagrees with Find.
 - Nothing persisted but ids. The centroids the fit uses are in-memory; the
   container entry carries ids, method, cutoff and compat tag.
 
-## Open questions for the owner
+## Settled when the slices were filed
 
-- **Linkage.** Centroid linkage is the ball's own test applied cluster to
-  cluster; average linkage is the standard for face clustering. The
-  calibration slice measures both; pick by the measurement, with the
-  split-over-merge rule above as the tiebreak.
-- **Entry points.** The dataset card's menu and Browse's toolbar are
-  proposed; the Train view's face list could offer *Show person* on a face
-  (the view opened on that person), which is cheap once the view exists.
-- **Naming the view.** *People* for the view and *Appears with* for the
-  relation; the issue's *Co-face Browse* names the feature.
-
-## What has to be written
-
-By tier, with the slice each belongs to in parentheses.
-
-**Library (`vtscore/`)**
-
-- `vtscore/datasets/`: `people.py` (partition dataclass, the fit, persistence
-  through two new container functions beside `append_similarity_order` /
-  `read_similarity_order`, the context cache and `request_people`) and
-  `co_occurrence.py` (photo index, per-person photos, pairwise shared
-  photos). (People partition; Photo index)
-- `vtscore/state/dataset_context.py`: two slots (`_people`, `_people_job_id`)
-  and a `people` reset group, as `order` is. (People partition)
-- `vtscore/datasets/stages/projection.py`: a people stage for Face datasets
-  beside the similarity-order stage, best-effort by the same contract.
-  (People partition)
-- `vtscore/datasets/registry.py`: nothing; the entry rides inside the
-  container, so `unregister_dataset` already sweeps it. The same goes for
-  the sidecar sweep.
-- `vtscore/docs/packages/datasets.md`: the two modules. (People partition)
-
-**App (`vtsearch/`)**
-
-- A `people` blueprint (new module beside `vtsearch/routes/sorting.py`):
-  `GET /api/people` (status and the list: id, face count, photo count,
-  representative; `building` with a job id while the fit runs, as
-  `/api/medias/similarity-order` answers), `GET /api/people/<id>` (the faces,
-  the photos, the co-people with counts), `GET /api/people/<id>/with/<other>`
-  (the shared photos, each with its faces, boxes and person ids, and the
-  sibling item when it resolves) and `POST /api/people/build` with `force`.
-  An unloaded sibling is the shared 409. (Routes)
-- Schemas in a new `vtsearch/schemas/` module, the OpenAPI snapshot
-  regenerated, and a `docs/api/` page indexed from `docs/API.md`. (Routes)
-
-**Frontend (`frontend/src/app/`)**
-
-- Route `people/:datasetId` with the dataset-only guard
-  (`guards/browse-context.guard.ts` generalised, or a sibling of it), a
-  `PeoplePrepService` that loads the dataset and waits for the partition
-  before navigating, as `BrowsePrepService` does for the map. (People view)
-- `components/people-view/`: the view, the people list, the person pane and
-  the appears-with pane; a `PeopleApiService` wrapper over the generated
-  client. (People view)
-- `vt-source-photo-modal` and `vt-image-viewer`: an `outlineBoxes` input
-  (several boxes, each with a colour class) beside `outlineBox`. (Multi-outline
-  photo)
-- The dataset card menu (`components/dashboard/card-context-menu-items.ts`)
-  and the Browse toolbar: the People entry on a Face dataset. (People view)
-
-**Docs and pictures**
-
-- `docs/ARCHITECTURE.md` (a paragraph beside Collapse to photos),
-  `docs/FRONTEND.md` (route table and a feature-area entry), the user guide's
-  Faces section, `CHANGELOG.md`. (Docs)
-- New screenshots are captured in the session that adds them
-  (`scripts/screenshots/refresh.sh <id>`); nothing existing moves, so the
-  reshoot queue is untouched. (Docs)
-
-**Tests**
-
-- `tests_lib/datasets/`: the fit on synthetic clusters (two people, a
-  chained lookalike, a hard view, a singleton), persistence round trip, the
-  live-id check, the stage; the photo index on faces with shared keys and a
-  `dupe_set` representative. (People partition; Photo index)
-- `tests/`: the routes, the 409, the build/poll contract. (Routes)
-- Vitest: the view's zoneless specs, the multi-outline viewer. (People view;
-  Multi-outline photo)
+The open questions were taken as proposed (2026-11-05): centroid linkage
+ships and #5591 measures it against average linkage, with the
+split-over-merge rule as the tiebreak; the entry points are the dataset
+card's menu and Browse's toolbar; the view is *People* and the relation
+*Appears with*. A *Show person* action from Train's face list is not filed,
+and is worth revisiting once the view ships.
 
 ## Open work
 
-Each item is a slice that can be filed as an issue when the owner settles
-the questions above; the plan then keeps a one-line pointer in its place.
+<!-- item-sep -->
+
+- [ ] #5586 — People partition: merge a Face dataset's crops into people at the face ball's floor
 
 <!-- item-sep -->
 
-- **People partition** — `people.py`, the container entry, the context
-  slots and reset group, the load stage, `request_people`, library tests.
-  Ships with centroid linkage at the ball's β 1 floor; the calibration may
-  move it. *Recommended Claude model: Opus* (cache plumbing that mirrors the
-  similarity order exactly, and a clustering whose wrong answer looks
-  plausible).
+- [ ] #5587 — Photo index: which faces share a photo, and which people appear together
 
 <!-- item-sep -->
 
-- **Photo index and co-occurrence** — `co_occurrence.py`: the key union,
-  per-person photos, pairwise shared photos, library tests. Independent of
-  the partition in code (it takes any grouping of face ids). *Recommended
-  Claude model: Sonnet.*
+- [ ] #5589 — People routes: list, person, shared photos, build
 
 <!-- item-sep -->
 
-- **People routes** — the blueprint, schemas, OpenAPI snapshot, API page,
-  route tests. After the two library slices. *Recommended Claude model:
-  Sonnet.*
+- [ ] #5588 — Image viewer and Show in photo: outline several faces, coloured by person
 
 <!-- item-sep -->
 
-- **Multi-outline photo** — `outlineBoxes` on the image viewer and the source
-  photo modal, with per-person colours, and its Vitest specs. Independent of
-  the backend; the Collapse to photos grid may adopt it too. *Recommended
-  Claude model: Sonnet.*
+- [ ] #5590 — People view: a Face dataset's people and who appears with whom
 
 <!-- item-sep -->
 
-- **People view** — the route, guard and prep service, the three panes, the
-  dataset-card and Browse entries, zoneless specs, the user-guide section
-  with its new screenshots. After the routes and the multi-outline photo.
-  *Recommended Claude model: Opus* (a new view's reactivity and the shared
-  sibling-load path).
-
-<!-- item-sep -->
-
-- **Calibrate the cut** — on FHIBE's 562 identities (GRID) and the
-  Celebrities in Context demo (laptop): pairwise precision, recall and
-  B-cubed F of the partition against the ground truth across floors around
-  the ball's, for centroid and average linkage, with and without the
-  hard-view step; and the share of people split or merged at the shipped
-  cut. Writes a `REPORT.md` under `docs/experiments/`; moves the shipped
-  linkage or floor only if it pays. An experiment: it cannot close without
-  the run. *Recommended Claude model: Sonnet* for the harness and analysis.
+- [ ] #5591 — Calibrate the People cut against FHIBE and the VGGFace2 demo (experiment)
 
 <!-- item-sep -->
 
 - **Sibling highlighting on the map, revived** — with the photo index
   served, Browse can highlight the bins holding the other faces of the
-  hovered face's photo, the item `vtsbrowse.md` cut. Optional, after the
-  routes. *Recommended Claude model: Sonnet.*
+  hovered face's photo. `vtsbrowse.md` cut this item for want of exactly
+  that plumbing, so reviving it is the owner's call, and it is not filed.
+  After #5589 if taken up. *Recommended Claude model: Sonnet.*
 
 <!-- item-sep -->
 
 ### Dependencies
 
-- *People partition* and *Photo index* are independent in code; *People
-  routes* needs both.
-- *Multi-outline photo* needs nothing and can run beside the library slices.
-- *People view* needs *People routes* and *Multi-outline photo*.
-- *Calibrate the cut* needs *People partition* for the fit it measures, and
-  can run beside the frontend slices; its outcome is a constant or a linkage
-  choice, so it does not block the view.
+- #5586 and #5587 are independent in code; #5589 needs both.
+- #5588 needs nothing and can run beside the library slices.
+- #5590 needs #5589 and #5588.
+- #5591 needs #5586 for the fit it measures, and can run beside the
+  frontend slices; its outcome is a constant or a linkage choice, so it
+  does not block the view.
