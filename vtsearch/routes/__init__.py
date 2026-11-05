@@ -35,6 +35,7 @@ from vtsearch.routes.media import (
     seed_importers_bp,
 )
 from vtsearch.routes.line_test import line_test_bp
+from vtsearch.routes.people import people_bp
 from vtsearch.routes.precision_check import precision_check_bp
 from vtsearch.routes.projection import projection_bp
 from vtsearch.routes.sessions import sessions_bp
@@ -72,6 +73,7 @@ __all__ = [
     "media_server_bp",
     "medias_bp",
     "metrics_bp",
+    "people_bp",
     "precision_check_bp",
     "projection_bp",
     "seed_importers_bp",
