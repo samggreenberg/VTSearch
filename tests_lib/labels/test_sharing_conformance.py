@@ -338,6 +338,7 @@ class TestForeignModifications:
 
         added = next(r for r in container.records if r.element.md5 == MD5_D)
         assert (added.created_by, added.last_modified_by) == (RECIPIENT, RECIPIENT)
+        assert container.manifest is not None
         assert container.manifest.record_count != len(container.records)
 
     def test_a_deletion_shows_only_in_the_manifest(self, shared):
@@ -346,6 +347,7 @@ class TestForeignModifications:
         container = _refresh(source, fv, ref)
 
         assert {(r.created_by, r.last_modified_by) for r in container.records} == {(OWNER, OWNER)}
+        assert container.manifest is not None
         assert container.manifest.record_count == 3
         assert len(container.records) == 2
         assert build_manifest(container.as_labelset()) != container.manifest

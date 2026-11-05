@@ -271,7 +271,7 @@ class SharedContainer:
         """
         from vtscore.datasets.labelset import LabelSet as _LabelSet  # noqa: PLC0415
 
-        return _LabelSet([r.element for r in self.records], detector_meta=self.detector_meta or None)
+        return _LabelSet([r.element for r in self.records], detector_meta=dict(self.detector_meta) or None)
 
 
 @dataclass(frozen=True)
