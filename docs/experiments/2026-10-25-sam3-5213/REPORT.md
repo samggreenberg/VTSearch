@@ -34,7 +34,10 @@ the rest (noun prompts), and its lead over SigLIP is +0.30 on the images it neve
 **SAM3 as the opening: measured (#5241), as an opt-in path beside SigLIP's (SigLIP stays the default: it is fast).**
 A session that opens on SAM3's set at 0.5 and hands Test to the detector at the 20th Good shows F1 +0.12 (± 0.015)
 over votes 1-150 on Binary and +0.07 (± 0.016) on Region, against today. Handing over at the label quota, as SigLIP's
-opening does, keeps only +0.02-0.03. See [SAM3 as the opening](#sam3-as-the-opening-5241).
+opening does, keeps only +0.02-0.03. See [SAM3 as the opening](#sam3-as-the-opening-5241). #5311 confirmed it at
+beta 1. #5565 makes it right at every preset: SAM3's cut moves with the preset (0.85 / 0.75 / 0.4 at beta 1/4 / 1 /
+4), with a hand-over at the 20th Good, and no hand-over at 4. On a fresh seed that is +0.11 / +0.13 / +0.23 on
+Binary and +0.06 / +0.09 / +0.14 on Region. See [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565).
 
 | seed 0, mean over cells (± SE over classes) | all (144) | small (46) | medium (49) | large (49) |
 |---|---|---|---|---|
@@ -357,7 +360,8 @@ moves with beta, so the right hand-over point moves with it.
 
 - One count of 20 is right only for the default balance.
 - The route either needs a count per preset (about 8-12 at 1/4 on Binary, 20 at 1, hold at 4), or SAM3's line has to
-  move with beta (a cut per preset), which would make one count fit all three again. Both are untested.
+  move with beta (a cut per preset), which would make one count fit all three again. #5565 tested both: see
+  [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565). The cut wins at 1/4 and 1, and 4 still holds.
 - On Region at 1/4 the opt-in buys nothing either way.
 - #5521's set-size guard is still open as well.
 
@@ -375,14 +379,138 @@ S5241_SEEDS="1 2" S5241_BETA=<b> sam3_opening_5241.sh launch {sig,sam3}` from a 
 `sam3_opening_5241.py` and `sam3_gate_5241.py {collect,price}` with `--date 2026-11-04 --beta <b>`, then
 `sam3_confirm_5311.py --out DIR`.
 
+## A SAM3 cut per preset (#5565)
+
+**Status (2026-11-05): move SAM3's cut with the preset (0.85 at beta 1/4, 0.75 at 1, 0.4 at 4), hand over at the 20th
+Good at 1/4 and 1, and hold SAM3's set at 4. On the fresh seed this beats today at every preset and on both paths,
+by +0.11 / +0.13 / +0.23 on Binary and +0.06 / +0.09 / +0.14 on Region. It also beats a hand-over count per preset
+at 0.5 at 1/4 (+0.075 / +0.051) and at 1 (+0.023 / +0.017), and ties it at 4. With the cut moved, the 20th Good fits
+1/4 and 1 again, but at 4 holding is still better. The label-free cut (scores read as probabilities) fails, because
+SAM3's scores are far from calibrated.**
+
+**Design.** #5311's question was which of two fixes makes the opt-in route (#5312) right at every preset. Both were
+fixed in the issue before any fresh cell ran:
+
+- **Option 2, a hand-over count per preset at the 0.5 cut**, read off #5311's seed 1: `goods>=8` at 1/4, `goods>=20`
+  at 1, hold at 4.
+- **Option 1, a SAM3 cut per preset.** (a) is label-free: the cut that maximises F-beta's expectation when SAM3's
+  scores of the withheld half are read as probabilities. (b) is one fixed cut per preset, the grid cut (0.05-0.95)
+  with the best mean set F-beta on the tuning seeds (seeds 0-1 at beta 1, seed 1 at 1/4 and 4).
+
+The fresh seed is seed 2 at every preset. New sessions, on dev plus a line knob (273907ef1), Intel kernels:
+
+- seed 2 at 1/4 and 4, both arms and both paths;
+- today's Binary arm again at every seed and preset compared, because dev shipped hold 0 (#5556) after #5311's tree.
+  Region's today is #5311's run: the hold never applied on a patch space.
+
+F is F-beta at the preset's beta over votes 1-150. ± is the SE over the 49 classes. Paired differences are per cell.
+
+**A cut is priced offline, and that is checked.** Picks never read the set, so SAM3's set at any cut is rebuilt off
+each cell's withheld half: `evaluable_pool`, then `_split_media_ids` under `RandomState(seed)`, and every Test image
+scoring the cut or more (`_query_step`). Two checks:
+
+- The rebuilt 0.5 sets match all 2,080 sessions' recorded vote-1 precision and recall, on both paths, within 5e-7
+  (`tables/sam3_5565_check.csv`).
+- The same 32 cells were run at `fixed:0.5` and `fixed:0.3` on this tree (24 Binary, 8 Region, seed 1). Both give
+  byte-identical picks and `hold:head` rows, to each other and to #5311's sessions on the old tree. Only the set
+  changes.
+
+**1. The set: a cut per preset, the same on every seed.** SAM3's set alone (no hand-over), mean over 144 cells:
+
+| set | beta 1/4: F, P / R | beta 1: F, P / R | beta 4: F, P / R |
+|---|---|---|---|
+| 0.5 (#5311's) | 0.48, 0.47 / 0.86 | 0.57, 0.47 / 0.86 | 0.78, 0.47 / 0.86 |
+| (b) tuned: 0.85 / 0.75 / 0.4 | **0.68**, 0.71 / 0.58 | **0.63**, 0.63 / 0.72 | **0.79**, 0.42 / 0.89 |
+| (a) label-free (median cut 0.76 / 0.32 / 0.05) | 0.62, 0.62 / 0.74 | 0.49, 0.38 / 0.91 | 0.63, 0.14 / 0.98 |
+
+- **Seed 2 picks the same tuned cuts.** Its own best grid cut is 0.85 / 0.75 / 0.4 as well, so tuning on seed 1 costs
+  it nothing. Seeds 0-2 differ by at most 0.005 in set F.
+- **Even at beta 1, 0.5 is not SAM3's best cut.** 0.75 is +0.06 F1.
+- **(a) keeps far too much at 1 and 4, because SAM3 is overconfident at the bottom.** Images scoring under 0.1
+  average 0.004 but are Good 0.02% of the time (`tables/sam3_5565_calibration.csv`). Images scoring 0.5-0.6 are Good
+  6% of the time, and those at 0.9-1.0 77%. A cell's ~11,000 withheld images scoring under 0.1 add some 47 phantom
+  Goods to the expectation, so the cut sinks.
+
+**2. The route: F-beta shown over votes 1-150 against today, seed 2 (out of sample for every choice made).**
+
+| route (set, hand-over) | Binary 1/4 | Binary 1 | Binary 4 | Region 1/4 | Region 1 | Region 4 |
+|---|---|---|---|---|---|---|
+| one count: 0.5, 20th Good (#5312 as filed) | +0.026 | +0.11 | +0.19 | -0.014 | +0.068 | +0.12 |
+| option 2: 0.5, 8th / 20th Good / hold | +0.034 (± 0.010) | +0.11 (± 0.014) | +0.23 (± 0.022) | +0.006 (± 0.010) | +0.068 (± 0.012) | +0.13 (± 0.017) |
+| option 1a: label-free cut, 20th Good | +0.081 | +0.076 | +0.12 | +0.038 | +0.036 | +0.060 |
+| option 1b: tuned cut, 20th Good | **+0.11** (± 0.016) | **+0.13** (± 0.015) | +0.20 (± 0.019) | **+0.057** (± 0.015) | **+0.085** (± 0.012) | +0.13 (± 0.014) |
+| **both: tuned cut, 20th Good, hold at 4** | **+0.11** (± 0.016) | **+0.13** (± 0.015) | **+0.23** (± 0.021) | **+0.057** (± 0.015) | **+0.085** (± 0.012) | **+0.14** (± 0.015) |
+| best count on seed 2, tuned cut (bound) | +0.11 (24th) | +0.14 (32nd) | +0.23 (48th) | +0.057 (20th) | +0.085 (20th) | +0.14 (hold) |
+| today's F, for scale | 0.60 | 0.49 | 0.56 | 0.65 | 0.55 | 0.65 |
+
+Seed 1 gives the same picture (within 0.01 in every cell of the table; `tables/sam3_5565_routes.csv`). Paired per
+cell on seed 2 (`tables/sam3_5565_cells.csv`), "both" against option 2 is:
+
+- +0.075 (± 0.010) and +0.051 (± 0.009) at 1/4, ahead in 83% of cells;
+- +0.023 (± 0.006) and +0.017 (± 0.006) at 1, ahead in 76%;
+- +0.006 (± 0.004) on both paths at 4, ahead in 47%.
+
+Against #5312's single count at 0.5, it is +0.083 / +0.071 at 1/4, +0.023 / +0.017 at 1 and +0.040 / +0.014 at 4.
+
+- **Does one count fit all three presets again?** At 1/4 and 1, yes: with the cut moved, the 20th Good is within
+  0.01 of the best count on both paths. At 4, no. The head still pulls F4 down once it takes over (0.79 to about
+  0.73 on Binary), so holding SAM3 is worth +0.035 on Binary and +0.010 on Region over the 20th Good.
+- **Region at 1/4 now gains.** At 0.5 SAM3 bought nothing there (+0.006). At 0.85 the set is +0.057, and the
+  route is +0.057.
+
+![F-beta shown per vote on seed 2 at each preset and path: today, option 2 (0.5 with a count per preset), option 1b (a cut per preset, 20th Good) and both (a cut per preset, 20th Good, held at 4). At 1/4 and 1 option 1b is the same route as both, under its line](figures/sam3_5565_by_beta.webp)
+
+**Literal examples** (seed 2, `tables/sam3_5565_sets.csv`). The tuned cut helps the set in 89% of cells at 1/4, 76%
+at 1 and 47% at 4:
+
+- **keyboard@medium (53 Goods in the withheld half).** 0.5 keeps 158 images (49 Good). 0.85 keeps 55 (44 Good):
+  F0.25 +0.48. At 0.4, 190 images (51 Good).
+- **dog@medium (51 Goods).** 0.5 keeps 99 (50 Good). 0.85 keeps 60 (50) and 0.75 keeps 71 (50): +0.32 at 1/4,
+  +0.15 at 1.
+- **skis@small (45 Goods), the worst cell.** 0.5 keeps 77 (27 Good). 0.85 keeps 3 (0 Good) and 0.75 keeps 9 (3):
+  -0.36 at 1/4, -0.33 at 1. SAM3 scores small skis low, so a high cut empties the set. At 0.4 it keeps 112 (38):
+  +0.20 at 4.
+
+**What this means for #5312.** The route should take SAM3's cut from the preset: 0.85 at 1/4, 0.75 at 1 and 0.4 at
+4. It hands over to the head at the 20th Good at 1/4 and 1, and does not hand over at 4 (through vote 150).
+
+**Caveats.**
+
+- **The tuned cuts are fitted on seed 1** (seeds 0-1 at 1), on the same 144 cells. Seed 2 is a fresh split and
+  fresh sessions, but the same classes and bands. A different corpus or prompt set would need its own check.
+- **The cut grid is 0.05 wide.** The set's F is flat near each optimum (within 0.01 for ±0.05 at 1 and 4), so the
+  exact value matters little.
+- **A high cut can empty a weak cell's set** (skis@small). That is the reverse of #5521's broad-set guard, and the
+  same guard question: what to show when SAM3's set is the wrong size.
+- **"Hold at 4" is through vote 150**, the eval's horizon, not the user's. The head never caught SAM3's set at 4 by
+  then.
+
+Tables (archived with the study), all in `tables/`:
+
+- `sam3_5565_summary.csv`: the headline routes on seed 2.
+- `sam3_5565_routes.csv`: every set x gate x seed x path x preset.
+- `sam3_5565_cells.csv`: per cell, the headline routes.
+- `sam3_5565_per_vote.csv`: per vote, the headline routes.
+- `sam3_5565_sets.csv`: SAM3's set on each cell's withheld half at every cut.
+- `sam3_5565_set_pr.csv`, `sam3_5565_tuned_cuts.csv`, `sam3_5565_calibration.csv`, `sam3_5565_check.csv`.
+
+Reproduce, from a frozen worktree:
+
+1. `S5241_DATE=2026-11-05 S5241_SEEDS=... S5241_BETA=<b> sam3_opening_5241.sh launch {sig,sam3}`, and
+   `S5241_TAG=-v03 S5241_LINE=fixed:0.3` for the check.
+2. `sam3_cut_5565.py sets|check|price --out DIR`.
+
 ## Follow-ups (filed)
 
 - **SAM3 as the opening (#5241), done:** see [SAM3 as the opening](#sam3-as-the-opening-5241). As an opt-in path,
   with the head taking over at the 20th Good: +0.12 F1 shown over votes 1-150 on Binary, +0.07 on Region.
 - **Confirm the 20th-Good hand-over out of sample (#5311), done:** see [Out of sample](#out-of-sample-and-the-other-presets-5311).
   It holds at beta 1. At 1/4 and 4 the count has to move, because SAM3's 0.5 line does not.
-- **SAM3 as an opt-in opening in the app (#5312):** the route, the feature cache, the 0.5 line and the hand-over.
-  SigLIP stays the default.
+- **A SAM3 cut per preset (#5565), done:** see [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565). The cuts are 0.85
+  / 0.75 / 0.4, with a hand-over at the 20th Good at 1/4 and 1 and a hold at 4. That is +0.11 / +0.13 / +0.23 Binary
+  and +0.06 / +0.09 / +0.14 Region on a fresh seed.
+- **SAM3 as an opt-in opening in the app (#5312):** the route, the feature cache, SAM3's cut per preset and the
+  hand-over (#5565). SigLIP stays the default.
 - **A light head on SAM3's object queries (#5242):** each image's 200 decoder queries are region embeddings that come with
   boxes. A Good box picks its query, a Bad floods them, and the SVM trains on them: #4711's Region loop with SAM3's
   regions in place of DINOv3 patches. This is the "learnable head" question, and it would keep SAM3's prior.
@@ -407,5 +535,8 @@ S5241_SEEDS="1 2" S5241_BETA=<b> sam3_opening_5241.sh launch {sig,sam3}` from a 
   `calibration/sam3_scores.py` reads the shards for both `text_baseline.py` and `run_cells.py`.
 - `scripts/experiments/state_of_app/sam3_confirm_5311.py`: #5311's cross-preset figure, per-seed table, set P/R and
   per-cell examples (the launcher takes `S5241_SEEDS` / `S5241_BETA`; the two analyses take `--date` / `--beta`).
+- `scripts/experiments/state_of_app/sam3_cut_5565.py`: #5565's sets at any cut off the rebuilt withheld half
+  (`sets`), their check against the sessions (`check`) and every route's price (`price`). The launcher takes
+  `S5241_LINE` for the sam3 arm's line.
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.
