@@ -442,6 +442,18 @@ For an item drawn from A, the calibration vectors and the item are exchangeable,
 
 Until #3348 this was the atlas's job: each node calibrated a quantile grid of leave-one-out `mu . x`, and a query's p-value was the mean over its root-to-leaf path. That ranked a query against the very points the k-means cells had been drawn around, which sit more centrally in their cells than any fresh item does, so a dataset's own held-out items read atypical: KS 0.11 from uniform on every embedder, and on `dinov3_patch` false alarms on 60% of its own held-out splits, so the route refused patch embedders. Calibrating on a held-back half fixed every per-node statistic, and the tree-free kNN rule then beat every atlas variant ([`REPORT.md`](experiments/2026-10-23-atlas-node-model-3348/REPORT.md)). The atlas's typicality *ordering* is untouched by any of this, and it is the only part `next_sample` ever read.
 
+#### When the training dataset is not here: its summary
+
+The report needs A's vectors, and they never travel with a detector: a detector handed to another instance arrives without A. So the detector carries a **summary** of A instead (#5567, `vtscore/coverage/domain_summary.py`), recorded beside the pointer to A whenever the pointer is written:
+
+1. A's vectors are split by the same seed. The fit half is clustered (spherical k-means, 128 clusters), and each cluster's **anchor** is its member nearest the centroid: an item of A, never an average, so it is recorded by origin and MD5, as a labelled item is.
+2. An item's score is its cosine to the nearest anchor. Up to 1 000 items of the calibration half are scored, and their sorted scores are recorded. They are scalars, but in the embedder's geometry, so the summary is stamped with the embedder and its width and refused in any other.
+3. Where it is read, the anchors are re-embedded: read from B when B holds the same media, else fetched from their origins, as a detector's labels are. Each of B's items is ranked among the recorded scores.
+
+The anchors are a function of the fit half alone, so the exchangeability argument above still holds and the p-value of an item drawn from A is still uniform. What the summary gives up is power: on a synthetic bench it flagged about 85 % of the shift the full report flagged. An anchor that cannot be fetched refuses the check rather than skew it, since B's items near a missing anchor would read atypical.
+
+The summary keeps no per-anchor **radius**, though #5567 first proposed one. A ball around each anchor is not a calibrated test. Radii set by a cluster's farthest member cover nearly everything, and flagged 2 % of a 30 % shift on the same bench. Radii set at a quantile flag a share of A's own items that depends on the data, measured on the very points the balls were drawn around, which is the bias #3348 removed from the atlas. The calibration scores make the test exact instead, and dividing by a radius as the score's normaliser did no better than the raw cosine.
+
 ### Tutorial: checking for domain shift before reusing a detector
 
 ```
@@ -466,7 +478,7 @@ X-Dataset-Id: <dataset_B_id>
 
 Reading this: 31 % of the sampled items of B sit farther from A's vectors than almost anything of A's own does (against the 5 % that chance produces), so the verdict is `shifted`. The detector will be *extrapolating* on about a third of B, and its scores there are unfalsified guesswork; verify by hand before trusting it. A same-domain report shows `frac_atypical` near `alpha`, a median p-value near 0.5, and `shifted: false`.
 
-The app asks this for you. [`GET /api/find/training-domain`](api/find.md#training-domain-overlap) takes A to be the loaded dataset holding most of the detector's labelled examples and returns the same report, and the SPA calls it the moment a detector meets a dataset, warning on a `shifted` verdict before anything is run.
+The app asks this for you. [`GET /api/find/training-domain`](api/find.md#training-domain-overlap) takes A to be the loaded dataset holding most of the detector's labelled examples and returns the same report, and the SPA calls it the moment a detector meets a dataset, warning on a `shifted` verdict before anything is run. When A is not on this instance, it reads the detector's summary of A instead (see above).
 
 The endpoint refuses (HTTP 400) when the two datasets use different embedders (typicality across embedding spaces would be confident nonsense), when A is not loaded, or when A has fewer than 40 embeddings. It needs no coverage atlas, and it answers on patch embedders.
 
@@ -485,6 +497,7 @@ report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(li
 - `vtscore/training/svm_prior.py`: `fit_linear_svm_prior_head` (the shipped head's fit); `vtscore/training/svm.py`: `fit_linear_svm_head` (the plain SVM arm); `vtscore/training/logreg.py`: `fit_linear_logreg_head`
 - `vtscore/coverage/atlas.py`: `CoverageAtlas`
 - `vtscore/coverage/domain_shift.py`: `domain_shift_report`, `typicality_pvalues` (split-conformal kNN)
+- `vtscore/coverage/domain_summary.py`: `summarize_reference`, `summary_shift_report` (the same report against a summary that travels); `vtscore/detectors/domain_summary.py`: the summary recorded on a detector, and its anchors resolved
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold` and `conformal_threshold` (`conformal.py`), `compute_fold_orderings` (`fold_orderings.py`), `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm_threshold.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training; its stages are `training_snap.py` (the embedding space), `training_scoring.py` (scoring a snapshot), `training_votes.py` (a vote's training rows) and `training_calibration.py` (the fold context, the split and the line)
