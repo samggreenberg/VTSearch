@@ -62,7 +62,7 @@ def _media(cid: int, dataset: str, *, shifted: bool, seed_offset: int) -> dict:
         "md5": content_md5(f"{dataset}/{cid}".encode()),
         "embeddings": {_EMBEDDER: emb},
         "filename": name,
-        "origin": {"importer": "test", "params": {"dataset": dataset}},
+        "origin": {"importer": "test", "params": {"dataset": dataset, "media_type": "audio"}},
         "origin_name": name,
     }
 
