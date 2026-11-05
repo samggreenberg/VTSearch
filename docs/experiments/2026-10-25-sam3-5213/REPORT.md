@@ -282,6 +282,7 @@ pile up near 0, the midpoint falls inside that pile, and the set keeps most of t
 - **The count of 20 is chosen on the data it is scored on.** The top is flat from 16 to 24 on both paths, so the
   choice is not a fine-tuned point, but it needs a fresh seed to confirm (#5311).
 - **Seed 0 and beta 1 only.** The other presets move the head's line, and with it where the hand-over pays.
+  #5311 checked both: see the next section.
 - **Cost is #5213's.** SAM3 scores a new query in ~2 min on one L40S with cached backbone features (~65 GB for this
   pool), or ~33 min without. That is why this is an opt-in path and SigLIP stays the default.
 
@@ -292,11 +293,94 @@ SAM3's F1, the head's, and the first vote the head beats SAM3), `tables/sam3_524
 Reproduce: `sam3_opening_5241.sh launch {sig,sam3,sam3gmm}` from a frozen worktree (288 cells a path; Binary ~10 min
 a cell, Region ~1 h), then `sam3_opening_5241.py --out DIR` and `sam3_gate_5241.py {collect,price} --out DIR`.
 
+## Out of sample and the other presets (#5311)
+
+**Status (2026-11-05): at beta 1 the 20th-Good hand-over holds on fresh seeds: +0.12 Binary, +0.07 Region, the same
+as seed 0. At the other two presets, one count of 20 is wrong. SAM3's 0.5 set is the same set at every balance, while
+today's line moves with it. So at beta 4 SAM3's set should be held, and at beta 1/4 the head should take over early,
+and on Region SAM3 then buys nothing. #5312 needs a count per preset, or a SAM3 line that moves with beta.**
+
+**Design.** Same arms as #5241 (`sig`, `sam3`), on #4711's grid, 150 votes, trajectory pass, Intel kernels. Seeds 1 and
+2 at beta 1 (288 cells a path), and seed 1 at beta 1/4 and 4 (144 cells a path; the owner trimmed the off-presets
+to one seed). The issue asked for beta 0.5 and 2, but the app's presets are 4, 1 and 1/4 (`BALANCE_PRESETS`), so
+those were run. `goods>=20` was fixed before the run. The other counts are priced beside it only to see whether the
+best count moves, and the best count at a preset is chosen on the sessions it is scored on. F is F-beta at the run's
+own beta, the objective the session runs on. ± is the SE over the 49 classes.
+
+**1. Beta 1: confirmed.** F1 shown over votes 1-150, against today's SigLIP opening:
+
+| | seed 0 (#5241, in-sample) | seed 1 | seed 2 | seeds 1-2 |
+|---|---|---|---|---|
+| Binary, `goods>=20` | +0.12 (± 0.015) | +0.11 (± 0.014) | +0.12 (± 0.013) | **+0.12 (± 0.013)** |
+| Region, `goods>=20` | +0.07 (± 0.016) | +0.07 (± 0.012) | +0.07 (± 0.012) | **+0.07 (± 0.012)** |
+
+The best count does not move. On Binary 20 and 24 tie (+0.115 each), 16 gives +0.11 and 32 +0.10. On Region 20 is
+the top (+0.071), 16 +0.064, 24 +0.058. Holding SAM3 all session is +0.08 / +0.02, handing over at the quota +0.03 /
++0.02, and the per-vote bound +0.16 / +0.11, all as on seed 0.
+
+**2. The count belongs to the preset.** F-beta shown over votes 1-150 against today, seed 1:
+
+| rule | Binary 1/4 | Binary 1 | Binary 4 | Region 1/4 | Region 1 | Region 4 |
+|---|---|---|---|---|---|---|
+| SAM3 held, never handed over | -0.12 | +0.08 | **+0.22** | -0.17 | +0.02 | **+0.14** |
+| head at the quota (about vote 7) | +0.03 | +0.03 | +0.03 | +0.01 | +0.02 | +0.05 |
+| `goods>=8` | **+0.05** | +0.07 | +0.11 | +0.01 | +0.04 | +0.09 |
+| `goods>=12` | **+0.05** | +0.09 | +0.15 | +0.01 | +0.06 | +0.10 |
+| `goods>=20` (fixed beforehand) | +0.03 (± 0.015) | **+0.12** | +0.19 (± 0.018) | -0.01 (± 0.014) | **+0.07** | +0.13 (± 0.013) |
+| `goods>=32` | -0.05 | +0.10 | +0.22 | -0.13 | +0.03 | +0.14 |
+| better of the two per vote (bound) | +0.08 | +0.16 | +0.24 | +0.05 | +0.11 | +0.16 |
+
+(The beta 1 column is seeds 1-2.)
+
+- **Beta 4 (recall):** SAM3's set is never beaten. The head drops F4 from 0.78 to 0.72 on Binary once it takes over,
+  so the best rule is to hold SAM3 (`goods>=32` or later, or no hand-over): +0.22 Binary, +0.14 Region.
+- **Beta 1/4 (precision):** SAM3's set is the wrong set. Holding it costs -0.12 / -0.17. The head should take over
+  by the 8th-12th Good on Binary (+0.05 ± 0.01). On Region nothing beats today by more than +0.01 (± 0.01): opening
+  on SAM3 buys nothing there.
+
+![F-beta shown over the votes at each preset and path: today, SAM3's set held, SAM3 to the head at the 20th Good, and the best count at that preset](figures/sam3_5311_by_beta.webp)
+
+**Why: SAM3's line ignores the balance.** The 0.5 cut gives the same set at every preset. At vote 1 it has
+precision 0.47 and recall 0.86. Today's typed line moves with beta: P 0.50 / R 0.25 at 1/4, 0.36 / 0.44 at 1, and
+0.16 / 0.58 at 4. A recall-heavy set is just what beta 4 asks for, and too loose for beta 1/4. The head's own line
+moves with beta, so the right hand-over point moves with it.
+
+**Literal examples** (`tables/sam3_5311_cells.csv`, seed 1):
+
+- **Beta 1/4.** SAM3's set scores F0.25 below 0.08 on dining table@small (0.05), bag or luggage@small and @medium
+  (0.07) and bottle@medium (0.08). Its precision there is 0.05-0.07 at recall 0.35-1.0 (bottle@medium P 0.07, R 1.0):
+  some 13-20 non-targets for each target, while beta 1/4 weights precision 16 times recall.
+- **Beta 4.** It scores F4 above 0.99 on tennis racket@large, baseball bat@medium and skateboard@medium, where
+  today's session reaches 0.93-0.98 over 150 votes.
+
+**What this means for #5312.**
+
+- One count of 20 is right only for the default balance.
+- The route either needs a count per preset (about 8-12 at 1/4 on Binary, 20 at 1, hold at 4), or SAM3's line has to
+  move with beta (a cut per preset), which would make one count fit all three again. Both are untested.
+- On Region at 1/4 the opt-in buys nothing either way.
+- #5521's set-size guard is still open as well.
+
+**Caveats.**
+
+- **One seed at 1/4 and 4.** The per-preset best counts above are chosen on the sessions they are scored on, so they
+  are a direction, not a setting. Only the beta-1 result, with N fixed beforehand, is out of sample.
+- **Region at 1/4 is within noise** for every rule except the bad ones: no claim either way beyond "nothing to gain".
+
+Tables (archived with the study): `tables/sam3_5311_gate_{b025,b1,b4}.csv` (every rule x path x band, against
+holding SAM3 and against today), `tables/sam3_5311_gate_per_click_{b025,b1,b4}.csv`, `tables/sam3_5311_seeds.csv`
+(each `goods>=N` against today, per seed), `tables/sam3_5311_set_pr.csv` (vote-1 precision and recall of each set),
+`tables/sam3_5311_cells.csv` (per cell: SAM3's set F and today's F over 1-150). Reproduce: `S5241_DATE=2026-11-04
+S5241_SEEDS="1 2" S5241_BETA=<b> sam3_opening_5241.sh launch {sig,sam3}` from a frozen worktree, then
+`sam3_opening_5241.py` and `sam3_gate_5241.py {collect,price}` with `--date 2026-11-04 --beta <b>`, then
+`sam3_confirm_5311.py --out DIR`.
+
 ## Follow-ups (filed)
 
 - **SAM3 as the opening (#5241), done:** see [SAM3 as the opening](#sam3-as-the-opening-5241). As an opt-in path,
   with the head taking over at the 20th Good: +0.12 F1 shown over votes 1-150 on Binary, +0.07 on Region.
-- **Confirm the 20th-Good hand-over out of sample (#5311):** fresh seeds and beta 0.5 / 2, with N fixed beforehand.
+- **Confirm the 20th-Good hand-over out of sample (#5311), done:** see [Out of sample](#out-of-sample-and-the-other-presets-5311).
+  It holds at beta 1. At 1/4 and 4 the count has to move, because SAM3's 0.5 line does not.
 - **SAM3 as an opt-in opening in the app (#5312):** the route, the feature cache, the 0.5 line and the hand-over.
   SigLIP stays the default.
 - **A light head on SAM3's object queries (#5242):** each image's 200 decoder queries are region embeddings that come with
@@ -321,5 +405,7 @@ a cell, Region ~1 h), then `sam3_opening_5241.py --out DIR` and `sam3_gate_5241.
   by rule, path and band), `sam3_gate_5241.py` (takeover rules: `collect` the judge's evidence, `price` the rules).
   Knobs: `CALIB_SEED_SAM3`, `CALIB_SEED_SAM3_PROMPTS`, `CALIB_QUERY_LINE`, `CALIB_QUERY_HOLD_PATCH`;
   `calibration/sam3_scores.py` reads the shards for both `text_baseline.py` and `run_cells.py`.
+- `scripts/experiments/state_of_app/sam3_confirm_5311.py`: #5311's cross-preset figure, per-seed table, set P/R and
+  per-cell examples (the launcher takes `S5241_SEEDS` / `S5241_BETA`; the two analyses take `--date` / `--beta`).
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.
