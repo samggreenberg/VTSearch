@@ -152,6 +152,12 @@ When the detector context **is** loaded, the new labels are also resolved
 against the loaded dataset's medias, applied to the detector's votes, and
 a fresh head is trained with a cross-validated threshold.
 
+A labelset whose `detector_meta` carries a training-domain summary (one this
+app exported, #5571) gives it to the detector when the detector has no
+training dataset of its own, or its own is the same dataset; a detector
+trained elsewhere keeps its own summary. The same holds for
+`POST /api/label-importers/import/{importer_name}`, into the active detector.
+
 → `{"applied": 12, "skipped": 3, "resolved": 12, "trained": true, "num_labels": 62, "message": "..."}`
 
 `resolved` counts labels resolved into the loaded detector context (0 when no
@@ -392,7 +398,11 @@ The media type is inferred from the labels' origins; labels spanning more than
 one media type, or none whose origin names one, are rejected (400). A missing
 `name` is a 422; a taken one a 409. The new registry entry keeps how it was
 imported as `imported` (the importer, its fields, the time), which
-[the detector's stats](#detector-statistics) return.
+[the detector's stats](#detector-statistics) return. When the labelset's
+`detector_meta` carries the sending detector's training-domain summary (a
+file the `server_json_file` exporter wrote, #5571), the new detector keeps it,
+so its [training-domain check](find.md#training-domain-overlap) runs without
+the training dataset.
 
 → (201)
 ```json

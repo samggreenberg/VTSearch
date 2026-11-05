@@ -81,7 +81,12 @@ server's embedder and head measured (`labelset_for_export`,
 `vtscore/datasets/labelset.py`): each element's `vt:provenance` keeps how the
 item was drawn but not its `rank_at_vote` / `score_at_vote` (#5131). An
 exported labelset is references to labels, so it can rebuild the detector
-under another embedder; your exporter has nothing to drop.
+under another embedder; your exporter has nothing to drop. It may carry a
+`detector_meta` block holding the detector's training-domain summary
+(`training_domain_summary`, #5571), which the receiving instance's overlap
+check reads. Write it beside the labels when your destination holds the whole
+object (the `server_json_file` exporter does, and its label importer reads it
+back); a tabular destination may leave it out.
 
 `supported_payloads` is **derived** from which of these you overrode
 (never declared, so there is nothing to forget), and it is what each

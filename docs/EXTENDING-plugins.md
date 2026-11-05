@@ -1991,6 +1991,8 @@ LABEL_IMPORTER = PostgresLabelImporter()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run_cli()` | `(field_values: dict) -> list[dict[str, str]]` | CLI variant; default delegates to `run()` |
+| `run_labelset()` | `(field_values: dict) -> dict` | The import as a serialised labelset: `{"labels": [...]}` plus a `detector_meta` block when your source carries one. The routes call this, so a detector imported from a labelset this app exported keeps its training-domain summary (#5571). Default: `{"labels": run(field_values)}` |
+| `run_labelset_cli()` | `(field_values: dict) -> dict` | CLI variant of `run_labelset()`; default `{"labels": run_cli(field_values)}`. Override it whenever you override `run_labelset()` |
 | `default_detector_name()` | `(field_values: dict) -> str` | Name a detector created from this importer. Shown live in the New Detector › Trained form's Detector name box. Default: the uploaded file's stem, else `"<display_name> detector"`. See [Naming the created detector](#naming-the-created-detector) |
 
 **Default class attributes:**

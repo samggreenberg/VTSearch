@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **A detector shared as a labels file keeps its training-domain warning** (issue #5571). Exporting a detector's
+  labels to a Server JSON File now writes the summary of the dataset it was trained on beside them, and a detector
+  created from that file (New detector › Trained), or a detector the labels are imported into, keeps it. So the
+  receiving VTSearch warns when its data looks unlike the training data, as a handed-over detector file already
+  did. Only on the same embedder: on another, the warning is skipped and says why. A detector that already learned
+  from a dataset of its own keeps its own summary.
+
 - **The training-domain warning travels with a shared detector** (issue #5567). A detector now carries a summary of
   the dataset it was trained on: 128 of that dataset's items, named by where they came from, plus scores to compare
   against. Given to someone whose VTSearch never had that dataset, it can still warn when their data looks unlike

@@ -1526,7 +1526,13 @@ the part that survives a change of embedder: `rank_at_vote` and
 head, so `labelset_for_export` (`vtscore/datasets/labelset.py`) drops them,
 with `detector_meta`'s `threshold`, from every labelset that leaves, whether
 through an exporter or a labelset-source push. The categorical fields travel:
-they say how the item was drawn, which holds under any embedder.
+they say how the item was drawn, which holds under any embedder. So does
+`detector_meta`'s `training_domain_summary`, the summary of the dataset the
+detector was trained on (#5571): it names the embedder that drew it, the
+overlap check refuses it under any other, and nothing trains on it. The Export
+route reads it from the exported detector's file, since the SPA posts labels
+alone; the importing detector keeps it when it has no training dataset of its
+own (`adopt_domain_summary`).
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  It answers two different questions, and the caller picks which:

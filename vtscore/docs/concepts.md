@@ -239,7 +239,9 @@ hatch for per-label data that doesn't fit the core fields - it survives
 every serialisation boundary. An export leaves behind only the numbers
 measured in this server's embedding space: the `rank_at_vote` /
 `score_at_vote` fields of the `"vt:provenance"` metadata record, and
-`detector_meta["threshold"]` (`labelset_for_export`, #5131).
+`detector_meta["threshold"]` (`labelset_for_export`, #5131). The detector's
+training-domain summary does travel, in `detector_meta`, because it says
+which embedder drew it and is refused in any other (#5571).
 
 ## 5. Embedder
 
