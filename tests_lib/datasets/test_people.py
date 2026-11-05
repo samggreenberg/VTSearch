@@ -65,7 +65,9 @@ class TestCut:
         assert pp.people_cutoff(compat) is None
 
     def test_the_uncalibrated_message_is_the_face_balls_wording(self):
-        assert pp.not_calibrated_message("ext-acme:3") == "People is not calibrated for this face embedder (ext-acme:3)."
+        assert (
+            pp.not_calibrated_message("ext-acme:3") == "People is not calibrated for this face embedder (ext-acme:3)."
+        )
         assert pp.not_calibrated_message(None) == "People is not calibrated for this face embedder."
 
 
@@ -117,6 +119,29 @@ class TestFit:
         person_b = next(p for p in people if 9 in p)
         assert person_a != person_b
         assert set(range(1, 9)) <= person_a and set(range(9, 17)) <= person_b
+
+    @pytest.mark.parametrize("seed", range(6))
+    def test_the_linkage_merges_as_a_brute_force_centroid_linkage_does(self, seed):
+        """The best-partner bookkeeping changes the cost, never the clusters."""
+        rng = np.random.default_rng(seed)
+        d = 24
+        centres = [_unit(rng.standard_normal(d)) for _ in range(5)]
+        rows = [f for c in centres for f in _person(rng, c, int(rng.integers(3, 12)), float(rng.uniform(0.4, 1.2)))]
+        unit = np.stack(rows)
+
+        clusters = [[i] for i in range(len(rows))]
+        while len(clusters) > 1:
+            cents = np.stack([_unit(unit[g].sum(axis=0)) for g in clusters])
+            cos = (cents @ cents.T).astype(np.float32)
+            np.fill_diagonal(cos, -np.inf)
+            i, j = np.unravel_index(int(np.argmax(cos)), cos.shape)
+            if cos[i, j] < CUT:
+                break
+            a, b = min(i, j), max(i, j)
+            clusters[a] = clusters[a] + clusters.pop(b)
+        expected = {frozenset(g) for g in clusters}
+
+        assert {frozenset(g) for g in pp._centroid_linkage(unit, CUT)} == expected
 
     def test_hard_views_attach_or_stay_unplaced_and_a_lone_face_is_a_person(self):
         rng = np.random.default_rng(42)
@@ -219,6 +244,13 @@ def _partition(people=((3, 1), (2,)), unplaced=(4,), cutoff=CUT, compat=SPACE) -
     return PeoplePartition(people, unplaced, pp.PEOPLE_METHOD, pp.PEOPLE_LINKAGE, cutoff, compat)
 
 
+def _stored(path) -> PeoplePartition:
+    """The partition in the container at *path*, which must hold one."""
+    payload = read_people(path)
+    assert payload is not None, "no people stored"
+    return PeoplePartition.from_payload(payload)
+
+
 class TestPartition:
     def test_covers_placed_and_unplaced_faces(self):
         part = _partition()
@@ -248,10 +280,10 @@ class TestContainerEntry:
     def test_round_trips(self, tmp_path):
         path = tmp_path / "ds.pkl"
         append_people(path, _partition().to_payload())
-        assert PeoplePartition.from_payload(read_people(path)) == _partition()
+        assert _stored(path) == _partition()
         # Replacing it leaves one entry with the new partition.
         append_people(path, _partition(people=((1, 2, 3),), unplaced=()).to_payload())
-        assert PeoplePartition.from_payload(read_people(path)) == _partition(people=((1, 2, 3),), unplaced=())
+        assert _stored(path) == _partition(people=((1, 2, 3),), unplaced=())
 
     def test_absent_reads_as_none(self, tmp_path):
         assert read_people(tmp_path / "missing.pkl") is None
@@ -321,7 +353,7 @@ class TestLifecycle:
             assert partition is not None
             assert _as_sets(partition) == {frozenset({1, 2, 3}), frozenset({4, 5, 6}), frozenset({7})}
             assert ctx._people is partition
-            assert PeoplePartition.from_payload(read_people(container)) == partition
+            assert _stored(container) == partition
             # A second ask is served from memory, a fresh context from the container.
             assert pp.people_for(ctx) is partition
             assert pp.people_for(_face_ctx()) == partition
@@ -352,7 +384,7 @@ class TestLifecycle:
         with patch.object(pp, "fit_people") as fit:
             partition = pp.people_for(ctx)
         fit.assert_not_called()
-        assert partition == stored
+        assert partition is not None and partition == stored
         assert partition.restricted_to(ctx.medias.keys()).people == ((1, 2, 3), (4, 6), (7,))
 
     def test_a_partition_missing_a_face_is_refit(self, container):
@@ -532,7 +564,7 @@ class TestRequest:
         _await_jobs()
         ready = pp.request_people(ctx)
         assert ready["status"] == "ready" and len(ready["people"].people) == 3
-        assert PeoplePartition.from_payload(read_people(container)) == ready["people"]
+        assert _stored(container) == ready["people"]
 
     def test_a_failed_fit_is_reported_once_and_the_next_ask_starts_over(self, container):
         ctx = self._loaded()

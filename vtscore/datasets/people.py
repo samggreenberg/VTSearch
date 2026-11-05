@@ -282,10 +282,17 @@ def _centroid_linkage(unit: np.ndarray, cutoff: float) -> list[list[int]]:
     """Step 2's clustering of one component: merge the closest unit centroids while their cosine clears *cutoff*.
 
     *unit* holds the component's unit rows; the clusters come back as lists of
-    row indices.  Centroid linkage is not monotone (a merged centroid can sit
-    closer to a third cluster than either half did), so each cluster's best
-    partner is tracked and re-read only where a merge could have lowered it.
-    Ties go to the lowest index pair, so the result is a function of the rows.
+    row indices.  Ties go to the lowest index, so the result is a function of
+    the rows.
+
+    The ``m x m`` cosines between centroids are held (float32), with each
+    cluster's best partner and a bound on its second best.  A merge rewrites
+    one row and column, and a cluster re-reads its row only when its best
+    partner was merged and the merged centroid fell below that bound.  Centroid
+    linkage is not monotone (a merged centroid can sit closer to a third
+    cluster than either half did, or further), and the bound is what keeps a
+    component that is all one person, whose every face's best partner is the
+    growing cluster, from re-reading every row on every merge.
     """
     m = unit.shape[0]
     members: list[list[int]] = [[i] for i in range(m)]
@@ -294,10 +301,24 @@ def _centroid_linkage(unit: np.ndarray, cutoff: float) -> list[list[int]]:
     sums = unit.copy()
     cents = unit.copy()
     active = np.ones(m, dtype=bool)
-    cos = cents @ cents.T
+    cos = (cents @ cents.T).astype(np.float32)
     np.fill_diagonal(cos, -np.inf)
-    best_j = np.argmax(cos, axis=1)
-    best = cos[np.arange(m), best_j]
+    best_j = np.empty(m, dtype=np.int64)
+    best = np.empty(m, dtype=np.float32)
+    second = np.empty(m, dtype=np.float32)
+
+    def _reread(rows: np.ndarray) -> None:
+        sub = cos[rows]  # a copy: fancy indexing
+        top = np.argmax(sub, axis=1)
+        idx = np.arange(rows.size)
+        best_j[rows] = top
+        best[rows] = sub[idx, top]
+        sub[idx, top] = -np.inf
+        second[rows] = sub.max(axis=1)
+
+    for start in range(0, m, _CHUNK):
+        _reread(np.arange(start, min(start + _CHUNK, m)))
+
     while True:
         i = int(np.argmax(np.where(active, best, -np.inf)))
         if not active[i] or best[i] < cutoff:
@@ -312,25 +333,33 @@ def _centroid_linkage(unit: np.ndarray, cutoff: float) -> list[list[int]]:
         active[b] = False
         cos[b, :] = -np.inf
         cos[:, b] = -np.inf
-        row = cents @ cents[a]
+        row = (cents @ cents[a]).astype(np.float32)
         row[~active] = -np.inf
         row[a] = -np.inf
         cos[a, :] = row
         cos[:, a] = row
-        best[b] = -np.inf
-        best_j[a] = int(np.argmax(cos[a]))
-        best[a] = cos[a, best_j[a]]
-        # Every other cluster: one whose best partner was a or b re-reads its
-        # row; any other takes the merged centroid if it is now closer.
+        best[b] = second[b] = -np.inf
+        _reread(np.array([a]))
         others = active.copy()
         others[a] = False
+        # A cluster whose best partner was a or b keeps the merged centroid if
+        # it still clears the bound on everything else, else re-reads its row.
         stale = others & ((best_j == a) | (best_j == b))
-        if stale.any():
-            best_j[stale] = np.argmax(cos[stale], axis=1)
-            best[stale] = cos[stale, best_j[stale]]
-        closer = others & ~stale & (row > best)
+        keep = stale & (row >= second)
+        best_j[keep] = a
+        best[keep] = row[keep]
+        reread = np.flatnonzero(stale & ~keep)
+        if reread.size:
+            _reread(reread)
+        # Any other cluster takes the merged centroid if it is now its best, and
+        # raises its bound if it is now its second.
+        fresh = others & ~stale
+        closer = fresh & (row > best)
+        second[closer] = best[closer]
         best_j[closer] = a
         best[closer] = row[closer]
+        raised = fresh & ~closer & (row > second)
+        second[raised] = row[raised]
     return [sorted(g) for g in members if g]
 
 
@@ -357,6 +386,55 @@ def _quality(value: Any) -> float | None:
         return None
     q = float(value)
     return q if math.isfinite(q) else None
+
+
+def _core_people(
+    unit: np.ndarray, core: np.ndarray, cutoff: float, neighbours: int, on_chunk: Callable[[int, int], None]
+) -> list[list[int]]:
+    """Steps 1 and 2 over the rows *core* of *unit* (the faces that are not hard views): each person's rows."""
+    if not core.size:
+        return []
+    core_unit = unit[core]
+    labels = _neighbour_components(core_unit, cutoff, neighbours, on_chunk)
+    order = np.argsort(labels, kind="stable")
+    bounds = np.flatnonzero(np.diff(labels[order])) + 1
+    groups: list[list[int]] = []
+    for comp in np.split(order, bounds):
+        local = core_unit[comp]
+        clusters = _reassign(local, _centroid_linkage(local, cutoff), cutoff)
+        groups.extend([[int(core[comp[r]]) for r in g] for g in clusters])
+    return groups
+
+
+def _attach_hard_views(
+    unit: np.ndarray, hard_rows: np.ndarray, cents: np.ndarray, cutoff: float
+) -> tuple[list[list[int]], list[int]]:
+    """Step 3: the hard-view rows each person (one unit centroid per row of *cents*) takes in, and the rest."""
+    attached: list[list[int]] = [[] for _ in range(cents.shape[0])]
+    if not cents.shape[0]:
+        return attached, [int(r) for r in hard_rows]
+    unplaced: list[int] = []
+    for start in range(0, hard_rows.size, _CHUNK):
+        chunk = hard_rows[start : start + _CHUNK]
+        sims = unit[chunk] @ cents.T
+        pick = np.argmax(sims, axis=1)
+        for r, p, s in zip(chunk, pick, sims[np.arange(chunk.size), pick]):
+            (attached[int(p)] if s >= cutoff else unplaced).append(int(r))
+    return attached, unplaced
+
+
+def _ordered_person(
+    rows: list[int], unit: np.ndarray, cent: np.ndarray, ids: Sequence[int], qualities: list[float | None]
+) -> tuple[int, ...]:
+    """A person's face ids: the representative, then the rest from the closest to *cent* out (ties by id).
+
+    The representative has the highest Face Quality; ties (every face without
+    one included) go to the closest to the centroid.
+    """
+    closeness = unit[rows] @ cent
+    by_closeness = sorted(range(len(rows)), key=lambda r: (-closeness[r], ids[rows[r]]))
+    rep = max(by_closeness, key=lambda r: (qualities[rows[r]] is not None, qualities[rows[r]] or 0.0))
+    return tuple(int(ids[rows[r]]) for r in [rep, *(r for r in by_closeness if r != rep)])
 
 
 def fit_people(
@@ -394,58 +472,17 @@ def fit_people(
         raise ValueError(f"quality has {len(quality)} values for {n} rows")
     qualities = [None] * n if quality is None else [_quality(q) for q in quality]
 
-    def _report(current: int, total: int, message: str) -> None:
-        if on_progress is not None:
-            on_progress(current, total, message)
-
-    core = np.nonzero(~hard_mask)[0]
     message = f"Finding people among {n} faces…"
-    _report(0, 0, message)
-
-    # Steps 1 and 2 over the faces that are not hard views.
-    groups: list[list[int]] = []  # row indices into the full matrix
-    if core.size:
-        core_unit = unit[core]
-        labels = _neighbour_components(
-            core_unit, cutoff, neighbours, lambda done, total: _report(done, total, message)
-        )
-        order = np.argsort(labels, kind="stable")
-        bounds = np.flatnonzero(np.diff(labels[order])) + 1
-        for comp in np.split(order, bounds):
-            local = core_unit[comp]
-            clusters = _reassign(local, _centroid_linkage(local, cutoff), cutoff)
-            groups.extend([[int(core[comp[r]]) for r in g] for g in clusters])
-
+    report = on_progress or (lambda _current, _total, _message: None)
+    report(0, 0, message)
+    groups = _core_people(
+        unit, np.flatnonzero(~hard_mask), cutoff, neighbours, lambda done, total: report(done, total, message)
+    )
     cents = np.stack([_unit(unit[g].sum(axis=0)) for g in groups]) if groups else np.empty((0, unit.shape[1]))
-
-    # Step 3: each hard view joins the person whose centroid it clears best.
-    unplaced: list[int] = []
-    attached: list[list[int]] = [[] for _ in groups]
-    hard_rows = np.nonzero(hard_mask)[0]
-    for start in range(0, hard_rows.size, _CHUNK):
-        chunk = hard_rows[start : start + _CHUNK]
-        if not groups:
-            unplaced.extend(int(r) for r in chunk)
-            continue
-        sims = unit[chunk] @ cents.T
-        pick = np.argmax(sims, axis=1)
-        for r, p, s in zip(chunk, pick, sims[np.arange(chunk.size), pick]):
-            (attached[int(p)] if s >= cutoff else unplaced).append(int(r))
-
-    people: list[tuple[int, ...]] = []
-    for g, extra, cent in zip(groups, attached, cents):
-        rows = g + extra
-        closeness = unit[rows] @ cent
-        # Closest to the centroid first, ties by id; the representative leads.
-        by_closeness = sorted(range(len(rows)), key=lambda r: (-closeness[r], ids[rows[r]]))
-        rep = max(
-            by_closeness,
-            key=lambda r: (qualities[rows[r]] is not None, qualities[rows[r]] or 0.0),
-        )
-        ordered = [rep] + [r for r in by_closeness if r != rep]
-        people.append(tuple(int(ids[rows[r]]) for r in ordered))
+    attached, unplaced = _attach_hard_views(unit, np.flatnonzero(hard_mask), cents, cutoff)
+    people = [_ordered_person(g + extra, unit, cent, ids, qualities) for g, extra, cent in zip(groups, attached, cents)]
     people.sort(key=lambda p: (-len(p), min(p)))
-    _report(1, 1, message)
+    report(1, 1, message)
     return PeoplePartition(
         people=tuple(people),
         unplaced=tuple(sorted(int(ids[r]) for r in unplaced)),

@@ -250,6 +250,8 @@ def face_uncalibrated_message(feature: str, compat: str | None) -> str:
     """
     space = f" ({compat})" if compat else ""
     return f"{feature} is not calibrated for this face embedder{space}."
+
+
 #: The face crops' line where the ball does not hold: #5325's count read above z 5.5.
 FACE_BALL_BELOW = "count_gap_floor_skip25_b1_z5.5"
 

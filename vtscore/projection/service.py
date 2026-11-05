@@ -526,7 +526,9 @@ def build_subset_layout(
         # the survivors of a cull re-spread instead of keeping their old slots.
         # Drops the layout, its pyramids, the in-flight job id, the tile-cache
         # token, and the signposts anchored in the dropped layout.
-        ctx.reset_derived_caches(matrices=False, lookups=False, projection=False, subset=True, order=False, people=False)
+        ctx.reset_derived_caches(
+            matrices=False, lookups=False, projection=False, subset=True, order=False, people=False
+        )
         ctx._subset_ids = sorted_ids
 
     return start_subset_build(ctx, sorted_ids, matrix, bin_shape, force=force)

@@ -81,13 +81,9 @@ surface over them.
 
 ### Two derived structures, library tier, ids only
 
-**The people partition.** A list of people, each a list of face ids, plus the
-faces placed in no person. Every face is in at most one person. Built from the
-cached embedding matrix and persisted in the container as a new entry beside
-`similarity_order.json` (ids, the method, the cutoff, the compat tag it was
-cut in), cached on the context in a reset group of its own, and swept with
-the container. A partition that still covers every current face serves after
-items were removed; one that misses a face is rebuilt.
+**The people partition** shipped in #5586 as `vtscore.datasets.people`: the
+fit, the container entry, the context cache and `request_people` are
+documented in [`vtscore/docs/packages/datasets.md`](../../vtscore/docs/packages/datasets.md#people).
 
 **The photo index.** Faces keyed by the photo they were cut from, read off
 each face's own converter refs (`source_path`, else `source_file`; a
@@ -98,45 +94,19 @@ photos they are in, and for each pair of people, the photos they share. This
 is cheap enough to build on demand from the partition and cache beside it;
 it need not be persisted.
 
-Both live in `vtscore/datasets/`, beside `source_item.py` and
-`source_groups.py`, which already own the face-to-photo join: a new
-`people.py` (the partition: fit, persistence, context cache, the `request_*`
-contract) and a new `co_occurrence.py` (the photo index and the pairwise
-counts). Flask-free, taking an explicit context, tested under
-`tests_lib/datasets/`.
+The photo index lives in `vtscore/datasets/`, beside `people.py`,
+`source_item.py` and `source_groups.py`, which already own the face-to-photo
+join: a new `co_occurrence.py` (the photo index and the pairwise counts).
+Flask-free, taking an explicit context, tested under `tests_lib/datasets/`.
 
 ### Merging faces into people
 
-The partition should agree with Find: a face belongs to a person when it
-passes the test the face ball already applies, cosine to the person's centroid
-at or above the β 1 floor. So the cut is the ball's floor for the dataset's
-compat tag, not a new knob.
-
-The fit, in three steps, all on the cached matrix:
-
-1. **A neighbour graph.** Each face's top-k cosine neighbours (k ≈ 20, by
-   chunked dot products over the matrix), keeping edges at or above the
-   floor. Connected components of that graph are candidate people. This
-   bounds the work to O(N·k) and never forms an N×N distance matrix; a Face
-   dataset is a few thousand crops, but the matrix would be the one thing
-   that scales badly.
-2. **A split within each component.** Chaining (A≈B, B≈C, A≉C) is the
-   failure mode of a threshold graph, and two people who share a lookalike
-   would land in one component. Each component is re-cut with agglomerative
-   clustering at the same floor (scipy, already a dependency; a component is
-   small, so its distance matrix is not), centroid or average linkage,
-   which of the two the calibration (#5591) settles. A face stays in the
-   cluster whose centroid it clears the floor to.
-3. **Hard views last.** A face under `HARD_VIEW_QUALITY` is poor evidence of
-   identity and is left out of steps 1 and 2. It is then attached to the
-   person whose centroid it clears the floor to, if any, else left unplaced.
-   This mirrors the trained head's down-weighting of hard-view Goods (#5413).
-
-Then: people are ordered by face count, descending; each person's
-representative is its face with the highest Face Quality (ties to the one
-closest to the centroid); a person with one face is a person, listed after
-the rest. The fit is deterministic (no UMAP, no seed), so a rebuild on the same
-faces gives the same people.
+The fit shipped in #5586
+([`datasets.md`](../../vtscore/docs/packages/datasets.md#people)): a
+neighbour graph, centroid linkage on the unit sphere and hard views attached
+last, all at the face ball's beta 1 floor, so a face belongs to a person when
+it passes the test Find applies. Two rules from its design still bind the
+work left:
 
 **Prefer a split to a merge.** A person shown as two is visible and
 recoverable; two people shown as one hides someone. Where the calibration
