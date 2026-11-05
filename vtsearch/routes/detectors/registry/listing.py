@@ -358,9 +358,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     _abort_if_name_taken(name)
     det_path = _detector_path(name)
 
-    label_entries, detector_meta, err = run_label_importer_or_error(importer, field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
+    label_entries, detector_meta = imported
 
     elements: list[LabeledElement] = []
     detected_types: set[str] = set()

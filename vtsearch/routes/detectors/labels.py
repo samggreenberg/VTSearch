@@ -353,9 +353,10 @@ def import_labels_into_detector(name: str, importer_name: str):
 
     field_values = validate_plugin_args(importer)
 
-    label_entries, detector_meta, err = run_label_importer_or_error(importer, field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
+    label_entries, detector_meta = imported
 
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)

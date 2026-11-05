@@ -296,10 +296,12 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args, verb: str = ""):
     return result, None
 
 
-def run_label_importer_or_error(importer: PluginBase, field_values: dict):
+def run_label_importer_or_error(
+    importer: PluginBase, field_values: dict
+) -> tuple[tuple[list[dict], dict | None] | None, Any]:
     """Run a label importer's :meth:`~vtscore.labels.importers.base.LabelImporter.run_labelset`.
 
-    Returns ``(label entries, detector_meta, None)``, or ``(None, None, (response,
+    Returns ``((label entries, detector_meta), None)``, or ``(None, (response,
     status))`` when the run failed or its ``labels`` is not a list.  The entries
     are the run's own dicts, for the routes to apply; ``detector_meta`` is the
     block the source carried (``None`` without one), whose training-domain
@@ -307,9 +309,9 @@ def run_label_importer_or_error(importer: PluginBase, field_values: dict):
     """
     labelset, err = run_plugin_or_error(importer, "run_labelset", field_values, verb="Run")
     if err:
-        return None, None, err
+        return None, err
     entries = labelset.get("labels") if isinstance(labelset, dict) else None
-    if not isinstance(entries, list):
-        return None, None, error_response("Importer did not return a list of label dicts.", 500)
+    if not isinstance(labelset, dict) or not isinstance(entries, list):
+        return None, error_response("Importer did not return a list of label dicts.", 500)
     meta = labelset.get("detector_meta")
-    return entries, meta if isinstance(meta, dict) else None, None
+    return (entries, meta if isinstance(meta, dict) else None), None

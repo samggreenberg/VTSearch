@@ -359,9 +359,10 @@ def run_label_import(importer_name: str):  # noqa: C901
 
     field_values = validate_plugin_args(importer)
 
-    label_entries, detector_meta, err = run_label_importer_or_error(importer, field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
+    label_entries, detector_meta = imported
 
     # Apply labels to global vote state
     origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
