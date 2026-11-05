@@ -61,10 +61,11 @@ from vtscore.coverage.domain_shift import (
 )
 
 #: Anchors a summary keeps.  Each is an origin the reader resolves and embeds,
-#: so this is the summary's cost on the receiving side as well as its power:
-#: on a synthetic 40-cluster bench, of the share of a 30 % shift the full
-#: report flagged, 32 anchors flagged about a quarter, 128 about 85 %, and 256
-#: a little more.
+#: so this is the summary's cost on the receiving side as well as its power.
+#: On five real embedders (#5568), of the full report's excess on a 30 % shift,
+#: 64 anchors kept 85 %, 128 kept 94 % (87 % on the worst embedder), and 256
+#: 96 %: past 128 the curve is flat and the cost is not.
+#: ``docs/experiments/2026-11-05-summary-power-5568/REPORT.md``.
 SUMMARY_ANCHORS = 128
 
 #: Calibration scores a summary keeps.  The smallest attainable p-value is

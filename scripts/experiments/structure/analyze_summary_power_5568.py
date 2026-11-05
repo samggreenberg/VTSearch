@@ -115,6 +115,7 @@ def figure(table: pd.DataFrame, path: Path) -> None:
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt  # noqa: PLC0415
+    import matplotlib.ticker  # noqa: PLC0415
 
     ns = [32, 64, 128, 256, 512]
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
@@ -132,6 +133,8 @@ def figure(table: pd.DataFrame, path: Path) -> None:
     axes[0].legend(fontsize=8)
     for ax in axes:
         ax.axvline(128, color="0.6", lw=0.8)
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.set_xticks(ns, [str(n) for n in ns])
     fig.savefig(path, dpi=110)
 
 
