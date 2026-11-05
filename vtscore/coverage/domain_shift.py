@@ -144,11 +144,29 @@ def domain_shift_report(reference: np.ndarray, matrix: np.ndarray, alpha: float 
     alpha).  Raises :class:`ReferenceTooSmall` as
     :func:`typicality_pvalues` does.
     """
+    return _report_from_pvalues(typicality_pvalues(reference, _sample_queries(matrix)), alpha)
+
+
+def _sample_queries(matrix: np.ndarray) -> np.ndarray:
+    """*matrix*'s rows, unit-normalized, at most ``DOMAIN_SHIFT_MAX_QUERY`` of them drawn by a fixed seed.
+
+    A random subset of the queries estimates the same atypical fraction, so
+    every report scores this sample rather than the whole dataset.
+    """
     queries = _normalize(matrix)
     if queries.shape[0] > DOMAIN_SHIFT_MAX_QUERY:
         pick = np.random.default_rng(_SEED + 1).choice(queries.shape[0], DOMAIN_SHIFT_MAX_QUERY, replace=False)
         queries = queries[np.sort(pick)]
-    pvals = typicality_pvalues(reference, queries)
+    return queries
+
+
+def _report_from_pvalues(pvals: np.ndarray, alpha: float = DOMAIN_SHIFT_ALPHA) -> dict:
+    """The shift report :func:`domain_shift_report` returns, read off one typicality p-value per scored item.
+
+    Shared with the training-domain summary's report
+    (:func:`vtscore.coverage.domain_summary.summary_shift_report`, #5567), so
+    the two verdicts are drawn by the same rule.
+    """
     n = int(pvals.shape[0])
     if n == 0:
         return {

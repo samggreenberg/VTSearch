@@ -675,9 +675,11 @@ def find_evidence_coverage():
     labelset, so the Stats modal can simply hide the section.  Its one write:
     run on the training dataset, it records the baseline on the detector; run
     anywhere else, it first lands one a learned sort there left waiting
-    (:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md
-    §6.1 (phase v0).
+    (:func:`defer_learned_sort_baseline`).  The write carries the training
+    dataset's pointer and its summary (#5501, #5567).  See
+    docs/plans/coverage-atlas.md §6.1 (phase v0).
     """
+    from vtscore.detectors.domain_summary import domain_summary_for
     from vtscore.detectors.evidence_baseline import (
         discard_baseline_draw,
         draw_baseline,
@@ -714,7 +716,8 @@ def find_evidence_coverage():
     # was resolved in (``det_ctx.embedder``), with its current predicted class
     # from the frozen score vs the live threshold.
     embedder = det_ctx.embedder or None
-    q_ids, q_mat, predicted = scored_queries(scores.items(), snapshot_medias(), embedder, det_ctx.threshold)
+    medias = snapshot_medias()
+    q_ids, q_mat, predicted = scored_queries(scores.items(), medias, embedder, det_ctx.threshold)
     if q_mat is None:
         return _empty_evidence_coverage()
 
@@ -742,13 +745,16 @@ def find_evidence_coverage():
             predicted_positive=predicted,
             labelled=labelled_media_ids(labelset, get_active_context()),
         )
+        held = home["labels_held"] > 0
         record_baseline(
             home["path"],
             baseline,
             det_ctx=det_ctx,
             training_dataset=training_dataset_record(home["training_id"], home["training_name"], home["labels_held"])
-            if home["labels_held"] > 0
+            if held
             else None,
+            # The training dataset's summary rides with the pointer (#5567).
+            domain_summary=domain_summary_for(home["training_id"], medias) if held else None,
         )
     elif home is not None:
         flush_baseline_draw(det_ctx.detector_id)

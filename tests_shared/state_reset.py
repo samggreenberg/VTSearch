@@ -246,6 +246,11 @@ def reset_shared_state(medias_snapshot) -> None:
 
     reset_baseline_draws_for_tests()
 
+    # And the training-domain summaries built and anchors resolved (#5567).
+    from vtscore.detectors.domain_summary import reset_domain_summary_caches_for_tests
+
+    reset_domain_summary_caches_for_tests()
+
     # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
     # test can't suppress a rehydrate in the next one.
     from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
