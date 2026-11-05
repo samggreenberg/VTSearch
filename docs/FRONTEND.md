@@ -1028,7 +1028,11 @@ it guards `@angular/cdk/a11y` (#5297) and the toast stack (#5505) the same way.
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` and
 `column-chooser/` (a checkbox per column under a select-all, which the Export
-and Find Results dialogs share, #5464) are the small shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
+and Find Results dialogs share, #5464; a host's `chooserEnd` content sits at the
+end of the checkbox row, #5584) are the small shared widgets. `utils/managed-columns.ts`
+is the column controller behind every sortable, drag-reorderable, resizable grid
+(the Dashboard's two, the demo picker, Find Results' list): a `<table>` by
+default, a CSS grid of divs through its `gridDom` adapter (#5584). `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and

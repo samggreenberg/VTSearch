@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
+  run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
+  setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what
+  settings, and how many results it sends; a paused auto-export (**Export results when AutoFind finishes** off) still
+  sends from here. `POST /api/autofind/runs/{run_id}/export` is the call behind it.
+
 - **A detector shared as a labels file keeps its training-domain warning** (issue #5571). Exporting a detector's
   labels to a Server JSON File now writes the summary of the dataset it was trained on beside them, and a detector
   created from that file (New detector › Trained), or a detector the labels are imported into, keeps it. So the
@@ -42,6 +48,16 @@ what is on `dev` but not yet on `main`; each release dates that section
   take: most detectors are trained within 50 votes, and Autopilot never asks for more than 200.
 
 ### Changed
+
+- **Find Results lists its hits in a grid like the Dashboard's** (issue #5584). Click a column heading to sort by it
+  (Score, highest first, to start), click it again to turn the order round, drag a heading onto another to reorder
+  the columns, and drag the line between two to resize them; the order is kept across sessions. The **Columns**
+  checkboxes still decide which columns there are, and the export follows the order on screen, so a run can be sent
+  sorted by name, score, filename or any metadata column. **Sort by** is gone: **Similarity** is now a column, each
+  item's place in the dataset's one-dimensional map, ticked on when wanted and sorted like any other. The thumbnail
+  size buttons sit at the end of the Columns row. The summary names the detectors that ran rather than counting them
+  (past three, the count, with every name on hover), its labels read as the form labels do (`Media type:`,
+  `Detectors:`), and the note under a moved Threshold says plainly what the list shows.
 
 - **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
   to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls

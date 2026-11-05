@@ -864,11 +864,12 @@ describe('AutoDetectResultsModalComponent', () => {
         await settleZoneless(fixture);
         // Seven headings of 100px: a seventh each; Name grew by 70px (ten
         // points) and Score shrank by as much. The thumbnail is still its tile.
-        const share = (track: string) => parseFloat(track.match(/^minmax\(0, (.*)fr\)$/)![1]);
-        const tracks = component.gridTemplate().split(' ');
-        expect(tracks[0]).toBe(thumb);
-        expect(share(tracks[1])).toBeCloseTo(100 / 7 + 10, 6);
-        expect(share(tracks[2])).toBeCloseTo(100 / 7 - 10, 6);
+        const template = component.gridTemplate();
+        expect(template.startsWith(`${thumb} `)).toBe(true);
+        const shares = [...template.matchAll(/minmax\(0, ([\d.]+)fr\)/g)].map((m) => parseFloat(m[1]));
+        expect(shares.length).toBe(6);
+        expect(shares[0]).toBeCloseTo(100 / 7 + 10, 6);
+        expect(shares[1]).toBeCloseTo(100 / 7 - 10, 6);
         document.dispatchEvent(new MouseEvent('mouseup'));
         expect(document.body.style.cursor).toBe('');
         const row = fixture.nativeElement.querySelector('.results-row') as HTMLElement;
@@ -967,7 +968,8 @@ describe('AutoDetectResultsModalComponent', () => {
   // up for AutoFind, as a finished run does, with read-only lines on what
   // that is.
   describe('the AutoFind tab', () => {
-    const run = { ...mockData, run_id: '_autofind_9', dataset_id: 'ds1' };
+    // No dataset id: the Browse warm-up (#4683) needs one, and is not under test here.
+    const run = { ...mockData, run_id: '_autofind_9' };
     const EXPORT_URL = '/api/autofind/runs/_autofind_9/export';
     const tabs = () => Array.from(fixture.nativeElement.querySelectorAll('.export-tabs .tab')) as HTMLElement[];
     const autofindTab = () => tabs().find((t) => t.textContent?.trim() === 'AutoFind') as HTMLButtonElement;
