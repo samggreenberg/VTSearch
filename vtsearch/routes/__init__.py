@@ -18,6 +18,7 @@ from vtsearch.routes.detectors import (
     detectors_export_bp,
     detectors_labels_bp,
     detectors_registry_bp,
+    detectors_sharing_bp,
 )
 from vtsearch.routes.eval import eval_bp
 from vtsearch.routes.events import events_bp
@@ -58,6 +59,7 @@ __all__ = [
     "detectors_export_bp",
     "detectors_labels_bp",
     "detectors_registry_bp",
+    "detectors_sharing_bp",
     "datasource_importers_bp",
     "embed_bp",
     "eval_bp",

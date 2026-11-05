@@ -22,6 +22,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Detector sharing, behind the `detector_sharing_source` setting** (issue #5577). A server whose admin names a
+  sharing source in `detector_sharing_source` can share detectors through it: share one of yours with people or
+  groups, or publicly, and every change to its labels reaches them; receive a detector shared with you as a
+  read-only copy, and check it for updates; fork any detector you can see into an editable copy of your own. A
+  received detector warns, and changes nothing, when someone other than its owner has written to it, until you
+  choose to take those changes or skip them. This release adds the API (`GET /api/detectors/sharing`,
+  `/api/detectors/sharing/received`, `/receive`, `/search-recipients`, and `/share`, `/refresh`, `/fork` and
+  `/sharing` under `/api/detectors/registry/{detector_id}`; see `docs/api/detectors.md`, "Detector sharing"); the
+  Dashboard's sharing controls follow. With the setting at its default, `null`, nothing changes.
+
 - **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
   run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
   setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what

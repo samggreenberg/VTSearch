@@ -182,20 +182,16 @@ dashboard offers a fork on the `detector_read_only` code.
 
 ### Routes
 
-New, under a `detectors_sharing_bp`; all but the first 404
-`sharing_disabled` when the setting is null:
-
-| Route | Does |
-|---|---|
-| `GET /api/detectors/sharing` | Capability: enabled, the source's name and icon, `supports_recipient_search`. 200 always |
-| `GET /api/detectors/sharing/received` | `list_received`, each with the local `detector_id` when already received |
-| `POST /api/detectors/sharing/receive` | `{remote_ref, foreign?}` → a new linked entry and file |
-| `POST /api/detectors/sharing/search-recipients` | `{query}` → suggestions; 501 when unsupported |
-| `GET /api/detectors/registry/<id>/sharing` | The binding's sharing state, recipients and public flag |
-| `POST /api/detectors/registry/<id>/share` | `{add, remove, public}`; creates the container on first use (replaces a plain binding, and says so) |
-| `DELETE /api/detectors/registry/<id>/share` | Archive and unbind |
-| `POST /api/detectors/registry/<id>/refresh` | `{foreign: abort\|import\|skip}`; linked only |
-| `POST /api/detectors/registry/<id>/fork` | `{name?}` → 201, a `forked` entry owned by the caller |
+Shipped in #5577; the permanent reference is "Detector sharing" in
+`docs/api/detectors.md`. What the dashboard slices build on: the capability
+route (`GET /api/detectors/sharing`) is the one switch for every sharing
+surface; fork answers while sharing is off, so a received detector stays
+forkable; receive and refresh answer `applied: false` with the integrity
+when the `abort` policy meets foreign records, which is the integrity
+dialog's input; and each refusal carries an `error_code` to branch on
+(`sharing_disabled`, `detector_read_only`, `sharing_unavailable`,
+`already_received`, `remote_not_found`, `remote_permission_denied`,
+`sharing_unsupported`, `sharing_failed`).
 
 ### Dashboard
 
