@@ -236,6 +236,22 @@ def goods_spread(vectors: Sequence[np.ndarray]) -> float | None:
 FACE_BALL_FLOORS: dict[float, float] = {1.0: 0.4425, 4.0: 0.385}
 FACE_BALL_SLOPE = 0.25
 FACE_BALL_CENTRE = 0.6371
+#: The face space (``custom_metadata["Face Compat"]``) the ball's floors were fitted in: buffalo_s.  A
+#: feature that needs a calibrated floor (People, :func:`vtscore.datasets.people.people_cutoff`) has none
+#: in any other space; #5497 moves the floors into a file per space.
+FACE_BALL_COMPAT = "oss-arcface-mbf:1"
+
+
+def face_uncalibrated_message(feature: str, compat: str | None) -> str:
+    """What *feature* says in a face space (*compat*) its face ball has no floor for.
+
+    One wording for every face feature that reads the ball's floors (People today; the ball's own
+    warning from #5497), so the user meets the same sentence wherever the gap shows.
+    """
+    space = f" ({compat})" if compat else ""
+    return f"{feature} is not calibrated for this face embedder{space}."
+
+
 #: The face crops' line where the ball does not hold: #5325's count read above z 5.5.
 FACE_BALL_BELOW = "count_gap_floor_skip25_b1_z5.5"
 

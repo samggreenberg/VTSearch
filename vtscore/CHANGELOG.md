@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.people`: a Face dataset's faces merged into people** (issue #5586). `fit_people` merges
+  the face vectors at the face ball's beta 1 floor (`people_cutoff(compat)`; `None`, and so no partition, outside the
+  space the floors were fitted in): a 20-nearest-neighbour graph, centroid linkage on the unit sphere within each
+  component, and hard views (`HARD_VIEW_QUALITY`) attached last or left unplaced. Deterministic. A frozen
+  `PeoplePartition` holds the people (largest first, each led by its best-quality face), the unplaced ids, and the
+  `method` / `linkage` / `cutoff` / `compat` it was cut under. It is stored in the container as `people.json`
+  (`append_people` / `read_people`, ids only) and cached on `DatasetContext._people` (reset group `people`);
+  `people_for` serves it, the load pipeline's people stage fits it for a Face build, and `request_people` answers
+  `ready` / `building` / `error` / `not_calibrated`, raising `NothingToPartition` for a dataset with no people to
+  find. `vtscore.detectors.centroid_head` gains `FACE_BALL_COMPAT` (the space its floors were fitted in) and
+  `face_uncalibrated_message(feature, compat)`, the one wording for a face feature in an uncalibrated space.
+  `DatasetContext.reset_derived_caches` takes a `people` keyword. Additive.
+
 - **`vtscore.datasets.co_occurrence`: which faces share a photo, and which people appear together** (issue #5587).
   `PhotoIndex(medias)` keys every converter output by the photo it was cut from, read off its own converter refs
   (`photo_keys`: `source_path`, else `source_file`), with the keys of a `dupe_set` face unioned so collapsed copies

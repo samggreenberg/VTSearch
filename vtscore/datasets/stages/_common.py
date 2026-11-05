@@ -263,6 +263,7 @@ class FinalizeProgress:
         ("registry", 0.45),
         ("projection", 0.05),
         ("similarity_order", 0.02),
+        ("people", 0.01),
     )
 
     def __init__(self, tracker, media_type: str = "") -> None:

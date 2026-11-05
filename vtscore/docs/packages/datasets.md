@@ -25,6 +25,7 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
 | `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
 | `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
+| `vtscore/datasets/people.py` | A Face dataset's people: its faces merged into people at the face ball's floor (`fit_people`, `PeoplePartition`), stored in the container and cached on the context; `request_people` is what a view polls - see [People](#people) |
 | `vtscore/datasets/co_occurrence.py` | The photo index: which faces of a dataset were cut from one photo, read off each face's own converter refs (no sibling needed), and which groups of faces (people) share photos |
 | `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped, less its rank and score on export; nothing acts on it yet) |
 
@@ -78,7 +79,7 @@ The post-import pipeline, one module per stage, run in this order:
 | `clipper.py` | Clipper / converter chain, plus per-clip MD5 + embedding fixup |
 | `embedding.py` | Embed items the importer left unembedded |
 | `finalize.py` | Drop failed embeds, collapse duplicates, build the coverage atlas |
-| `projection.py` | Optional 2-D UMAP projection build + persist |
+| `projection.py` | Optional 2-D UMAP projection build + persist; a Face dataset's 1-D similarity order and its [people](#people) |
 | `registry.py` | Save to the dataset registry, migrate the context id |
 
 `_common.py` holds shared constants and helpers; `_load_profiler.py` and
@@ -690,6 +691,62 @@ Access-control helpers
 multi-user visibility rules; library-only consumers without users can
 ignore them and treat every dataset as visible. `update_readers` returns
 a `ReadersUpdate` (see [security.md](security.md#readers-updates)).
+
+---
+
+## People
+
+`vtscore.datasets.people` merges a Face dataset's crops into **people**
+(#5586, the first slice of Co-face Browse). A `PeoplePartition` is the people
+(tuples of face ids, the largest person first, each led by its
+representative), the `unplaced` faces, and the stamps it was cut under:
+`method`, `linkage`, `cutoff` and the `compat` tag of the face space. Every
+face is in at most one person; a person with one face is a person.
+
+**The cut is the face ball's.** A face belongs to a person when its cosine to
+the person's unit centroid clears the ball's beta 1 floor for the dataset's
+`Face Compat` tag (`people_cutoff`, the one place the cut is read;
+`FACE_BALL_FLOORS` in `vtscore.detectors.centroid_head`, fitted in
+`FACE_BALL_COMPAT`). A space with no floor gets no partition, and is told so
+in the ball's wording (`not_calibrated_message`).
+
+**The fit** (`fit_people`, deterministic, no seed):
+
+1. each face's 20 nearest faces by cosine (chunked dot products, never an
+   `N x N` matrix), keeping the edges that clear the cut; the connected
+   components are candidates;
+2. each component re-cut by centroid linkage on the unit sphere (the cosine
+   between unit centroids, merging the closest pair while it clears the cut),
+   then each face moved to the cluster whose centroid it clears best, or left
+   as a person of its own;
+3. faces under `HARD_VIEW_QUALITY` (`vtscore.media.face.imagekit_bridge`) sit
+   out steps 1 and 2, then join the person whose centroid they clear best,
+   else stay unplaced.
+
+The linkage is not scipy's: scipy's centroid linkage is Euclidean between the
+clusters' raw means, which for unit vectors spread like one person's faces
+are far shorter than 1, and it merges people the cosine keeps apart.
+
+**Persistence and lifecycle.** Ids and stamps only, stored as the container's
+`people.json` (`append_people` / `read_people`) and cached on the context
+(`DatasetContext._people`, the `people` reset group), the carve-out the 1-D
+similarity order uses. A stored partition serves while it places every
+current face (`restricted_to` drops faces removed since), and is fit again
+once it misses one or was cut under another cut, space, method or linkage.
+The load pipeline's people stage fits it when a Face dataset is built;
+`people_for` serves it (cache, then container, then a fit), and
+`request_people` is what a view polls:
+
+```python
+from vtscore.datasets.people import request_people
+
+answer = request_people(ctx)            # force=True fits it again
+answer["status"]   # "ready" (answer["people"]), "building" (a job id and its
+                   # progress), "error" (once), or "not_calibrated"
+```
+
+`request_people` raises `NothingToPartition` (a `ValueError`) for a dataset
+that is not Face, or whose faces have no vectors.
 
 ---
 

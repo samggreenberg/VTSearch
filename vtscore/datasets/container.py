@@ -7,6 +7,8 @@ Each dataset is a single ZIP file containing:
 - ``projection.npz`` — (optional, appended later) frozen 2-D layout + pyramid
 - ``similarity_order.json`` — (optional, appended later) the ids in 1-D
   similarity order, for the example picker
+- ``people.json`` — (optional, appended later, Face datasets) the face ids
+  merged into people
 
 See ``docs/plans/vtsbrowse.md`` for the persistence carve-out.
 """
@@ -377,6 +379,60 @@ def read_similarity_order(path: str | Path) -> tuple[list[int], str] | None:
         return [int(i) for i in payload["ids"]], str(payload.get("method", ""))
     except Exception:
         logger.warning("Failed to read similarity order from container %s", path, exc_info=True)
+        return None
+
+
+#: ZIP entry holding a Face dataset's people (see ``vtscore.datasets.people``):
+#: its face ids merged into people, the unplaced ones, and the stamps the
+#: partition was cut under (method, linkage, cutoff, compat tag).  Ids only —
+#: JSON, no vectors — and checked against the live id set and the current cut
+#: on read.
+_PEOPLE_ENTRY = "people.json"
+
+
+def append_people(path: str | Path, payload: dict[str, Any]) -> None:
+    """Append (or replace) the people partition in a container.
+
+    *payload* is :meth:`~vtscore.datasets.people.PeoplePartition.to_payload`:
+    ``people`` (lists of ids), ``unplaced`` (ids), and the ``method``,
+    ``linkage``, ``cutoff`` and ``compat`` stamps.
+    """
+    p = Path(path)
+    body = json.dumps(
+        {
+            "method": str(payload["method"]),
+            "linkage": str(payload["linkage"]),
+            "cutoff": float(payload["cutoff"]),
+            "compat": str(payload["compat"]),
+            "people": [[int(i) for i in person] for person in payload["people"]],
+            "unplaced": [int(i) for i in payload["unplaced"]],
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    _replace_entry(p, _PEOPLE_ENTRY, body)
+
+    logger.info("Appended people (%d) to container: %s", len(payload["people"]), p)
+
+
+def read_people(path: str | Path) -> dict[str, Any] | None:
+    """Read the people partition's payload (as :func:`append_people` wrote it) from a container, or ``None``."""
+    try:
+        with zipfile.ZipFile(str(path), "r") as zf:
+            if _PEOPLE_ENTRY not in zf.namelist():
+                return None
+            body = zf.read(_PEOPLE_ENTRY)
+        payload = json.loads(body.decode("utf-8"))
+        return {
+            "method": str(payload["method"]),
+            "linkage": str(payload["linkage"]),
+            "cutoff": float(payload["cutoff"]),
+            "compat": str(payload["compat"]),
+            "people": [[int(i) for i in person] for person in payload["people"]],
+            "unplaced": [int(i) for i in payload["unplaced"]],
+        }
+    except Exception:
+        logger.warning("Failed to read people from container %s", path, exc_info=True)
         return None
 
 
