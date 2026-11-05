@@ -1,96 +1,54 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
-import type { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
-import type { DetectorSharingIntegrity } from '../generated/api-client/models/detector-sharing-integrity';
+import type { DetectorForkResponse } from '../generated/api-client/models/detector-fork-response';
+import type { DetectorSharingCapability } from '../generated/api-client/models/detector-sharing-capability';
+import type { DetectorSharingRefreshRequest } from '../generated/api-client/models/detector-sharing-refresh-request';
+import type { DetectorSharingRefreshResponse } from '../generated/api-client/models/detector-sharing-refresh-response';
+import type { DetectorSharingView } from '../generated/api-client/models/detector-sharing-view';
+import { forkRegisteredDetector } from '../generated/api-client/fn/detectors-sharing/fork-registered-detector';
+import { getDetectorSharing } from '../generated/api-client/fn/detectors-sharing/get-detector-sharing';
+import { getSharingCapability } from '../generated/api-client/fn/detectors-sharing/get-sharing-capability';
+import { refreshDetector } from '../generated/api-client/fn/detectors-sharing/refresh-detector';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
-// INTERIM (#5578 ahead of #5577): these shapes and URLs are #5577's documented
-// contract, typed by hand until its OpenAPI snapshot lands; then every method
-// wraps the generated function and these interfaces go.
-
-/** `GET /api/detectors/sharing`: whether sharing is on, and through what. */
-export interface SharingCapability {
-  enabled: boolean;
-  name?: string | null;
-  display_name?: string | null;
-  icon?: string | null;
-  supports_recipient_search: boolean;
-  missing_fields: string[];
-}
-
 /** What a container's foreign records get on a receive or refresh. */
-export type ForeignPolicy = 'abort' | 'import' | 'skip';
+export type ForeignPolicy = NonNullable<DetectorSharingRefreshRequest['foreign']>;
 
-/** `POST .../refresh`: applied or not, what the container held, and the entry after. */
-export interface SharingRefreshResponse {
-  ok: boolean;
-  applied: boolean;
-  message: string;
-  integrity: DetectorSharingIntegrity;
-  added: number;
-  changed: number;
-  removed: number;
-  detector: DetectorRegistryEntry;
-}
-
-/** `POST .../fork`: the new entry, and a note when the copy is local only. */
-export interface SharingForkResponse {
-  ok: boolean;
-  message: string;
-  detector: DetectorRegistryEntry;
-  remote_sync?: string | null;
-}
-
-/** `GET .../sharing`: a detector's container as it is now (null fields when not read). */
-export interface SharingView {
-  detector_id: string;
-  sync_mode: string;
-  is_owner: boolean;
-  sharing_note?: string | null;
-  owner?: string | null;
-  recipients?: string[] | null;
-  public?: boolean | null;
-}
-
-/** Detector sharing: the capability, a detector's container, Check for updates, Fork. */
+/** Detector sharing (`vtsearch/routes/detectors/sharing.py`): the capability,
+ *  a detector's container, Check for updates and Fork. */
 @Injectable({ providedIn: 'root' })
 export class DetectorsSharingApiService {
   private http = inject(HttpClient);
   private config = inject(ApiConfiguration);
 
-  private url(path: string): string {
-    return `${this.config.rootUrl}${path}`;
-  }
-
-  /** Never toasts: a server without the route is a server without sharing. */
-  getCapability(): Observable<SharingCapability> {
-    return this.http.get<SharingCapability>(this.url('/api/detectors/sharing'), {
-      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
-    });
+  /** Never toasts: a server without sharing simply says so, and the caller treats a failure the same way. */
+  getCapability(): Observable<DetectorSharingCapability> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return getSharingCapability(this.http, this.config.rootUrl, undefined, context).pipe(map((r) => r.body));
   }
 
   /** Never toasts: the Shared badge's title asks on hover, and goes without on failure. */
-  getSharingView(detectorId: string): Observable<SharingView> {
-    return this.http.get<SharingView>(
-      this.url(`/api/detectors/registry/${encodeURIComponent(detectorId)}/sharing`),
-      { context: new HttpContext().set(SKIP_ERROR_TOAST, true) },
+  getSharingView(detectorId: string): Observable<DetectorSharingView> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return getDetectorSharing(this.http, this.config.rootUrl, { detector_id: detectorId }, context).pipe(
+      map((r) => r.body),
     );
   }
 
-  refresh(detectorId: string, foreign: ForeignPolicy): Observable<SharingRefreshResponse> {
-    return this.http.post<SharingRefreshResponse>(
-      this.url(`/api/detectors/registry/${encodeURIComponent(detectorId)}/refresh`),
-      { foreign },
+  refresh(detectorId: string, foreign: ForeignPolicy): Observable<DetectorSharingRefreshResponse> {
+    return refreshDetector(this.http, this.config.rootUrl, { detector_id: detectorId, body: { foreign } }).pipe(
+      map((r) => r.body),
     );
   }
 
-  fork(detectorId: string, name?: string): Observable<SharingForkResponse> {
-    return this.http.post<SharingForkResponse>(
-      this.url(`/api/detectors/registry/${encodeURIComponent(detectorId)}/fork`),
-      name ? { name } : {},
-    );
+  fork(detectorId: string, name?: string): Observable<DetectorForkResponse> {
+    return forkRegisteredDetector(this.http, this.config.rootUrl, {
+      detector_id: detectorId,
+      body: name ? { name } : {},
+    }).pipe(map((r) => r.body));
   }
 }

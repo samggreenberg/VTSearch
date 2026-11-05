@@ -20,7 +20,7 @@ import { DetectorsSharingApiService } from '../../../services/detectors-sharing-
 import type { LineTestVerdict } from '../../../generated/api-client/models/line-test-verdict';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 import {
-  integrityLine,
+  hasForeignModifications,
   isLinked,
   isSharedOwned,
   receivedTitle,
@@ -178,7 +178,7 @@ export class DetectorCardComponent {
             recipients: Array.isArray(view.recipients) ? view.recipients.length : null,
             isPublic: view.public === true,
           }),
-        // No title line is better than a wrong one; the next row hover may retry.
+        // No audience line is better than a wrong one; the next hover asks again.
         error: () => (this.audienceAsked = false),
       });
   }
@@ -187,7 +187,7 @@ export class DetectorCardComponent {
    *  (local-only here), or a received container someone else has written to. */
   get sharingBadgeWarns(): boolean {
     if (this.sharingNote) return true;
-    return this.linked && integrityLine(this.detector()).startsWith('⚠');
+    return this.linked && hasForeignModifications(this.detector());
   }
 
   /** The last owner push's failure, shown as the "Remote sync failed" link. */

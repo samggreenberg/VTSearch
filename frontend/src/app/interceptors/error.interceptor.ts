@@ -14,7 +14,7 @@ import { PairRecoveryService } from '../services/pair-recovery.service';
 import { ErrorContext, ToastService } from '../services/toast.service';
 
 /** The `error_code` of the 409 a received, read-only detector answers a change with. */
-export const DETECTOR_READ_ONLY = 'detector_read_only';
+const DETECTOR_READ_ONLY = 'detector_read_only';
 
 /**
  * Opt out of the global error toast for a single request.

@@ -2,7 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { catchError, filter, of, switchMap, take } from 'rxjs';
 
 import { AuthService } from './auth.service';
-import { DetectorsSharingApiService, type SharingCapability } from './detectors-sharing-api.service';
+import type { DetectorSharingCapability } from '../generated/api-client/models/detector-sharing-capability';
+import { DetectorsSharingApiService } from './detectors-sharing-api.service';
 
 /**
  * Whether this deployment shares detectors, and through what: the
@@ -22,7 +23,7 @@ export class SharingCapabilityService {
   private readonly api = inject(DetectorsSharingApiService);
   private readonly auth = inject(AuthService);
 
-  private readonly capability = signal<SharingCapability | null>(null);
+  private readonly capability = signal<DetectorSharingCapability | null>(null);
 
   /** Sharing is on here. */
   readonly enabled = computed(() => this.capability()?.enabled === true);

@@ -4,11 +4,8 @@ import { Subject, firstValueFrom } from 'rxjs';
 import type { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { DatasetStateService } from './dataset-state.service';
 import { VtDialogService, type DialogButton } from './dialog.service';
-import {
-  DetectorsSharingApiService,
-  type ForeignPolicy,
-  type SharingRefreshResponse,
-} from './detectors-sharing-api.service';
+import type { DetectorSharingRefreshResponse } from '../generated/api-client/models/detector-sharing-refresh-response';
+import { DetectorsSharingApiService, type ForeignPolicy } from './detectors-sharing-api.service';
 import { SharingCapabilityService } from './sharing-capability.service';
 import { ToastService } from './toast.service';
 
@@ -28,7 +25,7 @@ export interface ForkLanded {
 export type RefreshOutcome = 'applied' | 'cancelled' | 'failed';
 
 /** The integrity dialog's answers: re-post with a policy, or leave it. */
-type IntegrityChoice = Exclude<ForeignPolicy, 'abort'> | 'cancel';
+export type IntegrityChoice = Exclude<ForeignPolicy, 'abort'> | 'cancel';
 
 /**
  * The two sharing actions that more than one surface starts: **Check for
@@ -86,8 +83,8 @@ export class DetectorSharingFlowsService {
   /**
    * Make a copy of *target* the user owns and can edit, optionally asking for
    * its name first. Resolves to the new entry, with a registry refresh on its
-   * way to list it, or `null` when the user cancelled or the request failed. A `remote_sync` note (the copy could not be shared)
-   * becomes a toast.
+   * way to list it, or `null` when the user cancelled or the request failed.
+   * A `remote_sync` note (the copy is local only) becomes a toast.
    */
   async fork(target: SharingFlowTarget, options: { askName?: boolean } = {}): Promise<DetectorRegistryEntry | null> {
     let name: string | undefined;
@@ -121,7 +118,7 @@ export class DetectorSharingFlowsService {
     return entry;
   }
 
-  private async refresh(id: string, foreign: ForeignPolicy): Promise<SharingRefreshResponse | null> {
+  private async refresh(id: string, foreign: ForeignPolicy): Promise<DetectorSharingRefreshResponse | null> {
     try {
       return await firstValueFrom(this.api.refresh(id, foreign));
     } catch {
@@ -129,7 +126,13 @@ export class DetectorSharingFlowsService {
     }
   }
 
-  private askAboutForeignRecords(target: SharingFlowTarget, count: number): Promise<IntegrityChoice> {
+  /**
+   * The integrity dialog: *count* votes in *target*'s container were written
+   * by someone other than its owner. Resolves the policy to re-post with, or
+   * `'cancel'` (also on Escape). Check for updates asks it; so can any flow
+   * that meets an `applied: false` answer, such as a receive.
+   */
+  askAboutForeignRecords(target: SharingFlowTarget, count: number): Promise<IntegrityChoice> {
     const votes = `${count} vote${count === 1 ? ' was' : 's were'}`;
     const buttons: DialogButton<IntegrityChoice>[] = [
       { label: 'Cancel', primary: false, value: 'cancel' },
@@ -146,7 +149,7 @@ export class DetectorSharingFlowsService {
   }
 
   /** Write what the refresh says about the row into the store, without a reload. */
-  private landRefresh(id: string, response: SharingRefreshResponse): void {
+  private landRefresh(id: string, response: DetectorSharingRefreshResponse): void {
     if (response.detector) this.datasetState.patchDetector(id, response.detector);
   }
 }

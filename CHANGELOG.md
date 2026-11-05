@@ -32,6 +32,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   `/sharing` under `/api/detectors/registry/{detector_id}`; see `docs/api/detectors.md`, "Detector sharing"); the
   Dashboard's sharing controls follow. With the setting at its default, `null`, nothing changes.
 
+- **The Dashboard and Train show detector sharing** (issue #5578). A received detector carries a **Received** badge
+  in its tab (who it came from, when it was last checked, and whether anyone but its owner has written to it), and
+  is read-only: no rename, no Import Labels, and in Train its Good and Bad buttons are off with **Read-only: fork
+  to edit** and a **Fork** beside them. Its ⋯ menu offers **Check for updates**, which asks before taking votes
+  someone other than the owner wrote (**Import anyway**, **Skip foreign records** or **Cancel**), and **Fork**, which
+  makes an editable copy in Drafts. A detector you share carries a **Shared** badge, and a **Remote sync failed**
+  link when its last save did not reach the shared copy. With sharing on, every detector of yours offers **Share…**
+  and **Fork**. A detector whose sharing source is no longer in use here says so, and its sharing actions are off.
+
 - **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
   run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
   setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what

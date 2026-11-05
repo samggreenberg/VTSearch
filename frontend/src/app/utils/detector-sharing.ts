@@ -61,11 +61,17 @@ function sourceLabel(entry: SharingEntry): string {
   return name || 'a sharing source';
 }
 
+/** True when the last refresh found votes in the container that its owner did not write. */
+export function hasForeignModifications(entry: SharingEntry | null | undefined): boolean {
+  const status = entry?.sharing?.integrity?.status;
+  return !!status && status !== INTEGRITY_CLEAN;
+}
+
 /** One line on what the last refresh found in the container, or `''` before any. */
 export function integrityLine(entry: SharingEntry | null | undefined): string {
   const integrity = entry?.sharing?.integrity;
   if (!integrity?.status) return '';
-  if (integrity.status === INTEGRITY_CLEAN) return 'Every vote is the owner’s.';
+  if (!hasForeignModifications(entry)) return 'Every vote is the owner’s.';
   const n = integrity.count ?? 0;
   return `⚠ ${n} vote${n === 1 ? ' was' : 's were'} modified by someone other than the owner.`;
 }
@@ -103,7 +109,7 @@ export function sharedTitle(entry: SharingEntry, recipients: number | null = nul
   if (isPublic) audience = 'Everyone can receive it.';
   else if (recipients !== null) audience = `Shared with ${recipients} recipient${recipients === 1 ? '' : 's'}.`;
   return [
-    `Shared through ${sourceLabel(entry)}: your saves update it for everyone you shared it with.`,
+    `Shared through ${sourceLabel(entry)}: every save reaches the people it is shared with.`,
     audience,
     syncedLine(entry, 'Last saved there'),
     sharingSyncError(entry) ? `The last save failed: ${sharingSyncError(entry)}` : '',

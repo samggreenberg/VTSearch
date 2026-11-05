@@ -1412,7 +1412,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private refuseReadOnlyVote(): void {
     this.toast.warning({
       message: `${READ_ONLY_HINT}: this detector's labels are its owner's.`,
-      action: { label: 'Fork', title: 'Make a copy of your own that you can vote on', onClick: () => void this.onFork() },
+      action: { label: 'Fork', title: 'Make a copy of your own that you can vote on', onClick: () => this.onFork() },
       dedupKey: 'read-only-vote',
     });
   }
