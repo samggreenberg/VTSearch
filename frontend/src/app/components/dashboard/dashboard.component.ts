@@ -23,6 +23,7 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
+import { PeoplePrepService } from '../../services/people-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
@@ -33,6 +34,7 @@ import { ProgressEventsService } from '../../services/progress-events.service';
 import {
   ProgressBarState,
   ProgressHeader,
+  ProgressKind,
   formatProgressHeader,
   progressBarState,
 } from '../../utils/format-progress';
@@ -137,6 +139,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   modals = inject(DashboardModalsService);
   loadingTasksSvc = inject(DashboardLoadingTasksService);
   browsePrep = inject(BrowsePrepService);
+  peoplePrep = inject(PeoplePrepService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
@@ -1033,14 +1036,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  Browsing works for any media type — the UMAP projection and hex-tile
    *  pyramid are embedding-based and media-agnostic. */
   browseDataset(dataset: DatasetRegistryEntry): void {
+    // One prep at a time: each ends in a navigation, and two would race.
+    if (this.peoplePrep.preparing) return;
     this.browsePrep.prepareAndBrowse(dataset.id);
   }
 
+  /** Open a Face dataset's People view (#5590). Loads the dataset (if needed)
+   *  and finds its people first, with progress on its row, as
+   *  {@link browseDataset} builds the map; `PeoplePrepService` navigates to
+   *  `/people/:id` once they are found. */
+  openPeople(dataset: DatasetRegistryEntry): void {
+    if (this.browsePrep.preparing) return;
+    this.peoplePrep.prepareAndOpen(dataset.id);
+  }
+
+  /** The prep row to show for *datasetId*, or null: Browse's map build or
+   *  People's fit, whichever is preparing that dataset. */
+  prepTask(datasetId: string): LoadingTask | null {
+    return this.browsePrep.displayTask(datasetId) ?? this.peoplePrep.displayTask(datasetId);
+  }
+
+  /** The vocabulary *datasetId*'s row speaks (see {@link prepTask}). */
+  prepTaskKind(datasetId: string): ProgressKind {
+    return this.peoplePrep.holds(datasetId)
+      ? this.peoplePrep.taskKind(datasetId)
+      : this.browsePrep.taskKind(datasetId);
+  }
+
   /** Cancel a dataset load row. Routes the browse-prep projection row to
-   *  `BrowsePrepService`; everything else is a real SSE load task. */
+   *  `BrowsePrepService` and the people row to `PeoplePrepService`; everything
+   *  else is a real SSE load task. */
   onCancelDatasetTask(taskId: string): void {
     if (this.browsePrep.ownsTask(taskId)) {
       this.browsePrep.cancel();
+    } else if (this.peoplePrep.ownsTask(taskId)) {
+      this.peoplePrep.cancel();
     } else {
       this.loadingTasksSvc.cancelLoadingTask(taskId);
     }
@@ -1050,6 +1080,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onDismissDatasetTask(taskId: string): void {
     if (this.browsePrep.ownsTask(taskId)) {
       this.browsePrep.dismiss();
+    } else if (this.peoplePrep.ownsTask(taskId)) {
+      this.peoplePrep.dismiss();
     } else {
       this.loadingTasksSvc.dismissLoadingTask(taskId);
     }
@@ -1353,12 +1385,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Train/Tune gate on this rather than `isContextSwitching` because they
-   *  must also wait out an in-flight browse-prep: when its projection build
-   *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
-   *  Tune navigation underneath it would race that redirect. Independent
-   *  actions don't care — to them browse-prep is just more background work. */
+   *  must also wait out an in-flight browse-prep or people-prep: when its build
+   *  finishes it fires a navigation to `/browse/:id` or `/people/:id`, and
+   *  starting a Train/Tune navigation underneath it would race that redirect.
+   *  Independent actions don't care — to them a prep is just more background
+   *  work. */
   get isNavBusy(): boolean {
-    return this.isContextSwitching || this.browsePrep.preparing;
+    return this.isContextSwitching || this.browsePrep.preparing || this.peoplePrep.preparing;
   }
 
   /**

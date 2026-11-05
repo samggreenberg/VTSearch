@@ -215,8 +215,10 @@ export interface ProgressHeader {
 /** Which flow this progress event belongs to. ``autofind`` is a background
  *  AutoFind of the user's AutoFind detectors on a dataset (#4252), and ``find``
  *  the same run with the detectors picked for the Dashboard's Find button
- *  (#4615); both report on the dataset channel but are not loads. */
-export type ProgressKind = 'dataset' | 'detector' | 'projection' | 'autofind' | 'find';
+ *  (#4615); both report on the dataset channel but are not loads. ``people``
+ *  is a Face dataset's faces being merged into people before the People view
+ *  opens (#5590), as ``projection`` is the map before Browse. */
+export type ProgressKind = 'dataset' | 'detector' | 'projection' | 'people' | 'autofind' | 'find';
 
 /**
  * Strip a leading action verb (a gerund like "Embedding"/"Converting"/"Loading",
@@ -263,11 +265,13 @@ export function formatProgressHeader(
       ? 'Loading detector'
       : kind === 'projection'
         ? 'Building the map'
-        : kind === 'autofind'
-          ? 'Running AutoFind'
-          : kind === 'find'
-            ? 'Running Find'
-            : 'Loading dataset';
+        : kind === 'people'
+          ? 'Finding people'
+          : kind === 'autofind'
+            ? 'Running AutoFind'
+            : kind === 'find'
+              ? 'Running Find'
+              : 'Loading dataset';
 
   let phase = '';
   let subtitle = '';
@@ -290,6 +294,8 @@ export function formatProgressHeader(
       phase = 'scoring';
       subtitle = `Scoring every item with your ${detectors}s.`;
     }
+  } else if (kind === 'people') {
+    subtitle = 'Merging the faces that are one person, so the dataset can be read as people.';
   } else if (kind === 'projection') {
     if (/pyramid|tiling|binning/i.test(message)) {
       phase = 'tiling layout';

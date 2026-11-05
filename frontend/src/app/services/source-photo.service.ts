@@ -85,9 +85,18 @@ export class SourcePhotoService {
   /** The open overlay, or null. */
   readonly request = this._request.asReadonly();
 
-  /** Open the overlay for *mediaId*, an item of the active dataset. */
-  open(mediaId: number): void {
-    this._request.set({ mediaId, fromName: this.activeDataset.datasetName() });
+  /**
+   * Open the overlay for *mediaId*, an item of the active dataset. *boxes*
+   * outline several faces by whose they are, in place of *mediaId*'s own
+   * ({@link SourcePhotoRequest.boxes}); *fromName* names where Back returns
+   * to, the active dataset by default.
+   */
+  open(mediaId: number, options: { boxes?: readonly OutlineBox[]; fromName?: string } = {}): void {
+    this._request.set({
+      mediaId,
+      fromName: options.fromName || this.activeDataset.datasetName(),
+      ...(options.boxes?.length ? { boxes: options.boxes } : {}),
+    });
   }
 
   close(): void {

@@ -14,6 +14,9 @@ import { ToastService } from './toast.service';
  */
 const RELOAD_COOLDOWN_MS = 60_000;
 
+/** The views of a dataset alone (`/<view>/:datasetId`), whose URL names no detector. */
+const DATASET_ONLY_VIEWS: ReadonlySet<string> = new Set(['browse', 'people']);
+
 /** Dataset id prefix of a detector-positives map (`vtscore.detectors.positives_browse`). */
 const POSITIVES_MAP_PREFIX = '__detpos__';
 
@@ -31,7 +34,7 @@ const POSITIVES_MAP_PREFIX = '__detpos__';
  *
  * {@link errorInterceptor} hands this service every failed response. A 409 that
  * names the active pair, while no switch is loading it and the tab is on that
- * pair's view (Train or Tune, or Browse on its dataset), starts a reload
+ * pair's view (Train or Tune, or Browse or People on its dataset), starts a reload
  * ({@link ContextSwitchService.reloadActivePair}); once it lands,
  * {@link reloaded$} fires and the view starts over as on a pair change, since
  * whatever the backend held for the session went with it. A 409
@@ -180,13 +183,14 @@ export class PairRecoveryService {
 
   /**
    * Whether the tab is on a view of this pair: Train or Tune of both halves, or
-   * Browse of the dataset. Browse shows a dataset alone and carries the active
-   * detector along (`browseContextGuard`), so its URL names no detector, but
-   * the reload brings that half back too, as the guard had it loaded (#5158).
+   * Browse or People of the dataset. Those two show a dataset alone and carry
+   * the active detector along (`datasetContextGuard`), so their URL names no
+   * detector, but the reload brings that half back too, as the guard had it
+   * loaded (#5158).
    */
   private onPairView(datasetId: string, detectorId: string): boolean {
     const [view, ds, det] = this.viewSegments();
-    if (view === 'browse') return ds === datasetId;
+    if (DATASET_ONLY_VIEWS.has(view)) return ds === datasetId;
     return (view === 'label' || view === 'tune') && ds === datasetId && det === detectorId;
   }
 
@@ -195,10 +199,10 @@ export class PairRecoveryService {
     return this.router.url.split('?')[0].split('/').slice(1);
   }
 
-  /** The pair as the view names it: Browse by its dataset alone. */
+  /** The pair as the view names it: Browse and People by the dataset alone. */
   private pairLabel(datasetId: string, detectorId: string): string {
     const dataset = this.datasetState.datasetById().get(datasetId)?.name || datasetId;
-    if (!detectorId || this.viewSegments()[0] === 'browse') return dataset;
+    if (!detectorId || DATASET_ONLY_VIEWS.has(this.viewSegments()[0])) return dataset;
     const detector = this.datasetState.detectorById().get(detectorId)?.name || detectorId;
     return `${dataset} · ${detector}`;
   }

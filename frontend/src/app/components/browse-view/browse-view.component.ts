@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, Eleme
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { PEOPLE_MEDIA_TYPE } from '../dashboard/card-context-menu-items';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
@@ -1448,6 +1449,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * canonical layout; in subset mode it re-projects the current ``subsetIds``.
    * The fit runs in the background, so the view shows build progress meanwhile.
    */
+  /**
+   * Whether to offer **People** (#5590): a Face dataset's people, a view of
+   * the same dataset beside this one. Not on a subset map (a Find's results or
+   * a detector's positives): People is about the whole dataset, and a
+   * positives map is no registered dataset to open it on.
+   */
+  readonly peopleOffered = computed(
+    () => !this.subset && this.mediaType() === PEOPLE_MEDIA_TYPE && !this.routeDatasetId().startsWith('__detpos__'),
+  );
+
+  /** The dataset id the URL names. */
+  private readonly routeDatasetId = signal(this.route.snapshot.paramMap.get('datasetId') || '');
+
+  /** Open this dataset's People view. Its dataset is loaded and active
+   *  already, so it goes straight there; the view waits out a fit itself. */
+  openPeople(): void {
+    this.router.navigate(['/people', this.routeDatasetId()]);
+  }
+
   onReproject(): void {
     if (this.subset && this.subsetIds.length === 0) return;
     // The same items come back in new positions, and selection is id-based —

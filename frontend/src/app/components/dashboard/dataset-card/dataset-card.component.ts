@@ -95,6 +95,8 @@ export class DatasetCardComponent {
   readonly delete = output<void>();
   readonly load = output<void>();
   readonly browse = output<void>();
+  /** The People item (a Face dataset's only): open its people (#5590). */
+  readonly people = output<void>();
   readonly autofind = output<void>();
   readonly security = output<void>();
   readonly cancelTask = output<string>();
@@ -162,6 +164,9 @@ export class DatasetCardComponent {
         break;
       case 'browse':
         this.browse.emit();
+        break;
+      case 'people':
+        this.people.emit();
         break;
       case 'autofind':
         this.autofind.emit();
@@ -263,6 +268,13 @@ export class DatasetCardComponent {
   capitalizeType(type: string | undefined): string {
     if (!type) return '-';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  /** A projection build or a people fit keeps the actions column beside its
+   *  bar, with its own icon waggling there; a load takes the whole row. */
+  get keepsActions(): boolean {
+    const kind = this.taskKind();
+    return kind === 'projection' || kind === 'people';
   }
 
   /** The vocabulary the inline row speaks: a background AutoFind or Find on

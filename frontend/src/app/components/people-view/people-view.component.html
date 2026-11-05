@@ -1,0 +1,321 @@
+<div class="people-view">
+  <div class="people-toolbar">
+    <button
+      type="button"
+      class="btn btn--secondary btn--sm"
+      (click)="backToDashboard()"
+      title="Return to the Dashboard"
+    >&larr; Dashboard</button>
+    <h1 class="people-title">
+      People
+      @if (datasetName()) {
+        <span class="people-title-dataset">in {{ datasetName() }}</span>
+      }
+    </h1>
+    @if (state.status() === 'ready') {
+      <span class="people-summary">{{ summary() }}</span>
+    }
+    <span class="people-toolbar-spacer"></span>
+    <button
+      type="button"
+      class="btn btn--secondary btn--sm"
+      (click)="openBrowse()"
+      title="Open this dataset's map in Browse"
+    >Browse</button>
+    <button
+      type="button"
+      class="btn btn--secondary btn--sm people-rebuild"
+      [disabled]="state.status() === 'building' || state.status() === 'loading' || state.status() === 'not_calibrated'"
+      (click)="rebuild()"
+      [title]="state.status() === 'not_calibrated'
+        ? 'People are not found for this face embedder, so there is nothing to rebuild'
+        : 'Find the people again from all the faces'"
+    >
+      <vt-icon type="shuffle" [size]="14" />
+      Rebuild people
+    </button>
+  </div>
+
+  @switch (state.status()) {
+    @case ('loading') {
+      <div class="people-status" role="status">
+        <p class="people-status-message">Reading the people…</p>
+        <vt-progress-bar [indeterminate]="true" [value]="0" [max]="1" />
+      </div>
+    }
+    @case ('building') {
+      <div class="people-status" role="status">
+        <p class="people-status-message">Finding people…</p>
+        <vt-progress-bar
+          [indeterminate]="buildBar().indeterminate"
+          [pulsing]="!!buildBar().pulsing"
+          [pulseTo]="buildBar().pulseTo ?? null"
+          [smooth]="true"
+          [value]="buildBar().value"
+          [max]="buildBar().max"
+        />
+        <span class="people-status-detail">
+          {{ buildHeader().detail }}
+          @if (buildEta()) {
+            <span class="people-status-eta">{{ buildEta() }}</span>
+          }
+        </span>
+      </div>
+    }
+    @case ('error') {
+      <div class="people-status" role="alert">
+        <p class="people-status-message people-status-error">{{ state.errorMessage() }}</p>
+        <button type="button" class="btn btn--secondary" (click)="retry()">Try again</button>
+      </div>
+    }
+    @case ('not_calibrated') {
+      <div class="people-status" role="status">
+        <p class="people-status-message">No people to show.</p>
+        <p class="people-status-detail people-not-calibrated">{{ state.notCalibratedMessage() }}</p>
+      </div>
+    }
+    @case ('ready') {
+      <div
+        class="people-panes"
+        #layout
+        [style.--people-list-width]="listWidth() + 'px'"
+        [style.--people-with-width]="withWidth() + 'px'"
+      >
+        <!-- People (left) -->
+        <aside class="people-list" aria-label="People">
+          <div class="people-list-filter">
+            <label class="people-filter-label">
+              At least
+              <input
+                type="number"
+                class="people-filter-input"
+                min="1"
+                [value]="state.minFaces()"
+                (input)="onMinFacesInput($event)"
+                aria-label="The fewest faces a person needs to be listed"
+              />
+              faces
+            </label>
+            @if (state.foldedCount() > 0) {
+              <button
+                type="button"
+                class="btn btn--cancel btn--sm people-folded"
+                (click)="showAllPeople()"
+                [title]="'List the ' + state.foldedCount() + ' people with fewer faces too'"
+              >+{{ state.foldedCount() | number }} with fewer</button>
+            }
+          </div>
+          @if (rows().length === 0) {
+            <p class="people-empty">No faces were found to merge into people.</p>
+          } @else {
+            <cdk-virtual-scroll-viewport [itemSize]="ROW_PX" class="people-list-scroll">
+              <button
+                *cdkVirtualFor="let row of rows(); trackBy: trackRow"
+                type="button"
+                class="people-row"
+                [style.height.px]="ROW_PX"
+                [class.picked]="row.kind === 'person' ? isPicked(row.person.id) : isPicked('unplaced')"
+                [attr.aria-pressed]="row.kind === 'person' ? isPicked(row.person.id) : isPicked('unplaced')"
+                (click)="choose(row.kind === 'person' ? row.person.id : 'unplaced')"
+              >
+                @if (row.kind === 'person') {
+                  <img class="people-row-thumb" [src]="faceUrl(row.person.representative)" alt="" loading="lazy" />
+                  <span class="people-row-text">
+                    <span class="people-row-name">{{ personName(row.person.id) }}</span>
+                    <span class="people-row-counts">{{ countsText(row.person) }}</span>
+                  </span>
+                } @else {
+                  <span class="people-row-thumb people-row-thumb--unplaced" aria-hidden="true">?</span>
+                  <span class="people-row-text">
+                    <span class="people-row-name">Unplaced</span>
+                    <span class="people-row-counts">{{ row.count | number }} {{ row.count === 1 ? 'face' : 'faces' }} in no person</span>
+                  </span>
+                }
+              </button>
+            </cdk-virtual-scroll-viewport>
+          }
+        </aside>
+
+        <div
+          class="pane-divider"
+          vtPanelResize="left"
+          [layoutEl]="layout"
+          [minWidth]="SIDE_MIN"
+          [opposingWidth]="withWidth()"
+          [centerMin]="CENTER_MIN"
+          [dividerTotal]="DIVIDER_TOTAL"
+          (widthChange)="onListWidthChange($event)"
+          (resizeEnd)="onListWidthChange($event)"
+        ></div>
+
+        <!-- Person (centre) -->
+        <section class="people-person" #centre aria-label="Person">
+          @if (state.pick() == null) {
+            <p class="people-empty">Pick a person on the left to see their faces.</p>
+          } @else {
+            <header class="people-person-header">
+              <h2 class="people-person-name">{{ pickTitle() }}</h2>
+              <span class="people-person-counts">{{ pickSubtitle() }}</span>
+            </header>
+            @if (state.personError()) {
+              <p class="error-text" role="alert">{{ state.personError() }}</p>
+            } @else if (state.faceIds().length === 0) {
+              <p class="people-empty">{{ state.personLoading() ? 'Reading their faces…' : 'No faces.' }}</p>
+            } @else {
+              @if (shownFace(); as face) {
+                <div class="people-face">
+                  <img class="people-face-img" [src]="largeFaceUrl(face)" [alt]="faceMetadata()[0]?.value ?? ''" />
+                  <div class="people-face-meta">
+                    @for (row of faceMetadata(); track row.label) {
+                      <div class="people-face-meta-row">
+                        <span class="people-face-meta-label">{{ row.label | titlecase }}</span>
+                        <span class="people-face-meta-value">{{ row.value }}</span>
+                      </div>
+                    }
+                    <button
+                      type="button"
+                      class="btn btn--toolbar btn--sm people-face-photo"
+                      (click)="showFaceInPhoto()"
+                      title="Open the photo this face was cut from, with the face outlined"
+                    >Show in photo</button>
+                  </div>
+                </div>
+              }
+              <vt-browse-bin-member-grid
+                class="people-face-grid"
+                [ids]="state.faceIds()"
+                [rows]="faceRows()"
+                [columns]="columns()"
+                [cellWidth]="cellWidth()"
+                [mediaType]="faceType"
+                [docked]="true"
+                [emptyHintHidden]="true"
+                [selectable]="false"
+                countNoun="face"
+                [focusedId]="state.focusedFace()"
+                (entryClick)="onFaceClick($event)"
+                (entryEnter)="onFaceEnter($event)"
+                (gridLeave)="onGridLeave()"
+              />
+            }
+          }
+        </section>
+
+        <div
+          class="pane-divider"
+          vtPanelResize="right"
+          [layoutEl]="layout"
+          [minWidth]="SIDE_MIN"
+          [opposingWidth]="listWidth()"
+          [centerMin]="CENTER_MIN"
+          [dividerTotal]="DIVIDER_TOTAL"
+          (widthChange)="onWithWidthChange($event)"
+          (resizeEnd)="onWithWidthChange($event)"
+        ></div>
+
+        <!-- Appears with (right) -->
+        <aside class="people-with" aria-label="Appears with">
+          <h2 class="people-with-heading">Appears with</h2>
+          @if (state.pick() === 'unplaced') {
+            <p class="people-empty">Unplaced faces are in no person, so no one appears with them.</p>
+          } @else if (state.person(); as person) {
+            @if (state.appearsWith().length === 0) {
+              <p class="people-empty">{{ personName(person.id) }} shares no photo with anyone else here.</p>
+            } @else {
+              <ul class="people-with-list">
+                @for (co of state.appearsWith(); track co.id) {
+                  <li>
+                    <button
+                      type="button"
+                      class="people-row people-with-row"
+                      [class.picked]="coPick() === co.id"
+                      [attr.aria-pressed]="coPick() === co.id"
+                      (click)="chooseCoPerson(co)"
+                      [title]="'Show the photos ' + personName(person.id) + ' and ' + personName(co.id) + ' share'"
+                    >
+                      <img class="people-row-thumb" [src]="faceUrl(co.representative)" alt="" loading="lazy" />
+                      <span class="people-row-text">
+                        <span class="people-row-name">{{ personName(co.id) }}</span>
+                        <span class="people-row-counts">{{ sharedText(co) }}</span>
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+
+              <div class="people-shared" aria-label="Shared photos">
+                @if (state.shared(); as read) {
+                  @if (read.kind === 'found') {
+                    <p class="people-shared-note">
+                      {{ read.photos.length | number }} shared {{ read.photos.length === 1 ? 'photo' : 'photos' }}
+                      <span class="people-legend">
+                        <span class="people-legend-key people-legend-key--primary"></span>{{ personName(person.id) }}
+                        <span class="people-legend-key people-legend-key--secondary"></span>{{ personName(coPick()!) }}
+                        <span class="people-legend-key people-legend-key--other"></span>others
+                      </span>
+                    </p>
+                    @for (photo of read.photos; track photo.photo) {
+                      @if (photoUrl(photo); as url) {
+                        <button
+                          type="button"
+                          class="people-photo"
+                          [title]="photoTitle(photo)"
+                          (click)="openPhoto(photo)"
+                        >
+                          <img class="people-photo-img" [src]="url" alt="" loading="lazy" />
+                          @for (face of facesByLayer(photo); track face.media_id) {
+                            @if (boxStyle(face); as style) {
+                              <span
+                                [class]="'people-photo-box people-photo-box--' + roleOf(face)"
+                                [style.left]="style['left']"
+                                [style.top]="style['top']"
+                                [style.width]="style['width']"
+                                [style.height]="style['height']"
+                                [title]="faceTitle(face)"
+                              ></span>
+                            }
+                          }
+                        </button>
+                      } @else {
+                        <div class="people-photo people-photo--orphan" title="This photo is not in a dataset you can read">
+                          @for (face of photo.faces; track face.media_id) {
+                            <img class="people-photo-chip" [src]="faceUrl(face.media_id)" [alt]="faceTitle(face)" [title]="faceTitle(face)" loading="lazy" />
+                          }
+                          <span class="people-photo-orphan-note">photo not found</span>
+                        </div>
+                      }
+                    }
+                  } @else if (read.kind === 'not-loaded') {
+                    <div class="empty-state" role="status">
+                      <p>The photos are in {{ photoDatasetName() }}, which isn't loaded.</p>
+                      <button
+                        type="button"
+                        class="btn btn--primary btn--sm"
+                        [disabled]="siblingLoading()"
+                        (click)="loadPhotos(read.datasetId)"
+                        [title]="'Load ' + photoDatasetName() + ' and show the photos they share'"
+                      >{{ siblingLoading() ? 'Loading ' + photoDatasetName() + '…' : 'Load ' + photoDatasetName() }}</button>
+                      @if (siblingLoadError()) {
+                        <p class="error-text">{{ siblingLoadError() }}</p>
+                      }
+                    </div>
+                  } @else if (read.kind === 'error') {
+                    <p class="error-text" role="alert">{{ read.message }}</p>
+                  }
+                } @else if (state.sharedLoading()) {
+                  <p class="people-empty">Finding the photos they share…</p>
+                }
+              </div>
+            }
+          } @else if (state.personLoading()) {
+            <p class="people-empty">Reading who they appear with…</p>
+          }
+        </aside>
+      </div>
+    }
+  }
+</div>
+
+@if (sourcePhoto.request(); as request) {
+  <vt-source-photo-modal [request]="request" (closed)="sourcePhoto.close()" />
+}

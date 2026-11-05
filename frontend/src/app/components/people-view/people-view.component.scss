@@ -1,0 +1,406 @@
+// The People view (#5590). `.btn`, `.pane-divider`, `.empty-state` and
+// `.error-text` come from `_components.scss`; the outline colours are the
+// `--photo-outline-*` tokens `vt-image-viewer` draws the same roles with.
+
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.people-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-body);
+}
+
+.people-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.people-title {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.people-title-dataset {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.people-summary {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.people-toolbar-spacer {
+  flex: 1;
+}
+
+.people-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+}
+
+.people-status-message {
+  margin: 0;
+  font-size: var(--font-xl);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.people-status-error {
+  color: var(--color-bad);
+}
+
+.people-status-detail {
+  display: flex;
+  gap: var(--space-sm);
+  min-height: 1.4em;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.people-not-calibrated {
+  max-width: 40rem;
+  text-align: center;
+}
+
+.people-panes {
+  display: grid;
+  grid-template-columns: var(--people-list-width, 280px) 8px minmax(0, 1fr) 8px var(--people-with-width, 340px);
+  flex: 1;
+  min-height: 0;
+}
+
+.people-list,
+.people-person,
+.people-with {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.people-list,
+.people-with {
+  background: var(--bg-panel);
+}
+
+.people-list-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.people-filter-input {
+  width: 3.5rem;
+  margin: 0 var(--space-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.people-list-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+// One person (or the unplaced faces): a thumbnail and two lines.
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-xs) var(--space-md);
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.picked {
+    border-left-color: var(--accent);
+    background: var(--accent-highlight-bg);
+  }
+}
+
+.people-row-thumb {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--bg-surface);
+
+  &--unplaced {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-2xl);
+    color: var(--text-muted);
+  }
+}
+
+.people-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.people-row-name {
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.people-row-counts {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.people-empty {
+  margin: 0;
+  padding: var(--space-xl);
+  font-size: var(--font-md);
+  font-style: italic;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.people-person {
+  padding: var(--space-md) var(--space-lg);
+  gap: var(--space-md);
+}
+
+.people-person-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.people-person-name,
+.people-with-heading {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.people-person-counts {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+// The face shown large, its metadata beside it.
+.people-face {
+  display: flex;
+  gap: var(--space-lg);
+  flex: none;
+}
+
+.people-face-img {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.people-face-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow-y: auto;
+  max-height: 220px;
+}
+
+.people-face-meta-row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.people-face-meta-label {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+}
+
+.people-face-meta-value {
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.people-face-photo {
+  align-self: flex-start;
+  margin-top: var(--space-sm);
+}
+
+.people-face-grid {
+  flex: 1;
+  min-height: 0;
+}
+
+.people-with {
+  padding: var(--space-md) 0;
+  gap: var(--space-sm);
+  overflow-y: auto;
+}
+
+.people-with-heading {
+  padding: 0 var(--space-md);
+}
+
+.people-with-list {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.people-with-row .people-row-thumb {
+  width: 36px;
+  height: 36px;
+}
+
+.people-shared {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-top: 1px solid var(--border);
+}
+
+.people-shared-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.people-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.people-legend-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: var(--space-xs);
+  border-radius: var(--radius-sm);
+
+  &--primary {
+    border: 3px solid var(--photo-outline-primary);
+  }
+
+  &--secondary {
+    border: 2px solid var(--photo-outline-secondary);
+  }
+
+  &--other {
+    border: 1.5px dashed var(--text-muted);
+  }
+}
+
+// A shared photo, sized by its image so a box's percentages are the photo's.
+.people-photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  line-height: 0;
+  overflow: hidden;
+  cursor: pointer;
+
+  &--orphan {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
+    line-height: normal;
+    cursor: default;
+  }
+}
+
+.people-photo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 4 / 3;
+}
+
+// Colour is not the only cue: the person in focus has the heaviest stroke,
+// everyone else faint dashes, and every box names whose it is on hover.
+.people-photo-box {
+  position: absolute;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+
+  &--primary {
+    border: 3px solid var(--photo-outline-primary);
+  }
+
+  &--secondary {
+    border: 2px solid var(--photo-outline-secondary);
+  }
+
+  &--other {
+    border: 1.5px dashed var(--photo-outline-other);
+    opacity: var(--opacity-dim);
+  }
+}
+
+.people-photo-chip {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.people-photo-orphan-note {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+}

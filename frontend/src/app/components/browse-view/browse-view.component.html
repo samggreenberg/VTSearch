@@ -101,6 +101,17 @@
               <vt-icon type="shuffle" [size]="14"></vt-icon>
               Rebuild Map
             </button>
+            @if (peopleOffered()) {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-people"
+                (click)="openPeople()"
+                title="The people in this dataset's faces, and who appears with whom in its photos"
+              >
+                <vt-icon type="face" [size]="14"></vt-icon>
+                People
+              </button>
+            }
             @if (mediaType() === 'audio') {
               <div class="browse-now-playing">
                 <!-- A shown docked bin-details panel replaces this small
