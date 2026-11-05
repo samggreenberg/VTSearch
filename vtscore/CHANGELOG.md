@@ -12,6 +12,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.co_occurrence`: which faces share a photo, and which people appear together** (issue #5587).
+  `PhotoIndex(medias)` keys every converter output by the photo it was cut from, read off its own converter refs
+  (`photo_keys`: `source_path`, else `source_file`), with the keys of a `dupe_set` face unioned so collapsed copies
+  of one photo count once; no sibling dataset is needed. Photos are numbered in order of their lowest face id.
+  `faces_by_photo` / `photo_of` / `faces_in` read the index; over people given as plain face-id lists,
+  `photos_of(face_ids)`, `appears_with(groups, person) -> list[CoAppearance]` (the other groups sharing a photo,
+  most shared first, ties in group order) and `shared_photos(group_a, group_b) -> list[SharedPhoto]` (each with
+  every face cut from it). Every face of one photo resolves to one item of the Image sibling through
+  `SourceResolver`. Additive; nothing is persisted.
+
 - **Received detectors are read-only, and can be received, refreshed and forked** (issue #5575). A registry entry
   now carries a `sync_mode` - `"local"` (the default, and an entry with no key), `"linked"` (a received, read-only
   mirror of someone else's container) or `"forked"` - read with `vtscore.detectors.registry.sync_mode_of` /

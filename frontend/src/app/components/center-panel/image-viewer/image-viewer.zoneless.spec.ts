@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ElementRef } from '@angular/core';
+import { vi } from 'vitest';
 
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -966,6 +967,110 @@ describe('ImageViewerComponent', () => {
       expect(fixture.nativeElement.querySelector('.outline-box')).toBeNull();
       fixture.componentRef.setInput('outlineBox', [0.5, 0.5, 0.4, 0.6]);
       expect(component.outlineBoxStyle).toBeNull();
+    });
+  });
+
+  // Co-face Browse (#5588): a photo two people share, both of their faces
+  // outlined by whose they are and everyone else's marked faintly.
+  describe('several outlined faces (outlineBoxes)', () => {
+    function laidOut(): void {
+      fixture.componentRef.setInput('media', mockMedia);
+      component.renderedW.set(400);
+      component.renderedH.set(300);
+      fixture.detectChanges();
+    }
+
+    function roleBoxes(): HTMLElement[] {
+      return Array.from(fixture.nativeElement.querySelectorAll('.role-box'));
+    }
+
+    it('draws a box per face in its role, the person in focus on top, each titled in words', () => {
+      fixture.componentRef.setInput('outlineBoxes', [
+        { box: [0.1, 0.1, 0.3, 0.4], role: 'primary' },
+        { box: [0.5, 0.1, 0.7, 0.4], role: 'other' },
+        { box: [0.4, 0.5, 0.6, 0.9], role: 'secondary' },
+        { box: [0.8, 0.1, 0.9, 0.3], role: 'other' },
+      ]);
+      laidOut();
+
+      const boxes = roleBoxes();
+      // Faint ones first, in the order given; the person in focus last.
+      expect(boxes.map((b) => b.className.match(/role-(primary|secondary|other)/)![1])).toEqual([
+        'other',
+        'other',
+        'secondary',
+        'primary',
+      ]);
+      expect(boxes.map((b) => b.title)).toEqual([
+        'Someone else in this photo',
+        'Someone else in this photo',
+        'Appears with the person in focus',
+        'The person in focus',
+      ]);
+      expect(component.drawnOutlineBoxes()[0].style).toEqual({
+        left: '50.000%',
+        top: '10.000%',
+        width: '20.000%',
+        height: '30.000%',
+      });
+      expect(component.drawnOutlineBoxes()[3].style['left']).toBe('10.000%');
+      expect(boxes[3].style.left).not.toBe('');
+      // The roles sit together on one stage, beside no single-face outline.
+      expect(fixture.nativeElement.querySelectorAll('.region-stage').length).toBe(1);
+      expect(fixture.nativeElement.querySelector('.outline-box')).toBeNull();
+    });
+
+    it('skips a box overlayBoxStyle rejects, and a role it does not know', () => {
+      fixture.componentRef.setInput('outlineBoxes', [
+        { box: [0.5, 0.5, 0.4, 0.6], role: 'secondary' }, // inverted
+        { box: [0.1, Number.NaN, 0.3, 0.4], role: 'other' }, // not a number
+        { box: [0.1, 0.2], role: 'other' }, // too short
+        { box: [0.1, 0.1, 0.3, 0.4], role: 'stranger' },
+        { box: [0, 0, 1, 1], role: 'primary' }, // a face that fills its photo still draws
+      ]);
+      laidOut();
+
+      expect(component.drawnOutlineBoxes().map((b) => b.role)).toEqual(['primary']);
+      expect(roleBoxes().length).toBe(1);
+      expect(roleBoxes()[0].classList.contains('role-primary')).toBe(true);
+    });
+
+    it('draws no stage when every box is rejected, or there is no list', () => {
+      laidOut();
+      expect(fixture.nativeElement.querySelector('.region-stage')).toBeNull();
+      fixture.componentRef.setInput('outlineBoxes', [{ box: [0.5, 0.5, 0.4, 0.6], role: 'primary' }]);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.region-stage')).toBeNull();
+    });
+
+    it('leaves outlineBox alone working as it did', () => {
+      fixture.componentRef.setInput('outlineBox', [0.1, 0.2, 0.6, 0.8]);
+      laidOut();
+      expect(roleBoxes().length).toBe(0);
+      const outline = fixture.nativeElement.querySelector('.outline-box') as HTMLElement;
+      expect(outline).not.toBeNull();
+      expect(outline.getAttribute('aria-hidden')).toBe('true');
+      expect(outline.title).toBe('');
+    });
+
+    it('repaints when the list changes, with no other input moving', async () => {
+      fixture.componentRef.setInput('outlineBoxes', [{ box: [0.1, 0.1, 0.3, 0.4], role: 'primary' }]);
+      laidOut();
+      expect(roleBoxes().length).toBe(1);
+      fixture.componentRef.setInput('outlineBoxes', [
+        { box: [0.1, 0.1, 0.3, 0.4], role: 'primary' },
+        { box: [0.4, 0.5, 0.6, 0.9], role: 'secondary' },
+      ]);
+      await settleZoneless(fixture);
+      expect(roleBoxes().map((b) => b.title)).toEqual(['Appears with the person in focus', 'The person in focus']);
+    });
+
+    it('lets a mousedown on a face bubble to the canvas, so pan still starts there', () => {
+      fixture.componentRef.setInput('outlineBoxes', [{ box: [0, 0, 1, 1], role: 'primary' }]);
+      laidOut();
+      const spy = vi.spyOn(component, 'onMouseDown');
+      roleBoxes()[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      expect(spy).toHaveBeenCalledTimes(1);
     });
   });
 
