@@ -13,14 +13,15 @@
           #photoViewer
           [media]="v.photo"
           [datasetId]="v.datasetId"
-          [outlineBox]="v.box"
+          [outlineBox]="outlineBoxes() ? null : v.box"
+          [outlineBoxes]="outlineBoxes()"
           [regionDraw]="false"
         />
         <vt-image-view-controls [viewer]="photoViewer" />
       </div>
       <p class="source-photo-caption">
         {{ v.photo.filename || 'Photo #' + v.mediaId }}
-        @if (!v.box) {
+        @if (!v.box && !outlineBoxes()) {
           <span class="source-photo-note">(no box was recorded for this item, so nothing is outlined)</span>
         }
       </p>
