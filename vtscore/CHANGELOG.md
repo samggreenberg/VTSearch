@@ -12,6 +12,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Detector sharing, as an optional capability of `LabelsetSource`** (issue #5574). A source can now keep a
+  detector's labels in a container on an external collaboration service, with an owner and recipients, by
+  overriding the new `_do_share_*` hooks: `_do_share_create`, `_do_share_save`, `_do_share_refresh`,
+  `_do_share_list_mine`, `_do_share_list_received`, `_do_share_add_recipients`, `_do_share_remove_recipients`,
+  `_do_share_set_public`, `_do_share_archive`, and the optional `_do_share_search_recipients`, called through the
+  framework wrappers `share_create` ... `share_search_recipients`. Every hook defaults to raising
+  `SharingUnsupported`. Three flags derived from the overrides ride on `to_dict()` (and so on
+  `GET /api/labelset-sources`): `supports_sync` (`_do_save` and a load hook: a plain sync target),
+  `supports_sharing` and `supports_recipient_search`, so a sharing-only source is legal. New module
+  `vtscore.labels.sharing` holds the value types (`ShareMeta`, `SharedRecord`, `SharedContainer`,
+  `SharedContainerSummary`, `RecipientSuggestion`, `Manifest`), the errors (`SharingError`, `SharingUnsupported`,
+  `RemoteNotFound`, `RemotePermissionDenied`), `build_manifest` / `labelset_digest`, `share_payload`, and
+  `active_sharing_source()`, which reads the new `CoreConfig.detector_sharing_source` (default `None`: sharing
+  off). A new built-in, `shared_folder`, implements the contract over a directory of JSON files for tests and local
+  development. Additive: an existing source overrides none of the new hooks and keeps working unchanged, now
+  reporting `supports_sync` true. The labelset digest the sync engine deduplicates pushes by no longer depends on
+  label order. See "The sharing contract" in `vtscore/docs/extending/labelset-sources.md`.
+
 - **The domain-shift report can run against a summary of the reference instead of its vectors** (issue #5567).
   `vtscore.coverage.summarize_reference(reference)` returns `(anchor_rows, calibration)`: up to 128 rows of the
   reference to anchor on (each a cluster's member nearest its centroid, so a caller can name it by origin) and the

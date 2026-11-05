@@ -241,6 +241,12 @@ def reset_shared_state(medias_snapshot) -> None:
 
     reset_label_sync_for_tests()
 
+    # A bad ``detector_sharing_source`` warns once per name; forget which were
+    # warned about, so a test asserting that one warning is not order-dependent.
+    from vtscore.labels.sharing import reset_sharing_warnings_for_tests
+
+    reset_sharing_warnings_for_tests()
+
     # Same for an Evidence baseline a learned sort left to be drawn (#5120).
     from vtscore.detectors.evidence_baseline import reset_baseline_draws_for_tests
 

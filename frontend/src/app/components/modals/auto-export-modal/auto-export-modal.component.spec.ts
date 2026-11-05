@@ -14,6 +14,9 @@ const jsonSource = {
   icon: '',
   ui_mode: '',
   hidden_from_picker: false,
+  supports_sync: true,
+  supports_sharing: false,
+  supports_recipient_search: false,
   fields: [
     { key: 'filepath', label: 'Save to (server path)', field_type: 'server_path', required: true },
     { key: 'note', label: 'Note', field_type: 'text', required: false },

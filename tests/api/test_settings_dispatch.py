@@ -237,6 +237,11 @@ class TestAppSchemaCoversTheModels:
         # (which source, which fields the user still fills, the pace).
         "default_labelset_source",
         "labelset_source_push_interval_seconds",
+        # The deployment's detector-sharing source. Its fixed field values are
+        # the service's connection values, which may be credentials, so the
+        # settings DTO never echoes them (docs/plans/detector-sharing.md plans
+        # a capability route for the public half).
+        "detector_sharing_source",
         # Server-tier UMAP knobs, consumed into ``CoreConfig`` by
         # ``vtsearch.seam_wiring``. Operator-tuned via the settings file; no frontend
         # code reads them.

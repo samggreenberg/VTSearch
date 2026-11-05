@@ -183,7 +183,13 @@ GET /api/labelset-sources
 ```
 
 → JSON array of source plugin objects, the same shape as the settings-source
-list.
+list plus three capability flags, each derived from the hooks the source
+implements: `supports_sync` (it can be a plain sync target, the kind a
+detector's binding above names), `supports_sharing` (it implements detector
+sharing; see the library guide's [The sharing
+contract](../../vtscore/docs/extending/labelset-sources.md#the-sharing-contract))
+and `supports_recipient_search`. A sharing-only source reports
+`supports_sync: false`.
 
 ### Get the deployment-wide labelset source
 

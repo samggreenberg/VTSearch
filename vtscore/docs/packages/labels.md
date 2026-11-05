@@ -20,6 +20,8 @@ back whenever they change. Both produce / consume the same
 | `vtscore/labels/sources/base.py` | The `LabelsetSource` ABC (a `SyncSource`) |
 | `vtscore/labels/sources/__init__.py` | Labelset-source registry with auto-discovery |
 | `vtscore/labels/sources/server_json_file/` | Bidirectional sync with a JSON file on the server |
+| `vtscore/labels/sources/shared_folder/` | Detector sharing through a folder of JSON files (tests and local development) |
+| `vtscore/labels/sharing.py` | The sharing capability's types, errors, manifest and `active_sharing_source` |
 | `vtscore/labels/json_format.py` | Shared shape checks for the label-JSON format (`require_label_object`, `extract_labels`) |
 | `vtscore/labels/binding.py` | Which source a detector syncs with: its registry binding, a context binding, or the deployment default |
 | `vtscore/labels/sync.py` | The sync engine: paced push on every detector write, merging pull |
@@ -144,6 +146,7 @@ src.save(labelset, {"filepath": "/tmp/copy.labels.json"})
 | Name               | Display name     | Notes                                                                |
 |--------------------|------------------|----------------------------------------------------------------------|
 | `server_json_file` | Server JSON File | Round-trips a `LabelSet` JSON file on the server filesystem.         |
+| `shared_folder`    | Shared Folder    | Sharing only: one JSON container per shared detector in a folder. For tests and local development. |
 
 ### Template variables
 
@@ -286,6 +289,51 @@ origins and meta, never embeddings or weights; see
 A pull that changed the file updates the registry's `num_training`,
 re-derives a loaded detector's votes (manual sync), and - through the
 write - schedules a push of the merged labels.
+
+---
+
+## Sharing
+
+A source may also implement **detector sharing**, an optional capability of
+the same `LabelsetSource` class: it keeps a detector's labels in a container
+on an external collaboration service, with an owner and recipients. The
+`share_*` methods are framework wrappers over `_do_share_*` hooks, and three
+flags derived from which hooks a class overrides say what a source can do:
+
+| Flag | True when |
+|------|-----------|
+| `supports_sync` | It overrides `_do_save` and a load hook: a plain sync target. |
+| `supports_sharing` | It overrides every required sharing hook. |
+| `supports_recipient_search` | It shares and overrides `_do_share_search_recipients`. |
+
+`vtscore/labels/sharing.py` holds what the hooks exchange: `ShareMeta`,
+`SharedRecord`, `SharedContainer`, `SharedContainerSummary`,
+`RecipientSuggestion` and `Manifest`; the errors `SharingError`,
+`SharingUnsupported`, `RemoteNotFound` and `RemotePermissionDenied`;
+`share_payload(detector_data)`, the `(labelset, meta)` pair a hook receives
+for one detector file; and `build_manifest` / `labelset_digest`, the
+order-independent digest a manifest records and the sync engine's push
+deduplication also uses.
+
+Sharing is off until `CoreConfig.detector_sharing_source` names a source
+that can share; `active_sharing_source()` is its one reader:
+
+```python
+from vtscore.labels.sharing import active_sharing_source, share_payload
+from vtscore.state.current_user import thread_user
+
+active = active_sharing_source()  # None: sharing is off
+if active is not None:
+    labelset, meta = share_payload(detector_data)
+    with thread_user("alice"):
+        remote_ref = active.source.share_create(labelset, meta, dict(active.field_values))
+        container = active.source.share_refresh(remote_ref, dict(active.field_values))
+```
+
+Identities are the source's: it resolves the caller with
+`get_current_user()` and reports owners, record writers and recipients as
+opaque strings. The contract a source author follows is
+[`../extending/labelset-sources.md`](../extending/labelset-sources.md#the-sharing-contract).
 
 ---
 
