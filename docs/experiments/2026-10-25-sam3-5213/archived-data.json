@@ -112,6 +112,48 @@
      "oid": "c500328397aa5300c3848dab92e8d4940bb0ce50"
     }
    }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.670d99cef25e.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5565_calibration.csv": {
+     "bytes": 611,
+     "oid": "b3cbef2c10294e24617020481f3afde89586690e"
+    },
+    "tables/sam3_5565_cells.csv": {
+     "bytes": 287287,
+     "oid": "923520e0aaa72bfdeec2484fdff4d2006218e8eb"
+    },
+    "tables/sam3_5565_check.csv": {
+     "bytes": 197955,
+     "oid": "75445960e89a7c3cd5e79b716e2191bf7e11177f"
+    },
+    "tables/sam3_5565_per_vote.csv": {
+     "bytes": 866758,
+     "oid": "74239889a0cd3252c25921b1358c8e2e310b67a8"
+    },
+    "tables/sam3_5565_routes.csv": {
+     "bytes": 41752,
+     "oid": "2610b8b579183bdf0e8366f3a8d26fdb5b1cf7d8"
+    },
+    "tables/sam3_5565_set_pr.csv": {
+     "bytes": 3629,
+     "oid": "55bc56a77b848c84ca9bb94fd1470084bbbe2079"
+    },
+    "tables/sam3_5565_sets.csv": {
+     "bytes": 466352,
+     "oid": "263b4ea15ae2e23d4f6ceb045ab64f35d6d2d6be"
+    },
+    "tables/sam3_5565_summary.csv": {
+     "bytes": 6020,
+     "oid": "84106d94d8f694aa80ad91f6b7a660caab47c746"
+    },
+    "tables/sam3_5565_tuned_cuts.csv": {
+     "bytes": 61,
+     "oid": "cb39458a5eaed72b57e1d42f34d5df10db45cfd0"
+    }
+   }
   }
  ]
 }
