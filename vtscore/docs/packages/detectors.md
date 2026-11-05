@@ -878,12 +878,35 @@ or `None`. Detectors with no input spec accept any dataset (legacy
 behaviour). The `detector_meta` block is what travels with a labelset
 through a `LabelsetSource`, so a downstream consumer can reproduce the
 training clipper without reading the detector JSON. It holds `media_type`
-and `input_spec` only: they describe the input format, not a measurement.
-It no longer carries the live head's `threshold` (#5131), a number from one
-embedder's space and one trained head that means nothing to a receiver,
-which trains its own; `build_detector_meta`'s `threshold` keyword is
+and `input_spec`, which describe the input format, and the detector's
+training-domain summary under `training_domain_summary` when it records one
+(#5571), so the receiver's overlap check has its reference. The summary is
+the one measurement it carries: it names the embedder and vector width that
+drew it, a reader in any other refuses it, and nothing trains on it. The
+training-dataset pointer stays behind, since it names a dataset of the
+sending instance. It no longer carries the live head's `threshold` (#5131), a
+number from one embedder's space and one trained head that means nothing to a
+receiver, which trains its own; `build_detector_meta`'s `threshold` keyword is
 accepted with a `DeprecationWarning` and ignored. `apply_detector_meta`
-still ignores a `threshold` arriving from an older server.
+still ignores a `threshold` arriving from an older server, and keeps an
+incoming summary only as `adopt_domain_summary` allows (below).
+
+`vtscore/detectors/domain_summary.py` holds the receiving half:
+
+```python
+def adopt_domain_summary(detector_data, detector_meta) -> bool: ...
+def adopt_domain_summary_on_file(path, detector_meta, *, det_ctx=None) -> bool: ...
+```
+
+`adopt_domain_summary` stores the summary an imported labelset's
+`detector_meta` carries on a detector, unchanged, when the detector has no
+training dataset of its own (no summary and no pointer), or its own is the
+same dataset. Otherwise the detector keeps its own; two summaries are never
+merged. Every import path calls it: a `LabelsetSource` pull (through
+`apply_detector_meta`), the app's New detector › Trained and label imports
+(through `LabelImporter.run_labelset`), and the CLI's `--import-labels-into`.
+`adopt_domain_summary_on_file` does the same to a detector file under the
+detector-JSON write lock.
 
 `resolve_clipper_spec` turns a clipper choice into an input spec, the way the
 CLI's clipper override (`--override-clipper`, #5282) takes one. It refuses an

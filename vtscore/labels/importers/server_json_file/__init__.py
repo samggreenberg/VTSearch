@@ -5,7 +5,11 @@ filesystem (the machine where the Python process is running), as opposed
 to the local (browser-upload) importer which receives files uploaded from
 the user's browser.  The file format is identical::
 
-    {"labels": [{"md5": "...", "label": "good"}, ...]}
+    {"labels": [{"md5": "...", "label": "good"}, ...], "detector_meta": {...}}
+
+``detector_meta`` is optional; when a file this app exported carries one, the
+importing detector keeps the training-domain summary in it
+(:meth:`ServerJsonLabelImporter.run_labelset`, #5571).
 
 No additional pip packages are required; uses only Python's ``json`` and
 ``pathlib`` stdlib modules.
@@ -56,9 +60,22 @@ class ServerJsonLabelImporter(LabelImporter):
         data = read_server_json(field_values["filepath"])
         return extract_labels(data)
 
+    def run_labelset(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """The file's labels, and its ``detector_meta`` block when it carries one."""
+        data = read_server_json(field_values["filepath"])
+        out: dict[str, Any] = {"labels": extract_labels(data)}
+        meta = data.get("detector_meta")
+        if isinstance(meta, dict) and meta:
+            out["detector_meta"] = meta
+        return out
+
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Load labels from a file-path string (CLI usage)."""
         return self.run(field_values)
+
+    def run_labelset_cli(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """:meth:`run_labelset` from a file-path string (CLI usage)."""
+        return self.run_labelset(field_values)
 
     def add_cli_arguments(self, parser: Any) -> None:
         parser.add_argument(

@@ -20,6 +20,18 @@ instead, since every commit on `dev` is effectively a new app release.)
   `vtscore/docs/packages/coverage.md`. `vtscore.detectors.domain_summary` records one on a detector beside its
   training-dataset pointer, under `training_domain_summary`, and resolves its anchors where it is read.
 
+- **An exported labelset carries the detector's training-domain summary** (issue #5571).
+  `build_detector_meta` adds the detector's `training_domain_summary` to the `detector_meta` block, and
+  `labelset_for_export` lets it through: it names the embedder that drew it and is refused under any other, and
+  nothing trains on it. The training-dataset pointer stays behind. On the receiving side,
+  `vtscore.detectors.domain_summary.adopt_domain_summary(detector_data, detector_meta)` (and
+  `adopt_domain_summary_on_file`) stores it when the detector has no training dataset of its own, or its own is the
+  same dataset, and never merges two; `apply_detector_meta` calls it, so a `LabelsetSource` pull keeps it. New
+  `LabelImporter.run_labelset(field_values)` / `run_labelset_cli(field_values)` return the import as a serialised
+  labelset, with `detector_meta` when the source carries one. Additive: the defaults wrap `run` / `run_cli`, so an
+  importer that returns labels alone overrides nothing. The `server_json_file` importer reads `detector_meta`, and
+  the `server_json_file` exporter writes it. See `vtscore/docs/extending/label-importers.md`.
+
 - **A `find_results` payload from the app carries each detector's cut at every Threshold preset** (issue #5540).
   Beside `threshold` and `balance`, an app run's detector result has `beta` (the balance `threshold` was cut at) and
   `lines` (`[{"beta", "threshold"}]` at beta 4, 1 and 1/4). Both are informational. An export from the Find Results

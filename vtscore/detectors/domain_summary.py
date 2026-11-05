@@ -26,6 +26,17 @@ embedder's geometry, stamped as the Evidence baseline's cuts are
 refused on any mismatch.  :mod:`vtscore.coverage.domain_summary` has the
 statistics, and why there is no per-anchor radius.
 
+A detector shared through an exported labelset, rather than as its file,
+carries the record too (#5571).  The export writes it into the labelset's
+``detector_meta`` under the same key
+(:func:`~vtscore.detectors.input_spec.build_detector_meta`), and the import
+stores it on the receiving detector (:func:`adopt_domain_summary`).  The
+pointer stays behind, since it names a dataset of the sending instance; the
+reader counts a summary that arrived without one as holding every label.  An
+exported labelset is otherwise embedder-free (#5131), and this block is let
+through because it says which embedder drew it, a reader in any other refuses
+it, and nothing trains on it.
+
 Two process-scoped caches, nothing persisted but the record itself.  Building
 a summary clusters up to 20 000 vectors and every draw on the training dataset
 records one, so the last one built for each dataset is kept, keyed by its media
@@ -49,7 +60,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from vtscore.state.core import DatasetContext
+    from pathlib import Path
+
+    from vtscore.state.core import DatasetContext, DetectorContext
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +232,69 @@ def stored_domain_summary(detector_data: Mapping[str, Any] | None) -> dict[str, 
         "anchors": [dict(a) for a in anchors],
         "calibration": [float(x) for x in calibration],
     }
+
+
+def adopt_domain_summary(detector_data: dict[str, Any], detector_meta: Mapping[str, Any] | None) -> bool:
+    """Record the summary an imported labelset's *detector_meta* carries on *detector_data*; whether it did (#5571).
+
+    How a detector shared through an exported labelset keeps its overlap
+    check: the block an export writes into ``detector_meta`` under
+    :data:`DOMAIN_SUMMARY_KEY` is stored on the receiving detector under the
+    same key, with the fields :func:`stored_domain_summary` reads and nothing
+    recomputed.  Only when the detector has no training dataset of its own (no
+    summary, and no pointer to one), or when its own names the same dataset,
+    which is a later draw of the same summary.  Otherwise the detector keeps
+    its own: two summaries are never merged, and a pointer to another dataset
+    says where this detector's labels were drawn, which a summary from
+    elsewhere does not overrule.  A block that is missing, malformed or of
+    another format version is ignored.
+    """
+    from vtscore.detectors.training_domain import recorded_training_dataset  # noqa: PLC0415
+
+    incoming = _incoming_summary(detector_meta)
+    if incoming is None:
+        return False
+    own = stored_domain_summary(detector_data)
+    own_ids = {rec["dataset_id"] for rec in (own, recorded_training_dataset(detector_data)) if rec is not None}
+    if own_ids - {incoming["dataset_id"]} or own == incoming:
+        return False
+    detector_data[DOMAIN_SUMMARY_KEY] = incoming
+    return True
+
+
+def adopt_domain_summary_on_file(
+    path: Path, detector_meta: Mapping[str, Any] | None, *, det_ctx: DetectorContext | None = None
+) -> bool:
+    """:func:`adopt_domain_summary` on the detector file at *path*; whether it wrote.
+
+    Read, adopted and written under the detector-JSON write lock, so it cannot
+    lose a label sync's write, and *det_ctx*'s cached labelset is re-pointed at
+    the new file the way :func:`~vtscore.detectors.evidence_baseline.record_baseline`
+    re-points it.  Never call this holding :data:`vtscore.state.core._state_lock`:
+    the label sync takes that lock while it holds the write lock.
+    """
+    if _incoming_summary(detector_meta) is None:
+        return False
+    from vtscore.detectors.label_sync import label_sync_write_lock  # noqa: PLC0415
+    from vtscore.detectors.store import _read_detector, _write_detector  # noqa: PLC0415
+
+    with label_sync_write_lock:
+        data = _read_detector(path)
+        if data is None or not adopt_domain_summary(data, detector_meta):
+            return False
+        _write_detector(path, data)
+    if det_ctx is not None:
+        from vtscore.detectors.dataset_sync import _repoint_labelset_cache  # noqa: PLC0415
+
+        _repoint_labelset_cache(det_ctx, path)
+    return True
+
+
+def _incoming_summary(detector_meta: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The well-formed summary *detector_meta* carries, or ``None``."""
+    if not isinstance(detector_meta, Mapping):
+        return None
+    return stored_domain_summary({DOMAIN_SUMMARY_KEY: detector_meta.get(DOMAIN_SUMMARY_KEY)})
 
 
 def _summary_digest(summary: Mapping[str, Any]) -> str:

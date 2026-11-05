@@ -184,7 +184,8 @@ degrades to an image-level label rather than failing the import.
 
 `vtscore/datasets/labelset.py`: `LabelSet(elements=None, *,
 detector_meta=None)` - an ordered list of `LabeledElement` plus an
-optional `detector_meta` block (`media_type`, `input_spec`). The
+optional `detector_meta` block (`media_type`, `input_spec`, and the
+detector's `training_domain_summary` when it records one, #5571). The
 serialised form `{"labels": [...], "detector_meta": {...}}` is a strict
 superset of the legacy `{"labels": [{"md5", "label"}, …]}` shape.
 
@@ -196,6 +197,10 @@ means nothing to a receiver that trains its own (#5131): `threshold` from
 `detector_meta`, and `rank_at_vote` / `score_at_vote` from each element's
 `vt:provenance` (`vote_provenance.NON_PORTABLE_FIELDS`). The rest of the
 payload passes through, and the detector's own JSON keeps every field.
+`detector_meta`'s `training_domain_summary` is the one embedder-stamped block
+it lets through (#5571): it says which embedder and width drew it, a reader in
+any other refuses it, and nothing trains on it, so the labels stay as
+embedder-agnostic as before.
 `label_entry_for_export(entry)` is its per-entry half, for an export that never
 holds the whole labelset (`ResultsExporter.export_labelset_streaming`).
 

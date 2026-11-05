@@ -151,6 +151,31 @@ class LabelImporter(PluginBase):
         """
         raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
 
+    def run_labelset(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """Perform the import and return it as a serialised labelset.
+
+        The shape is :meth:`~vtscore.datasets.labelset.LabelSet.to_dict`'s:
+        ``{"labels": [...]}``, plus a ``detector_meta`` block when the source
+        carries one.  The routes and the CLI call this rather than :meth:`run`,
+        so an importer whose source can hold the block (a labelset file this
+        app exported) hands it over, and the importing detector keeps the
+        sending detector's training-domain summary (#5571;
+        :func:`~vtscore.detectors.domain_summary.adopt_domain_summary`).  The
+        default wraps :meth:`run`, so an importer that only returns labels
+        overrides nothing.  ``labels`` must be a list of label dicts, as
+        :meth:`run` returns.
+        """
+        return {"labels": self.run(field_values)}
+
+    def run_labelset_cli(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """:meth:`run_labelset` from CLI-provided *field_values*.
+
+        The default wraps :meth:`run_cli`, so a CLI override there keeps
+        applying.  An importer that overrides :meth:`run_labelset` overrides
+        this too, the way it pairs :meth:`run` with :meth:`run_cli`.
+        """
+        return {"labels": self.run_cli(field_values)}
+
     def default_detector_name(self, field_values: dict[str, Any]) -> str:
         """Return the default name for a detector created from *field_values*.
 

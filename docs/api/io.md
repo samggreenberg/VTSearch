@@ -54,6 +54,15 @@ A `labelset` reaches the exporter without what this server's embedder and head
 measured: each entry's `metadata["vt:provenance"]` loses `rank_at_vote` and
 `score_at_vote`, and a `detector_meta` loses `threshold`. An exported labelset
 is references to labels, so it can rebuild the detector under another embedder.
+It gains the detector's training-domain summary, though, in
+`detector_meta.training_domain_summary`, read from the file of the detector the
+export belongs to (`detector_id`, else the active one) when that detector
+records one (#5571). The summary names the embedder that drew it and is refused
+under any other, and nothing trains on it; it gives the receiver's
+[training-domain check](find.md#training-domain-overlap) its reference. The
+`server_json_file` exporter writes the `detector_meta` block beside the labels,
+and the `server_json_file` label importer reads it back. A streamed
+(`?format=ndjson`) label export has no wrapper, so it carries no summary.
 
 → `{success, message, open_url, display_results}`: `success` always, the rest
 only when the exporter returns them

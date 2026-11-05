@@ -202,7 +202,11 @@ class ServerJsonResultsExporter(ResultsExporter):
         """Write the labelset as JSON, filtering to the selected columns.
 
         Entries keep their ``origin`` as a real nested dict rather than a
-        display string, which is what makes the file re-importable.
+        display string, which is what makes the file re-importable.  A
+        ``detector_meta`` block is written beside them as it came, so the
+        detector's training-domain summary travels with the file and the
+        ``server_json_file`` label importer hands it to the detector it
+        creates (#5571).
         """
         filepath = Path(field_values["filepath"])
         labels = labelset.get("labels", [])
@@ -222,6 +226,9 @@ class ServerJsonResultsExporter(ResultsExporter):
             output = {"labels": filtered_labels, "selected_columns": selected_columns}
         else:
             output = {"labels": labels}
+        detector_meta = labelset.get("detector_meta")
+        if isinstance(detector_meta, dict) and detector_meta:
+            output["detector_meta"] = detector_meta
 
         atomic_write_json(filepath, output)
         return {

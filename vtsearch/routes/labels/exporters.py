@@ -26,7 +26,9 @@ POST /api/exporters/export
     it. ``detector_id`` names the detector the export belongs to when the
     caller is not exporting the active pair (the Dashboard row action), so
     the exporter's ``{detector_*}`` templates resolve against that detector
-    rather than the request's ``X-Detector-Id``. ``field_values`` is
+    rather than the request's ``X-Detector-Id``. A ``labelset`` payload goes
+    out with that detector's training-domain summary in its
+    ``detector_meta`` when the detector records one (#5571). ``field_values`` is
     permissive at the schema layer because its inner keys depend on the
     named exporter; the handler validates it against the selected plugin's
     :attr:`fields`.
@@ -116,15 +118,43 @@ def _detector_scope(detector_id: str) -> AbstractContextManager[None]:
     return override_detector_context(_template_context(entry.get("name", "") or "", detector_id))
 
 
+def _with_domain_summary(payload: dict) -> dict:
+    """*payload* with the exported detector's training-domain summary in its ``detector_meta`` (#5571).
+
+    The Export modal sends the labels alone, so the summary is read here, from
+    the file of the detector the export is scoped to: the one ``detector_id``
+    names, else the request's active detector.  A detector shared as a
+    labelset then arrives with what the receiver's overlap check compares
+    against.  A payload that already carries a summary (an API client's own),
+    or one exported with no detector, or from a detector that records none,
+    goes out as it came.
+    """
+    from vtscore.detectors.domain_summary import DOMAIN_SUMMARY_KEY, stored_domain_summary  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
+
+    meta = payload.get("detector_meta")
+    if isinstance(meta, dict) and DOMAIN_SUMMARY_KEY in meta:
+        return payload
+    detector_id = getattr(get_active_detector_context(), "detector_id", "") or ""
+    name = (get_detector(detector_id) or {}).get("name") if detector_id else None
+    summary = stored_domain_summary(_read_detector(_detector_path(name))) if name else None
+    if summary is None:
+        return payload
+    return {**payload, "detector_meta": {**(meta if isinstance(meta, dict) else {}), DOMAIN_SUMMARY_KEY: summary}}
+
+
 def _run(exporter: ResultsExporter, payload_kind: str, payload: dict, field_values: dict) -> dict:
     """Dispatch to the exporter method for *payload_kind*.
 
     A labelset goes out as every labelset export does, without the numbers
     measured by this server's embedder and head (#5131), so no exporter has to
-    remember to drop them.
+    remember to drop them, and with the detector's training-domain summary
+    (:func:`_with_domain_summary`, #5571).
     """
     if payload_kind == "labelset":
-        return exporter.export_labelset(labelset_for_export(payload), field_values)
+        return exporter.export_labelset(labelset_for_export(_with_domain_summary(payload)), field_values)
     return exporter.export_find_results(payload, field_values)
 
 

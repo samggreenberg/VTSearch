@@ -507,7 +507,10 @@ it holds them and otherwise fetched from their origins and embedded, once per
 process. The report has the same shape and the same null (about `alpha` of an
 in-domain dataset reads atypical), with less power than the full comparison.
 An anchor that cannot be fetched, or another embedder, gives `domain_shift:
-null` with the reason. The active dataset wins a tie, so a detector used on the dataset it was trained on has nothing to
+null` with the reason. A detector created from an exported labelset carries the
+summary without the pointer (#5571); the summarised dataset then counts as
+holding every labelled example, while a pointer to another dataset still says
+where the labels were drawn, and the summary is set aside. The active dataset wins a tie, so a detector used on the dataset it was trained on has nothing to
 compare. It needs no scored Find run: the SPA calls it whenever a
 (dataset, detector) pair becomes active, and raises a warning when the verdict
 is *likely domain shift*. Every Find and AutoFind result carries the same

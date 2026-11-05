@@ -8,9 +8,11 @@ loaded dataset matches the detector's expected granularity.
 The module also assembles the ``detector_meta`` block that travels with
 a labelset when synced through a :class:`LabelsetSource`, so a downstream
 consumer can reproduce the detector's input format without reading the
-detector JSON directly.  The block describes the input, never a
-measurement: a threshold belongs to the head that drew it, and the
-receiver trains its own (#5131).
+detector JSON directly.  The block describes the input, not a measurement:
+a threshold belongs to the head that drew it, and the receiver trains its
+own (#5131).  The one measurement it carries is the detector's
+training-domain summary (#5571), which nothing trains on and which says
+which embedder drew it (:mod:`vtscore.detectors.domain_summary`).
 
 ``input_spec`` and ``detector_meta`` are both **optional**: detectors
 that never set ``input_spec`` behave exactly as before, and labelsets
@@ -80,9 +82,12 @@ def build_detector_meta(
     """Assemble a ``detector_meta`` block for labelset export.
 
     Pulls ``media_type`` and ``input_spec`` straight from the detector
-    JSON dict.  Keys with empty/None values are omitted so the block stays
-    minimal - a detector with no ``input_spec`` produces a block containing
-    only ``media_type``.
+    JSON dict, and its training-domain summary under
+    :data:`~vtscore.detectors.domain_summary.DOMAIN_SUMMARY_KEY` when it
+    records a well-formed one (#5571), so the overlap check survives a
+    handoff by labelset.  Keys with empty/None values are omitted so the
+    block stays minimal - a detector with no ``input_spec`` and no summary
+    produces a block containing only ``media_type``.
 
     *threshold* is deprecated and ignored (#5131).  The block used to carry
     the live head's threshold, which is a number from one embedder's space
@@ -105,6 +110,11 @@ def build_detector_meta(
     spec = detector_data.get("input_spec")
     if isinstance(spec, dict) and spec:
         meta["input_spec"] = dict(spec)
+    from vtscore.detectors.domain_summary import DOMAIN_SUMMARY_KEY, stored_domain_summary  # noqa: PLC0415
+
+    summary = stored_domain_summary(detector_data)
+    if summary is not None:
+        meta[DOMAIN_SUMMARY_KEY] = summary
     return meta
 
 
@@ -116,16 +126,21 @@ def apply_detector_meta(
 
     Writes ``input_spec`` (and ``media_type`` when the receiver doesn't
     already have one) so the receiving detector picks up the originating
-    detector's expected input format.  Does **not** persist a ``threshold``
-    (which this server no longer sends, but an older one or another producer
-    may) - the receiver retrains its own head from the imported labels, so
-    the threshold is rederived on the next load.
+    detector's expected input format, and the training-domain summary when
+    the receiver may take it
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571).
+    Does **not** persist a ``threshold`` (which this server no longer sends,
+    but an older one or another producer may) - the receiver retrains its own
+    head from the imported labels, so the threshold is rederived on the next
+    load.
 
     Returns ``True`` when *detector_data* was modified.
     """
     if not detector_meta:
         return False
-    changed = False
+    from vtscore.detectors.domain_summary import adopt_domain_summary  # noqa: PLC0415
+
+    changed = adopt_domain_summary(detector_data, detector_meta)
     spec = detector_meta.get("input_spec")
     if isinstance(spec, dict) and spec:
         existing = detector_data.get("input_spec")

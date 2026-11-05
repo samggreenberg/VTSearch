@@ -148,11 +148,22 @@ def labelset_for_export(payload: dict[str, Any]) -> dict[str, Any]:
       (``rank_at_vote``, ``score_at_vote``);
     * ``detector_meta`` loses ``threshold``.
 
+    One embedder-stamped block is let through: ``detector_meta``'s
+    ``training_domain_summary``, the summary of the dataset the detector was
+    trained on (:mod:`vtscore.detectors.domain_summary`, #5571), so the
+    receiver's training-domain overlap check has something to compare
+    against.  It is allowed where a threshold is not because it is
+    self-describing (it names the embedder and vector width that drew it), a
+    reader in any other embedder refuses it rather than misread it, and
+    nothing trains on it: it rebuilds no detector, so the labels stay as
+    embedder-agnostic as they were.
+
     Every labelset export passes through here: a
     :class:`~vtscore.labels.sources.base.LabelsetSource` push and the payload
     handed to an exporter's ``export_labelset``.  A streamed labelset has no
     whole payload, so it takes the per-entry half,
-    :func:`label_entry_for_export`, one entry at a time.  Everything else passes
+    :func:`label_entry_for_export`, one entry at a time, and carries no
+    ``detector_meta``, summary included.  Everything else passes
     through untouched, keys this function does not know included (the Export
     modal's ``selected_columns``, an entry's ``custom_metadata``).  Copies
     rather than mutating, since *payload* may be the detector's own record.
@@ -203,8 +214,10 @@ class LabelSet:
             present, lets a labelset round-trip a detector's
             ``media_type`` and ``input_spec`` (clipper + params) so an
             external consumer can reproduce the detector's expected input
-            format without reading the detector JSON directly.  It never
-            carries a ``threshold`` out of this server
+            format without reading the detector JSON directly, and the
+            detector's training-domain summary under
+            ``training_domain_summary`` when it records one (#5571).  It
+            never carries a ``threshold`` out of this server
             (:func:`labelset_for_export`): a threshold belongs to the head
             that drew it.  Strictly informational - ``None`` (the default)
             means the labelset carries only labels, preserving the legacy
