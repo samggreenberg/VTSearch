@@ -56,8 +56,9 @@ per detector:
   to at all.
 
 A failed push is logged and leaves the source as it was (an owner's is also
-recorded on its binding); the next change schedules another.  :func:`flush_pending_label_syncs` lands every pending push
-now, ignoring the pace - tests use it, and an ``atexit`` hook calls it so the
+recorded on its binding); the next change schedules another.
+:func:`flush_pending_label_syncs` lands every pending push now, ignoring the
+pace - tests use it, and an ``atexit`` hook calls it so the
 newest labels reach the source on a normal shutdown (a SIGKILL still loses
 whatever was waiting).
 
