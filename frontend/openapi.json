@@ -2780,6 +2780,32 @@
         ],
         "type": "object"
       },
+      "DetectorForkedFrom": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_id",
+          "name"
+        ],
+        "type": "object"
+      },
       "DetectorImportRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3034,6 +3060,10 @@
             },
             "type": "array"
           },
+          "forked_from": {
+            "$ref": "#/components/schemas/DetectorForkedFrom",
+            "nullable": true
+          },
           "id": {
             "type": "string"
           },
@@ -3068,6 +3098,22 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState",
+            "nullable": true
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
           },
           "test_verdict": {
             "$ref": "#/components/schemas/LineTestVerdict",
@@ -3360,6 +3406,56 @@
           "name",
           "num_labels",
           "success"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingIntegrity": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "Foreign records, plus one for a foreign manifest",
+            "type": "integer"
+          },
+          "status": {
+            "description": "``clean`` or ``foreign_modifications``",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "status"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingState": {
+        "additionalProperties": false,
+        "properties": {
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity",
+            "nullable": true
+          },
+          "last_synced": {
+            "nullable": true,
+            "type": "number"
+          },
+          "remote_owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          },
+          "sync_error": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote_ref",
+          "source_name"
         ],
         "type": "object"
       },
@@ -11484,7 +11580,7 @@
     },
     "/api/detectors/registry": {
       "get": {
-        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoFind detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoFind tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.",
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoFind detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoFind tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.\nEvery entry carries its sharing state: ``sync_mode`` (``local``,\n``linked`` for a received read-only copy, ``forked``), ``sharing`` (the\ncontainer it mirrors or owns, without the binding's field values),\n``sharing_note`` (why that container is not in use here, when it is not)\nand ``forked_from``.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -11914,7 +12010,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "A detector with the new name already exists."
+            "description": "A detector with the new name already exists, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -12121,6 +12217,9 @@
           "404": {
             "description": "Unknown detector or labelset source."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12165,6 +12264,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12278,6 +12380,9 @@
           "404": {
             "description": "Detector not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12321,6 +12426,9 @@
           },
           "404": {
             "description": "Detector not found, or unknown label importer name."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "description": "A required field is missing, or a field value is invalid."
@@ -12371,7 +12479,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "Detector vote state is not aligned with the active dataset."
+            "description": "Detector vote state is not aligned with the active dataset, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12552,6 +12660,9 @@
           "404": {
             "description": "Detector or label element not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12607,7 +12718,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "A detector with the new name already exists."
+            "description": "A detector with the new name already exists, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13360,7 +13471,7 @@
             "description": "No active detector to update."
           },
           "409": {
-            "description": "Detector vote state is not aligned with the active dataset."
+            "description": "Detector vote state is not aligned with the active dataset, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13737,6 +13848,9 @@
           "404": {
             "description": "Unknown label importer name."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "description": "A required field is missing, or a field value is invalid."
           },
@@ -13779,6 +13893,9 @@
           },
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14033,6 +14150,9 @@
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -14075,6 +14195,9 @@
           },
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14478,6 +14601,9 @@
           "400": {
             "description": "Missing or malformed multipart body (no file / empty file / invalid label), no dataset loaded, or no embedder available."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -14718,6 +14844,9 @@
           },
           "400": {
             "description": "No ids supplied, or provenance is malformed."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -15199,6 +15328,9 @@
           "404": {
             "description": "Media not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -15364,7 +15496,7 @@
             "description": "A vote on an item that is not one of this band's picks."
           },
           "409": {
-            "description": "No check is running."
+            "description": "No check is running, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -16775,6 +16907,9 @@
           },
           "400": {
             "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

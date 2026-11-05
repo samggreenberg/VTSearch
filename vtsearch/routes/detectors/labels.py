@@ -64,6 +64,7 @@ from vtsearch.schemas.detectors import (
     DetectorLabelVoteResponseSchema,
     DetectorSaveLabelsResponseSchema,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +112,16 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
 @detectors_labels_bp.alt_response(400, description="X-Dataset-Id / X-Detector-Id header missing.")
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
-@detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@detectors_labels_bp.alt_response(
+    409,
+    description=(
+        "Detector vote state is not aligned with the active dataset, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("name")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
@@ -318,6 +326,8 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict], dete
 @detectors_labels_bp.alt_response(404, description="Detector not found, or unknown label importer name.")
 @detectors_labels_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 @detectors_labels_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
+@detectors_labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("name")
 def import_labels_into_detector(name: str, importer_name: str):
     """Run a label importer and merge results into this detector's labelset.
 
@@ -653,6 +663,8 @@ def thumbnail_detector_label(name: str, element_id: str):
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
 @detectors_labels_bp.alt_response(400, description="provenance is malformed.")
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
+@detectors_labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("name")
 def vote_detector_label(body: dict, name: str, element_id: str):
     """Set a saved labelset element's label to an absolute target.
 

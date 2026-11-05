@@ -97,6 +97,7 @@ from vtsearch.state import (
     find_missing_entries,
     resolve_media_ids,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 label_importers_bp = Blueprint(
     "label_importers",
@@ -341,8 +342,10 @@ def label_importer_suggested_name(body: dict, importer_name: str):
 @label_importers_bp.alt_response(404, description="Unknown label importer name.")
 @label_importers_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 @label_importers_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
+@label_importers_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
@@ -419,8 +422,10 @@ def run_label_import(importer_name: str):  # noqa: C901
 @label_importers_bp.arguments(IngestMissingRequestSchema)
 @label_importers_bp.response(200, IngestMissingResponseSchema)
 @label_importers_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
+@label_importers_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def ingest_missing(body: dict):
     """Re-ingest missing medias from their origins, then apply their labels."""
     entries = body["entries"]

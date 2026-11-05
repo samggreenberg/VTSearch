@@ -259,6 +259,41 @@ class DetectorCombineResponseSchema(Schema):
 # ---------------------------------------------------------------------------
 
 
+class DetectorSharingIntegritySchema(Schema):
+    """Whether anyone but a container's owner wrote to it, as of the last refresh."""
+
+    status = fields.String(required=True, metadata={"description": "``clean`` or ``foreign_modifications``"})
+    count = fields.Integer(required=True, metadata={"description": "Foreign records, plus one for a foreign manifest"})
+
+
+class DetectorSharingStateSchema(Schema):
+    """The container a detector mirrors (received) or owns (shared), as ``GET /api/detectors/registry`` lists it.
+
+    Carries none of the binding's field values, which may be the sharing
+    service's connection values.  ``remote_owner`` is the owner of a received
+    detector's container as the sharing source reports identities (an opaque
+    string, shown as it is); ``integrity`` is set by the last refresh and
+    ``sync_error`` by the last owner push.
+    """
+
+    source_name = fields.String(required=True)
+    remote_ref = fields.String(required=True)
+    remote_owner = fields.String(allow_none=True)
+    last_synced = fields.Float(allow_none=True)
+    integrity = fields.Nested(DetectorSharingIntegritySchema, allow_none=True)
+    sync_error = fields.String(allow_none=True)
+
+
+class DetectorForkedFromSchema(Schema):
+    """Where a forked detector came from."""
+
+    detector_id = fields.String(required=True)
+    name = fields.String(required=True)
+    owner = fields.String(allow_none=True)
+    source_name = fields.String()
+    remote_ref = fields.String()
+
+
 class DetectorRegistryEntrySchema(Schema):
     """One entry in the in-memory detector registry.
 
@@ -313,6 +348,16 @@ class DetectorRegistryEntrySchema(Schema):
     # nowhere.  The raw binding on the registry entry (``labelset_source``,
     # with its field values) is deliberately not dumped.
     labelset_source_status = fields.Nested(LabelsetSourceStatusSchema, allow_none=True)
+    # Detector sharing (docs/plans/detector-sharing.md): ``local`` (also an
+    # entry with no ``sync_mode``), ``linked`` for a received, read-only copy,
+    # or ``forked``.  ``sharing`` is the container it mirrors or owns,
+    # ``sharing_note`` why that container is not in use on this server (its
+    # source is not the active one, or sharing is off), and ``forked_from`` a
+    # fork's provenance.  Set by ``GET /api/detectors/registry``.
+    sync_mode = fields.String(validate=validate.OneOf(["local", "linked", "forked"]))
+    sharing = fields.Nested(DetectorSharingStateSchema, allow_none=True)
+    sharing_note = fields.String(allow_none=True)
+    forked_from = fields.Nested(DetectorForkedFromSchema, allow_none=True)
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -1274,7 +1319,10 @@ __all__ = [
     "DetectorRegistryCreateRequestSchema",
     "DetectorRegistryCreateResponseSchema",
     "DetectorRegistryDeleteResponseSchema",
+    "DetectorForkedFromSchema",
     "DetectorRegistryEntrySchema",
+    "DetectorSharingIntegritySchema",
+    "DetectorSharingStateSchema",
     "DetectorRegistryListResponseSchema",
     "DetectorRegistryLoadRequestSchema",
     "DetectorRegistryLoadResponseSchema",

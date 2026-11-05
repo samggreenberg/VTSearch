@@ -35,6 +35,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   every face cut from it). Every face of one photo resolves to one item of the Image sibling through
   `SourceResolver`. Additive; nothing is persisted.
 
+- **Received detectors are read-only, and can be received, refreshed and forked** (issue #5575). A registry entry
+  now carries a `sync_mode` - `"local"` (the default, and an entry with no key), `"linked"` (a received, read-only
+  mirror of someone else's container) or `"forked"` - read with `vtscore.detectors.registry.sync_mode_of` /
+  `is_linked`; `register_detector` takes `sync_mode`, `labelset_source` and `forked_from`. The container's state
+  lives in the entry's `labelset_source` binding (`remote_ref`, `remote_owner`, `last_synced`, `integrity`,
+  `sync_error`), read with `vtscore.labels.binding.sharing_binding`; `binding_matches_active_source` and
+  `sharing_note` say whether it belongs to the active sharing source and, when not, why. The store refuses a write
+  that would change a linked detector's name or labelset with the new `vtscore.detectors.store.DetectorReadOnlyError`,
+  except inside `allow_linked_write()`. `vtscore.labels.sharing` gains `receive_container`,
+  `refresh_linked_detector` (returning a `RefreshResult`), `fork_detector`, `compute_integrity`, the `foreign`
+  policies (`FOREIGN_ABORT`, `FOREIGN_IMPORT`, `FOREIGN_SKIP`) and two errors, `SharingUnavailable` and
+  `ForeignModifications`. Also new: `registry.detector_name_taken` (the name-collision rule the app's create and
+  rename routes use) and `registry.free_detector_name`. Additive: an entry without the new keys behaves as before.
+  See `vtscore/docs/packages/labels.md` (Receive, refresh, fork).
+
 - **Detector sharing, as an optional capability of `LabelsetSource`** (issue #5574). A source can now keep a
   detector's labels in a container on an external collaboration service, with an owner and recipients, by
   overriding the new `_do_share_*` hooks: `_do_share_create`, `_do_share_save`, `_do_share_refresh`,

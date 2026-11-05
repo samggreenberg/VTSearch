@@ -335,6 +335,31 @@ Identities are the source's: it resolves the caller with
 opaque strings. The contract a source author follows is
 [`../extending/labelset-sources.md`](../extending/labelset-sources.md#the-sharing-contract).
 
+### Receive, refresh, fork
+
+Three operations create and keep the sharing state a registry entry carries
+(see [detectors.md](detectors.md#sharing-state)). Each runs as the calling
+user, and hands the active source the binding's own field values with the
+setting's fixed ones laid over them; the fixed ones are never stored per
+detector.
+
+| Function | Does |
+|----------|------|
+| `receive_container(remote_ref, *, foreign="abort")` | A container becomes the caller's read-only `linked` detector: its records written to a new file, the entry registered with a binding carrying `remote_ref`, `remote_owner`, `last_synced` and `integrity`. A taken name is suffixed; the caller holding that container already is a `ValueError` |
+| `refresh_linked_detector(detector_id, *, foreign="abort")` | Replaces a linked detector's labelset with the container's - a mirror, not a merge - and returns a `RefreshResult(applied, integrity, added, changed, removed)`. A loaded context re-derives its votes |
+| `fork_detector(detector_id, *, name=None)` | An editable copy of any detector, owned by the caller: `sync_mode` `"forked"`, `forked_from` provenance, and, when sharing is on, a container of its own. A failed create leaves a working local fork; the returned entry's `share_error` says why |
+| `compute_integrity(container)` | `{"status": "clean" or "foreign_modifications", "count"}`: records someone other than the owner created or last modified, plus one for a manifest the owner did not write or whose count disagrees (how a deletion shows) |
+
+`foreign` names what to do about foreign modifications: `"abort"` (the
+default) changes nothing - `receive_container` raises
+`ForeignModifications`, `refresh_linked_detector` returns `applied=False` and
+records the integrity on the entry - while `"import"` takes every record and
+`"skip"` only the owner's. A detector whose binding names a source other than
+the active one, or one not installed, stays read-only but local-only:
+`binding_matches_active_source(entry)` is false, `sharing_note(entry)` says
+why, and a refresh raises `SharingUnavailable` with that note (as does any
+operation while sharing is off). It can still be forked.
+
 ---
 
 ## Relationship to `vtscore.datasets`

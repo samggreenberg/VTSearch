@@ -34,6 +34,7 @@ from vtsearch.schemas.detectors import (
     FindTrainingDomainResponseSchema,
 )
 from vtsearch.state import snapshot_medias
+from vtsearch.routes._read_only import refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -796,9 +797,16 @@ def find_training_domain():
 @detector_scoring_bp.response(200, FindCorrectionsToDetectorResponseSchema)
 @detector_scoring_bp.alt_response(400, description="No Find run to take corrections from.")
 @detector_scoring_bp.alt_response(404, description="No active detector to update.")
-@detector_scoring_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@detector_scoring_bp.alt_response(
+    409,
+    description=(
+        "Detector vote state is not aligned with the active dataset, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def find_corrections_to_detector():
     """Fold the Find corrections into the active detector's labelset for *future*
     scoring, leaving the current Find session frozen.
