@@ -20,6 +20,8 @@
 # S5241_GRID, SAM3_SCORES (#5213's shards), SOTA_ROOT, and anything launch.sh reads.
 # #5311's confirmation: S5241_SEEDS (the seeds, "0"; a run dir holds them all, idx seed*288 + cell) and S5241_BETA
 # (1; the run dir's -b suffix as launch.sh spells it, -b025 / -b1 / -b4).
+# #5565: S5241_LINE (fixed:0.5), SAM3's line on the sam3 arm; picks never read it, so a run at another line checks
+# that a cut is priced offline (give it its own S5241_TAG).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
@@ -54,7 +56,7 @@ common_env() {  # ARM: today's app at beta 1, trajectory pass, plus the arm's op
   unset CALIB_QUERY_MISS VTSEARCH_SVM_HEAD_C SOTA_EMBEDDERS SOTA_DATASET SOTA_POOL_PREVALENCE SOTA_CELL_PREVALENCE
   unset CALIB_SEED_SAM3 CALIB_SEED_SAM3_PROMPTS CALIB_QUERY_LINE CALIB_QUERY_HOLD_PATCH CALIB_HANDOVER_SHADOW
   if [[ "$arm" == sam3* ]]; then
-    export CALIB_SEED_SAM3="$SCORES" CALIB_SEED_SAM3_PROMPTS=typed CALIB_QUERY_LINE=fixed:0.5
+    export CALIB_SEED_SAM3="$SCORES" CALIB_SEED_SAM3_PROMPTS=typed CALIB_QUERY_LINE="${S5241_LINE:-fixed:0.5}"
     # The hold counts labels, check votes included, so it is set past any session's.
     export CALIB_QUERY_HOLD=100000 CALIB_QUERY_HOLD_PATCH=1 CALIB_QUERY_MISS=0
     # #4776's evidence (held-out Goods' ranks under the head), for a takeover rule; single-vector cells only.
