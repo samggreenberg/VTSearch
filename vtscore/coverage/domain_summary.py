@@ -166,8 +166,8 @@ def summary_pvalues(anchors: np.ndarray, calibration: Sequence[float] | np.ndarr
     than ``DOMAIN_SHIFT_MIN_CAL`` calibration scores, and :class:`ValueError`
     for no anchors or a width mismatch.
     """
-    anc = _normalize(anchors)
-    if anc.shape[0] == 0:
+    anchor_mat = _normalize(anchors)
+    if anchor_mat.shape[0] == 0:
         raise ValueError("the summary has no anchors")
     cal = np.sort(np.asarray(calibration, dtype=np.float64).ravel())
     if cal.size < DOMAIN_SHIFT_MIN_CAL:
@@ -177,9 +177,9 @@ def summary_pvalues(anchors: np.ndarray, calibration: Sequence[float] | np.ndarr
     queries = _normalize(matrix)
     if queries.shape[0] == 0:
         return np.ones(0, dtype=np.float64)
-    if queries.shape[1] != anc.shape[1]:
-        raise ValueError(f"vector width mismatch: anchors {anc.shape[1]}, matrix {queries.shape[1]}")
-    scores = np.round(_topk_mean_cosine(queries, anc, 1), SCORE_DECIMALS)
+    if queries.shape[1] != anchor_mat.shape[1]:
+        raise ValueError(f"vector width mismatch: anchors {anchor_mat.shape[1]}, matrix {queries.shape[1]}")
+    scores = np.round(_topk_mean_cosine(queries, anchor_mat, 1), SCORE_DECIMALS)
     return (1.0 + np.searchsorted(cal, scores, side="right")) / (cal.size + 1.0)
 
 

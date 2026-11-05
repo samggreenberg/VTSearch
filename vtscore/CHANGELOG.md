@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The domain-shift report can run against a summary of the reference instead of its vectors** (issue #5567).
+  `vtscore.coverage.summarize_reference(reference)` returns `(anchor_rows, calibration)`: up to 128 rows of the
+  reference to anchor on (each a cluster's member nearest its centroid, so a caller can name it by origin) and the
+  sorted calibration scores of the other half. `summary_shift_report(anchors, calibration, matrix)` returns the same
+  dict as `domain_shift_report`, with the same null and less power; `summary_pvalues` is its per-row half. See
+  `vtscore/docs/packages/coverage.md`. `vtscore.detectors.domain_summary` records one on a detector beside its
+  training-dataset pointer, under `training_domain_summary`, and resolves its anchors where it is read.
+
 - **A `find_results` payload from the app carries each detector's cut at every Threshold preset** (issue #5540).
   Beside `threshold` and `balance`, an app run's detector result has `beta` (the balance `threshold` was cut at) and
   `lines` (`[{"beta", "threshold"}]` at beta 4, 1 and 1/4). Both are informational. An export from the Find Results

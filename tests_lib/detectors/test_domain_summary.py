@@ -262,7 +262,9 @@ def _world(tmp_path, medias: dict[int, dict], dataset_id: str) -> PendingDraw:
     dataset.medias.update(medias)
     labelset = LabelSet(
         [
-            LabeledElement(md5=medias[c]["md5"], label=lab, origin=medias[c]["origin"], origin_name=medias[c]["origin_name"])
+            LabeledElement(
+                md5=medias[c]["md5"], label=lab, origin=medias[c]["origin"], origin_name=medias[c]["origin_name"]
+            )
             for c, lab in marks.items()
         ]
     )

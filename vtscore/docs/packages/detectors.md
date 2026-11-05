@@ -50,6 +50,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
 | `vtscore/detectors/evidence_baseline.py`     | The Evidence verdict's training baseline, stamped onto the detector |
 | `vtscore/detectors/training_domain.py`       | Which dataset a detector's labels were cast on, and its record      |
+| `vtscore/detectors/domain_summary.py`        | The training dataset's summary the detector carries, and its anchors resolved |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 | `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
 | `vtscore/detectors/label_quota.py`           | The label quota: which detector a labelset's counts give            |

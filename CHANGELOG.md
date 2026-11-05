@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **The training-domain warning travels with a shared detector** (issue #5567). A detector now carries a summary of
+  the dataset it was trained on: 128 of that dataset's items, named by where they came from, plus scores to compare
+  against. Given to someone whose VTSearch never had that dataset, it can still warn when their data looks unlike
+  what it was trained on, in Tune, in Find Results and in AutoFind runs. The summary is recorded the next time the
+  detector is trained or tuned on its own dataset. The first check on the new machine fetches the 128 items, and
+  skips the warning, saying why, if any of them cannot be fetched.
+
 - **Autopilot counts your votes** (issue #5539). The top of the Autopilot panel, folded or open, now reads how many
   votes you have cast on this dataset. No step can say how many are left, since nobody knows how many a detector
   will need, so the count's tooltip, and Toasty while Autopilot sharpens the detector, say how many it tends to

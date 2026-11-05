@@ -341,10 +341,11 @@ def training_domain_for(
     (:func:`~vtscore.detectors.domain_summary.stored_domain_summary`) stands in
     for it at the same count, and is what the check compares against (#5567);
     so it does, too, when the recorded one's saved file cannot be read.
-    *active_ctx*'s dataset wins a tie.  ``domain_shift`` is ``None`` (and ``reason`` says why)
-    when there is nothing to compare: no labelled examples, none of them in a
-    dataset to compare with, the examples being from the active dataset itself,
-    or any of :func:`domain_shift_against`'s refusals.  The counts ride along
+    *active_ctx*'s dataset wins a tie.  ``domain_shift`` is ``None`` (and
+    ``reason`` says why) when there is nothing to compare: no labelled
+    examples, none of them in a dataset to compare with, the examples being
+    from the active dataset itself, or any of :func:`domain_shift_against`'s
+    or :func:`domain_shift_from_summary`'s refusals.  The counts ride along
     either way, so the caller can say what the reference rests on.
     """
     from vtscore.datasets.registry import get_dataset
@@ -381,31 +382,50 @@ def training_domain_for(
     result["labels_in_reference"] = counts[reference_id]
     if reference_id == active_id:
         return unavailable("The detector's labelled examples are from this dataset")
-    # The summary of the reference, when the detector carries one.
-    fallback = summary if summary is not None and summary["dataset_id"] == reference_id else None
-    if fallback is not None and travelled is not None:
-        try:
-            result["domain_shift"] = cached_summary_shift(fallback, active_ctx, cache=cache)
-        except DomainShiftUnavailable as e:
-            return unavailable(str(e))
-        return result
     try:
-        result["domain_shift"] = cached_domain_shift(
+        result["domain_shift"] = _compare(
             reference_id,
             active_ctx,
             allow_unloaded=stored is not None and reference_id == stored["dataset_id"],
+            summary=summary if summary is not None and summary["dataset_id"] == reference_id else None,
+            summary_only=travelled is not None and reference_id == travelled["dataset_id"],
             cache=cache,
         )
     except DomainShiftUnavailable as e:
-        if fallback is None:
-            return unavailable(str(e))
-        # The reference is here but its vectors could not be read (a recorded
-        # dataset whose saved file is gone, say): its summary still can be.
-        try:
-            result["domain_shift"] = cached_summary_shift(fallback, active_ctx, cache=cache)
-        except DomainShiftUnavailable:
-            return unavailable(str(e))
+        return unavailable(str(e))
     return result
+
+
+def _compare(
+    reference_id: str,
+    active_ctx: Any,
+    *,
+    allow_unloaded: bool,
+    summary: dict[str, Any] | None,
+    summary_only: bool,
+    cache: OverlapCache | None,
+) -> dict[str, Any]:
+    """:func:`training_domain_for`'s report against *reference_id*: its vectors, else its *summary* (#5567).
+
+    *summary_only* when the reference is not here at all, so the summary is
+    all there is.  Otherwise the reference's own vectors are compared against,
+    and the summary, when the detector carries one, steps in only if they
+    cannot be read (a recorded dataset whose saved file is gone, say).  Raises
+    :class:`DomainShiftUnavailable` with the full check's reason when neither
+    can be read.
+    """
+    if summary is not None and summary_only:
+        return cached_summary_shift(summary, active_ctx, cache=cache)
+    try:
+        return cached_domain_shift(reference_id, active_ctx, allow_unloaded=allow_unloaded, cache=cache)
+    except DomainShiftUnavailable as e:
+        if summary is None:
+            raise
+        unreadable = e
+    try:
+        return cached_summary_shift(summary, active_ctx, cache=cache)
+    except DomainShiftUnavailable:
+        raise unreadable from None
 
 
 def training_domain_check() -> dict[str, Any]:
@@ -413,9 +433,9 @@ def training_domain_check() -> dict[str, Any]:
 
     The training dataset recorded on the detector, and its summary, are read
     from its file, so a detector paired with a dataset after a restart, or on
-    another instance, is still compared against the one it was trained on.  ``domain_shift`` is ``None`` with a ``reason``
-    when there is no detector or dataset to check, as well as on every refusal
-    of :func:`training_domain_for`.
+    another instance, is still compared against the one it was trained on.
+    ``domain_shift`` is ``None`` with a ``reason`` when there is no detector or
+    dataset to check, as well as on every refusal of :func:`training_domain_for`.
     """
     from vtscore.detectors.learned_sort import resolve_active_labelset
     from vtscore.state.core import (
