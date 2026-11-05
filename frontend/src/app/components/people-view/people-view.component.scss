@@ -114,6 +114,10 @@
   color: var(--text-secondary);
 }
 
+.people-filter-label {
+  white-space: nowrap;
+}
+
 .people-filter-input {
   width: 3.5rem;
   margin: 0 var(--space-xs);
