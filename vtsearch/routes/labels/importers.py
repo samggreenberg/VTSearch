@@ -72,9 +72,13 @@ logger = logging.getLogger(__name__)
 from vtscore.datasets.labelset import imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.labels.importers import get_label_importer, list_label_importers
-from vtsearch.errors import error_response
 from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
-from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, run_plugin_or_error, validate_plugin_args
+from vtsearch.routes._plugins import (
+    get_plugin_or_404,
+    plugin_field_options,
+    run_label_importer_or_error,
+    validate_plugin_args,
+)
 from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
@@ -164,6 +168,27 @@ def _sync_after_import() -> None:
 
     sync_labels_to_loaded_detector()
     record_detector_import(get_active_detector_context().detector_id)
+
+
+def _adopt_imported_summary(detector_meta: dict | None) -> None:
+    """Keep the training-domain summary an imported labelset carries on the active detector's file (#5571).
+
+    So labels imported into the active detector bring the overlap check's
+    reference with them, as they do through the Dashboard's import
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, which
+    decides whether the detector may take it).
+    """
+    if not detector_meta:
+        return
+    from vtscore.detectors.domain_summary import adopt_domain_summary_on_file
+    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.store import _detector_path
+    from vtscore.state.core import get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    name = (get_detector(det_ctx.detector_id) or {}).get("name") if det_ctx.detector_id else None
+    if name:
+        adopt_domain_summary_on_file(_detector_path(name), detector_meta, det_ctx=det_ctx)
 
 
 def _apply_ingested_labels(missing: list[dict], ingested: int) -> dict:
@@ -334,12 +359,9 @@ def run_label_import(importer_name: str):  # noqa: C901
 
     field_values = validate_plugin_args(importer)
 
-    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    label_entries, detector_meta, err = run_label_importer_or_error(importer, field_values)
     if err:
         return err
-
-    if not isinstance(label_entries, list):
-        return error_response("Importer did not return a list of label dicts.", 500)
 
     # Apply labels to global vote state
     origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
@@ -361,6 +383,7 @@ def run_label_import(importer_name: str):  # noqa: C901
     # the new label count (num_training) immediately.
     if applied > 0:
         _sync_after_import()
+    _adopt_imported_summary(detector_meta)
 
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingest_task_id:

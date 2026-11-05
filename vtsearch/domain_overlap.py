@@ -20,8 +20,9 @@ something to compare against.
 
 Where the training dataset is not here at all (a detector handed over from
 another instance), the check reads the summary of it the detector records
-beside the pointer (#5567, :mod:`vtscore.detectors.domain_summary`): its anchor
-items, re-embedded here, and calibration scores.  The report has the same
+beside the pointer (#5567, :mod:`vtscore.detectors.domain_summary`), or that
+came alone with its labels in an exported labelset (#5571): its anchor items,
+re-embedded here, and calibration scores.  The report has the same
 shape and the same null; it has less power, since 128 anchors stand in for
 the dataset's vectors (:mod:`vtscore.coverage.domain_summary`).
 """
@@ -299,21 +300,28 @@ def _summary_reference(
     recorded: dict[str, Any] | None,
     stored: dict[str, Any] | None,
     counts: dict[str, int],
+    labels_total: int,
 ) -> dict[str, Any] | None:
     """The training dataset the detector's *summary* stands in for, when nothing better can (#5567).
 
     That is, when the summarised dataset is neither counted live in *counts*
     (loaded, and readable by the caller) nor *stored*, the recorded dataset
     whose saved file the full check reads.  It counts as holding what the
-    *recorded* pointer says it held, since the pointer is recorded with it;
-    ``None`` with no pointer to it, which leaves it no labels to win on.
+    *recorded* pointer says it held, since the pointer is recorded with it.
+    A summary that arrived without a pointer, in an exported labelset
+    (#5571), counts as holding all *labels_total* labelled examples: it is a
+    summary of the dataset the detector was trained on, and nothing here says
+    how many of the labels that dataset held.  ``None`` when the pointer names
+    another dataset: the pointer says where this detector's labels were drawn.
     """
     if summary is None:
         return None
     dataset_id = summary["dataset_id"]
     if dataset_id in counts or (stored is not None and stored["dataset_id"] == dataset_id):
         return None
-    if recorded is None or recorded["dataset_id"] != dataset_id:
+    if recorded is None:
+        return {"dataset_id": dataset_id, "dataset_name": summary["dataset_name"], "labels_held": labels_total}
+    if recorded["dataset_id"] != dataset_id:
         return None
     return {
         "dataset_id": dataset_id,
@@ -340,7 +348,9 @@ def training_domain_for(
     one is not here at all, the detector's *summary* of it
     (:func:`~vtscore.detectors.domain_summary.stored_domain_summary`) stands in
     for it at the same count, and is what the check compares against (#5567);
-    so it does, too, when the recorded one's saved file cannot be read.
+    so it does, too, when the recorded one's saved file cannot be read.  A
+    summary that came with the labels in an exported labelset has no pointer
+    beside it, and stands in at every labelled example (#5571).
     *active_ctx*'s dataset wins a tie.  ``domain_shift`` is ``None`` (and
     ``reason`` says why) when there is nothing to compare: no labelled
     examples, none of them in a dataset to compare with, the examples being
@@ -368,7 +378,7 @@ def training_domain_for(
     if stored is not None:
         counts = {**counts, stored["dataset_id"]: min(stored["labels_held"], labels_total)}
         reference_id = infer_training_dataset(counts, prefer=active_id)
-    travelled = _summary_reference(summary, recorded, stored, counts)
+    travelled = _summary_reference(summary, recorded, stored, counts, labels_total)
     if travelled is not None:
         counts = {**counts, travelled["dataset_id"]: min(travelled["labels_held"], labels_total)}
         reference_id = infer_training_dataset(counts, prefer=active_id)

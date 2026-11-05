@@ -325,9 +325,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtscore.datasets.ingest import _media_type_from_origin
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.labels.importers import get_label_importer, list_label_importers
+    from vtscore.detectors.domain_summary import adopt_domain_summary
     from vtscore.detectors.import_record import build_import_record
     from vtscore.detectors.registry import register_detector, update_detector
-    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
+    from vtsearch.routes._plugins import get_plugin_or_404, run_label_importer_or_error, validate_plugin_args
     from vtsearch.routes._policy import abort_if_semantic_only_type
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
@@ -357,11 +358,9 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     _abort_if_name_taken(name)
     det_path = _detector_path(name)
 
-    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    label_entries, detector_meta, err = run_label_importer_or_error(importer, field_values)
     if err:
         return err
-    if not isinstance(label_entries, list):
-        return error_response("Importer did not return a list of label dicts.", 500)
 
     elements: list[LabeledElement] = []
     detected_types: set[str] = set()
@@ -409,6 +408,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         "labelset": labelset.to_dict(),
     }
     _keep_creation_beta(detector_data, beta)
+    # A labelset this app exported carries the sending detector's
+    # training-domain summary, so the overlap check runs here without its
+    # training dataset (#5571).
+    adopt_domain_summary(detector_data, detector_meta)
     _write_detector(det_path, detector_data)
 
     entry = register_detector(
