@@ -167,28 +167,14 @@ binding the way the default's fixed keys are today.
 
 ### The sharing contract
 
-Sharing hooks follow the family's `_do_*` convention: public wrappers
-normalize `field_values` and dispatch, and a source overrides the hooks. The
-capability is **derived from the overrides**, the way `supported_payloads` is
-on `ResultsExporter`: `supports_sharing` is true when the required hooks are
-overridden, `supports_recipient_search` when the optional one is.
-
-| Hook | Returns | Note |
-|---|---|---|
-| `_do_share_create(labelset, meta, field_values)` | `remote_ref` | First save; also what fork calls |
-| `_do_share_save(remote_ref, labelset, meta, field_values)` | — | Owner save: rewrite in place |
-| `_do_share_refresh(remote_ref, field_values)` | `SharedContainer` | Records with identities, owner, recipients, public flag, manifest |
-| `_do_share_list_mine(field_values)` / `_do_share_list_received(field_values)` | `list[SharedContainerSummary]` | |
-| `_do_share_add_recipients` / `_do_share_remove_recipients(remote_ref, ids, field_values)` | — | |
-| `_do_share_set_public(remote_ref, public, field_values)` | — | The well-known public group |
-| `_do_share_archive(remote_ref, field_values)` | — | Stop sharing |
-| `_do_share_search_recipients(query, field_values)` | `list[RecipientSuggestion]` | Optional; `SharingUnsupported` otherwise |
-
-`labelset` is the `labelset_for_export` payload (no thresholds or scores);
-`meta` is `build_detector_meta` plus the manifest. Typed errors
-(`SharingError`, `SharingUnsupported`, `RemoteNotFound`,
-`RemotePermissionDenied`) let the core degrade: 501 for an unsupported
-optional operation, never a crash.
+Shipped in #5574; the permanent reference is "The sharing contract" in
+`vtscore/docs/extending/labelset-sources.md`. What the later slices build on:
+the core calls the `share_*` wrappers with `share_payload(detector_data)`'s
+`(labelset, meta)` pair (`meta` is a `ShareMeta`: name, `detector_meta`,
+manifest), reads the source through `active_sharing_source()`, and checks a
+refresh's integrity with `build_manifest(container.as_labelset())` against
+`container.manifest` and `manifest_modified_by`. An unsupported optional
+operation raises `SharingUnsupported`, which a route answers with 501.
 
 ### Roles in the sync engine
 
