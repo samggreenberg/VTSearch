@@ -331,7 +331,16 @@ def labelset_source_status(
 
     ``None`` when the detector syncs nowhere.  Carries no field values, so it
     is safe to list for every user who can see the detector.
+
+    A sharing binding is read as the sync engine reads it
+    (``vtscore.labels.sync``): its fixed values are the
+    ``detector_sharing_source`` setting's, never the deployment default's, so
+    its missing fields are those the setting leaves unfilled.  One whose source
+    is not the active sharing source is never pushed (:func:`sharing_note`
+    says why), so it lacks nothing.
     """
+    if sharing_binding(entry) is not None:
+        return _sharing_status(entry)
     resolved = resolve_labelset_source(entry, detector_id=detector_id, default=default)
     if resolved is None:
         return None
@@ -341,4 +350,22 @@ def labelset_source_status(
         "display_name": (source.display_name if source is not None else "") or resolved.source_name,
         "inherited": resolved.inherited,
         "missing_fields": list(resolved.missing_fields),
+    }
+
+
+def _sharing_status(entry: dict[str, Any] | None) -> dict[str, Any]:
+    """:func:`labelset_source_status` for an entry with a :func:`sharing_binding`."""
+    from vtscore.labels.sharing import _field_values, active_sharing_source  # noqa: PLC0415
+    from vtscore.labels.sources import get_labelset_source  # noqa: PLC0415
+
+    binding = sharing_binding(entry) or {}
+    source_name = str(binding.get("source_name") or "").strip()
+    active = active_sharing_source() if binding_matches_active_source(entry) else None
+    source = active.source if active is not None else get_labelset_source(source_name)
+    missing = _missing_required(active.source, _field_values(binding, active)) if active is not None else ()
+    return {
+        "source_name": source_name,
+        "display_name": (source.display_name if source is not None else "") or source_name,
+        "inherited": False,
+        "missing_fields": list(missing),
     }

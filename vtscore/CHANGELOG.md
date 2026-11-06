@@ -61,7 +61,9 @@ instead, since every commit on `dev` is effectively a new app release.)
   `refresh_linked_detector` (returning a `RefreshResult`), `fork_detector`, `compute_integrity`, the `foreign`
   policies (`FOREIGN_ABORT`, `FOREIGN_IMPORT`, `FOREIGN_SKIP`) and two errors, `SharingUnavailable` and
   `ForeignModifications`. Also new: `registry.detector_name_taken` (the name-collision rule the app's create and
-  rename routes use) and `registry.free_detector_name`. Additive: an entry without the new keys behaves as before.
+  rename routes use) and `registry.free_detector_name`. `labelset_source_status` reads a sharing binding as the
+  push engine does, through the `detector_sharing_source` setting's fixed values, so a shared or received detector
+  lists no missing field the setting fills (#5579). Additive: an entry without the new keys behaves as before.
   See `vtscore/docs/packages/labels.md` (Receive, refresh, fork).
 
 - **Detector sharing, as an optional capability of `LabelsetSource`** (issue #5574). A source can now keep a

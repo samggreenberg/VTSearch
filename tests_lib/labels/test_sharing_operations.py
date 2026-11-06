@@ -25,7 +25,12 @@ from vtscore.detectors.registry import (
     update_detector,
 )
 from vtscore.detectors.store import DetectorReadOnlyError, _detector_path, _read_detector, _write_detector
-from vtscore.labels.binding import binding_matches_active_source, sharing_binding, sharing_note
+from vtscore.labels.binding import (
+    binding_matches_active_source,
+    labelset_source_status,
+    sharing_binding,
+    sharing_note,
+)
 from vtscore.labels.sharing import (
     FOREIGN_IMPORT,
     FOREIGN_SKIP,
@@ -393,6 +398,52 @@ class TestMismatchedSource:
         with thread_user(BOB):
             fork = fork_detector(received["id"])
         assert sync_mode_of(fork) == SYNC_MODE_FORKED
+
+
+class TestSyncStatus:
+    """What the listing says a sharing binding syncs to (#5579), read as the sync engine reads it.
+
+    A sharing binding stores no field values: the ``detector_sharing_source``
+    setting's are laid in at push time, so the status must count them, or every
+    shared and received row warns that its auto-export is not set up.
+    """
+
+    @pytest.fixture
+    def received(self, folder):
+        return _receive(_publish(folder))
+
+    def test_the_setting_fills_what_the_source_needs(self, received):
+        assert labelset_source_status(get_detector(received["id"])) == {
+            "source_name": "shared_folder",
+            "display_name": get_labelset_source("shared_folder").display_name,
+            "inherited": False,
+            "missing_fields": [],
+        }
+
+    def test_an_owners_shared_detector_lacks_nothing_either(self, folder):
+        entry = register_detector(name="Owned", media_type="image", created_by=OWNER)
+        binding = {"source_name": "shared_folder", "field_values": {}, "remote_ref": _publish(folder)}
+        update_detector(entry["id"], labelset_source=binding)
+        assert labelset_source_status(get_detector(entry["id"]))["missing_fields"] == []
+
+    def test_the_deployment_default_has_no_say(self, received):
+        register_setting_getter(
+            "default_labelset_source",
+            lambda: {"source_name": "server_json_file", "field_values": {}},
+        )
+        status = labelset_source_status(get_detector(received["id"]))
+        assert status["source_name"] == "shared_folder"
+        assert status["missing_fields"] == []
+
+    def test_a_setting_that_leaves_a_required_field_empty_says_so(self, received):
+        register_setting_getter("detector_sharing_source", lambda: {"source_name": "shared_folder", "field_values": {}})
+        assert labelset_source_status(get_detector(received["id"]))["missing_fields"] == ["folder"]
+
+    def test_a_binding_whose_source_is_not_in_use_lacks_nothing(self, received):
+        _sharing_off()
+        status = labelset_source_status(get_detector(received["id"]))
+        assert status["source_name"] == "shared_folder"
+        assert status["missing_fields"] == []
 
 
 # ---------------------------------------------------------------------------
