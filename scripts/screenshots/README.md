@@ -21,8 +21,8 @@ pages under `docs/user/howto/`, README.md and demos.md (dev/ops docs get none). 
 shot yields a `{light,dark}` pair). Annotations = declared in the manifest,
 drawn by the harness as a pre-capture DOM overlay — never hand-edited.
 
-**Fixture = the Smiley example.** Every shot is taken against one worked
-example: a few hundred cartoon drawings from the Synthetic Media generator
+**Fixture = the Smiley example.** Every shot but the face path's (below) is
+taken against one worked example: a few hundred cartoon drawings from the Synthetic Media generator
 (`vtscore/utils/synthetic/images.py`), and a `Yellow Smileys` detector trained
 on them (#4240). The definition lives in `scripts/screenshots/smiley-example.mjs`;
 `scripts/screenshots/smiley_fixture.py` draws the corpora (a few seconds, with
@@ -43,6 +43,59 @@ with no face), drawn for free anywhere. The deck's harness still shoots the
 Book example on the same app, so each harness clears the other's datasets and
 detectors before it shoots. Shots that must show the *demo picker itself*
 screenshot the picker UI, not a downloaded dataset.
+
+**The face example** (#5605). The guide's *Faces* shots (Show in photo, Collapse
+to photos, People) need faces a face detector finds, which drawings do not have,
+so they are taken on a second example, `scripts/screenshots/face-example.mjs`,
+marked `fixture: 'faces'` in the manifest. `capture.ts` takes those shots after
+every other, builds the example just before the first of them and removes it
+after the last, so no Smiley shot's Dashboard lists it. It is:
+
+- **Photos: 80 from Celebrities in Context.** That is the demo the guide's
+  *Faces* steps import: Celebrity Together (Zhong, Arandjelovic & Zisserman,
+  ACCV 2018), red-carpet and press photos of public figures, from the Hugging
+  Face mirror `Juoguessr/celebritytogether` (`vtscore/datasets/downloader/core.py`).
+  The mirror states no licence, and the photos' copyright stays with their
+  photographers. They are real, named people, and the shots carry their faces
+  into `docs/user/assets/` and the in-app Help panel. The owner chose this
+  slice over public-domain photos (2026-11-06). The slice is the demo's first 20 photos of each of Andrew
+  Garfield, Emma Stone, Jamie Foxx and Kerry Washington. Their photos overlap
+  (two films' casts), so People has a person who appears with others: Andrew
+  Garfield (Person 1) shares 13 photos with Emma Stone (Person 2) and 4 with
+  Jamie Foxx (Person 4). `face-slice.json` pins every photo by SHA-256, and
+  `face_fixture.py photos` fetches them through the demo's own downloader and
+  cache (`data/celebrity_together/images/`), checks each one, and copies them
+  flat into `data/doc-fixtures/celebrities/`. The folder is flat because the
+  app captions a face with its photo's path, and a folder per person would put
+  that person's name under everyone else in their photos.
+- **Models: InsightFace buffalo_s** (`det_500m.onnx`, SCRFD-500M, and
+  `w600k_mbf.onnx`, MobileFaceNet ArcFace). These come from the model zoo's v0.7
+  release, under InsightFace's **non-commercial research only** licence, so
+  they are fetched and never committed. buffalo_s is the face space the face
+  ball and the People cut are calibrated in (`oss-arcface-mbf:1`); in another
+  space People shows no one. `face_fixture.py models` downloads the zip once
+  (about 128 MB) into `<models>/imagekit-buffalo_s/` (`VTSEARCH_MODELS_DIR`,
+  default `data/models/`). It checks the zip and both models against their
+  pinned SHA-256 and writes a `face.json` beside them. `refresh.sh` runs it
+  before it starts its app, and starts the app with `IMAGEKIT_FACE_CONFIG`
+  naming that file, so every shot is taken with Face on and the same models.
+  That covers the Smiley shots too: Add Dataset offers Face only on a server
+  with face models.
+- **Imported as the guide imports it**: one Folder import with Multi-Dataset's
+  Image (SigLIP) and Face rows, giving `Celebrities in Context – Image` (80
+  photos) and `Celebrities in Context – Face` (253 faces, 129 people). A face
+  detector, `Andrew Garfield`, is trained on pinned votes: eight of his faces
+  Good, and eight of the next three people's Bad.
+
+Nothing about it fails quietly. Missing or mismatched weights stop `refresh.sh`
+before the app starts, naming each file, its hash and the URL. A photo that no
+longer matches its pin is named. An app someone else started without face
+models fails every face shot with the command that fixes it. A changed face
+model shows up as a pinned vote naming a face the import did not cut. To move
+the slice, change `PEOPLE` or `PHOTOS_PER_PERSON` in `face_fixture.py`, run
+`face_fixture.py pin`, repin the votes and named faces in `face-example.mjs`
+from the new import, and take the face shots again.
+`tests_lib/meta/test_face_example.py` holds the three files to one another.
 
 **Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, a `ring`,
 or a numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
@@ -159,7 +212,9 @@ stub randomness the UI exposes (never rely on unseeded draws).
   state an earlier one left behind; the fixtures are imported afresh each run.
   An app already serving is refused, and named, when its `GET /api/version`
   is not the checkout's: it would shoot another commit's code, and the
-  stale-build toast that would say so is hidden in every shot.
+  stale-build toast that would say so is hidden in every shot. Before it starts
+  its app it fetches the face models (`face_fixture.py models`, above) and
+  points the app at them; without them it stops there.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.

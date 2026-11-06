@@ -1,5 +1,6 @@
 /**
- * The Smiley example: the one worked example every user-guide screenshot uses.
+ * The Smiley example: the worked example every user-guide screenshot uses,
+ * except the face path's (`face-example.mjs`).
  *
  * A few hundred cartoon drawings from VTSearch's own Synthetic Media generator
  * (`vtscore/utils/synthetic/images.py`): faces in seven colours and seven
