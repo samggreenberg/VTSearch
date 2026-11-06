@@ -22,6 +22,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The face ball's floors are read beside the face pipeline config in use** (issue #5621). `face_ball.json`
+  used to be read from the models folder's `imagekit` directory whatever config `IMAGEKIT_FACE_CONFIG` named, so
+  a server pointed at a pack elsewhere had no calibrated face search line and no people. It is now read beside
+  that config (the same file in the models folder's `imagekit` directory when the variable is unset), and
+  `scripts/data/fit_face_ball.py` writes there by default: a pack directory carries its floors with it. A
+  deployment that names a config outside its `imagekit` directory moves (or links) its `face_ball.json` beside
+  that config. The user-docs screenshot harness, which runs its app on a pinned buffalo_s pack of its own, now
+  writes the shipped buffalo_s entry beside that pack, so its face shots show the deployed cut.
+
 - **Rebuild Map only when there is something to rebuild** (issue #5615). The Browse map's top-left **Rebuild Map**
   button used to be there on every map, including one freshly built from exactly the items it shows, where a
   rebuild could only reshuffle it. It now appears once items have been verified away on a map opened from Tune,
@@ -503,7 +512,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   unknown clipper or parameter, or a clipper for another media type than a detector scores, stops the run with a
   message naming the problem. A pipeline file sets it as `override_clipper:`. See
   [`docs/CLI.md`](docs/CLI.md#how-the-run-scores).
-
 
 - **`--stream-results --as-labelset` streams a headless run's hits as a labelset** (issue #5285). A run over a
   source larger than RAM can now write its predictions as label entries rather than hits: each carries the item's

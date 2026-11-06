@@ -1,11 +1,13 @@
-"""The face ball's floors per face space, read from ``face_ball.json`` beside the face pack (#5497).
+"""The face ball's floors per face space, read from ``face_ball.json`` beside the face pipeline config (#5497).
 
 #5478's face line keeps every face whose cosine to the Goods' centroid clears a floor, and that
 floor is a cosine in one embedder's space: buffalo_s's floors fit buffalo_l by coincidence and lose
 0.65 to 0.76 F on FaceNet (#5486).  So each space (the ``Face Compat`` tag the face provider
 stamps on every face) brings its own entry, fitted from a labelled face set the server's provider
 embedded (:mod:`vtscore.media.face.face_ball_fit`, ``scripts/data/fit_face_ball.py``).  The file
-is a calculated asset: it lives in the models folder, never in the repo.
+is a calculated asset: it lives beside the pipeline config the app reads (``imagekit/face_ball.json``
+in the models folder by default, or beside the config ``IMAGEKIT_FACE_CONFIG`` names), never in the
+repo, so a pack directory carries its floors with it (#5621).
 
 An entry holds a floor and a slope per balance, the spread they are centred on, whether the ball
 is used in that space at all (``use``, the fit's go/no-go check from the space's own data), and
@@ -45,8 +47,13 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-#: Where, under the models folder, the entries live: beside the face pack's ``face.json``.
-FACE_BALL_RELPATH = Path("imagekit") / "face_ball.json"
+#: The file's name.  It sits beside the face pipeline config in use (:func:`face_ball_path`), so a
+#: pack directory (config, models and floors) moves as one unit.
+FACE_BALL_NAME = "face_ball.json"
+
+#: Where, under the models folder, the file is when ``IMAGEKIT_FACE_CONFIG`` is unset: beside the
+#: default ``imagekit/face.json``.
+FACE_BALL_RELPATH = Path("imagekit") / FACE_BALL_NAME
 
 #: The file's format.  A file of another version is not read.
 FILE_VERSION = 1
@@ -115,10 +122,16 @@ class FaceBall:
 
 
 def face_ball_path() -> Path:
-    """The file the entries are read from: :data:`FACE_BALL_RELPATH` in the models folder."""
-    from vtscore.config import paths  # noqa: PLC0415
+    """The file the entries are read from: :data:`FACE_BALL_NAME` beside the face pipeline config in use.
 
-    return Path(paths.MODELS_CACHE_DIR).expanduser() / FACE_BALL_RELPATH
+    That is the config ``IMAGEKIT_FACE_CONFIG`` names, else the models folder's ``imagekit/face.json``
+    (:func:`~vtscore.media.face.imagekit_bridge.config_path`), whether or not either exists.  So the
+    floors travel with the pack they were fitted on: a server pointed at a pack elsewhere reads that
+    pack's entry, not whatever the models folder's ``imagekit`` directory holds (#5621).
+    """
+    from vtscore.media.face.imagekit_bridge import config_path  # noqa: PLC0415
+
+    return config_path().parent / FACE_BALL_NAME
 
 
 _lock = threading.Lock()

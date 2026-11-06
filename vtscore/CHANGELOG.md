@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.media.face.face_ball.face_ball_path()` resolves beside the face pipeline config in use** (issue
+  #5621): `FACE_BALL_NAME` (`face_ball.json`) in the directory of the new
+  `vtscore.media.face.imagekit_bridge.config_path()`, which is the file `IMAGEKIT_FACE_CONFIG` names, else
+  `default_config_path()`. With the variable unset nothing moves (`FACE_BALL_RELPATH`, `face_ball.json` in the
+  `imagekit` directory under the models folder, is still the default place); with it set, the entries are read
+  beside the named config instead of the models folder's `imagekit` directory. `write_entry`'s default target
+  and `uncalibrated_detail`'s wording follow.
+
 - **A typed-query detector hands over to the trained head at the label quota** (issue #5556).
   `vtscore.detectors.label_quota.QUERY_HOLD_LABELS` is `0` (was `30`, #4736), so `query_holds` is false at the
   app's count and `served_quota`'s `hold_owed` is `0`. `query_holds`' `hold` keyword now defaults to `None`, which

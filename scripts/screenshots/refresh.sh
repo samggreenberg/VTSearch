@@ -32,10 +32,13 @@
 # landed somewhere different each run (#4339). "OS Setting" defers to the page.
 #
 # And it runs the face path on InsightFace's buffalo_s models, pinned by hash:
-# face_fixture.py fetches them into the models folder (once; about 128 MB) and
-# the app is pointed at them with IMAGEKIT_FACE_CONFIG (and this package's own
-# provider, IMAGEKIT_FACE_PROVIDER=oss), so every shot is taken with Face on and
-# the same models on every machine, whatever face.json the models folder holds.
+# face_fixture.py fetches them into the models folder (once; about 128 MB),
+# writes buffalo_s's face ball beside them (the shipped floors, pinned too, since
+# the app reads face_ball.json beside the config in use and People needs it,
+# #5621), and the app is pointed at them with IMAGEKIT_FACE_CONFIG (and this
+# package's own provider, IMAGEKIT_FACE_PROVIDER=oss), so every shot is taken
+# with Face on and the same models and floors on every machine, whatever
+# face.json and face_ball.json the models folder holds.
 # The face shots need them, and with Face on for every shot none depends on
 # whether the machine has face models (Add Dataset's Multi-Dataset rows offer
 # Face only on a server with them). A failed fetch stops the run, saying what

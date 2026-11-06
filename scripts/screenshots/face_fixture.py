@@ -36,6 +36,17 @@ models are checked against `BUFFALO_S_SHA256` / `MODEL_SHA256`. The weights are
 for **non-commercial research only** (InsightFace's licence), which is why they
 are fetched here and never committed.
 
+**The face ball** goes beside them too, as `face_ball.json`: the app reads the
+face search line's floors, and the People cut, beside the pipeline config in
+use (`vtscore/media/face/face_ball.py`), and a space with no entry has no
+people (#5621). The file is a calculated asset, fitted on the GRID from FHIBE
+and never in the repo, so buffalo_s's entry is pinned here (`FACE_BALL_ENTRY`)
+the way the models are: the floors #5497 fitted for `oss-arcface-mbf:1`, as its
+report records them and the GRID's live file holds them. That is the shipped
+cut, so the face shots show what a deployment shows; the test suite pins the
+same numbers (`tests_shared/face_ball.py`), and `tests_lib/meta/test_face_example.py`
+holds the two to each other.
+
 Every failure is loud and names what is missing: there is no quiet fallback in
 which the face shots are skipped, since a fixture that skips when its models are
 absent would let the shots rot unnoticed.
@@ -82,6 +93,25 @@ FACE_CONFIG = {
     "provider": "oss",
     "detector": {"model_bundle": "det_500m.onnx"},
     "embedder": {"model": "w600k_mbf.onnx", "config": "arcface_mbf.json"},
+}
+#: The face space `w600k_mbf.onnx` embeds into (the `compatibility` in `arcface_mbf.json`).
+FACE_COMPAT = "oss-arcface-mbf:1"
+#: buffalo_s's face ball, as `face_ball.json` stores an entry: the floors #5497 fitted on FHIBE
+#: (`docs/experiments/2026-11-06-face-ball-per-embedder-5497`, its report's "The fit reproduces what
+#: shipped"), which are the numbers #5478 shipped. `check` carries the report's go/no-go readings;
+#: `provenance` says where this copy came from. Pinned like the models: the real file is a
+#: calculated asset on the GRID, and the harness must give the same cut on every machine.
+FACE_BALL_ENTRY = {
+    "use": True,
+    "betas": {"1": {"floor": 0.4425, "slope": 0.25}, "4": {"floor": 0.385, "slope": 0.25}},
+    "centre": 0.6371,
+    "check": {"use": True, "gain": {"1": -0.003, "4": 0.055}, "gain_se": {"1": 0.001, "4": 0.001}, "clean_gap": 0.84},
+    "provenance": {
+        "corpus": "FHIBE faces",
+        "commit": "c534adabf",
+        "tool": "scripts/data/fit_face_ball.py, pinned by scripts/screenshots/face_fixture.py",
+        "report": "docs/experiments/2026-11-06-face-ball-per-embedder-5497",
+    },
 }
 
 
@@ -155,18 +185,41 @@ def _fetch_pack(folder: Path) -> None:
         archive.unlink(missing_ok=True)
 
 
+def write_pack_configs(folder: Path) -> Path:
+    """Write the pack's configs into *folder*: the embedder's, the pipeline's and the face ball's.
+
+    Returns the pipeline config's path, the one `refresh.sh` names in `IMAGEKIT_FACE_CONFIG`.
+    The ball's file goes beside it because that is where the app reads it
+    (:func:`vtscore.media.face.face_ball.face_ball_path`), so the pack is complete on its own,
+    whatever the machine's `imagekit/` directory holds. The entry is read back through the app's
+    own parser first, so a malformed pin fails the run instead of leaving People empty.
+    """
+    from vtscore.media.face.face_ball import FACE_BALL_NAME, FILE_VERSION, FaceBall  # noqa: PLC0415
+
+    folder.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(EMBEDDER_CONFIG, folder / EMBEDDER_CONFIG.name)
+    config = folder / "face.json"
+    config.write_text(json.dumps(FACE_CONFIG, indent=2) + "\n")
+    try:
+        ball = FaceBall.from_json(FACE_COMPAT, FACE_BALL_ENTRY)
+    except ValueError as exc:
+        raise FixtureError(f"the pinned buffalo_s face ball entry is malformed: {exc}") from exc
+    if not ball.use:
+        raise FixtureError("the pinned buffalo_s face ball entry is no-go, and the face shots need the ball")
+    file = {"version": FILE_VERSION, "spaces": {FACE_COMPAT: ball.to_json()}}
+    (folder / FACE_BALL_NAME).write_text(json.dumps(file, indent=1) + "\n")
+    return config
+
+
 def ensure_models() -> Path:
-    """The buffalo_s pack and its `face.json`, fetched if missing; returns the config's path."""
+    """The buffalo_s pack with its `face.json` and `face_ball.json`, fetched if missing; returns the config's path."""
     folder = pack_dir()
     if _models_current(folder):
         _fetch_pack(folder)
     problems = _models_current(folder)
     if problems:
         raise FixtureError("the buffalo_s face models are not in place: " + "; ".join(problems))
-    shutil.copyfile(EMBEDDER_CONFIG, folder / EMBEDDER_CONFIG.name)
-    config = folder / "face.json"
-    config.write_text(json.dumps(FACE_CONFIG, indent=2) + "\n")
-    return config
+    return write_pack_configs(folder)
 
 
 # ----------------------------------------------------------------------
