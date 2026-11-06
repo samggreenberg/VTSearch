@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ColMeta, ManagedColumns } from './managed-columns';
+import { ColMeta, gridDom, ManagedColumns } from './managed-columns';
 import { SortState } from './sort-rows';
 
 /**
@@ -175,6 +175,41 @@ function reorder(mc: ManagedColumns<Col>, source: Col, target: Col): void {
   mc.onColDrop({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, target);
 }
 
+// Columns a table only learns of with its data (Find Results' metadata
+// columns, #5584) join after construction.
+describe('ManagedColumns: columns that join later', () => {
+  const KEY = 'mc-test-late';
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it('appends a new column at the end, and knows it from then on', () => {
+    const mc = make(KEY);
+    expect(mc.addColumns(['width' as Col])).toBe(true);
+    expect(mc.columnOrder).toEqual(['name', 'size', 'date', 'kind', 'width']);
+    expect(mc.addColumns(['width' as Col, 'name'])).toBe(false);
+    expect(mc.columnOrder).toEqual(['name', 'size', 'date', 'kind', 'width']);
+  });
+
+  it('puts a column back where the saved order had it', () => {
+    localStorage.setItem(KEY, JSON.stringify(['date', 'width', 'name', 'height', 'size', 'kind']));
+    const mc = make(KEY);
+    // Unknown at construction, so left out until named.
+    expect(mc.columnOrder).toEqual(['date', 'name', 'size', 'kind']);
+    mc.addColumns(['height' as Col, 'width' as Col, 'depth' as Col]);
+    expect(mc.columnOrder).toEqual(['date', 'width', 'name', 'height', 'size', 'kind', 'depth']);
+  });
+
+  it('a later drop keeps and saves the new column', () => {
+    const mc = make(KEY);
+    mc.addColumns(['width' as Col]);
+    mc.onColDragStart({ dataTransfer: null } as unknown as DragEvent, 'width' as Col);
+    mc.onColDrop({ preventDefault() {} } as unknown as DragEvent, 'name');
+    expect(mc.columnOrder).toEqual(['width', 'name', 'size', 'date', 'kind']);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(['width', 'name', 'size', 'date', 'kind']);
+  });
+});
+
 describe('ManagedColumns: drag-reorder', () => {
   const KEY = 'mc-test-reorder';
 
@@ -292,6 +327,16 @@ describe('ManagedColumns: drag-reorder', () => {
 });
 
 /**
+ * Stub an element's layout width the way a browser reports it: the exact
+ * (possibly fractional) `getBoundingClientRect().width`, and `offsetWidth`
+ * rounded to a whole pixel.
+ */
+function stubWidth(el: HTMLElement, width: number): void {
+  Object.defineProperty(el, 'offsetWidth', { value: Math.round(width), configurable: true });
+  el.getBoundingClientRect = () => ({ width }) as DOMRect;
+}
+
+/**
  * Build a `<table>` with a `<thead>` of `data-col` headers and one body row.
  * Stubs the layout geometry the resize code reads: table width, each header's
  * width, and each body cell's `scrollWidth` (its natural content width).
@@ -302,7 +347,7 @@ function makeTable(opts: {
   cellScrollWidths?: Partial<Record<Col, number>>;
 }): HTMLTableElement {
   const table = document.createElement('table');
-  Object.defineProperty(table, 'offsetWidth', { value: opts.tableWidth, configurable: true });
+  stubWidth(table, opts.tableWidth);
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
@@ -312,7 +357,7 @@ function makeTable(opts: {
   for (const col of DEFAULTS) {
     const th = document.createElement('th');
     th.setAttribute('data-col', col);
-    Object.defineProperty(th, 'offsetWidth', { value: opts.headerWidths[col], configurable: true });
+    stubWidth(th, opts.headerWidths[col]);
     headRow.appendChild(th);
 
     const td = document.createElement('td');
@@ -362,6 +407,25 @@ describe('ManagedColumns: resize', () => {
     expect(mc.colWidths['size']).toBeCloseTo(25);
     expect(document.body.style.cursor).toBe('col-resize');
     expect(document.body.style.userSelect).toBe('none');
+  });
+
+  it('startResize keeps a column its fractional width, not the rounded offsetWidth (#5534)', () => {
+    // A content-sized auto-layout column is often a fraction of a pixel
+    // wider than its offsetWidth; capturing the rounded value made the first
+    // drag ellipsize the column's longest cell.
+    const mc = make();
+    const table = makeTable({
+      tableWidth: 850,
+      headerWidths: { name: 287.140625, size: 76, date: 362, kind: 124.859375 },
+    });
+    mc.startResize({
+      target: table.querySelector('th[data-col="size"]') as HTMLElement,
+      clientX: 0,
+      stopPropagation() {},
+      preventDefault() {},
+    } as unknown as MouseEvent);
+    expect(mc.colWidths['name']).toBeCloseTo((287.140625 / 850) * 100, 6);
+    expect(mc.colWidths['kind']).toBeCloseTo((124.859375 / 850) * 100, 6);
   });
 
   it('startResize on the leftmost divider (no previous column) is a no-op', () => {
@@ -455,6 +519,78 @@ describe('ManagedColumns: resize', () => {
     // 102px / 1000px = 10.2%; size absorbs the rest of the 50% pair.
     expect(mc.colWidths['name']).toBeCloseTo(10.2);
     expect(mc.colWidths['size']).toBeCloseTo(50 - 10.2);
+  });
+
+  // A grid of divs (Find Results' list, #5584) through `gridDom`: the width is
+  // the header cells' together, and the auto-fit narrows the column's cells.
+  describe('on a CSS grid', () => {
+    function makeGrid(headerWidths: Record<Col, number>, scrollWidths: Partial<Record<Col, number>> = {}) {
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      const head = document.createElement('div');
+      head.className = 'grid-head';
+      const row = document.createElement('div');
+      row.className = 'grid-row';
+      for (const col of DEFAULTS) {
+        const cell = document.createElement('span');
+        cell.setAttribute('data-col', col);
+        stubWidth(cell, headerWidths[col]);
+        head.appendChild(cell);
+        const body = document.createElement('span');
+        Object.defineProperty(body, 'scrollWidth', { value: scrollWidths[col] ?? 0, configurable: true });
+        row.appendChild(body);
+      }
+      grid.appendChild(head);
+      grid.appendChild(row);
+      document.body.appendChild(grid);
+      return grid;
+    }
+
+    function makeOnGrid(): ManagedColumns<Col> {
+      return new ManagedColumns<Col>(DEFAULTS, META, {
+        initialSort: 'name',
+        dom: gridDom('.grid', '.grid-head [data-col]', '.grid-row'),
+      });
+    }
+
+    afterEach(() => document.querySelectorAll('.grid').forEach((g) => g.remove()));
+
+    it('shares out the header cells\' width, gaps aside, and drags by it', () => {
+      const mc = makeOnGrid();
+      // 500px of cells in a wider container: the gaps are in no one's share.
+      const grid = makeGrid({ name: 200, size: 100, date: 100, kind: 100 });
+      stubWidth(grid, 560);
+      mc.startResize({
+        target: grid.querySelector('[data-col="size"]') as HTMLElement,
+        clientX: 200,
+        stopPropagation() {},
+        preventDefault() {},
+      } as unknown as MouseEvent);
+      expect(mc.tableFixed).toBe(true);
+      expect(mc.colWidths['name']).toBeCloseTo(40);
+      expect(mc.colWidths['size']).toBeCloseTo(20);
+      mc.onResizeMove({ clientX: 250 } as MouseEvent); // +50px of 500 = +10%
+      expect(mc.colWidths['name']).toBeCloseTo(50);
+      expect(mc.colWidths['size']).toBeCloseTo(10);
+    });
+
+    it('auto-fits a column by narrowing its cells, and widens them back', () => {
+      const mc = makeOnGrid();
+      const grid = makeGrid({ name: 200, size: 100, date: 100, kind: 100 }, { name: 48 });
+      const cell = grid.querySelector('.grid-row span') as HTMLElement;
+      cell.style.width = '7px';
+      mc.startResize({
+        target: grid.querySelector('[data-col="size"]') as HTMLElement,
+        clientX: 200,
+        stopPropagation() {},
+        preventDefault() {},
+      } as unknown as MouseEvent);
+      mc.onResizeEnd();
+      // (48 + 2) / 500 = 10%; size takes the rest of the pair's 60%.
+      expect(mc.colWidths['name']).toBeCloseTo(10);
+      expect(mc.colWidths['size']).toBeCloseTo(50);
+      expect(cell.style.width).toBe('7px');
+    });
   });
 
   it('onResizeEnd is a no-op when no resize is active', () => {

@@ -23,9 +23,12 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
+import { PeoplePrepService } from '../../services/people-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { SharingCapabilityService } from '../../services/sharing-capability.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -33,6 +36,7 @@ import { ProgressEventsService } from '../../services/progress-events.service';
 import {
   ProgressBarState,
   ProgressHeader,
+  ProgressKind,
   formatProgressHeader,
   progressBarState,
 } from '../../utils/format-progress';
@@ -60,6 +64,8 @@ import { LabelImporterModalComponent } from '../modals/label-importer-modal/labe
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { AutoExportModalComponent } from '../modals/auto-export-modal/auto-export-modal.component';
+import { ShareDetectorModalComponent } from '../modals/share-detector-modal/share-detector-modal.component';
+import { ReceivedDetectorsModalComponent } from '../modals/received-detectors-modal/received-detectors-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { topOpenModal } from '../modal/modal.component';
@@ -106,6 +112,8 @@ type DashboardHintId = Extract<
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
     AutoExportModalComponent,
+    ShareDetectorModalComponent,
+    ReceivedDetectorsModalComponent,
     IconComponent,
     ToastyHintComponent,
     UsageBarComponent,
@@ -137,10 +145,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   modals = inject(DashboardModalsService);
   loadingTasksSvc = inject(DashboardLoadingTasksService);
   browsePrep = inject(BrowsePrepService);
+  peoplePrep = inject(PeoplePrepService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
   private autofindSetup = inject(AutoFindSetupService);
+  private sharingFlows = inject(DetectorSharingFlowsService);
+  /** Public: each detector row reads `sharing.enabled()` for its menu, and
+   *  the card header shows Received… on it. */
+  readonly sharing = inject(SharingCapabilityService);
   private hints = inject(HintsService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
@@ -678,16 +691,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
     if (targets.length === 0) return;
-    const names = targets.map((d) => `"${d.name}"`).join(', ');
     this.deletingSelectedDatasetsConfirm.set(true);
     let ok = false;
     try {
-      const question =
-        targets.length === 1
-          ? `Delete dataset ${names} from your list?`
-          : `Delete ${targets.length} datasets from your list?\n${names}`;
+      // One target is named in the question; several are counted there and
+      // listed under it, one per line (#5532).
+      const single = targets.length === 1;
+      const question = single
+        ? `Delete dataset "${targets[0].name}" from your list?`
+        : `Delete ${targets.length} datasets from your list?`;
       const detail = '(Detectors are unaffected.)';
-      ok = await this.dialog.confirmDestructive(question, detail);
+      ok = await this.dialog.confirmDestructive(question, detail, 'Delete', single ? [] : targets.map((d) => d.name));
     } finally {
       this.deletingSelectedDatasetsConfirm.set(false);
       this.wasDeletingSelectedDatasetsConfirm.set(true);
@@ -787,16 +801,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (targets.length === 0) return;
-    const names = targets.map((m) => `"${m.name}"`).join(', ');
     this.deletingSelectedDetectorsConfirm.set(true);
     let ok = false;
     try {
-      const question =
-        targets.length === 1
-          ? `Delete detector ${names}?`
-          : `Delete ${targets.length} detectors?\n${names}`;
+      // As for datasets: one named in the question, several listed under it.
+      const single = targets.length === 1;
+      const question = single ? `Delete detector "${targets[0].name}"?` : `Delete ${targets.length} detectors?`;
       const detail = '(This deletes your labels. The underlying media is unaffected.)';
-      ok = await this.dialog.confirmDestructive(question, detail);
+      ok = await this.dialog.confirmDestructive(question, detail, 'Delete', single ? [] : targets.map((m) => m.name));
     } finally {
       this.deletingSelectedDetectorsConfirm.set(false);
       this.wasDeletingSelectedDetectorsConfirm.set(true);
@@ -954,13 +966,47 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** A received detector's "Check for updates": the owner's latest labels,
+   *  through the integrity dialog when someone else has written to them. */
+  checkDetectorUpdates(model: DetectorRegistryEntry): void {
+    void this.sharingFlows.checkForUpdates(model);
+  }
+
+  /** "Fork": a copy of the user's own, which lands in Drafts selected. */
+  async forkDetector(model: DetectorRegistryEntry): Promise<void> {
+    const entry = await this.sharingFlows.fork(model, { askName: true });
+    if (!entry) return;
+    // Selected ahead of the refresh that lists it, as a created detector is.
+    this.dashSelection.setDetectorTab('drafts');
+    this.dashSelection.selectOnly('detector', [entry.id]);
+  }
+
+  /** The Received list added a detector: re-list, and land it in Drafts
+   *  selected, as a fork lands. The list stays open for the next one. */
+  onDetectorReceived(entry: DetectorRegistryEntry): void {
+    this.datasetState.refresh();
+    this.dashSelection.setDetectorTab('drafts');
+    this.dashSelection.selectOnly('detector', [entry.id]);
+  }
+
+  /** A Received row's "Show": close the list and select the user's copy, on
+   *  whichever tab it lives. */
+  showReceivedCopy(detectorId: string): void {
+    this.modals.closeReceived();
+    const entry = this.datasetState.detectorById().get(detectorId);
+    this.dashSelection.setDetectorTab(entry?.autofind ? 'autofind' : 'drafts');
+    this.dashSelection.selectOnly('detector', [detectorId]);
+  }
+
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId.set(model.id);
     // No AutoFind caveat needed here: AutoFind rows are frozen (no Delete
     // affordance), so only draft detectors can reach this dialog.
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      '(This deletes your labels. The underlying media is unaffected.)',
+      model.sync_mode === 'linked'
+        ? "(This deletes your received copy. The owner's detector and the underlying media are unaffected.)"
+        : '(This deletes your labels. The underlying media is unaffected.)',
     );
     this.deletingDetectorId.set('');
     if (!ok) return;
@@ -1034,14 +1080,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  Browsing works for any media type — the UMAP projection and hex-tile
    *  pyramid are embedding-based and media-agnostic. */
   browseDataset(dataset: DatasetRegistryEntry): void {
+    // One prep at a time: each ends in a navigation, and two would race.
+    if (this.peoplePrep.preparing) return;
     this.browsePrep.prepareAndBrowse(dataset.id);
   }
 
+  /** Open a Face dataset's People view (#5590). Loads the dataset (if needed)
+   *  and finds its people first, with progress on its row, as
+   *  {@link browseDataset} builds the map; `PeoplePrepService` navigates to
+   *  `/people/:id` once they are found. */
+  openPeople(dataset: DatasetRegistryEntry): void {
+    if (this.browsePrep.preparing) return;
+    this.peoplePrep.prepareAndOpen(dataset.id);
+  }
+
+  /** The prep row to show for *datasetId*, or null: Browse's map build or
+   *  People's fit, whichever is preparing that dataset. */
+  prepTask(datasetId: string): LoadingTask | null {
+    return this.browsePrep.displayTask(datasetId) ?? this.peoplePrep.displayTask(datasetId);
+  }
+
+  /** The vocabulary *datasetId*'s row speaks (see {@link prepTask}). */
+  prepTaskKind(datasetId: string): ProgressKind {
+    return this.peoplePrep.holds(datasetId)
+      ? this.peoplePrep.taskKind(datasetId)
+      : this.browsePrep.taskKind(datasetId);
+  }
+
   /** Cancel a dataset load row. Routes the browse-prep projection row to
-   *  `BrowsePrepService`; everything else is a real SSE load task. */
+   *  `BrowsePrepService` and the people row to `PeoplePrepService`; everything
+   *  else is a real SSE load task. */
   onCancelDatasetTask(taskId: string): void {
     if (this.browsePrep.ownsTask(taskId)) {
       this.browsePrep.cancel();
+    } else if (this.peoplePrep.ownsTask(taskId)) {
+      this.peoplePrep.cancel();
     } else {
       this.loadingTasksSvc.cancelLoadingTask(taskId);
     }
@@ -1051,6 +1124,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onDismissDatasetTask(taskId: string): void {
     if (this.browsePrep.ownsTask(taskId)) {
       this.browsePrep.dismiss();
+    } else if (this.peoplePrep.ownsTask(taskId)) {
+      this.peoplePrep.dismiss();
     } else {
       this.loadingTasksSvc.dismissLoadingTask(taskId);
     }
@@ -1346,13 +1421,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.trainLoading() || this.findLoading() || this.contextSwitch.switching;
   }
 
+  /** What a toolbar button disabled by {@link isContextSwitching} says on
+   *  hover, or ``''`` while nothing is switching: a disabled button always
+   *  says why (#5533). Each button falls back to its own tooltip. */
+  get contextSwitchReason(): string {
+    return this.isContextSwitching ? 'Wait for the current load to finish' : '';
+  }
+
   /** Train/Tune gate on this rather than `isContextSwitching` because they
-   *  must also wait out an in-flight browse-prep: when its projection build
-   *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
-   *  Tune navigation underneath it would race that redirect. Independent
-   *  actions don't care — to them browse-prep is just more background work. */
+   *  must also wait out an in-flight browse-prep or people-prep: when its build
+   *  finishes it fires a navigation to `/browse/:id` or `/people/:id`, and
+   *  starting a Train/Tune navigation underneath it would race that redirect.
+   *  Independent actions don't care — to them a prep is just more background
+   *  work. */
   get isNavBusy(): boolean {
-    return this.isContextSwitching || this.browsePrep.preparing;
+    return this.isContextSwitching || this.browsePrep.preparing || this.peoplePrep.preparing;
   }
 
   /**

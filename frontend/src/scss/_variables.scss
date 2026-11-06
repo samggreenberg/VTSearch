@@ -121,9 +121,9 @@
   // Modal width scale. Dialogs pick one of these instead of hand-rolling a
   // width; keeps chrome consistent across the ~24 modals. `sm` is the simple
   // single-column form (label importer, combine detectors, blank new-detector
-  // form); `md` the picker/table dialogs (importer, export, settings, help);
-  // `lg` the media-picker view that needs room for the demo table + folder
-  // browser. Modals with no fixed-width need size to content.
+  // form); `md` the picker/table dialogs (export, settings, help); `lg` the
+  // views that need room for the demo table or folder browser (Add Dataset,
+  // New Detector's media picker). Modals with no fixed-width need size to content.
   --modal-w-sm: 480px;
   --modal-w-md: 720px;
   --modal-w-lg: 900px;
@@ -161,6 +161,15 @@
   // hand.  Validated (dataviz lightness band, 3:1 on --bg-surface) for this
   // theme.
   --chart-verified: #d4731a;
+  // Faces outlined on a photo, by whose they are (vt-image-viewer's
+  // outlineBoxes): the person in focus, the person they appear with, and
+  // everyone else in the photo, drawn faintly. The pair is a categorical one,
+  // checked with the dataviz palette validator (OKLCH lightness band, CVD
+  // separation, 3:1 on --bg-surface) for this theme. Never a status colour:
+  // a face outlined orange is not a vote.
+  --photo-outline-primary: #dc7400;
+  --photo-outline-secondary: #3794e8;
+  --photo-outline-other: rgba(255, 255, 255, 0.95);
   // Audio-waveform playhead: a warm line swept over the (blue --accent)
   // waveform, so it reads as the complementary color and never blends in.
   --waveform-playhead: #ffb300;
@@ -279,6 +288,9 @@
   --color-good: #2e7d32;
   --color-bad: #d32f2f;
   --chart-verified: #e8590c;
+  --photo-outline-primary: #d9650b;
+  --photo-outline-secondary: #1f7fd6;
+  --photo-outline-other: rgba(255, 255, 255, 0.95);
   --waveform-playhead: #e8590c;
   --shadow-dropdown: rgba(0, 0, 0, 0.15);
   --modal-backdrop: rgba(0, 0, 0, 0.4);
@@ -352,6 +364,11 @@
   --color-good: #00ff00;
   --color-bad: #ff0000;
   --chart-verified: #00ffff;
+  // Brighter than the dark theme's pair, past the chart lightness band as this
+  // theme's other colours are; the CVD separation still passes.
+  --photo-outline-primary: #ff8000;
+  --photo-outline-secondary: #1aa8ff;
+  --photo-outline-other: #ffffff;
   // Max-contrast red line over the yellow (--accent) waveform in highviz.
   --waveform-playhead: #ff0000;
   --shadow-dropdown: rgba(255, 255, 255, 0.2);

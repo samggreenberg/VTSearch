@@ -10,7 +10,9 @@ The **v0 labelset-kNN evidence signals** (§6.1's `D` and `TS`) have also shippe
 
 **The verdict's null (#5089).** The labelset's leave-one-out spread proved no null for the Evidence chip's verdict: the votes are picked by active learning, so they are no sample of their class, and on #4739's bench the verdict fired on 81% of in-domain runs by vote 150. The verdict now ranks each item's distance to its predicted class's votes against the same distance over the training haystack (`reference_cutoffs`, one cut per class), which reads alpha in-domain and fires on a foreign corpus from vote 10. Those two cuts are the first summary of the training haystack the detector carries: recorded on the detector JSON when it is tested or trained on its training dataset (`vtscore/detectors/evidence_baseline.py`; the Train view's learned sort leaves it to be drawn once the votes stop, #5120), stamped with the embedder, its width and the labelset's signature, and refused on any mismatch, as §7.3 asks of a persisted geometric summary. They are scalars, not vectors: the no-persisted-vectors rule is unchanged.
 
-Not yet built: the tree ensemble, the `n_viewed` channel, everything in §5 (blob scan, global alarms), the rest of §6 (tiered work queue, active auditor / stratified estimation), and §7 (portable artifact).
+**The domain chip travels (#5567).** A detector records a summary of its training dataset beside the pointer: 128 anchor items (each a k-means cluster's member nearest its centroid), named by origin, and the sorted calibration scores of the dataset's other half, stamped with the embedder (`vtscore/coverage/domain_summary.py`, `vtscore/detectors/domain_summary.py`). Where the dataset is not on the instance, the overlap check re-embeds the anchors and ranks each item's nearest-anchor cosine against those scores: the split-conformal null holds, with less power than the full comparison. It is §7.1's exemplar spine without the moments, and needs no §7.3 amendment, since nothing it persists is a vector.
+
+Not yet built: the tree ensemble, the `n_viewed` channel, everything in §5 (blob scan, global alarms), the rest of §6 (tiered work queue, active auditor / stratified estimation), and the rest of §7 (the portable artifact's moments and evidence channels).
 
 **Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/detectors/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue). In Find every unverified item is flood-filled with the detector's own call, so an agreement count read off those piles is inflated by everything the human never looked at; the result pane instead reads the line's precision and recall off the Test's own picks, with ranges (#4527). The active-auditor portion of this design (§6) generalises that: stratified estimates with confidence intervals, by coverage quadrant, instead of adopted self-agreement.
 
@@ -300,7 +302,7 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 <!-- item-sep -->
 
-3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3, the result pane's domain chip read from the artifact.
+3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3. The result pane's domain chip already reads a summary that travels (see Background).
 
 <!-- item-sep -->
 

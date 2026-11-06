@@ -72,20 +72,21 @@ export class TrainingDomainAlertService {
     const key = pairKey(pair);
     this.answered.add(key);
 
-    const detector = this.datasetState.detectorById().get(pair.modelId)?.name ?? 'This detector';
-    const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name ?? 'this dataset';
-    // The Tune result's own line, word for word, as Find Results and a run's
-    // notice word it too (#5501).
-    const warning = domainShiftWarning(report, detector, dataset);
-    if (!warning) return;
+    const detector = this.datasetState.detectorById().get(pair.modelId)?.name;
+    const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name;
     const onTune = this.router.url.split('?')[0].startsWith('/tune/');
+    // The Tune result's own line, word for word, as Find Results and a run's
+    // notice word it too (#5501); its next step points at the Tune it button,
+    // or on Tune at where the calls get checked (#5545).
+    const warning = domainShiftWarning(report, detector, dataset, onTune ? 'tune' : 'toast');
+    if (!warning) return;
     this.toast.warning({
       ...warning,
       action: onTune
         ? undefined
         : {
             label: 'Tune it',
-            title: `Tune ${detector} on ${dataset}`,
+            title: `Tune ${detector ?? 'this detector'} on ${dataset ?? 'this dataset'}`,
             onClick: () => void this.router.navigate(['/tune', pair.datasetId, pair.modelId]),
           },
       dedupKey: `training-domain:${key}`,

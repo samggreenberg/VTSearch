@@ -241,10 +241,21 @@ def reset_shared_state(medias_snapshot) -> None:
 
     reset_label_sync_for_tests()
 
+    # A bad ``detector_sharing_source`` warns once per name; forget which were
+    # warned about, so a test asserting that one warning is not order-dependent.
+    from vtscore.labels.sharing import reset_sharing_warnings_for_tests
+
+    reset_sharing_warnings_for_tests()
+
     # Same for an Evidence baseline a learned sort left to be drawn (#5120).
     from vtscore.detectors.evidence_baseline import reset_baseline_draws_for_tests
 
     reset_baseline_draws_for_tests()
+
+    # And the training-domain summaries built and anchors resolved (#5567).
+    from vtscore.detectors.domain_summary import reset_domain_summary_caches_for_tests
+
+    reset_domain_summary_caches_for_tests()
 
     # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
     # test can't suppress a rehydrate in the next one.
@@ -282,6 +293,11 @@ def reset_shared_state(medias_snapshot) -> None:
     from vtscore.media.face.imagekit_bridge import reset_for_tests as reset_face_bridge
 
     reset_face_bridge()
+
+    # ...and the face ball's cached read of its file, and the spaces already warned about (#5497).
+    from vtscore.media.face.face_ball import reset_for_tests as reset_face_ball
+
+    reset_face_ball()
 
 
 @pytest.fixture(autouse=True)
@@ -351,7 +367,7 @@ def no_face_models(tmp_path, monkeypatch):
     pointing at a developer's real one (:mod:`tests_shared.data_dir`).  Either
     would turn Face on for one machine's run and not another's.  A test that
     wants Face on points ``IMAGEKIT_FACE_CONFIG`` at a config of its own, or
-    installs a fake pipeline on the bridge.
+    installs a fake pipeline on the bridge.  No face space has a ball either.
     """
     from vtscore.media.face import imagekit_bridge
 
@@ -360,3 +376,10 @@ def no_face_models(tmp_path, monkeypatch):
     monkeypatch.delenv("IMAGEKIT_EXT_BACKEND", raising=False)
     absent = tmp_path / "no-face-models" / imagekit_bridge.DEFAULT_CONFIG_RELPATH
     monkeypatch.setattr(imagekit_bridge, "default_config_path", lambda: absent)
+    # Nor the face ball's floors (#5497), which live beside the face pack: a test that wants a
+    # space's ball writes one (:func:`tests_shared.face_ball.face_ball_space`).
+    from vtscore.media.face import face_ball
+
+    no_ball = tmp_path / "no-face-models" / face_ball.FACE_BALL_RELPATH
+    monkeypatch.setattr(face_ball, "face_ball_path", lambda: no_ball)
+    face_ball.reset_for_tests()

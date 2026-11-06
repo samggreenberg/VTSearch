@@ -26,6 +26,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`vtsbrowse.md`](vtsbrowse.md)
 - [`vtsbrowse-empirical-tuning.md`](vtsbrowse-empirical-tuning.md)
 - [`vtsbrowse-toponymy.md`](vtsbrowse-toponymy.md)
+- [`co-face-browse.md`](co-face-browse.md)
 
 ## Embedders, detectors, media
 

@@ -17,6 +17,26 @@ when that holds more and is not loaded: its vectors are then read from its
 saved file (:func:`~vtscore.embedding.matrix.stored_primary_vectors`), so a
 run after a restart, or an unattended AutoFind on a fresh import, still has
 something to compare against.
+
+Where the training dataset is not here at all (a detector handed over from
+another instance), the check reads the summary of it the detector records
+beside the pointer (#5567, :mod:`vtscore.detectors.domain_summary`), or that
+came with its labels in an exported labelset (#5571): its anchor items,
+re-embedded here, and calibration scores.  The report has the same
+shape and the same null; it has less power, since 128 anchors stand in for
+the dataset's vectors (:mod:`vtscore.coverage.domain_summary`).
+
+A dataset holds a label as evidence only when the label's media is its own:
+media a label import copied into it are left out of its count (#5572,
+:data:`~vtscore.detectors.training_domain.INGESTED_LABELS_KEY`), or the
+dataset an import landed in would read as the one the detector was trained on.
+
+One rule picks the training dataset for every reader
+(:func:`training_reference`): this check, and the Evidence chip's baseline,
+which is drawn only there and records the pointer and summary as it is
+(``vtsearch.routes.detectors.scoring._evidence_baseline_home``).  Were the two
+to disagree, a draw on a dataset holding a few of the labels would move the
+pointer there and replace the summary, and the check would go quiet (#5572).
 """
 
 from __future__ import annotations
@@ -43,7 +63,7 @@ class OverlapCache:
     """
 
     vectors: dict[str, Any] = field(default_factory=dict)
-    answers: dict[tuple[str, str], dict[str, Any] | str] = field(default_factory=dict)
+    answers: dict[tuple[str, ...], dict[str, Any] | str] = field(default_factory=dict)
 
 
 def domain_shift_against(
@@ -109,14 +129,86 @@ def cached_domain_shift(
     Its refusal is remembered as well as its report, so a second detector
     trained on the same unreadable dataset does not try it again.
     """
-    key = (reference_id, active_ctx.dataset_id)
+    return _cached_answer(
+        cache,
+        (reference_id, active_ctx.dataset_id),
+        lambda: domain_shift_against(reference_id, active_ctx, allow_unloaded=allow_unloaded, cache=cache),
+    )
+
+
+def domain_shift_from_summary(
+    summary: dict[str, Any], active_ctx: Any, *, cache: OverlapCache | None = None
+) -> dict[str, Any]:
+    """Report domain shift of *active_ctx*'s vectors against a detector's training-domain summary (#5567).
+
+    :func:`vtscore.coverage.summary_shift_report` against *summary*
+    (:func:`~vtscore.detectors.domain_summary.stored_domain_summary`): its
+    anchors, read from the active dataset or fetched from their origins and
+    embedded (:func:`~vtscore.detectors.domain_summary.anchor_vectors`), and
+    its calibration scores.  The same dict as :func:`domain_shift_against`,
+    naming the summarised dataset as the reference.  Raises
+    :class:`DomainShiftUnavailable` when the summary is of the active dataset
+    itself, was drawn in another embedder, media type or vector width, an
+    anchor cannot be fetched, or the active dataset has no embeddings.
+    """
+    from vtscore.coverage.domain_summary import summary_shift_report
+    from vtscore.datasets.registry import get_dataset
+    from vtscore.detectors.domain_summary import SummaryUnavailable, anchor_vectors
+
+    if summary["dataset_id"] == active_ctx.dataset_id:
+        raise DomainShiftUnavailable("Active dataset and reference dataset are the same")
+    active = get_dataset(active_ctx.dataset_id) or {}
+    active_embedder = active.get("embedder", "") or ""
+    # The calibration scores live in the summary's embedder: refuse instead of
+    # returning confident nonsense, as the full check does.
+    if summary["embedder"] != active_embedder:
+        raise DomainShiftUnavailable(
+            f"Embedder mismatch: the training dataset's summary was drawn in {summary['embedder']!r}, "
+            f"active dataset uses {active_embedder or 'unknown'!r}"
+        )
+    if summary["media_type"] and active.get("media_type") and summary["media_type"] != active["media_type"]:
+        raise DomainShiftUnavailable(
+            f"Media type mismatch: the training dataset holds {summary['media_type']}, "
+            f"the active dataset {active['media_type']}"
+        )
+    vectors = _cached_vectors(cache, active_ctx.dataset_id, lambda: _media_vectors(active_ctx))
+    if vectors is None:
+        raise DomainShiftUnavailable("Active dataset has no embeddings to compare")
+    if vectors.shape[1] != summary["dim"]:
+        raise DomainShiftUnavailable(
+            f"Vector width mismatch: the training dataset's summary is {summary['dim']}-wide, "
+            f"the active dataset's vectors {vectors.shape[1]}-wide"
+        )
+    try:
+        anchors = anchor_vectors(summary, active_ctx, embedder=active_embedder)
+        report = summary_shift_report(anchors, summary["calibration"], vectors)
+    except SummaryUnavailable as e:
+        raise DomainShiftUnavailable(str(e)) from e
+    except ValueError as e:  # an anchor re-embedded at another width, or too few scores to calibrate
+        raise DomainShiftUnavailable(f"The training dataset's summary cannot be read here: {e}") from e
+    return {"reference_dataset_id": summary["dataset_id"], **report}
+
+
+def cached_summary_shift(
+    summary: dict[str, Any], active_ctx: Any, *, cache: OverlapCache | None = None
+) -> dict[str, Any]:
+    """:func:`domain_shift_from_summary`, answered once per summary and dataset in a run that shares *cache*."""
+    return _cached_answer(
+        cache,
+        ("summary", summary["dataset_id"], active_ctx.dataset_id),
+        lambda: domain_shift_from_summary(summary, active_ctx, cache=cache),
+    )
+
+
+def _cached_answer(cache: OverlapCache | None, key: tuple[str, ...], compute: Any) -> dict[str, Any]:
+    """*compute()*'s report, or its :class:`DomainShiftUnavailable` refusal, remembered under *key* in *cache*."""
     if cache is not None and key in cache.answers:
         answer = cache.answers[key]
         if isinstance(answer, str):
             raise DomainShiftUnavailable(answer)
         return dict(answer)
     try:
-        report = domain_shift_against(reference_id, active_ctx, allow_unloaded=allow_unloaded, cache=cache)
+        report = compute()
     except DomainShiftUnavailable as e:
         if cache is not None:
             cache.answers[key] = str(e)
@@ -162,14 +254,19 @@ def _stored_vectors(dataset_id: str) -> Any:
     return stored_primary_vectors(pkl_path)
 
 
-def infer_training_reference(labelset: Any, active_dataset_id: str) -> tuple[str, dict[str, int]]:
+def infer_training_reference(
+    labelset: Any, active_dataset_id: str, *, ingested: dict[str, list[dict[str, Any]]] | None = None
+) -> tuple[str, dict[str, int]]:
     """The loaded dataset the caller can read that holds most of *labelset*'s labels, and every count.
 
     :func:`~vtscore.detectors.training_domain.infer_training_dataset` over the
     loaded, readable datasets, the active one winning a tie; ``""`` when none
-    holds any.  Both trust checks read their reference from here: the overlap
-    check compares against it, and the evidence check draws its baseline on it
-    (#5089).  The active dataset is always counted: the caller has it open.
+    holds any.  The live half of :func:`training_reference`, which both trust
+    checks read their reference from.  The active dataset is always counted:
+    the caller has it open.  *ingested*
+    (:func:`~vtscore.detectors.training_domain.recorded_ingests`) leaves out
+    of each dataset's count the labels on media an import copied into it
+    (#5572).
     """
     from vtscore.datasets.registry import can_user_access, get_dataset, get_loaded_ids
     from vtscore.detectors.training_domain import infer_training_dataset, labels_held_by_dataset
@@ -191,7 +288,7 @@ def infer_training_reference(labelset: Any, active_dataset_id: str) -> tuple[str
         and all(ctx.dataset_id != active_dataset_id for ctx in contexts)
     ):
         contexts.append(active_ctx)
-    counts = labels_held_by_dataset(labelset, contexts)
+    counts = labels_held_by_dataset(labelset, contexts, ingested=ingested)
     return infer_training_dataset(counts, prefer=active_dataset_id), counts
 
 
@@ -215,24 +312,146 @@ def _recorded_reference(recorded: dict[str, Any] | None, counts: dict[str, int])
     return recorded
 
 
+def _summary_reference(
+    summary: dict[str, Any] | None,
+    recorded: dict[str, Any] | None,
+    stored: dict[str, Any] | None,
+    counts: dict[str, int],
+    labels_total: int,
+) -> dict[str, Any] | None:
+    """The training dataset the detector's *summary* stands in for, when nothing better can (#5567).
+
+    That is, when the summarised dataset is neither counted live in *counts*
+    (loaded, and readable by the caller) nor *stored*, the recorded dataset
+    whose saved file the full check reads.  It counts as holding what the
+    *recorded* pointer says it held, since the pointer is recorded with it;
+    an import from an exported labelset records one naming the labels that
+    came with the summary (#5572).  A summary with no pointer at all (one
+    imported before #5572) counts as holding all *labels_total* labelled
+    examples: it is a summary of the dataset the detector was trained on, and
+    nothing here says how many of the labels that dataset held.  ``None`` when
+    the pointer names another dataset: the pointer says where this detector's
+    labels were drawn.
+    """
+    if summary is None:
+        return None
+    dataset_id = summary["dataset_id"]
+    if dataset_id in counts or (stored is not None and stored["dataset_id"] == dataset_id):
+        return None
+    if recorded is None:
+        return {"dataset_id": dataset_id, "dataset_name": summary["dataset_name"], "labels_held": labels_total}
+    if recorded["dataset_id"] != dataset_id:
+        return None
+    return {
+        "dataset_id": dataset_id,
+        "dataset_name": summary["dataset_name"] or recorded["dataset_name"],
+        "labels_held": recorded["labels_held"],
+    }
+
+
+@dataclass(frozen=True)
+class TrainingReference:
+    """The dataset a detector's labels say it was trained on (:func:`training_reference`), and what that rests on.
+
+    *dataset_id* is ``""`` when no dataset holds any of the labels.  *counts*
+    is how many of the labels each candidate holds; *stored* the recorded
+    training dataset when it is registered here but not loaded, at its
+    recorded count; *travelled* the dataset the detector's summary stands in
+    for, when nothing better does.
+    """
+
+    dataset_id: str
+    counts: dict[str, int]
+    stored: dict[str, Any] | None = None
+    travelled: dict[str, Any] | None = None
+
+
+def training_reference(
+    labelset: Any,
+    active_id: str,
+    *,
+    recorded: dict[str, Any] | None = None,
+    summary: dict[str, Any] | None = None,
+    ingested: dict[str, list[dict[str, Any]]] | None = None,
+) -> TrainingReference:
+    """The dataset, among those the caller can read, holding the most of *labelset*'s Good / Bad examples.
+
+    The candidates are the loaded datasets, counted live less the labels on
+    media an import copied in (*ingested*, #5572); the one *recorded* on the
+    detector, at its recorded count, when that one is not loaded (#5501); and,
+    when the recorded one is not here at all, the detector's *summary* of it
+    at the same count (#5567), or at every labelled example with no pointer
+    beside it (#5571).  *active_id* wins a tie.  :func:`training_domain_for`
+    compares against the answer, and the Evidence chip draws its baseline only
+    on it (#5089), so neither moves the pointer while the other still points
+    elsewhere.
+    """
+    from vtscore.detectors.training_domain import infer_training_dataset
+
+    labels_total = 0 if labelset is None else sum(1 for e in labelset.elements if e.label in ("good", "bad"))
+    if labels_total == 0:
+        return TrainingReference("", {})
+    reference_id, counts = infer_training_reference(labelset, active_id, ingested=ingested)
+    stored = _recorded_reference(recorded, counts)
+    if stored is not None:
+        counts = {**counts, stored["dataset_id"]: min(stored["labels_held"], labels_total)}
+        reference_id = infer_training_dataset(counts, prefer=active_id)
+    travelled = _summary_reference(summary, recorded, stored, counts, labels_total)
+    if travelled is not None:
+        counts = {**counts, travelled["dataset_id"]: min(travelled["labels_held"], labels_total)}
+        reference_id = infer_training_dataset(counts, prefer=active_id)
+    return TrainingReference(reference_id, counts, stored, travelled)
+
+
+def detector_training_reference(
+    labelset: Any, active_id: str, detector_data: dict[str, Any] | None
+) -> TrainingReference:
+    """:func:`training_reference` with the pointer, summary and ingest record read off *detector_data*."""
+    from vtscore.detectors.domain_summary import stored_domain_summary
+    from vtscore.detectors.training_domain import recorded_ingests, recorded_training_dataset
+
+    return training_reference(
+        labelset,
+        active_id,
+        recorded=recorded_training_dataset(detector_data),
+        summary=stored_domain_summary(detector_data),
+        ingested=recorded_ingests(detector_data),
+    )
+
+
 def training_domain_for(
-    labelset: Any, active_ctx: Any, *, recorded: dict[str, Any] | None = None, cache: OverlapCache | None = None
+    labelset: Any,
+    active_ctx: Any,
+    *,
+    recorded: dict[str, Any] | None = None,
+    summary: dict[str, Any] | None = None,
+    ingested: dict[str, list[dict[str, Any]]] | None = None,
+    cache: OverlapCache | None = None,
 ) -> dict[str, Any]:
     """The overlap check for a detector with *labelset* on *active_ctx*, against the dataset it was trained on.
 
-    The reference is the dataset, among those the caller can read, holding the
-    most of the labelset's Good / Bad examples: the loaded ones, counted live,
-    and the one *recorded* on the detector
-    (:func:`~vtscore.detectors.training_domain.recorded_training_dataset`), at
-    its recorded count, when that one is not loaded (#5501).  *active_ctx*'s
-    dataset wins a tie.  ``domain_shift`` is ``None`` (and ``reason`` says why)
-    when there is nothing to compare: no labelled examples, none of them in a
-    dataset to compare with, the examples being from the active dataset itself,
-    or any of :func:`domain_shift_against`'s refusals.  The counts ride along
+    The reference is :func:`training_reference`'s: the dataset, among those
+    the caller can read, holding the most of the labelset's Good / Bad
+    examples.  The loaded ones are counted live, less the labels on media an
+    import copied into them (*ingested*,
+    :func:`~vtscore.detectors.training_domain.recorded_ingests`, #5572), and
+    the one *recorded* on the detector
+    (:func:`~vtscore.detectors.training_domain.recorded_training_dataset`) at
+    its recorded count, when that one is not loaded (#5501).  When the recorded
+    one is not here at all, the detector's *summary* of it
+    (:func:`~vtscore.detectors.domain_summary.stored_domain_summary`) stands in
+    for it at the same count, and is what the check compares against (#5567);
+    so it does, too, when the recorded one's saved file cannot be read.  A
+    summary that came with the labels in an exported labelset stands in at the
+    labels that came with it (#5571, #5572).
+    *active_ctx*'s dataset wins a tie.  ``domain_shift`` is ``None`` (and
+    ``reason`` says why) when there is nothing to compare: no labelled
+    examples, none of them in a dataset to compare with, the examples being
+    from the active dataset itself, or any of :func:`domain_shift_against`'s
+    or :func:`domain_shift_from_summary`'s refusals.  The counts ride along
     either way, so the caller can say what the reference rests on.
     """
     from vtscore.datasets.registry import get_dataset
-    from vtscore.detectors.training_domain import infer_training_dataset
 
     result = _unavailable_check("")
 
@@ -246,24 +465,26 @@ def training_domain_for(
     result["labels_total"] = labels_total
 
     active_id = active_ctx.dataset_id
-    reference_id, counts = infer_training_reference(labelset, active_id)
-    stored = _recorded_reference(recorded, counts)
-    if stored is not None:
-        counts = {**counts, stored["dataset_id"]: min(stored["labels_held"], labels_total)}
-        reference_id = infer_training_dataset(counts, prefer=active_id)
+    reference = training_reference(labelset, active_id, recorded=recorded, summary=summary, ingested=ingested)
+    reference_id, counts = reference.dataset_id, reference.counts
+    stored, travelled = reference.stored, reference.travelled
     result["labels_in_active"] = counts.get(active_id, 0)
     if not reference_id:
         return unavailable("None of the loaded datasets holds the detector's labelled examples")
     result["reference_dataset_id"] = reference_id
-    result["reference_dataset_name"] = (get_dataset(reference_id) or {}).get("name", "") or ""
+    result["reference_dataset_name"] = (get_dataset(reference_id) or {}).get("name", "") or (
+        travelled["dataset_name"] if travelled is not None and reference_id == travelled["dataset_id"] else ""
+    )
     result["labels_in_reference"] = counts[reference_id]
     if reference_id == active_id:
         return unavailable("The detector's labelled examples are from this dataset")
     try:
-        result["domain_shift"] = cached_domain_shift(
+        result["domain_shift"] = _compare(
             reference_id,
             active_ctx,
             allow_unloaded=stored is not None and reference_id == stored["dataset_id"],
+            summary=summary if summary is not None and summary["dataset_id"] == reference_id else None,
+            summary_only=travelled is not None and reference_id == travelled["dataset_id"],
             cache=cache,
         )
     except DomainShiftUnavailable as e:
@@ -271,14 +492,47 @@ def training_domain_for(
     return result
 
 
+def _compare(
+    reference_id: str,
+    active_ctx: Any,
+    *,
+    allow_unloaded: bool,
+    summary: dict[str, Any] | None,
+    summary_only: bool,
+    cache: OverlapCache | None,
+) -> dict[str, Any]:
+    """:func:`training_domain_for`'s report against *reference_id*: its vectors, else its *summary* (#5567).
+
+    *summary_only* when the reference is not here at all, so the summary is
+    all there is.  Otherwise the reference's own vectors are compared against,
+    and the summary, when the detector carries one, steps in only if they
+    cannot be read (a recorded dataset whose saved file is gone, say).  Raises
+    :class:`DomainShiftUnavailable` with the full check's reason when neither
+    can be read.
+    """
+    if summary is not None and summary_only:
+        return cached_summary_shift(summary, active_ctx, cache=cache)
+    try:
+        return cached_domain_shift(reference_id, active_ctx, allow_unloaded=allow_unloaded, cache=cache)
+    except DomainShiftUnavailable as e:
+        if summary is None:
+            raise
+        unreadable = e
+    try:
+        return cached_summary_shift(summary, active_ctx, cache=cache)
+    except DomainShiftUnavailable:
+        raise unreadable from None
+
+
 def training_domain_check() -> dict[str, Any]:
     """The overlap check for the active detector on the active dataset (:func:`training_domain_for`).
 
-    The training dataset recorded on the detector is read from its file, so a
-    detector paired with a dataset after a restart is still compared against
-    the one it was trained on.  ``domain_shift`` is ``None`` with a ``reason``
-    when there is no detector or dataset to check, as well as on every refusal
-    of :func:`training_domain_for`.
+    The training dataset recorded on the detector, its summary and what its
+    imports copied in are read from its file, so a detector paired with a
+    dataset after a restart, or on another instance, is still compared
+    against the one it was trained on.
+    ``domain_shift`` is ``None`` with a ``reason`` when there is no detector or
+    dataset to check, as well as on every refusal of :func:`training_domain_for`.
     """
     from vtscore.detectors.learned_sort import resolve_active_labelset
     from vtscore.state.core import (
@@ -294,8 +548,18 @@ def training_domain_check() -> dict[str, Any]:
     active_ctx = get_active_context()
     if not active_ctx.dataset_id or is_request_missing_dataset_context(active_ctx):
         return _unavailable_check("No dataset is active")
+    from vtscore.detectors.domain_summary import stored_domain_summary
+    from vtscore.detectors.training_domain import recorded_ingests, recorded_training_dataset
+
     labelset, _media_type = resolve_active_labelset(det_ctx)
-    return training_domain_for(labelset, active_ctx, recorded=_recorded_on_file(det_ctx.detector_id))
+    data = _detector_data_on_file(det_ctx.detector_id)
+    return training_domain_for(
+        labelset,
+        active_ctx,
+        recorded=recorded_training_dataset(data),
+        summary=stored_domain_summary(data),
+        ingested=recorded_ingests(data),
+    )
 
 
 def detector_training_domain(
@@ -305,30 +569,39 @@ def detector_training_domain(
 
     What a Find or AutoFind asks of each detector it ran: the labels and the
     recorded training dataset are the file's, since the run never touches the
-    detector's loaded context.  ``None``, logged, when the check itself fails:
+    detector's loaded context, and so are the training dataset's summary
+    (#5567) and what its imports copied in (#5572).  ``None``, logged, when
+    the check itself fails:
     it rides alongside the run's results, which must not be lost to it.
     """
     from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.training_domain import recorded_training_dataset
+    from vtscore.detectors.domain_summary import stored_domain_summary
+    from vtscore.detectors.training_domain import recorded_ingests, recorded_training_dataset
 
     try:
         labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
-        return training_domain_for(labelset, active_ctx, recorded=recorded_training_dataset(detector_data), cache=cache)
+        return training_domain_for(
+            labelset,
+            active_ctx,
+            recorded=recorded_training_dataset(detector_data),
+            summary=stored_domain_summary(detector_data),
+            ingested=recorded_ingests(detector_data),
+            cache=cache,
+        )
     except Exception:  # noqa: BLE001 - see the docstring
         logger.exception("Training-domain check failed for detector %s", detector_data.get("name", "?"))
         return None
 
 
-def _recorded_on_file(detector_id: str) -> dict[str, Any] | None:
-    """The training dataset recorded in *detector_id*'s file, or ``None`` with no file or record."""
+def _detector_data_on_file(detector_id: str) -> dict[str, Any] | None:
+    """*detector_id*'s detector JSON, or ``None`` with no file."""
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path, _read_detector
-    from vtscore.detectors.training_domain import recorded_training_dataset
 
     name = (get_detector(detector_id) or {}).get("name")
     if not name:
         return None
-    return recorded_training_dataset(_read_detector(_detector_path(name)))
+    return _read_detector(_detector_path(name))
 
 
 def _unavailable_check(reason: str) -> dict[str, Any]:

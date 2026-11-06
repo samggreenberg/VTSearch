@@ -143,8 +143,9 @@ Goods' centroid, `trained` for the trained head; `n_good` / `n_bad` are the
 detector's labels, `goods_owed` / `bads_owed` what the first quota still needs,
 and `dry_bad_quota` the Bads that give a single Good the trained head. Past the
 quota, a typed-query detector on a single-vector space keeps its query's set
-until it has `hold_labels` (30) labels; `hold_owed` is then the labels, Good or
-Bad, still owed (and `0` whenever the hold is not why the tier is `query`). Under
+until it has `hold_labels` labels; `hold_owed` is then the labels, Good or
+Bad, still owed (and `0` whenever the hold is not why the tier is `query`). The
+app's `hold_labels` is 0 since #5556 (30 before), so `hold_owed` is 0. Under
 the quota the line is the head's own (its `threshold` is always 0.5 on its own
 scale), drawn at the detector's balance: `balance` counts what it keeps, and a
 balance change redraws it.
@@ -181,10 +182,19 @@ demand, and returns one result column per detector.
 
 → `{media_type, detectors_run, results, missing_detectors}`; `results` is keyed
 by detector name, each with its `detector_name`, `threshold`, `balance`,
-`label_quota`, `total_hits`, `hits` and `negative_hits` (rows carrying `score`),
-and `training_domain`: the [training-domain overlap](#training-domain-overlap)
-report for that detector on the scored dataset (#5501), or `null` when the
-check itself failed.
+`beta`, `lines`, `label_quota`, `total_hits`, `hits` and `negative_hits` (rows
+carrying `score`), and `training_domain`: the
+[training-domain overlap](#training-domain-overlap) report for that detector
+on the scored dataset (#5501), or `null` when the check itself failed.
+
+`beta` is the balance `threshold` was cut at, and `lines` is the cut at each
+of the Threshold's presets, from false positives to false negatives:
+`[{beta: 4, threshold}, {beta: 1, threshold}, {beta: 0.25, threshold}]`
+(#5540). Each is re-derived from what the train cached, as a balance change
+re-cuts the line, so nothing is retrained: the Find Results dialog splits
+`hits` and `negative_hits` at another notch's cut to show what it would have
+kept. The detector's own balance keeps `threshold`, and so does a preset whose
+cut cannot be re-derived (a head no balance moves).
 
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
 under the label quota runs as its typed query's own set (`query`, #4758), or
@@ -249,6 +259,28 @@ later), or `skipped` with a `reason` (the dataset is no longer loaded, or the
 run found nothing Good). A layout already built for these ids, or the fit
 already running for them, is reported whatever the server is doing. **404**
 as for [AutoFind results](#autofind-results).
+
+### Export AutoFind results by hand
+
+```
+POST /api/autofind/runs/{run_id}/export
+```
+
+Sends run `run_id`'s results through the AutoFind results exporter, as the
+run's finish did (#5584): the Find Results dialog's **AutoFind** tab, a way to
+try the exporter and field values set up on the Settings **AutoFind** tab
+without importing another dataset. The payload is the run's own
+[`POST /api/auto-detect`](#auto-detect) body
+(`media_type`, `detectors_run`, `results`, `missing_detectors`): every
+detector's Good at the run's own cut, whatever the dialog lists. The pause
+(`autofind_export_enabled`) holds back what finished runs send on their own,
+not this request.
+
+→ the same `{exporter, exporter_display_name, success, message?/error?,
+open_url?}` block a run records as its `auto_export`, the exporter's own
+failure included (`success: false` with its `error`, never an HTTP error).
+**404** as for [AutoFind results](#autofind-results); **409** when no
+exporter is set up for AutoFind.
 
 ### Test the line
 
@@ -485,11 +517,32 @@ reference worked out rather than picked: the dataset, among those the caller
 can read, holding the most of the detector's Good / Bad examples (matched by
 origin or MD5, never by file name alone). The candidates are the loaded
 datasets, counted live, and the training dataset recorded on the detector
-(its `training_dataset`, written with the Evidence baseline whenever one is
-drawn there, #5501) at its recorded count. That one need not be loaded: its
-vectors are read from its saved file. The active dataset wins a
-tie, so a detector used on the dataset it was trained on has nothing to
-compare. It needs no scored Find run: the SPA calls it whenever a
+(its `training_dataset`, written when the detector is tuned on that dataset
+or trained there in the Train view, #5501, #5514) at its recorded count. That
+one need not be loaded: its vectors are read from its saved file. Nor need it
+be on this instance at all: the detector records a summary of it beside the
+pointer (its `training_domain_summary`, #5567), 128 of its items named by
+origin plus calibration scores stamped with the embedder, and when the
+dataset is not here, or its saved file is gone, the report is read against
+that summary instead. Its anchor items are read from the active dataset when
+it holds them and otherwise fetched from their origins and embedded, once per
+process. The report has the same shape and the same null (about `alpha` of an
+in-domain dataset reads atypical), with less power than the full comparison.
+An anchor that cannot be fetched, or another embedder, gives `domain_shift:
+null` with the reason. A detector created from an exported labelset gets the
+summary (#5571) and a pointer of its own beside it, naming the summarised
+dataset as holding the labels that came with it (#5572); a summary stored with
+no pointer at all counts as holding every labelled example, while a pointer to
+another dataset still says where the labels were drawn, and the summary is set
+aside. A loaded dataset's count leaves out the labels on media an import
+copied into it (the detector's `labels_ingested`, #5572): importing labels
+with a dataset active pulls their media into it, which says nothing about
+where they were cast, so `labels_in_active` counts only the labels on the
+dataset's own media. The active dataset wins a tie, so a detector used on the
+dataset it was trained on has nothing to compare. The
+[Evidence chip's baseline](#evidence-coverage) is drawn only on the dataset
+this rule picks, so a learned sort or Tune on a dataset holding fewer of the
+labels does not record it as the training dataset. It needs no scored Find run: the SPA calls it whenever a
 (dataset, detector) pair becomes active, and raises a warning when the verdict
 is *likely domain shift*. Every Find and AutoFind result carries the same
 report per detector, as `training_domain` (see [auto-detect](#auto-detect)).

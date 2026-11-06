@@ -47,17 +47,37 @@ describe('VtDialogService', () => {
   });
 
   // #4380: the question and its detail used to be joined with a space, so a
-  // destructive confirmation read as one run-on line.
-  it('confirmDestructive puts the detail on its own line', async () => {
+  // destructive confirmation read as one run-on line. They are now separate
+  // parts, which the host renders on lines of their own.
+  it('confirmDestructive keeps the detail apart from the question', async () => {
     const promise = service.confirmDestructive("Delete detector 'cats'?", '(Media is unaffected.)');
-    expect(service.dialogMessage()).toBe("Delete detector 'cats'?\n(Media is unaffected.)");
+    expect(service.dialogMessage()).toBe("Delete detector 'cats'?");
+    expect(service.dialogDetail()).toBe('(Media is unaffected.)');
+    expect(service.dialogItems()).toEqual([]);
     service.cancel();
     expect(await promise).toBe(false);
   });
 
-  it('confirmDestructiveWithEscape puts the detail on its own line', async () => {
+  // #5532: several targets are a list, not a comma-joined row in the question.
+  it('confirmDestructive carries the names it is about as items', async () => {
+    const promise = service.confirmDestructive('Delete 2 detectors?', '(Labels only.)', 'Delete', ['cats', 'dogs']);
+    expect(service.dialogMessage()).toBe('Delete 2 detectors?');
+    expect(service.dialogItems()).toEqual(['cats', 'dogs']);
+    service.cancel();
+    await promise;
+
+    // The next dialog does not inherit the last one's items or detail.
+    const next = service.confirm('Sure?');
+    expect(service.dialogItems()).toEqual([]);
+    expect(service.dialogDetail()).toBe('');
+    service.cancel();
+    await next;
+  });
+
+  it('confirmDestructiveWithEscape keeps the detail apart from the question', async () => {
     const promise = service.confirmDestructiveWithEscape('Reset?', 'Cannot be undone.', 'Reset', 'Export first…');
-    expect(service.dialogMessage()).toBe('Reset?\nCannot be undone.');
+    expect(service.dialogMessage()).toBe('Reset?');
+    expect(service.dialogDetail()).toBe('Cannot be undone.');
     service.cancel();
     expect(await promise).toBe('cancel');
   });

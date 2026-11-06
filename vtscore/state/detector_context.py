@@ -233,6 +233,10 @@ class DetectorContext:
         # cosines it was drawn on, so a balance change redraws it on the same
         # scores.  Read only while the model is a centroid head.
         "centroid_line",  # CentroidLine | None
+        # The face space (``Face Compat`` tag) of the corpus the head last
+        # trained on, which the face crops' ball is drawn in (#5497); ``None``
+        # off face crops or with no single tag.
+        "face_compat",  # str | None
     )
 
     def __init__(
@@ -314,3 +318,4 @@ class DetectorContext:
         self.check_ended_votes: int | None = None
         self.labels_line: Any = None  # LabelsLine | None
         self.centroid_line: Any = None  # CentroidLine | None
+        self.face_compat: str | None = None

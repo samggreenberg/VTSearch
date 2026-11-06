@@ -11,6 +11,10 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { SharingCapabilityService } from '../../services/sharing-capability.service';
+import { DashboardModalsService } from '../../services/dashboard-modals.service';
+import type { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -256,6 +260,95 @@ describe('DashboardComponent', () => {
 
       expect(component.detectorTab()).toBe('drafts');
       expect(component.selectedDetectorIds.has('m4')).toBe(true);
+    });
+
+    // #5578: a fork is a new draft. From either tab it lands in Drafts,
+    // selected, ahead of the registry refresh that lists it.
+    it('lands a fork in Drafts, selected, even when it was started on the AutoFind tab', async () => {
+      const fork = vi
+        .spyOn(TestBed.inject(DetectorSharingFlowsService), 'fork')
+        .mockResolvedValue({ id: 'm9', name: 'Frozen B (fork)', media_type: 'audio' } as DetectorRegistryEntry);
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+
+      await component.forkDetector(component.autofindDetectors[0]);
+      expect(fork).toHaveBeenCalledWith(expect.objectContaining({ id: 'm2' }), { askName: true });
+      expect(component.detectorTab()).toBe('drafts');
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+
+      // The refresh that lists the copy keeps it selected.
+      component.refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [...mixed, { id: 'm9', name: 'Frozen B (fork)', media_type: 'audio', sync_mode: 'forked' }],
+      });
+      TestBed.tick();
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+      expect(component.draftDetectors.map((d) => d.id)).toContain('m9');
+    });
+
+    // #5579: the Received list, behind a header button that sharing turns on.
+    /** Answer the capability route as a deployment that shares detectors. */
+    function enableSharing(): void {
+      const caps = TestBed.inject(SharingCapabilityService) as unknown as { capability: WritableSignal<object | null> };
+      caps.capability.set({
+        enabled: true,
+        name: 'shared_folder',
+        display_name: 'Shared folder',
+        icon: '',
+        supports_recipient_search: false,
+        missing_fields: [],
+      });
+    }
+
+    it('shows Received… in the card header only while sharing is on', async () => {
+      flushInitialRequests([], mixed);
+      await fixture.whenStable();
+      const button = (): HTMLButtonElement | null => fixture.nativeElement.querySelector('.received-btn');
+      expect(button()).toBeNull();
+
+      enableSharing();
+      await fixture.whenStable();
+      expect(button()!.textContent!.trim()).toBe('Received…');
+      button()!.click();
+      await fixture.whenStable();
+      expect(TestBed.inject(DashboardModalsService).received.open).toBe(true);
+      expect(fixture.nativeElement.querySelector('vt-received-detectors-modal')).not.toBeNull();
+      httpMock.expectOne('/api/detectors/sharing/received').flush({ received: [] });
+    });
+
+    it('lands a received detector in Drafts, selected, from either tab', () => {
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+      component.onDetectorReceived({ id: 'm9', name: 'Dog barks', media_type: 'audio', sync_mode: 'linked' } as DetectorRegistryEntry);
+      expect(component.detectorTab()).toBe('drafts');
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+
+      // The re-list it asked for carries the copy, which stays selected.
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [...mixed, { id: 'm9', name: 'Dog barks', media_type: 'audio', sync_mode: 'linked' }],
+      });
+      TestBed.tick();
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+    });
+
+    it('shows a held copy on its own tab, and closes the list', () => {
+      flushInitialRequests([], mixed);
+      const modals = TestBed.inject(DashboardModalsService);
+      modals.openReceived();
+      component.showReceivedCopy('m2');
+      expect(modals.received.open).toBe(false);
+      expect(component.detectorTab()).toBe('autofind');
+      expect([...component.selectedDetectorIds]).toEqual(['m2']);
+    });
+
+    it('leaves the selection alone when a fork is cancelled', async () => {
+      vi.spyOn(TestBed.inject(DetectorSharingFlowsService), 'fork').mockResolvedValue(null);
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+      await component.forkDetector(component.autofindDetectors[0]);
+      expect(component.detectorTab()).toBe('autofind');
     });
 
     it('disables Train for a frozen detector with an explanatory hint', () => {
@@ -1172,10 +1265,10 @@ describe('DashboardComponent', () => {
   });
 
   // #4380: the bulk-delete confirmation ran the question, the enumerated
-  // names and the parenthetical together on one line. The names now sit on
-  // their own line below the question (the detail gets its own line from
-  // confirmDestructive).
-  it('puts the names in a bulk delete confirmation on their own line', async () => {
+  // names and the parenthetical together on one line. #5532: the names, a
+  // comma-joined row of them, are now a bulleted list under the question,
+  // one per line (the detail gets its own line from confirmDestructive).
+  it('lists the names in a bulk delete confirmation, one per item', async () => {
     const datasets = [
       { id: 'd1', name: 'DS1', media_type: 'audio' },
       { id: 'd2', name: 'DS2', media_type: 'audio' },
@@ -1192,15 +1285,41 @@ describe('DashboardComponent', () => {
 
     await component.deleteSelectedDetectors();
     expect(confirm).toHaveBeenLastCalledWith(
-      'Delete 2 detectors?\n"detector1", "detector2"',
+      'Delete 2 detectors?',
       '(This deletes your labels. The underlying media is unaffected.)',
+      'Delete',
+      ['detector1', 'detector2'],
     );
 
     await component.deleteSelectedDatasets();
     expect(confirm).toHaveBeenLastCalledWith(
-      'Delete 2 datasets from your list?\n"DS1", "DS2"',
+      'Delete 2 datasets from your list?',
       '(Detectors are unaffected.)',
+      'Delete',
+      ['DS1', 'DS2'],
     );
+  });
+
+  it('names a single bulk-delete target in the question, with no list', async () => {
+    flushInitialRequests(
+      [{ id: 'd1', name: 'DS1', media_type: 'audio' }],
+      [{ id: 'm1', name: 'detector1', media_type: 'audio' }],
+    );
+    selection.selectOnly('dataset', ['d1']);
+    selection.selectOnly('detector', ['m1']);
+
+    const confirm = vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
+
+    await component.deleteSelectedDetectors();
+    expect(confirm).toHaveBeenLastCalledWith(
+      'Delete detector "detector1"?',
+      '(This deletes your labels. The underlying media is unaffected.)',
+      'Delete',
+      [],
+    );
+
+    await component.deleteSelectedDatasets();
+    expect(confirm).toHaveBeenLastCalledWith('Delete dataset "DS1" from your list?', '(Detectors are unaffected.)', 'Delete', []);
   });
 
   it('should open and close importer modal via NewThingFlowsService', () => {

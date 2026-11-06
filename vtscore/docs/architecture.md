@@ -155,7 +155,8 @@ library actually reads:
   `autofind_exporter_field_values`, `autofind_cli_delete_dataset`,
   `projection_n_neighbors`,
   `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
-  `default_labelset_source`, `labelset_source_push_interval`, `beta`
+  `default_labelset_source`, `detector_sharing_source`,
+  `labelset_source_push_interval`, `beta`
   (the balance new detectors are seeded with), and the deprecated
   `hide_ingest_eta` (ignored) and `inclusion` (only `0` is accepted).
 

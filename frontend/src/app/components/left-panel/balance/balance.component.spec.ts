@@ -56,6 +56,14 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(checkedValue()).toBe('1');
     });
 
+    it('says the host\'s own reason on its frozen radios (#5540)', async () => {
+      await show(1);
+      fixture.componentRef.setInput('locked', true);
+      fixture.componentRef.setInput('lockedHint', 'Every notch lists the same items here.');
+      await settleZoneless(fixture);
+      expect((root().querySelector('.spectrum-radio') as HTMLElement).title).toBe('Every notch lists the same items here.');
+    });
+
     it('shows the host\'s state line in place of the check\'s, with its dot', async () => {
       await show(1, lineBalance('checked'));
       fixture.componentRef.setInput('lineState', { text: 'Untested · top 64 kept', title: 'No test yet.', dot: 'yellow' });
@@ -181,6 +189,23 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
   });
 
+  // The Find Results dialog's run of detectors cut at different balances (#5540).
+  describe('no balance to show', () => {
+    it('checks no radio and snaps to none', async () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      await show(null);
+      expect(checkedValue()).toBeNull();
+      expect(emitted).not.toHaveBeenCalled();
+    });
+
+    it('emits whichever radio is picked', async () => {
+      await show(null);
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      component.onPick({ target: radios()[1] } as unknown as Event, 1);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(1);
+    });
+  });
+
   describe('the state line', () => {
     it('is absent with no line from the detector', async () => {
       await show(1, null);
@@ -286,6 +311,16 @@ describe('BalanceComponent (#4413, #4317)', () => {
         expect(hints()[0].closest('.balance-head')).not.toBeNull();
       }
       expect(hints()[0].querySelector('.field-hint-icon')!.getAttribute('aria-label')).toBe('What the threshold means');
+    });
+
+    it('has a short tooltip on the word itself, the long one staying with the (?) (#5536)', () => {
+      const label = root().querySelector('.balance-label') as HTMLElement;
+      expect(label.textContent).toBe('Threshold:');
+      expect(label.title).toBe(component.shortHint);
+      expect(component.shortHint.length).toBeLessThan(component.hint.length / 2);
+      // On the label, not the row: the row also holds Find's projected actions,
+      // which would inherit a native tooltip set on it.
+      expect((root().querySelector('.balance-head') as HTMLElement).hasAttribute('title')).toBe(false);
     });
 
     it('is one sentence pair, not a page (#4317)', () => {

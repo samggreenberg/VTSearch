@@ -23,7 +23,9 @@ when something goes wrong, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
    `VTSEARCH_DATASET_MAX_AGE_DAYS`, …; see [Application](#application)) or in
    the [server settings file](SETTINGS.md#server-tier--datasettingsjson), which is also
    where `default_labelset_source` backs every detector's labels up off the
-   server.
+   server, and where `detector_sharing_source` switches on detector sharing
+   through a collaboration service (off by default; what users then see is
+   [Share a detector, receive one, fork one](user/howto/share-a-detector.md)).
 5. Size the disk for the model cache (~4.1 GB) and the demos your users will
    pull ([Network dependencies](#network-dependencies)); air-gapped hosts
    follow [Offline deployment](#offline-deployment).
@@ -493,6 +495,7 @@ directory, so a models directory moves as one unit:
 ```
 data/models/imagekit/
 ├── face.json
+├── face_ball.json
 ├── det_500m.onnx
 ├── w600k_mbf.onnx
 └── arcface_mbf.json
@@ -529,6 +532,22 @@ picker, and an import that names `image2face` anyway fails on its first photo wi
 reason. Face datasets saved earlier still open: their vectors are in the pickle. In Docker,
 mount the models directory (e.g. `-v ./face-models:/app/data/models/imagekit:ro` for the main
 images), or mount it anywhere and set `IMAGEKIT_FACE_CONFIG`.
+
+**The face search line is calibrated per face space.** From two starting photos at a balance of 1 or more,
+Find and Test keep every face whose cosine to the Goods' centroid clears a floor (the *face ball*), and the
+floors are cosines in one embedder's space. They live beside the pack, in `face_ball.json` in the same
+`imagekit` directory, one entry per compat tag, and are not in the repo. A face space with no entry (or an
+entry whose fit found the ball no better than the line before it) keeps that line, and the app shows a
+warning that the face search line is not calibrated for that embedder. People needs the same entry. Fit one
+from a labelled face set your provider embedded, with each face's person in its `categories`:
+
+```
+python scripts/data/fit_face_ball.py --medias <set>.pkl [<set2>.pkl ...] --people <people.txt> --corpus "<name>"
+```
+
+The script writes to `$VTSEARCH_MODELS_DIR/imagekit/face_ball.json` (`--out` elsewhere, `--dry-run` to only
+print), keeping the other spaces' entries; the entry records its go/no-go check and how it was fitted. A
+pack moved to another server takes its `face_ball.json` with it.
 
 The face models run on the device `VTSEARCH_DEVICE` resolves to, which needs `onnxruntime-gpu` for
 CUDA. `docker/Dockerfile.gpu` and a CUDA `scripts/install.sh` install it in place of the CPU

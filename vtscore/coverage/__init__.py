@@ -4,7 +4,10 @@ This package holds the *structure* — a hierarchical k-means partition with
 per-class evidence channels and von Mises-Fisher moments (see
 :mod:`vtscore.coverage.atlas` and ``docs/plans/coverage-atlas.md``) — and the
 domain-shift report, a split-conformal kNN against a reference dataset's
-vectors (:mod:`vtscore.coverage.domain_shift`, #3348).  It touches no
+vectors (:mod:`vtscore.coverage.domain_shift`, #3348), and the summary of a
+reference that lets the report travel without those vectors: anchor items
+named by origin plus calibration scores (:mod:`vtscore.coverage.domain_summary`,
+#5567).  It touches no
 :class:`~vtscore.state.core.DatasetContext` and takes no lock: everything
 here is a function of the embeddings handed to it.
 
@@ -26,6 +29,7 @@ from vtscore.coverage.atlas import (
     auto_max_depth,
 )
 from vtscore.coverage.domain_shift import domain_shift_line, domain_shift_report
+from vtscore.coverage.domain_summary import summarize_reference, summary_shift_report
 
 __all__ = [
     "COVERAGE_ATLAS_DEFAULT_K",
@@ -35,4 +39,6 @@ __all__ = [
     "auto_max_depth",
     "domain_shift_line",
     "domain_shift_report",
+    "summarize_reference",
+    "summary_shift_report",
 ]

@@ -446,7 +446,10 @@ sent); optional `dataset_name` (default `"Local files upload"`), `embedder` /
 `embedders`, `clipper`, `clipper_params` (JSON string), `source_specs`,
 `cleaners`, `build_projection`, `merge_near_duplicates`, `outputs` (as for
 `import-local-folder`). Runs the `server_files` importer in the background.
-Same response shape as `import-local-folder`.
+Same response shape as `import-local-folder`. Text-file lines that name no
+file are skipped and reported in a warning notification, not failed on; the
+task fails only when no line names one, and its `error` then lists the first
+skipped lines.
 
 → `{"ok": true, "message": "...", "task_id": "...", "task_ids": ["..."]}`
 
@@ -486,6 +489,10 @@ user is about to load with; each entry's `status` is computed against them
 built with another embedder / clipper) or `"needs_download"`; `pkl_embedder`
 / `pkl_clipper` name what the cached pickle was built with, and
 `available_converters` the converters that apply to the demo's media type.
+`browsable` says whether [`source=demo:<name>`](#browse-media-files) resolves:
+the demo declares a source folder (`has_source_folder`) and that folder is
+populated. It does not follow `status`: a hub-fetched or generated demo has no
+source folder, so it reads `ready` once loaded and is still not browsable.
 
 ### Demo categories
 
@@ -778,6 +785,17 @@ does while it covers the grid up.
 
 `expires_at` is `null` when the dataset never ages off. `clipper` is the
 clipper's display name, `""` for a media type's default clipper.
+`embedder_display_name` is `embedder`'s display name (`""` when none is
+recorded), and `importer_display_name` the display name of `source`'s importer.
+
+`source_rows` is `source.params` worded for display, in recorded order:
+`[{"key", "label", "value", "description"}]`, labelled with the importer's own
+field labels and worded by its `describe_origin_param()` (`Yes` / `No` for a
+checkbox, a media type's name, and `source_specs` as the converters the import
+ran: `"Images → Faces"`, labelled `Include media`). Empty values are left out,
+as are a `media_type` that is the dataset's own and `source_specs` that only
+include the dataset's own type. `source` itself is the raw re-import recipe,
+unchanged.
 
 `file_type_counts` keys are file types, not necessarily filename extensions:
 each item is typed by its filename extension when it has one, and otherwise by

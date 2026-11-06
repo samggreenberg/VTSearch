@@ -70,6 +70,132 @@
      "oid": "b2b75887efac06cb196b64b7317de8e95067a239"
     }
    }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.99d90182ea40.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5311_cells.csv": {
+     "bytes": 76582,
+     "oid": "e45378961e29e47d384c26a41e75093c8a23f9db"
+    },
+    "tables/sam3_5311_gate_b025.csv": {
+     "bytes": 33712,
+     "oid": "f1738e8ba801094a47e4a01ae32ca472335aa638"
+    },
+    "tables/sam3_5311_gate_b1.csv": {
+     "bytes": 33818,
+     "oid": "1d60d739f6fbfa64b3b688b475d9699224b9b2d2"
+    },
+    "tables/sam3_5311_gate_b4.csv": {
+     "bytes": 33483,
+     "oid": "602ac49512175c1a9544de93cb647a136c1e2d55"
+    },
+    "tables/sam3_5311_gate_per_click_b025.csv": {
+     "bytes": 96238,
+     "oid": "663675073ee4c03af4b79765490ac99bf62d5971"
+    },
+    "tables/sam3_5311_gate_per_click_b1.csv": {
+     "bytes": 95277,
+     "oid": "2850b47356ac4655476002e5744b710f097ef217"
+    },
+    "tables/sam3_5311_gate_per_click_b4.csv": {
+     "bytes": 95247,
+     "oid": "5bf025a09de4636f94a1342599856da2c3ed0908"
+    },
+    "tables/sam3_5311_seeds.csv": {
+     "bytes": 3926,
+     "oid": "e6595597559ca5356f5a850230b11cc12fdbee2a"
+    },
+    "tables/sam3_5311_set_pr.csv": {
+     "bytes": 723,
+     "oid": "c500328397aa5300c3848dab92e8d4940bb0ce50"
+    }
+   }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.670d99cef25e.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5565_calibration.csv": {
+     "bytes": 611,
+     "oid": "b3cbef2c10294e24617020481f3afde89586690e"
+    },
+    "tables/sam3_5565_cells.csv": {
+     "bytes": 287287,
+     "oid": "923520e0aaa72bfdeec2484fdff4d2006218e8eb"
+    },
+    "tables/sam3_5565_check.csv": {
+     "bytes": 197955,
+     "oid": "75445960e89a7c3cd5e79b716e2191bf7e11177f"
+    },
+    "tables/sam3_5565_per_vote.csv": {
+     "bytes": 866758,
+     "oid": "74239889a0cd3252c25921b1358c8e2e310b67a8"
+    },
+    "tables/sam3_5565_routes.csv": {
+     "bytes": 41752,
+     "oid": "2610b8b579183bdf0e8366f3a8d26fdb5b1cf7d8"
+    },
+    "tables/sam3_5565_set_pr.csv": {
+     "bytes": 3629,
+     "oid": "55bc56a77b848c84ca9bb94fd1470084bbbe2079"
+    },
+    "tables/sam3_5565_sets.csv": {
+     "bytes": 466352,
+     "oid": "263b4ea15ae2e23d4f6ceb045ab64f35d6d2d6be"
+    },
+    "tables/sam3_5565_summary.csv": {
+     "bytes": 6020,
+     "oid": "84106d94d8f694aa80ad91f6b7a660caab47c746"
+    },
+    "tables/sam3_5565_tuned_cuts.csv": {
+     "bytes": 61,
+     "oid": "cb39458a5eaed72b57e1d42f34d5df10db45cfd0"
+    }
+   }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.8170ea028bff.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5521_cut05_cells.csv": {
+     "bytes": 136420,
+     "oid": "36c874083e5d34e91ee26f712bd5c63ded30ee31"
+    },
+    "tables/sam3_5521_cut05_info.json": {
+     "bytes": 330,
+     "oid": "f4c56b10e38136a449d528493064389de5a98d46"
+    },
+    "tables/sam3_5521_cut05_price.csv": {
+     "bytes": 62893,
+     "oid": "3fbc1c2ae4338810955b3805baa85bdfccc881c9"
+    },
+    "tables/sam3_5521_cut05_shares.csv": {
+     "bytes": 3121,
+     "oid": "4392109e92d48cd41d4ff395ca264333e8bfbe9f"
+    },
+    "tables/sam3_5521_fgvc_sets.csv": {
+     "bytes": 112598,
+     "oid": "aed180452dee8f5bbb08fba3cc47dd430e0418a0"
+    },
+    "tables/sam3_5521_shipped_cells.csv": {
+     "bytes": 303976,
+     "oid": "6d906cae88bccc8d879d5bf48e0e043646d1ac68"
+    },
+    "tables/sam3_5521_shipped_price.csv": {
+     "bytes": 64732,
+     "oid": "91dab43ef9990e15efe93601efa26407c7415531"
+    },
+    "tables/sam3_5521_shipped_shares.csv": {
+     "bytes": 1273,
+     "oid": "0e4c50807984d30cab3d08ddbede388cbcef3a36"
+    },
+    "tables/sam3_5521_shipped_summary.csv": {
+     "bytes": 5379,
+     "oid": "c3d63f86abfa1a49d12a40b6c0560900c87ce783"
+    }
+   }
   }
  ]
 }

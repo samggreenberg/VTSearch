@@ -214,6 +214,13 @@ class DatasetContext:
         # The in-flight fit a Find Results list's Similarity sort is waiting
         # on (#5464): the full layout build, or an order-only fit.
         "_order_job_id",
+        # A Face dataset's people (#5586): a PeoplePartition, its faces merged
+        # into people, cached here once read from the container or fit.  Ids
+        # and the cut's stamps only, no vectors; checked against the live id
+        # set and the current cut on every read (vtscore.datasets.people).
+        "_people",
+        # The in-flight people fit a request is waiting on.
+        "_people_job_id",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/ARCHITECTURE.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -239,7 +246,7 @@ class DatasetContext:
     # ------------------------------------------------------------------
     # Every slot above is either a *source of truth* for this dataset or a
     # *derived cache* - something rebuildable, at some cost, from the medias
-    # or from the persisted layout.  The four families below name the caches
+    # or from the persisted layout.  The families below name the caches
     # and :meth:`reset_derived_caches` drops them by family; every call site
     # that used to hand-clear a list of private slots goes through it now.
     #
@@ -303,6 +310,9 @@ class DatasetContext:
         # it costs a container read, not a re-fit.  With it, the id of the fit
         # a Similarity sort is waiting on, which would otherwise outlive it.
         "order": frozenset({"_similarity_order", "_order_job_id"}),
+        # A Face dataset's people, persisted beside it as the order is, and the
+        # id of the fit a request is waiting on.
+        "people": frozenset({"_people", "_people_job_id"}),
     }
 
     #: Slots that are state, not cache - never touched by
@@ -376,6 +386,8 @@ class DatasetContext:
         self._subset_content_version: int = 0
         self._similarity_order: Any = None  # SimilarityOrder | None (#5465)
         self._order_job_id: str | None = None  # fit a Similarity sort waits on (#5464)
+        self._people: Any = None  # PeoplePartition | None (#5586)
+        self._people_job_id: str | None = None  # people fit a request waits on (#5586)
         # Role-typed embedder binding (see __slots__ comment).  ``None``
         # until either explicitly bound or derived from the medias.
         self._text_embedder: str | None = None
@@ -440,6 +452,7 @@ class DatasetContext:
         projection: bool = True,
         subset: bool = True,
         order: bool = True,
+        people: bool = True,
     ) -> None:
         """Drop this context's derived caches, by family.
 
@@ -496,6 +509,9 @@ class DatasetContext:
             if order:
                 self._similarity_order = None
                 self._order_job_id = None
+            if people:
+                self._people = None
+                self._people_job_id = None
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding

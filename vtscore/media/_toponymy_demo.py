@@ -12,7 +12,8 @@ pipeline exists.
 
 This module is media-type-agnostic: it produces the taxonomy, the per-item
 category paths, and the synthetic vectors.  The audio and image media types
-wrap each item in their own media bytes (a tone / a colour tile) and thumbnail.
+wrap each item in their own media bytes (a tone / a colour tile) and thumbnail,
+each folding in the item's :func:`serial_mark` so no two items share bytes.
 Library tier: numpy + stdlib only, plus one lazy read of the embedder
 registry's declared widths (:func:`baked_dim`).
 """
@@ -218,12 +219,35 @@ def total_cities() -> int:
     )
 
 
+#: How many binary digits :func:`serial_mark` spells out; enough for 2**32 items.
+SERIAL_MARK_BITS = 32
+
+
+def serial_mark(serial: int) -> np.ndarray:
+    """The binary digits of an item's *serial*, least significant first.
+
+    Every item in a city renders from the same colour or pitch, so without a
+    per-item difference all of a city's media carry identical bytes and the
+    load's exact-duplicate stage folds them into one (#5515).  Each renderer
+    therefore nudges :data:`SERIAL_MARK_BITS` of its pixels or samples by one
+    level wherever this mark has a 1: two items with different serials differ
+    in at least one byte, and nobody can see or hear a change of one level.
+
+    Returns an ``int16`` array of 0s and 1s, of length :data:`SERIAL_MARK_BITS`.
+    """
+    if not 0 <= serial < 2**SERIAL_MARK_BITS:
+        raise ValueError(f"serial {serial} does not fit in {SERIAL_MARK_BITS} bits")
+    return ((serial >> np.arange(SERIAL_MARK_BITS)) & 1).astype(np.int16)
+
+
 __all__ = [
     "SOURCE_ID",
     "TAXONOMY",
     "DEFAULT_ITEMS_PER_CITY",
+    "SERIAL_MARK_BITS",
     "ToponymyItem",
     "baked_dim",
     "generate_items",
+    "serial_mark",
     "total_cities",
 ]

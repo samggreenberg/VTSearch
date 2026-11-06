@@ -11,8 +11,6 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtscore.detectors.store import _detector_path
-
 detectors_registry_bp = Blueprint(
     "detectors_registry",
     __name__,
@@ -41,15 +39,9 @@ def _abort_if_name_taken(name: str, *, own_path: Path | None = None, exclude_id:
             this same path and is allowed through.
         exclude_id: Registry id to skip, so a rename doesn't collide with itself.
     """
-    from vtscore.detectors.registry import list_detectors
+    from vtscore.detectors.registry import detector_name_taken
 
-    new_path = _detector_path(name)
-    if own_path is not None and new_path == own_path:
-        return
-    if new_path.exists() or any(
-        entry.get("id") != exclude_id and _detector_path(entry.get("name", "")) == new_path
-        for entry in list_detectors()
-    ):
+    if detector_name_taken(name, own_path=own_path, exclude_id=exclude_id):
         abort(409, message=f"A detector named '{name}' already exists")
 
 

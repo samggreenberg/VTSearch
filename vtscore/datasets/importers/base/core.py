@@ -690,6 +690,25 @@ class ImporterBase(PluginBase):
     # Origin display and reload
     # ------------------------------------------------------------------
 
+    def describe_origin_param(self, key: str, value: str) -> str:
+        """Return the origin param *key*'s *value* as a person reads it.
+
+        The dataset Stats window lists a dataset's origin params one row per
+        param, labelled with this importer's own field labels
+        (:func:`vtscore.datasets.importers.origin_rows.origin_rows`); this
+        method words each value.  Return ``""`` to leave the row out.
+
+        The default reads a checkbox as ``Yes`` / ``No``, ``media_type`` as the
+        type's display name and ``source_specs`` as the converters it ran
+        (``"Images → Faces"``), and returns anything else as recorded.  Override
+        it to name a value your importer records as an id (a catalogue entry,
+        a registry name), and call ``super()`` for the keys you leave alone.
+        """
+        from vtscore.datasets.importers.origin_rows import describe_origin_value  # noqa: PLC0415
+
+        field = next((f for f in self.fields if f.key == key), None)
+        return describe_origin_value(field, key, value)
+
     def origin_display(self, origin: dict[str, Any]) -> str:
         """Return a human-readable string for an origin dict from this importer.
 

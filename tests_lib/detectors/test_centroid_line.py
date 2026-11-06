@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.centroid_head import CENTROID_COUNTS, CENTROID_LINE_RULE, CENTROID_LINE_RULES, centroid_cut
+from tests_shared.face_ball import face_ball_space  # noqa: F401
 from vtscore.eval.voting_iterations import centroid_line_tag, parse_centroid_line_variants
 from vtscore.training.thresholds import (
     _count_line,
@@ -525,11 +526,14 @@ class TestTheHigherBars:
 class TestTheFaceRule:
     """#5325: face crops draw the centroid's line at the z5.5 bar; every other media type keeps the app's rule."""
 
-    def test_each_media_type_gets_its_rule(self):
-        from vtscore.detectors.centroid_head import centroid_line_rule
+    def test_each_media_type_gets_its_rule(self, face_ball_space):  # noqa: F811
+        from tests_shared.face_ball import COMPAT
+        from vtscore.detectors.centroid_head import FACE_BALL_BELOW, centroid_line_rule, is_centroid_line_rule
 
-        assert centroid_line_rule("face") == "face_ball"
-        assert centroid_line_rule("face") in CENTROID_LINE_RULES
+        assert centroid_line_rule("face", COMPAT) == f"face_ball[{COMPAT}]"
+        assert is_centroid_line_rule(centroid_line_rule("face", COMPAT))
+        # A face space with no ball keeps the count from before it (#5497).
+        assert centroid_line_rule("face") == FACE_BALL_BELOW in CENTROID_LINE_RULES
         for other in ("image", "video", "", None):
             assert centroid_line_rule(other) == CENTROID_LINE_RULE
 
@@ -539,7 +543,7 @@ class TestTheFaceRule:
         from vtscore.eval.voting_iterations import production_centroid_line, simulate_voting_iterations
 
         assert inspect.signature(simulate_voting_iterations).parameters["centroid_line"].default is None
-        assert production_centroid_line({1: {"media_type": "face"}}) == "face_ball"
+        assert production_centroid_line({1: {"media_type": "face"}}) == "count_gap_floor_skip25_b1_z5.5"
         assert production_centroid_line({1: {"media_type": "image"}}) == CENTROID_LINE_RULE
         assert production_centroid_line({1: {}}) == CENTROID_LINE_RULE
         assert production_centroid_line({}) == CENTROID_LINE_RULE

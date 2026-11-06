@@ -603,8 +603,9 @@ keeps, and what the spot check found on it.
 
 The `done` payload also carries `query_hold` (#4736): whether a session opened
 on a typed query still shows that query's set rather than this ranking. It is
-`true` on a single-vector space while the labels number fewer than 30
-(`vtscore.detectors.label_quota.query_holds`; a patch space has no hold). The
+`true` on a single-vector space while the labels number fewer than
+`QUERY_HOLD_LABELS` (`vtscore.detectors.label_quota.query_holds`; a patch space
+has no hold). That is 0 since #5556 (30 before), so the app sends `false`. The
 Train view then keeps the text sort on screen and takes Autopilot's Hard pick
 from this ranking; from the first payload without it, it shows this ranking.
 

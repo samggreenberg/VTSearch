@@ -19,7 +19,8 @@ The 1-D similarity order comes with the 2-D layout (the shared build fits it
 once the layout is saved, #5464).  A Face dataset gets its order whether or not
 the layout is pre-built, since its example picker lists its items in that order
 (#5465); that stage is wired here too, by the same contract, and its fit lives
-in :mod:`vtscore.projection.similarity_order`.
+in :mod:`vtscore.projection.similarity_order`.  So is a Face dataset's people
+stage (#5586), whose fit lives in :mod:`vtscore.datasets.people`.
 """
 
 from __future__ import annotations
@@ -170,3 +171,33 @@ def _build_similarity_order_stage(ctx: DatasetContext, tracker) -> None:
 
     if similarity_order.similarity_order_for(ctx, on_progress=_progress) is not None:
         _progress(1, 1, "Similarity order ready")
+
+
+def _build_people_stage(ctx: DatasetContext, tracker) -> None:
+    """Fit + persist the people of a freshly built Face dataset (#5586).
+
+    Its face crops merged into people (:mod:`vtscore.datasets.people`), which
+    the People view lists.  A no-op for every type but Face, and for a Face
+    dataset whose face space has no cut (the view says so instead).  Runs after
+    registration, so the container exists to persist into, and is best-effort
+    by the projection stage's contract: the caller wraps it, and the first ask
+    for the people fits them if this did not.
+    """
+    from vtscore.datasets import people  # noqa: PLC0415
+
+    if not people.wants_people(ctx):
+        return
+
+    def _progress(current: int, total: int, message: str) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            message,
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    if people.people_for(ctx, on_progress=_progress) is not None:
+        _progress(1, 1, "People ready")

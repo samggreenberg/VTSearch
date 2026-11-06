@@ -62,6 +62,7 @@
             type="button"
             class="btn btn--primary"
             [disabled]="fileLoading() || !typedPath.trim()"
+            [title]="!fileLoading() && !typedPath.trim() ? 'Type the path to a media file first' : ''"
             (click)="submitTypedPath()"
           >
             @if (fileLoading()) { Loading… } @else { Load }

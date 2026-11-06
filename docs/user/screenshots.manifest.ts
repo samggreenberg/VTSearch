@@ -22,6 +22,10 @@ import { join } from 'node:path';
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, REPO, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with capture.ts
+import { FACE_DATASET, FACE_DETECTOR, faceItem, IMAGE_DATASET, SHARED_PHOTO, SHOWN_FACE } from '../../scripts/screenshots/face-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { RECEIVED, RECIPIENT, SHARED_FOLDER, TAMPERED, unshare } from '../../scripts/screenshots/sharing-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -165,6 +169,14 @@ export interface Shot {
    * canvas, not the bin popup that lands wherever its tile does.
    */
   computed?: string[];
+  /**
+   * The worked example the shot is taken on, when it is not the Smiley one:
+   * `faces` is the face example (`scripts/screenshots/face-example.mjs`), real
+   * photographs imported as Image + Face. The harness takes these shots after
+   * every other, builds that example just before them and removes it after
+   * them, so no Smiley shot has it in the app.
+   */
+  fixture?: 'faces';
   recipe: (page: Page, h: Helpers) => Promise<void>;
   /**
    * Undo whatever the recipe changed in the app to reach its frame (items
@@ -181,6 +193,7 @@ const BOTH: Theme[] = ['light', 'dark'];
 const GUIDE = 'docs/user/USER_GUIDE.md';
 const HOWTO = 'docs/user/howto';
 const STEPS = `${GUIDE}#step-by-step-your-first-search`;
+const FACES = `${GUIDE}#faces-find-a-person-in-a-set-of-photos`;
 
 /**
  * `Shot.computed` for the Browse map: the canvas (a UMAP fit, laid out
@@ -237,6 +250,39 @@ function icon(s: {
     recipe: s.recipe,
     after: s.after,
   };
+}
+
+/**
+ * Fail a sharing shot unless the app shares through the sharing example's
+ * folder (`sharing-example.mjs`): refresh.sh's own app does; one someone else
+ * started needs `detector_sharing_source` naming `shared_folder`, and
+ * `SHOTS_SHARED_FOLDER` naming its folder when ensure-fixtures.mjs runs.
+ */
+async function sharingReady(h: Helpers): Promise<void> {
+  const capability = await h.app.api('/api/detectors/sharing');
+  if (!capability.enabled || capability.name !== 'shared_folder') {
+    throw new Error(
+      "sharing is off on this app, or not through shared_folder: let refresh.sh start its own app, which shares",
+    );
+  }
+  const received = (await h.app.api('/api/detectors/sharing/received')).received || [];
+  for (const c of [RECEIVED, TAMPERED]) {
+    if (!received.some((r: { remote_ref: string }) => r.remote_ref === c.ref)) {
+      throw new Error(
+        `nobody shares ${c.name} with this app's user${SHARED_FOLDER ? '' : ' (no SHOTS_SHARED_FOLDER)'}: ` +
+          "run ensure-fixtures.mjs with SHOTS_SHARED_FOLDER set to the folder the app's setting names",
+      );
+    }
+  }
+}
+
+/** Open the Detectors card's Received… list and wait for its rows. */
+async function openReceived(page: Page, h: Helpers): Promise<void> {
+  await sharingReady(h);
+  await cleanDashboard(page, h);
+  await page.locator('.received-btn').first().click();
+  await page.waitForSelector('.received-table .received-add', { timeout: 15000 });
+  await h.wait(500);
 }
 
 /** Clean overview: nothing ticked, cursor parked where no row is hovered. */
@@ -762,6 +808,67 @@ async function autopilotServing(page: Page, h: Helpers): Promise<void> {
   await h.sortsSettled();
   await h.wait(1500);
 }
+
+/**
+ * Wait until every picture in view under *scope* has loaded. The face shots'
+ * photos and crops load lazily, so one off screen never loads and is not
+ * waited for.
+ */
+async function picturesLoaded(page: Page, scope: string): Promise<void> {
+  await page.waitForFunction(
+    (sel) => {
+      const imgs = Array.from(document.querySelectorAll(`${sel} img`)) as HTMLImageElement[];
+      const inView = imgs.filter((i) => {
+        const r = i.getBoundingClientRect();
+        return r.width > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+      });
+      return inView.length > 0 && inView.every((i) => i.complete && i.naturalWidth > 0);
+    },
+    scope,
+    { timeout: 30000, polling: 200 },
+  );
+}
+
+/**
+ * Train on the face example, its list ranked by the detector and the best
+ * matches first (Manual, Sort: Learned, Select: Top), as the guide's *Faces*
+ * steps have a reader rank it.
+ */
+async function rankFaces(page: Page, h: Helpers): Promise<void> {
+  await h.enterLabelView(FACE_DATASET, FACE_DETECTOR);
+  await h.leftTab('Manual');
+  await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
+  await page.locator('.select-mode-group .sort-radio', { hasText: 'Top' }).first().click();
+  await page.waitForSelector('.thumbnail-wrap', { timeout: 60000 });
+  await h.sortsSettled();
+}
+
+/** Wait for the Show in photo window: its photo drawn and the face outlines on it. */
+async function sourcePhotoOpen(page: Page): Promise<void> {
+  // One outline (`outline-box`) for a face opened from Train, one per face by
+  // role (`role-box`) for a photo opened from People.
+  await page.waitForSelector('vt-source-photo-modal :is(.outline-box, .role-box)', { timeout: 30000 });
+  await picturesLoaded(page, 'vt-source-photo-modal .image-wrap');
+  await page.waitForTimeout(500);
+}
+
+/** Open the face example's People view from the Face dataset's ⋯ menu, as the guide says to. */
+async function openPeople(page: Page, h: Helpers): Promise<void> {
+  await h.dashboard();
+  await h.overflowMenu(FACE_DATASET);
+  await page.locator('.context-menu .menu-item', { hasText: 'People' }).first().click();
+  await page.waitForURL(/\/people\//, { timeout: 120000 });
+  // The menu item was where a row of the list now is: move off it, onto the
+  // toolbar's empty middle, so no row is drawn hovered.
+  await page.mouse.move(760, 62);
+  // Person 1 and the person they share most photos with are picked on arrival.
+  await page.waitForSelector('.people-with-row.picked', { timeout: 60000 });
+  await page.waitForSelector('.people-photo .people-photo-box', { timeout: 60000 });
+  await picturesLoaded(page, '.people-panes');
+}
+
+/** The remembered left-panel widths from before the Collapse to photos shot widened the Face one. */
+let savedFaceWidths: Record<string, number> | null = null;
 
 export const SHOTS: Shot[] = [
   // ── Step by step: the four jobs, one numbered picture per click ─────────
@@ -1868,6 +1975,95 @@ export const SHOTS: Shot[] = [
     },
   },
 
+  // share-a-detector.md (#5580). Sharing is on for every shot (refresh.sh);
+  // what other people share is the sharing example's (sharing-example.mjs).
+  {
+    id: 'share-dialog',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-2-choose-who-gets-it`,
+    caption:
+      'Step 2: in Share, (1) type a name and pick it from the list that opens, or type it and click (2) Add; (3) who it is shared with, each with × to stop; (4) Public; then (5) Done',
+    themes: BOTH,
+    annotations: [
+      { target: '#share-recipient', kind: 'step', step: 1 },
+      { target: '.share-add-btn', kind: 'step', step: 2, at: 'right' },
+      { target: '.share-recipients', kind: 'step', step: 3 },
+      { target: '.share-public', kind: 'step', step: 4 },
+      { target: '.share-done-btn', kind: 'step', step: 5, at: 'right' },
+    ],
+    // Shared with one person already, so the dialog shows the list a reader
+    // manages. Nothing is typed: the suggestions a name opens would cover
+    // "Shared with:", and picking one shares at once.
+    async recipe(page, h) {
+      await sharingReady(h);
+      const det = h.app.named(await h.app.detectors(), DETECTOR);
+      await h.app.api(`/api/detectors/registry/${det.id}/share`, { method: 'POST', body: { add: [RECIPIENT] } });
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Share…' }).first().click();
+      await page.waitForSelector('.share-recipients', { timeout: 15000 });
+      await h.wait(500);
+    },
+    // Stopping sharing archives the container and leaves the detector plain local.
+    after: async (_page, h) => unshare(h.app, DETECTOR),
+  },
+  icon({
+    id: 'icon-received',
+    anchor: 'step-1-open-the-received-list',
+    page: 'share-a-detector.md',
+    caption: 'The Received… button on the Detectors card',
+    target: '.received-btn',
+    recipe: async (page, h) => {
+      await sharingReady(h);
+      await cleanDashboard(page, h);
+    },
+  }),
+  {
+    id: 'share-received-list',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-1-open-the-received-list`,
+    caption: `Received Detectors: what other people share with you; (1) Add the one you want (${RECEIVED.name})`,
+    themes: BOTH,
+    annotations: [
+      // Newest first: Smiling Faces, then Orange Smileys.
+      { target: '.received-table tbody tr:nth-child(2) .received-add', kind: 'step', step: 1, at: 'right' },
+    ],
+    recipe: openReceived,
+  },
+  {
+    id: 'share-received-row',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-2-use-your-copy`,
+    caption: `Your copy of ${RECEIVED.name}: (1) its Received badge; in its ⋯ menu, (2) Check for updates and (3) Fork`,
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'tr[vt-detector-card] .sharing-badge', hasText: 'Received' }, kind: 'step', step: 1, at: 'right' },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Check for updates' }, kind: 'step', step: 2, at: 'right' },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Fork' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await sharingReady(h);
+      await h.app.api('/api/detectors/sharing/receive', { method: 'POST', body: { remote_ref: RECEIVED.ref } });
+      await cleanDashboard(page, h);
+      await h.overflowMenu(RECEIVED.name);
+    },
+    // Deleting a received detector removes the local copy only.
+    after: async (_page, h) => h.app.dropDetectors(RECEIVED.name),
+  },
+  {
+    id: 'share-integrity',
+    embeddedIn: `${HOWTO}/share-a-detector.md#if-someone-other-than-the-owner-changed-it`,
+    caption: `The warning for ${TAMPERED.name}: two votes were changed by someone other than its owner; (1) Skip foreign records takes only the owner's`,
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'Skip foreign records' }, kind: 'step', step: 1, at: 'right' },
+    ],
+    // Posed: the receive asked first and changed nothing, and no choice is made.
+    async recipe(page, h) {
+      await openReceived(page, h);
+      await page.locator('.received-table tbody tr:nth-child(1) .received-add').first().click();
+      await page.waitForSelector('vt-dialog-host .btn--primary', { timeout: 15000 });
+      await h.wait(500);
+    },
+  },
+
   // import-labels.md
   {
     id: 'labels-menu',
@@ -2304,6 +2500,75 @@ export const SHOTS: Shot[] = [
       await page.locator('.settings-actions button[aria-label="Export"]').first().click();
       await page.waitForSelector('vt-modal .picker-card', { timeout: 10000 });
       await h.wait(700);
+    },
+  },
+
+  // USER_GUIDE.md › Faces: the face example (scripts/screenshots/face-example.mjs),
+  // built just for these shots and taken after every other.
+  {
+    id: 'show-in-photo',
+    embeddedIn: FACES,
+    caption: 'Show in photo from Train: the photo a face was cut from, opened over the ranking with that face outlined, and ← Back to return to the face',
+    themes: BOTH,
+    fixture: 'faces',
+    async recipe(page, h) {
+      await rankFaces(page, h);
+      await h.serveItem(faceItem(SHOWN_FACE));
+      await page.locator('.panel-center').getByRole('button', { name: 'Show in photo' }).first().click();
+      await sourcePhotoOpen(page);
+    },
+  },
+  {
+    id: 'collapse-to-photos',
+    embeddedIn: FACES,
+    caption: "Train's Manual list with Show set to Photos: each photo once, where its best face ranks, every ranked face in it outlined (a voted Good in green, faces below the line faintly) and a small picture of each face underneath",
+    themes: BOTH,
+    fixture: 'faces',
+    clip: { target: '.panel-left' },
+    async recipe(page, h) {
+      // Wide enough for two photos a row; the width is remembered per media
+      // type, so it is put back in `after`.
+      const settings = await h.app.api('/api/settings');
+      savedFaceWidths = settings.panel_pct_left;
+      await h.app.api('/api/settings', { method: 'PUT', body: { panel_pct_left: { ...savedFaceWidths, face: 440 } } });
+      await rankFaces(page, h);
+      await page.getByRole('button', { name: 'Collapse to photos' }).click();
+      await page.waitForSelector('vt-photo-grid .photo-card .face-box', { timeout: 60000 });
+      await picturesLoaded(page, 'vt-photo-grid');
+      await h.wait(500);
+    },
+    after: async (_page, h) => {
+      if (savedFaceWidths) await h.app.api('/api/settings', { method: 'PUT', body: { panel_pct_left: savedFaceWidths } });
+    },
+  },
+  {
+    id: 'people-view',
+    embeddedIn: FACES,
+    caption: "The People view of a Face dataset: everyone in it on the left, Person 1's faces in the middle with one shown large, and on the right the people Person 1 appears with, the photos they share with Person 2 underneath, Person 1 and Person 2 outlined and anyone else dashed",
+    themes: BOTH,
+    fixture: 'faces',
+    async recipe(page, h) {
+      await openPeople(page, h);
+    },
+  },
+  {
+    id: 'show-in-photo-people',
+    embeddedIn: FACES,
+    caption: 'A shared photo opened from People: the person in the middle outlined most heavily, the person they appear with next, and the others dashed',
+    themes: BOTH,
+    fixture: 'faces',
+    async recipe(page, h) {
+      await openPeople(page, h);
+      // The photo by its file name, through the Image dataset it is an item of.
+      const image = h.app.named(await h.app.datasets(), IMAGE_DATASET);
+      const ids = (await h.app.api('/api/medias/ids', { dataset: image.id })).map((m: { id: number }) => m.id);
+      const photos = await h.app.api('/api/medias/batch', { method: 'POST', dataset: image.id, body: { ids } });
+      const photo = photos.find((m: { filename: string }) => m.filename === SHARED_PHOTO);
+      if (!photo) throw new Error(`${SHARED_PHOTO} is not in ${IMAGE_DATASET}`);
+      const card = page.locator(`.people-photo:has(img[src*="/api/medias/${photo.id}/thumbnail"])`).first();
+      await card.scrollIntoViewIfNeeded();
+      await card.click();
+      await sourcePhotoOpen(page);
     },
   },
 ];

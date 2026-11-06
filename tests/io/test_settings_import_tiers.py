@@ -55,6 +55,7 @@ def _server_key_values(tmp_path: Path) -> dict[str, Any]:
         "browse_signpost_vocab": {"image": ["evil"]},
         "default_settings_source": source,
         "default_labelset_source": source,
+        "detector_sharing_source": {"source_name": "shared_folder", "field_values": {"folder": str(tmp_path / "evil")}},
         "labelset_source_push_interval_seconds": 99.0,
         "enable_metrics": False,
     }

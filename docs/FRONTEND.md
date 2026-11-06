@@ -91,8 +91,9 @@ active context in the URL:
 | `/label/:datasetId/:detectorId` | `activeContextGuard` | Labeling / training |
 | `/tune/:datasetId/:detectorId` | `activeContextGuard` | Tune (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
+| `/people/:datasetId` | `peopleContextGuard` | A Face dataset's people and who appears with whom |
 
-Bare `/label`, `/tune`, `/browse` (and anything unmatched) redirect to
+Bare `/label`, `/tune`, `/browse`, `/people` (and anything unmatched) redirect to
 `/dashboard`: a half-specified pair is not a representable state, so there is
 nothing to render. The legacy `/find/…` and `/test/…` pair paths redirect to
 `/tune/…`.
@@ -146,7 +147,7 @@ Two rules keep this navigable:
 
 ## 3. Feature areas and their boundaries
 
-Four routed views, plus the shared chrome. Their boundaries are worth knowing
+Five routed views, plus the shared chrome. Their boundaries are worth knowing
 because they determine which service a new piece of state belongs to.
 
 ### Dashboard (`components/dashboard/`)
@@ -170,6 +171,28 @@ the component —
   grids share one `toggle(kind, id, additive)` ladder, and the ids the top bar
   reads are `computed` over the selection and the registry — the pulldown
   needs no push, and there is no per-mutation mirror call to forget.
+
+**Detector sharing on the card** (#5578). What the registry listing says about
+an entry (`sync_mode`, `sharing`, `sharing_note`) is read in one place,
+`utils/detector-sharing.ts`, and the card and its menu builder
+(`buildDetectorCardMenuItems`) only render it: a received (`linked`) row gets
+the frozen treatment, a Received or Shared badge, and its own verbs. The
+ambient verbs (Share…, a Fork of one's own detector) wait on
+`SharingCapabilityService.enabled()`, so a deployment without sharing sees
+today's card; what the listing already shows does not. The two flows more than
+one surface starts, Check for updates (with its integrity dialog) and Fork,
+live in `DetectorSharingFlowsService`; the Train view and the 409
+`detector_read_only` toast use the same Fork.
+
+The two sharing dialogs (#5579) open through `DashboardModalsService`:
+`vt-share-detector-modal` (Share…, and the "Remote sync failed" link) sends
+each change as its own `POST .../share` and serialises them, since two first
+changes in flight would create two containers; `vt-received-detectors-modal`
+(the card header's **Received…**, shown on `enabled()`) receives a container
+and, on an `applied: false` answer, asks through the same
+`askAboutForeignRecords` dialog Check for updates uses. The recipient picker is
+the shared `vt-plugin-combobox` with `filterOptions` off, since its options
+are already the server's answer to what was typed.
 
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
@@ -211,6 +234,14 @@ phase wiring (including the effects that start a spot check) and the re-sort
 prompt. What outlives the view is root: `SortStateService` (the ranking, the
 line, the balance), `VoteStateService`, `AutopilotStateService` (the phase
 machine) and `PanelHideStateService` (the side-panel folds, shared with Tune).
+
+**A received detector is read-only up front** (#5578).
+`ActiveDetectorService.readOnly` turns off the centre's Good / Bad (with a
+Fork in their place), the vote keys, undo and redo, a vote from a grid or the
+Labels panel, and Autopilot. The server's 409 `detector_read_only` stays the
+backstop, answered by `errorInterceptor` with a Fork toast. A fork of the
+detector on screen, wherever it started, moves Train to the copy
+(`DetectorSharingFlowsService.forked$`).
 
 **Ordering rules.** These keep what the view serves independent of which
 request answers first (#4318):
@@ -309,6 +340,40 @@ not root — plus the root `TileCacheService`,
 `BrowsePrepService` (load + project before navigating), and
 `ProjectionApiService`.
 
+### People view (`components/people-view/`)
+
+A Face dataset's people (#5590): its faces merged into persons, each one's
+faces, and who they appear with in the photos the faces were cut from. The
+data model and routes are in [ARCHITECTURE.md](ARCHITECTURE.md#derived-media-converter-and-clipper-provenance)
+beside Collapse to photos; the design is `docs/plans/co-face-browse.md`.
+Three panes, as Browse lays its out: the people list (left, virtual-scrolled,
+with a minimum-face filter and an **Unplaced** row last), the person (centre:
+the face shown large over `vt-browse-bin-member-grid` with `selectable` off,
+so a click shows a face rather than selecting it), and **Appears with**
+(right: the co-people, and the photos the two share with every face outlined
+by its `OutlineRole`, which open in `vt-source-photo-modal` with the same
+boxes).
+
+- **Entry.** The Dashboard card's **People** item goes through the root
+  `PeoplePrepService`, which loads the dataset and waits for the partition
+  with progress on the card's row, as `BrowsePrepService` waits for the map.
+  Browse's **People** button goes straight to the route: its dataset is
+  loaded, and the view polls a fit still running. Both are offered on a Face
+  dataset only, and `peopleContextGuard` bounces any other.
+- **State** is the component-provided `PeopleViewStateService`. The list is
+  imperative (`GET /api/people`, polled with `pollUntil` while `building`;
+  Rebuild people is a POST answering the same way); the person and the shared
+  photos are `rxResource`s keyed by the pick **and the partition**, so a new
+  list re-reads both.
+- **A person id is a rank in one partition.** A per-person read answering 409
+  `people_changed` reads the list again and picks the same person anew by
+  their representative face, or no one. An id is never carried into a
+  partition it was not read from.
+- **The photos are the Image sibling's**, read with `mediaUrlIn` while the
+  Face dataset stays active; an unloaded sibling is offered through
+  `SiblingLoadService`, as Collapse to photos offers it. Nothing else in the
+  view needs the sibling.
+
 ### Shared chrome
 
 `AppComponent`'s header, `context-pulldown` (the dataset and detector
@@ -375,6 +440,8 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
+| `SharingCapabilityService` | Whether the deployment shares detectors (`GET /api/detectors/sharing`), fetched once after sign-in |
+| `DetectorSharingFlowsService` | Check for updates (with the integrity dialog) and Fork, for every surface that starts them, and `forked$` for the views that follow a fork |
 | `SettingsPanelService` | Opens the app shell's Settings modal on a chosen tab, optionally with the settings importer up, and resolves on close with whether an import was applied. `AutoFindSetupService` uses it for the question a first AutoFind detector asks (#5344) |
 | `AutoFindService` | The end of a background AutoFind: opens the results of a Find this tab started (the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, a dataset's ⋯ **Run AutoFind**, or a Find that landed while the dialog was open) with a **View Results** action, and holds the run the app-root Find Results dialog shows. AutoFind is the unattended path and never opens the dialog on its own (#4615) |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
@@ -655,7 +722,9 @@ otherwise holds activation on `ContextSwitchService.applyActivePair(...)`. An
 *incompatible* pair (mismatched media types) is allowed through — the
 `vt-incompatible-pair-explainer` overlay is a legitimate UI state.
 
-`browseContextGuard` is the dataset-only variant, with one carve-out:
+`browseContextGuard` is the dataset-only variant (built by
+`datasetContextGuard`, which `peopleContextGuard` shares, refusing any dataset
+but a Face one), with one carve-out:
 ephemeral detector-positive contexts (`__detpos__<id>`) are built server-side,
 are deliberately absent from the registry, and skip the checks. The guard
 still makes the map the active dataset, so a reload names it as the
@@ -967,7 +1036,9 @@ the seams `vt-modal` adds:
   a click outside the box lands on it as before.
 
 - `dialog-host` + `VtDialogService` provide promise-returning `confirm()` /
-  `prompt()`, including the standardised `confirmDestructive()` phrasing.
+  `prompt()`, including the standardised `confirmDestructive()` phrasing: the
+  question, then the names it acts on as a bulleted list (its `items`, never a
+  comma-joined row in the question), then the detail line.
   Purely informational messages go to `ToastService`, never a modal.
 - **Back vs Cancel is a rule, not a preference.** An inner view that *replaces*
   an outer one gets a left-aligned `← Back` chevron; `Cancel` in the footer
@@ -1026,7 +1097,11 @@ it guards `@angular/cdk/a11y` (#5297) and the toast stack (#5505) the same way.
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` and
 `column-chooser/` (a checkbox per column under a select-all, which the Export
-and Find Results dialogs share, #5464) are the small shared widgets. `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
+and Find Results dialogs share, #5464; a host's `chooserEnd` content sits at the
+end of the checkbox row, #5584) are the small shared widgets. `utils/managed-columns.ts`
+is the column controller behind every sortable, drag-reorderable, resizable grid
+(the Dashboard's two, the demo picker, Find Results' list): a `<table>` by
+default, a CSS grid of divs through its `gridDom` adapter (#5584). `toasty-hint/` is one of Toasty's hints (#4680): Toasty and a
 speech bubble beside the control to click next, with "Hide this hint" / "Hide
 all hints" boxes that `HintsService` keeps in the user's settings. Drop it
 under any positioned container; it measures itself against its anchor and
@@ -1048,8 +1123,9 @@ per-instance state or a component-bound lifetime is the point.  The complete
 list today: `LabelViewPanelStateService` and `SortRunnerService`
 (`label-view`), `PairScopeService` (`label-view`, `find-view`),
 `LineTestSessionService` (`find-view`), `BrowseViewportService` /
-`BrowseSelectionService` (`browse-view`), and `SiblingLoadService`
-(`photo-grid`, `source-photo-modal`).
+`BrowseSelectionService` (`browse-view`), `PeopleViewStateService`
+(`people-view`), and `SiblingLoadService` (`photo-grid`,
+`source-photo-modal`, `people-view`).
 
 ---
 

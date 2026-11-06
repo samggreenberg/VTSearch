@@ -58,7 +58,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
 | Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
 | Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
-| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 2 |
 | Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
 | Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
 | Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |
@@ -637,6 +637,7 @@ to the framework.
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
 | `origin_display()` | `(origin: dict) -> str` | Human-readable string for an origin dict |
+| `describe_origin_param()` | `(key: str, value: str) -> str` | Word one origin param's value for the dataset Stats window, which labels each row with your field's own `label`. Default: `Yes` / `No` for a checkbox, a media type's name, `source_specs` as the converters run (`"Images → Faces"`), anything else as recorded. Override to name a value you record as an id (the demo importer names its demo); return `""` to leave the row out, and call `super()` for the keys you leave alone |
 | `can_reload_from_origin()` | `(origin: dict) -> bool` | Whether data can be re-loaded from an origin. Default: `True` |
 | `reload_from_origin()` | `(origin: dict) -> dict | None` | Extract field_values from an origin for re-import |
 | `resolve_file()` | `(origin, origin_name, filename) -> Path | None` | Resolve a media file from origin info. Default: `None` |
@@ -1563,7 +1564,7 @@ with three **payload kinds**. Implement a method per kind you support:
 
 | Kind | Method | Payload | Produced by |
 |------|--------|---------|-------------|
-| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}, "selected_columns"?: [...]}` | `POST /api/auto-detect`, a background AutoFind (after an import, or a dataset's Run AutoFind), AutoFind auto-export, the Find Results dialog's **Export** (which moves the side it lists into `hits`), CLI `--autodetect` |
+| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}, "selected_columns"?: [...]}` | `POST /api/auto-detect`, a background AutoFind (after an import, or a dataset's Run AutoFind), AutoFind auto-export, the Find Results dialog's **Export** (which moves the side it lists into `hits`) and its **AutoFind** tab (`POST /api/autofind/runs/{run_id}/export`, which sends the kept run through the AutoFind exporter as its finish did), CLI `--autodetect` |
 | `labelset` | `export_labelset()` | `{"labels": [LabeledElement], "selected_columns": [...]}` | the Export modal |
 | `detector_bundles` | `export_cli_detectors()` | the trained classifiers | CLI `--pipeline` / `--autodetect` |
 
@@ -1859,6 +1860,7 @@ What each surface does with the key:
 |---------|-----------|
 | Export modal | An `opens_url` exporter gets a blank tab opened inside the click handler, which is navigated when the export returns — a tab opened from the response instead is what popup blockers stop. If the blocker refuses even that, the success toast carries an **Open** action and stays up until dismissed |
 | AutoFind auto-export (`POST /api/auto-detect`, background AutoFind) | Offered as an **Open** button on the Find Results dialog's status line — not opened on arrival, since the results arrive asynchronously and would be blocked |
+| Find Results' **AutoFind** tab (`POST /api/autofind/runs/{run_id}/export`) | As the dialog's other Export tabs: a blank tab claimed in the click handler and navigated when the status returns, with the success toast's **Open** action as the fallback |
 | CLI (`--exporter`) | No browser: the URL is printed under the confirmation message, and rides along as an `open_url` field on the `export_complete` event under `--progress-format json` |
 
 Every path re-validates the URL with
@@ -1991,6 +1993,8 @@ LABEL_IMPORTER = PostgresLabelImporter()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run_cli()` | `(field_values: dict) -> list[dict[str, str]]` | CLI variant; default delegates to `run()` |
+| `run_labelset()` | `(field_values: dict) -> dict` | The import as a serialised labelset: `{"labels": [...]}` plus a `detector_meta` block when your source carries one. The routes call this, so a detector imported from a labelset this app exported keeps its training-domain summary (#5571). Default: `{"labels": run(field_values)}` |
+| `run_labelset_cli()` | `(field_values: dict) -> dict` | CLI variant of `run_labelset()`; default `{"labels": run_cli(field_values)}`. Override it whenever you override `run_labelset()` |
 | `default_detector_name()` | `(field_values: dict) -> str` | Name a detector created from this importer. Shown live in the New Detector › Trained form's Detector name box. Default: the uploaded file's stem, else `"<display_name> detector"`. See [Naming the created detector](#naming-the-created-detector) |
 
 **Default class attributes:**
@@ -2614,5 +2618,49 @@ The same "a sync target is a side channel" stance as
 [settings sources](ARCHITECTURE.md#failure-semantics) holds: a source that raises is
 logged and retried on the next change, and the detector file stays the
 record.
+
+A detector shared through a container is pushed by the same engine, by
+role (`vtscore.labels.sync.sync_role`): its **owner's** writes rewrite the
+container with `share_save` - the whole labelset and its manifest, no pull
+first and no merge, so a recipient's edits there are overwritten rather
+than imported - and each push records `sync_error` and `last_synced` on the
+entry's binding. A **received** (linked) detector never pushes and is never
+pulled; it changes only by refresh. One whose sharing source is not the
+active one does nothing, logged once. Neither the load-time pull nor
+`POST .../labelset-source/sync` touches a shared detector: the manual sync
+answers 409 (`detector_read_only` for a received one, `detector_shared` for
+an owner, `sharing_unavailable` with the reason when the source is not
+active). `PUT .../labelset-source` answers the same 409s for any body, so a
+sharing binding is never replaced there: an owner unshares first. The
+library guide's [Roles](../vtscore/docs/packages/labels.md#roles) has the
+table.
+
+### Sharing detectors
+
+A labelset source can also **share** detectors through an external
+collaboration service: one container per shared detector, with an owner and
+recipients. Sharing is an optional capability of this same plugin family -
+no new registry, sentinel or entry-point group. Override the `_do_share_*`
+hooks (all nine required ones, plus `_do_share_search_recipients` for
+recipient autocomplete); the library guide's [The sharing
+contract](../vtscore/docs/extending/labelset-sources.md#the-sharing-contract)
+lists them with the types they exchange (`vtscore/labels/sharing.py`) and
+the identity and manifest rules. What it means for the app:
+
+- `GET /api/labelset-sources` reports three derived flags per source:
+  `supports_sync` (it implements `_do_save` and a load hook, so it can be a
+  plain sync target), `supports_sharing` and `supports_recipient_search`.
+  A sharing-only source is legal; with `supports_sync` false it is never a
+  plain-binding target.
+- Sharing is switched on by the `detector_sharing_source` server setting
+  (see [SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)), never by
+  installing a source: `vtscore.labels.sharing.active_sharing_source()`
+  resolves it, and treats an unknown name or a source that cannot share as
+  off, with a warning.
+- The built-in `vtscore/labels/sources/shared_folder/` implements the whole
+  contract over a directory of JSON files, for tests and local development,
+  and `tests_lib/labels/test_sharing_conformance.py` runs the contract tests
+  against every registered source that can share. Add a driver there for a
+  new in-tree sharing source.
 
 ---

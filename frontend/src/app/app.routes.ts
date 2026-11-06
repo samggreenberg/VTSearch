@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { activeContextGuard } from './guards/active-context.guard';
 import { browseContextGuard } from './guards/browse-context.guard';
+import { peopleContextGuard } from './guards/people-context.guard';
 
 /**
  * Routes. The label/tune views encode the active (dataset, detector)
@@ -13,7 +14,8 @@ import { browseContextGuard } from './guards/browse-context.guard';
  * is still Find: the `/tune` route renders `FindViewComponent`, and the API keeps `find`
  * throughout (`/api/find-label`, `find_mode`, the `find` SSE channel).
  *
- * Browse is dataset-only (no detector required): `/browse/:datasetId`.
+ * Browse is dataset-only (no detector required): `/browse/:datasetId`. So is
+ * People (#5590), on a Face dataset alone: `/people/:datasetId`.
  */
 export const routes: Routes = [
   {
@@ -47,6 +49,14 @@ export const routes: Routes = [
         (m) => m.BrowseViewComponent,
       ),
   },
+  {
+    path: 'people/:datasetId',
+    canActivate: [peopleContextGuard],
+    loadComponent: () =>
+      import('./components/people-view/people-view.component').then(
+        (m) => m.PeopleViewComponent,
+      ),
+  },
   // The Tune view's earlier names, so a link saved or sent under one still
   // opens the same pair (#5129).
   { path: 'find/:datasetId/:detectorId', redirectTo: 'tune/:datasetId/:detectorId' },
@@ -56,6 +66,7 @@ export const routes: Routes = [
   { path: 'label', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'tune', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'browse', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'people', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '**', redirectTo: 'dashboard' },
 ];

@@ -1,0 +1,79 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-04-hold-count-5556.555bdfb136e2.tar.gz",
+   "source_commit": null,
+   "files": {
+    "measurements/checks/h0-b1.csv": {
+     "bytes": 8311,
+     "oid": "884113df0c446b64578b08d194a89d888ae3096f"
+    },
+    "measurements/checks/h40-b025.csv": {
+     "bytes": 7491,
+     "oid": "2a082954d68dc8871edceafd6eff98084beb8a51"
+    },
+    "measurements/checks/h40-b1.csv": {
+     "bytes": 7571,
+     "oid": "9aa790019d008788a958b58954bc8748f44c5197"
+    },
+    "measurements/checks/h40-b4.csv": {
+     "bytes": 7649,
+     "oid": "9c57a830d9bb0a4197e5fe9b7d10655e4e022552"
+    },
+    "measurements/checks/h8-b025.csv": {
+     "bytes": 8361,
+     "oid": "2d55c173559bef394e5cedb047597e0c231c4bc5"
+    },
+    "measurements/photos/crossing.csv": {
+     "bytes": 395,
+     "oid": "353134321f4b7077dd9de012b67cafa780fe21ac"
+    },
+    "measurements/photos/decision.csv": {
+     "bytes": 1248,
+     "oid": "0c16c89be0b2b464a1447e1b6c3eeab0ac3f0b3d"
+    },
+    "measurements/photos/gap.csv": {
+     "bytes": 116345,
+     "oid": "d37bc7d530f315da1b283e4eefb67eab786a0ee6"
+    },
+    "measurements/photos/one_count.csv": {
+     "bytes": 362,
+     "oid": "906d9bbcc73b8ca5ab74e6270788a31dd1f16fc2"
+    },
+    "measurements/photos/stop_clicks.csv": {
+     "bytes": 1539,
+     "oid": "0c035109a6ca325aae0db0bdf29b765b8cf11ebf"
+    },
+    "measurements/photos/stop_holds.csv": {
+     "bytes": 155726,
+     "oid": "c24e24ba41eff8b33d4a1755795cf2056fcdb1bc"
+    },
+    "measurements/screens/crossing.csv": {
+     "bytes": 150,
+     "oid": "9504fea7d56345ca31b42e81631d0d7cf5089f61"
+    },
+    "measurements/screens/decision.csv": {
+     "bytes": 339,
+     "oid": "086e21350aa2bf6d4910b2110eef84ed10258b22"
+    },
+    "measurements/screens/gap.csv": {
+     "bytes": 27974,
+     "oid": "41ffce5e4c34925a687b4af3916067484c8609d2"
+    },
+    "measurements/screens/one_count.csv": {
+     "bytes": 360,
+     "oid": "865fa0f0c3bc76afca73882094be89749d146740"
+    },
+    "measurements/screens/stop_clicks.csv": {
+     "bytes": 528,
+     "oid": "f9dc372c9cfc59076de1d8b2ab3993fc3394db26"
+    },
+    "measurements/screens/stop_holds.csv": {
+     "bytes": 37627,
+     "oid": "ee150d6b7e63d473e03e6f4fb5128c9de5b52144"
+    }
+   }
+  }
+ ]
+}

@@ -18,6 +18,7 @@ from vtsearch.schemas.media import (
     MediaVoteResponseSchema,
 )
 from vtsearch.state import get_media, set_vote
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 
 @medias_bp.route("/api/medias/<int:media_id>/vote", methods=["POST"])
@@ -28,8 +29,10 @@ from vtsearch.state import get_media, set_vote
 )
 @medias_bp.alt_response(404, description="Media not found.")
 @medias_bp.alt_response(500, description="The vote could not be written to the detector store.")
+@medias_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active", find_mode_ok=True)
 def vote_media(body: dict, media_id: int):
     """Set a single media's vote to an **absolute target state**.
 
@@ -105,8 +108,10 @@ def vote_media(body: dict, media_id: int):
 @medias_bp.response(200, MediaVoteBulkResponseSchema)
 @medias_bp.alt_response(400, description="No ids supplied, or provenance is malformed.")
 @medias_bp.alt_response(500, description="The votes could not be written to the detector store.")
+@medias_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active", find_mode_ok=True)
 def vote_media_bulk(body: dict):
     """Apply one absolute vote target to many medias in a single request.
 

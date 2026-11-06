@@ -112,6 +112,9 @@ have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `signpost_vocab` (`dict[str, list[str]]`, `{}`), `default_labelset_source`
 (`dict[str, Any] | None`, `None` - the deployment-wide labelset source every
 detector syncs its labels to unless it has a binding of its own),
+`detector_sharing_source` (`dict[str, Any] | None`, `None` - the labelset
+source detector sharing goes through, read by
+`vtscore.labels.sharing.active_sharing_source`; `None` is sharing off),
 `labelset_source_push_interval` (`float`, `DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL` = `60.0` seconds - the shortest gap
 between two pushes of one detector's labels to its source), `hide_ingest_eta`
 (`bool`, `False` - **deprecated and ignored** (#4667): ingest progress bars

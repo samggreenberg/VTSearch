@@ -98,6 +98,7 @@ _EXCLUDE_FROM_DEFAULTS = {
     "settings_source",
     "default_settings_source",
     "default_labelset_source",
+    "detector_sharing_source",
 }
 
 #: Keys excluded from source sync export (to avoid circular config). Both the

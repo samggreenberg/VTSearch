@@ -34,6 +34,7 @@ kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections import OrderedDict
@@ -435,7 +436,9 @@ def score_detector(
         )
         if mlp is None:
             return None
-        balance = _line_state(name, trained[0] if trained else None)
+        det_ctx = trained[0] if trained else None
+        balance = _line_state(name, det_ctx)
+        beta, lines = _balance_lines(det_ctx, threshold)
 
         from vtscore.detectors.query_head import query_head_embedder  # noqa: PLC0415
 
@@ -472,6 +475,11 @@ def score_detector(
             # The balance's state on that cut: unchecked, headless (#4247,
             # #4272, #4413).
             "balance": balance,
+            # The balance the cut was drawn at, and the cut at each of the
+            # Threshold's presets, so the Find Results dialog can show what
+            # the other notches would have kept without a retrain (#5540).
+            "beta": beta,
+            "lines": lines,
             # Which detector the labels gave: under the quota, the Goods'
             # centroid rather than a trained head (#4643), or a typed-query
             # detector's own query (#4758).
@@ -483,6 +491,34 @@ def score_detector(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+def _balance_lines(det_ctx: Any, threshold: float) -> tuple[float | None, list[dict[str, float]]]:
+    """*det_ctx*'s balance, and its cut at each Threshold preset (#5540): ``(beta, [{beta, threshold}, ...])``.
+
+    Each preset's cut is :func:`~vtscore.state.core.recut_detector_threshold`'s,
+    re-derived from the estimators the train cached, so nothing is retrained or
+    re-scored: the scores the run already holds are split at another line.  The
+    detector's own balance keeps *threshold*, the cut its hits were split at, so
+    its notch reproduces the run exactly.  A cut the estimators cannot re-derive
+    (no context to ask, a head whose line no balance moves, or a cut that is
+    not a number) is *threshold* too: that notch keeps what the run kept.  Presets run from false positives
+    to false negatives (beta 4, 1, 1/4), as the control lays them out.
+    """
+    from vtscore.state import detector_beta  # noqa: PLC0415
+    from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_PRESETS, PRECISION_FLOOR_FALLBACK_INCLUSION  # noqa: PLC0415
+
+    own = detector_beta(det_ctx) if det_ctx is not None else None
+    lines: list[dict[str, float]] = []
+    for preset in sorted(BALANCE_PRESETS, reverse=True):
+        cut = None
+        if det_ctx is not None and preset != own:
+            cut = recut_detector_threshold(det_ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=preset)
+        if cut is None or not math.isfinite(cut):
+            cut = threshold
+        lines.append({"beta": preset, "threshold": round(float(cut), 4)})
+    return own, lines
 
 
 def _line_state(name: str, det_ctx: Any) -> dict | None:
@@ -694,7 +730,7 @@ def domain_shifts(response: dict) -> list[dict[str, Any]]:
     return shifts
 
 
-def run_autofind_export(response: dict) -> dict | None:
+def run_autofind_export(response: dict, *, on_demand: bool = False) -> dict | None:
     """Run the configured AutoFind results exporter on *response*.
 
     Returns ``None`` when no exporter is configured (the common case) or the
@@ -705,6 +741,11 @@ def run_autofind_export(response: dict) -> dict | None:
     Export failures are reported in the status block rather than raised: the
     scored results are valuable on their own, so a misconfigured exporter must
     not sink the whole run.
+
+    *on_demand* is the Find Results dialog's AutoFind tab asking for the export
+    by hand (#5584, :func:`export_run_now`): the pause holds back what finished
+    runs send on their own, not a test the user presses the button for, so it
+    is not consulted.
     """
     from vtsearch.settings import (  # noqa: PLC0415
         get_autofind_export_enabled,
@@ -713,7 +754,7 @@ def run_autofind_export(response: dict) -> dict | None:
     )
 
     exporter_name = get_autofind_exporter()
-    if not exporter_name or not get_autofind_export_enabled():
+    if not exporter_name or (not on_demand and not get_autofind_export_enabled()):
         return None
 
     from vtscore.exporters import get_exporter  # noqa: PLC0415
@@ -859,6 +900,37 @@ def prep_run_browse(run_id: str, user: str) -> dict[str, Any] | None:
         # NothingToProject and the matrix builder's own refusals: Browse would
         # meet the same, and its own build will say so when it is pressed.
         return {"status": "skipped", "reason": str(exc)}
+
+
+#: The keys of a kept run that make up the ``POST /api/auto-detect`` body the
+#: exporter saw when the run finished; the rest of the record (who ran it,
+#: when, on what) is the dialog's, not the exporter's.
+RUN_RESPONSE_KEYS = ("media_type", "detectors_run", "results", "missing_detectors")
+
+
+def export_run_now(run_id: str, user: str) -> dict[str, Any] | None:
+    """Send kept run *run_id*'s results through the AutoFind exporter, as its finish did (#5584).
+
+    The Find Results dialog's AutoFind tab: a way to try the exporter set up
+    on the Settings AutoFind tab without importing another dataset.  The
+    payload is the run's own ``POST /api/auto-detect`` body (every detector's
+    Good at the run's own cut, whatever the dialog lists), so what goes out is
+    what a finished run sends.  The pause (``autofind_export_enabled``) is not
+    consulted: it holds back runs, not a button the user pressed.
+
+    ``None`` for a run *user* cannot see (as :func:`get_autofind_run`).
+    Raises :class:`AutoFindUnavailable` (409) when no exporter is set up, and
+    otherwise returns the same status block a finished run records as its
+    ``auto_export``, failures included.
+    """
+    record = get_autofind_run(run_id, user)
+    if record is None:
+        return None
+    response = {key: record[key] for key in RUN_RESPONSE_KEYS if key in record}
+    status = run_autofind_export(response, on_demand=True)
+    if status is None:
+        raise AutoFindUnavailable("No results exporter is set up for AutoFind (Settings › AutoFind).", status=409)
+    return status
 
 
 def clear_autofind_runs() -> None:

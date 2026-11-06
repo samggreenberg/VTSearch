@@ -6,8 +6,8 @@ import { map } from 'rxjs/operators';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { DefaultLabelsetSource } from '../generated/api-client/models/default-labelset-source';
 import type { DetectorLabelsetSource } from '../generated/api-client/models/detector-labelset-source';
+import type { LabelsetSourceEntry } from '../generated/api-client/models/labelset-source-entry';
 import type { OkMessage } from '../generated/api-client/models/ok-message';
-import type { SyncSourceEntry } from '../generated/api-client/models/sync-source-entry';
 import { getDefaultLabelsetSource } from '../generated/api-client/fn/sync-sources/get-default-labelset-source';
 import { getDetectorLabelsetSource } from '../generated/api-client/fn/sync-sources/get-detector-labelset-source';
 import { listLabelsetSourcesRoute } from '../generated/api-client/fn/sync-sources/list-labelset-sources-route';
@@ -34,8 +34,10 @@ export class LabelsetSourcesApiService {
     return getDefaultLabelsetSource(this.http, this.config.rootUrl).pipe(map((r) => r.body ?? null));
   }
 
-  /** Every registered labelset source plugin, with all its fields. */
-  listSources(): Observable<SyncSourceEntry[]> {
+  /** Every registered labelset source plugin, with all its fields and its
+   *  capability flags (`supports_sync`, `supports_sharing`,
+   *  `supports_recipient_search`). */
+  listSources(): Observable<LabelsetSourceEntry[]> {
     return listLabelsetSourcesRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body ?? []));
   }
 

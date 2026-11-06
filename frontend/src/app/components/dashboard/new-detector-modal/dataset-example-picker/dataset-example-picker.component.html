@@ -44,7 +44,7 @@
               class="pick-tile"
               [class.pick-tile--named]="!showsThumbnail(id)"
               [disabled]="busy()"
-              [title]="name(id)"
+              [title]="busy() ? 'Wait for the picked example to load' : name(id)"
               [attr.aria-label]="'Use ' + name(id) + ' as the example'"
               (click)="pick(id)">
               @if (showsThumbnail(id)) {

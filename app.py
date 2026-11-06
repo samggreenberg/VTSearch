@@ -119,6 +119,7 @@ from vtsearch.routes import (  # noqa: E402
     detectors_export_bp,
     detectors_labels_bp,
     detectors_registry_bp,
+    detectors_sharing_bp,
     embed_bp,
     eval_bp,
     events_bp,
@@ -141,6 +142,7 @@ from vtsearch.routes import (  # noqa: E402
     label_importers_bp,
     main_bp,
     metrics_bp,
+    people_bp,
     projection_bp,
     sessions_bp,
     settings_bp,
@@ -294,11 +296,13 @@ api.register_blueprint(sync_sources_bp)
 api.register_blueprint(detectors_crud_bp)
 api.register_blueprint(detectors_labels_bp)
 api.register_blueprint(detectors_registry_bp)
+api.register_blueprint(detectors_sharing_bp)
 api.register_blueprint(detector_scoring_bp)
 api.register_blueprint(detector_find_bp)
 api.register_blueprint(detectors_export_bp)
 api.register_blueprint(embed_bp)
 api.register_blueprint(projection_bp)
+api.register_blueprint(people_bp)
 app.register_blueprint(events_bp)
 # Plain Flask blueprint (browser-redirect callback + JSON status); kept off the
 # OpenAPI surface like events_bp.

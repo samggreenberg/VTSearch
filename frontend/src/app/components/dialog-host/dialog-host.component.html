@@ -1,5 +1,21 @@
 <vt-modal [open]="dialog.dialogOpen()" [title]="dialog.dialogTitle()" [showCloseButton]="false" (closed)="onClosed()">
-  <p class="dialog-message"><vt-icon [type]="dialog.getIconType()" [size]="32"></vt-icon><span class="dialog-message__text">{{ dialog.dialogMessage() }}</span></p>
+  <!-- A <div>, not a <p>: the body can hold a <ul>, which a <p> cannot. -->
+  <div class="dialog-message">
+    <vt-icon [type]="dialog.getIconType()" [size]="32"></vt-icon>
+    <div class="dialog-message__body">
+      <span class="dialog-message__text">{{ dialog.dialogMessage() }}</span>
+      @if (dialog.dialogItems().length) {
+        <ul class="name-list dialog-message__items">
+          @for (item of dialog.dialogItems(); track $index) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      }
+      @if (dialog.dialogDetail()) {
+        <span class="dialog-message__text dialog-message__detail">{{ dialog.dialogDetail() }}</span>
+      }
+    </div>
+  </div>
   @if (dialog.dialogShowInput()) {
     <input
       class="form-input"

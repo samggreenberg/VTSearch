@@ -25,8 +25,8 @@ Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="..
 
 **Readiness** is one of:
 
-- **Ready**: already downloaded and analysed; it loads straight away.
-- **Needs setup**: already downloaded, but it has to be analysed with the
+- **Ready**: already analysed; it loads straight away.
+- **Needs setup**: nothing left to download, but it has to be analysed with the
   embedder you have chosen before it can be searched.
 - **Needs Download**: it has to be downloaded first, from a few MB to many
   GB depending on the collection (the full list, with sizes, is in

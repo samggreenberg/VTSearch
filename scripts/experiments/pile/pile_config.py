@@ -195,7 +195,19 @@ DATASETS: dict[str, dict] = {
     # crowd captions agreeing (`pilebuild/loaders/apptitude.py`). `on_request`
     # while it is v0: the reviewed disagreements have not joined yet.
     "apptitude": {"boxed": False, "kind": "apptitude", "on_request": True},
+    # FGVC-Aircraft (#5490): sibling aircraft variants (737-300 vs 737-400), the
+    # bench for a class no model knows by name. Boxed by FGVC's aircraft box, so
+    # the region arm runs; `on_request` because it exists for one study and its
+    # licence is non-commercial research only.
+    "fgvc_aircraft": {"boxed": True, "kind": "fgvc_aircraft", "on_request": True},
 }
+
+#: FGVC-Aircraft 2013b (#5490), as `fgvc_aircraft` reads it: Oxford VGG's
+#: archive extracted in place. Non-commercial research only.
+FGVC_ROOT = Path(os.environ.get("VTS_FGVC_ROOT", "/exp/scale26/datasets/external/aircraft/fgvc"))
+FGVC_DATA = FGVC_ROOT / "fgvc-aircraft-2013b" / "data"
+#: The photos without their 20-pixel copyright banner, staged once by the loader.
+FGVC_STAGED = Path(os.environ.get("VTS_FGVC_STAGED", str(PILE / "fgvc_aircraft" / "images")))
 
 #: Objects365 v2 (#4815), as `o365_better` reads it. The validation split only:
 #: 80,000 images and 1,240,587 boxes over 365 classes, every image annotated for

@@ -64,7 +64,7 @@
                 class="btn btn--secondary btn--sm build-atlas-btn"
                 [disabled]="atlasBuilding()"
                 (click)="buildAtlas()"
-                title="Build the coverage atlas now; its progress shows on the dataset's row"
+                [title]="atlasBuilding() ? 'Already building; its progress shows on the dataset\'s row' : 'Build the coverage atlas now; its progress shows on the dataset\'s row'"
               >Build</button>
             </td>
           </tr>
@@ -83,17 +83,17 @@
         }
         @for (p of originParams; track p.key) {
           <tr>
-            <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.label }}</td>
+            <td class="stat-label" [title]="paramTitle(p)">{{ p.label }}</td>
             <td class="stat-value">{{ p.value }}</td>
           </tr>
         }
         <tr>
           <td class="stat-label" title="The clip size used to slice items at creation">Clipper</td>
-          <td class="stat-value">{{ stats.clipper || '-' }}</td>
+          <td class="stat-value">{{ stats.clipper || noValue }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Embedder used to analyze this dataset">Embedder</td>
-          <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
+          <td class="stat-value">{{ stats.embedder_display_name || noValue }}</td>
         </tr>
       </tbody>
     </table>
@@ -132,7 +132,7 @@
         <tbody>
           <tr>
             <td class="stat-label" title="User who created this dataset">Creator</td>
-            <td class="stat-value">{{ stats.created_by || '-' }}</td>
+            <td class="stat-value">{{ stats.created_by || noValue }}</td>
           </tr>
           <tr>
             <td class="stat-label" title="Users with access to this dataset">Readers</td>

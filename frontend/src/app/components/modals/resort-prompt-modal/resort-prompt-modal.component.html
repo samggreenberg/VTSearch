@@ -39,7 +39,7 @@
                 title="Enter a text description to sort by"
                 (keydown.enter)="$event.preventDefault(); submitText()"
               />
-              <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()" title="Use this text as the new sort example">Use</button>
+              <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()" [title]="pendingText.trim() ? 'Use this text as the new sort example' : 'Describe what to sort by first'">Use</button>
             </div>
           </div>
           <div class="example-group">
@@ -125,6 +125,7 @@
           type="button"
           class="btn btn--primary"
           [disabled]="fileLoading() || !typedPath.trim()"
+          [title]="!fileLoading() && !typedPath.trim() ? 'Type the path to a media file first' : ''"
           (click)="submitTypedPath()"
         >
           @if (fileLoading()) { Loading… } @else { Load }

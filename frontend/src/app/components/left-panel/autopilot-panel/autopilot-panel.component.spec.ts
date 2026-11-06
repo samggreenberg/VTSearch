@@ -3,7 +3,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from '../../../services/autopilot-state.service';
+import {
+  AutopilotStateService,
+  STOP_CAP_VOTES,
+  TYPICAL_DONE_VOTES,
+  type AutopilotState,
+} from '../../../services/autopilot-state.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
@@ -645,6 +650,50 @@ describe('AutopilotPanelComponent', () => {
     fixture.componentRef.setInput('badVotes', bads(4));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('good');
+  });
+
+  describe('vote counter (#5539)', () => {
+    function counter(selector: string): HTMLElement {
+      return fixture.nativeElement.querySelector(selector) as HTMLElement;
+    }
+
+    it('counts every vote on this dataset, Goods and Bads together', async () => {
+      expect(counter('.autopilot-header .ap-vote-count').textContent!.trim()).toBe('0 votes');
+      fixture.componentRef.setInput('goodVotes', goods(1));
+      await settleZoneless(fixture);
+      expect(counter('.ap-vote-count').textContent!.trim()).toBe('1 vote');
+      fixture.componentRef.setInput('goodVotes', goods(3));
+      fixture.componentRef.setInput('badVotes', bads(39));
+      await settleZoneless(fixture);
+      expect(counter('.ap-vote-count').textContent!.trim()).toBe('42 votes');
+    });
+
+    it('says how many votes a run tends to take, and the most Autopilot asks for', () => {
+      expect(counter('.ap-vote-count').title).toBe(
+        `Your votes on this dataset. Most detectors are trained within ${TYPICAL_DONE_VOTES} votes, `
+          + `and Autopilot never asks for more than ${STOP_CAP_VOTES}.`,
+      );
+    });
+
+    it('stays up once nothing is left to label', async () => {
+      fixture.componentRef.setInput('datasetSize', 1);
+      fixture.componentRef.setInput('goodVotes', goods(1));
+      await settleZoneless(fixture);
+      expect(component.exhausted).toBe(true);
+      expect(counter('.ap-vote-count').textContent!.trim()).toBe('1 vote');
+    });
+
+    it('shows in the collapsed rail too, under the toggle', async () => {
+      fixture.componentRef.setInput('goodVotes', goods(3));
+      fixture.componentRef.setInput('badVotes', bads(9));
+      fixture.componentRef.setInput('collapsed', true);
+      await settleZoneless(fixture);
+      const rail = counter('.collapsed-steps');
+      const folded = counter('.collapsed-steps .collapsed-vote-count');
+      expect(folded.textContent!.trim()).toBe('12 votes');
+      expect(folded.title).toBe(component.voteCountTitle);
+      expect(rail.children[1]).toBe(folded);
+    });
   });
 
   it('should show tooltip on each step label via title attribute', () => {

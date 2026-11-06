@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 
 REGISTRY_PATH = DATA_DIR / "detector_registry.json"
 
+#: ``sync_mode`` of an ordinary detector - and of an entry with no ``sync_mode``
+#: key, which is every entry made before detector sharing.
+SYNC_MODE_LOCAL = "local"
+#: A received detector: a read-only mirror of a container someone else owns.
+#: Its file changes only through a refresh (see
+#: :func:`vtscore.detectors.store.allow_linked_write`).
+SYNC_MODE_LINKED = "linked"
+#: A detector forked from another (often a received one): ``local`` in every
+#: rule, with ``forked_from`` provenance on the entry.
+SYNC_MODE_FORKED = "forked"
+#: Every legal ``sync_mode``.
+SYNC_MODES = frozenset({SYNC_MODE_LOCAL, SYNC_MODE_LINKED, SYNC_MODE_FORKED})
+
 _T = TypeVar("_T")
 
 # Guards the process-local state below: the ``_entries`` cache and the
@@ -166,6 +179,9 @@ def register_detector(
     embedder_type: str = "",
     readers: list[str] | None = None,
     imported: dict[str, Any] | None = None,
+    sync_mode: str | None = None,
+    labelset_source: dict[str, Any] | None = None,
+    forked_from: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
 
@@ -195,11 +211,27 @@ def register_detector(
             it: the record :func:`vtscore.detectors.import_record.build_import_record`
             builds (importer name, the fields it ran with, when).  ``None`` for
             a detector made any other way.
+        sync_mode: :data:`SYNC_MODE_LINKED` for a received detector,
+            :data:`SYNC_MODE_FORKED` for a fork; ``None`` or
+            :data:`SYNC_MODE_LOCAL` stores no key (an absent ``sync_mode``
+            reads as local).
+        labelset_source: The detector's labelset-source binding, stored as
+            given.  A sharing binding (one with a ``remote_ref``) names the
+            container the detector mirrors or owns; see
+            :func:`vtscore.labels.binding.sharing_binding`.
+        forked_from: Where a fork came from (the detector it copied and, for
+            a received one, its container); stored as given.
 
     Returns:
         The newly created entry dict.
+
+    Raises:
+        ValueError: *sync_mode* is not one of :data:`SYNC_MODES`.
     """
     import uuid
+
+    if sync_mode is not None and sync_mode not in SYNC_MODES:
+        raise ValueError(f"sync_mode must be one of {sorted(SYNC_MODES)}, not {sync_mode!r}")
 
     entry: dict[str, Any] = {
         "id": uuid.uuid4().hex,
@@ -219,8 +251,70 @@ def register_detector(
         "readers": list(readers) if readers else [],
         "imported": dict(imported) if imported else None,
     }
+    if sync_mode and sync_mode != SYNC_MODE_LOCAL:
+        entry["sync_mode"] = sync_mode
+    if labelset_source is not None:
+        entry["labelset_source"] = dict(labelset_source)
+    if forked_from is not None:
+        entry["forked_from"] = dict(forked_from)
     _read_modify_write(lambda entries: entries.append(entry))
     return entry
+
+
+def sync_mode_of(entry: dict[str, Any] | None) -> str:
+    """The entry's ``sync_mode``: :data:`SYNC_MODE_LOCAL` when absent or not a known mode."""
+    mode = (entry or {}).get("sync_mode")
+    return mode if mode in SYNC_MODES else SYNC_MODE_LOCAL
+
+
+def is_linked(entry: dict[str, Any] | None) -> bool:
+    """Whether *entry* is a received, read-only detector (:data:`SYNC_MODE_LINKED`)."""
+    return sync_mode_of(entry) == SYNC_MODE_LINKED
+
+
+def detector_name_taken(name: str, *, own_path: Any = None, exclude_id: str = "") -> bool:
+    """Whether *name* would collide with an existing detector.
+
+    Two detectors collide as soon as their names resolve to the same labelset
+    file: the file name is a slug (lowercased, punctuation stripped), so
+    "My Cat" and "my cat" share one file, and whichever wrote last would
+    destroy the other's labels.  Both halves are checked because either can
+    outlive the other: the file on disk, and every registry entry's name.
+
+    Args:
+        name: The proposed detector name.
+        own_path: The labelset path the caller already owns, if any; a name
+            that resolves to it (a rename that only re-spells its own name)
+            does not collide.
+        exclude_id: A registry id to skip, so a rename does not collide with
+            itself.
+    """
+    from vtscore.detectors.store import _detector_path  # noqa: PLC0415
+
+    new_path = _detector_path(name)
+    if own_path is not None and new_path == own_path:
+        return False
+    if new_path.exists():
+        return True
+    return any(
+        entry.get("id") != exclude_id and _detector_path(entry.get("name", "")) == new_path
+        for entry in list_detectors()
+    )
+
+
+def free_detector_name(base: str) -> str:
+    """*base*, or ``"<base> (2)"``, ``"<base> (3)"``, ... - the first that :func:`detector_name_taken` allows.
+
+    For a detector the server names itself (a received or forked copy): a
+    collision is suffixed, never overwritten.
+    """
+    base = base.strip() or "Detector"
+    if not detector_name_taken(base):
+        return base
+    n = 2
+    while detector_name_taken(f"{base} ({n})"):
+        n += 1
+    return f"{base} ({n})"
 
 
 def unregister_detector(detector_id: str) -> bool:
@@ -261,6 +355,37 @@ def update_detector(detector_id: str, **fields: Any) -> bool:
                 entry.update(fields)
                 return True
         return False
+
+    return _read_modify_write(mutate)
+
+
+def update_sharing_binding(detector_id: str, remote_ref: str, **changes: Any) -> dict[str, Any] | None:
+    """Merge *changes* into the entry's ``labelset_source`` binding while it still names *remote_ref*.
+
+    For the sharing state the core records on a binding as work finishes - a
+    push's ``sync_error`` and ``last_synced``, a refresh's ``integrity``.  The
+    merge runs under the registry's read-modify-write, onto the binding as it
+    is on disk *now*: a change made since the caller read the entry (a rename,
+    another field of the binding) is kept, and a binding that was unshared or
+    pointed at another container meanwhile is left alone rather than given
+    back a stale ``remote_ref``.
+
+    Returns:
+        The binding as stored after the merge, or ``None`` when no entry has
+        that id or its binding no longer names *remote_ref*.
+    """
+
+    def mutate(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+        for entry in entries:
+            if entry["id"] != detector_id:
+                continue
+            binding = entry.get("labelset_source")
+            if not isinstance(binding, dict) or binding.get("remote_ref") != remote_ref:
+                return None
+            merged = {**binding, **changes}
+            entry["labelset_source"] = merged
+            return dict(merged)
+        return None
 
     return _read_modify_write(mutate)
 

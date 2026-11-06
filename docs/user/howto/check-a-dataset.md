@@ -16,9 +16,12 @@ On the dashboard, click the **⋯** <picture><source media="(prefers-color-schem
 1. **Media items**: how many pictures it holds. **Duplicate groups** counts
    sets of pictures that are the same file under different names, which
    VTSearch keeps once each.
-2. **Creation**: how it was made, including the **Importer** and its settings
-   (for a folder, its path) and the **Embedder**. A detector only works on
-   datasets made with a compatible embedder.
+2. **Creation**: how it was made, including the **Importer** and its settings,
+   under the names the import form gave them (for a folder, its path and
+   whether it included subfolders), and the **Embedder**. **Include media**
+   says which other kinds of media were converted in, such as *Images → Faces*
+   for a dataset of faces cut from photos. A setting with nothing in it reads
+   **None**. A detector only works on datasets made with a compatible embedder.
 3. **Timeline** and **File Types**: when it was imported and how long that
    took, and the kinds of file it holds.
 

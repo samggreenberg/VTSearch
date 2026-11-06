@@ -1,0 +1,69 @@
+<vt-modal [open]="true" title="Received Detectors" (closed)="close()">
+  @if (loading()) {
+    <p class="info-text">Loading…</p>
+  } @else if (loadError()) {
+    <p class="error-text">{{ loadError() }}</p>
+  } @else if (rows().length === 0) {
+    <p class="empty-state received-empty">
+      Nobody has shared a detector with you through {{ sharing.displayName() || 'the sharing service' }} yet.
+    </p>
+  } @else {
+    <p class="info-text">
+      Detectors other people share with you through <strong>{{ sharing.displayName() }}</strong>. Add one to
+      use it here: it stays read-only, and follows its owner's changes when you check for updates.
+    </p>
+    <table class="data-table received-table">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Type</th>
+          <th scope="col" class="received-num">Labels</th>
+          <th scope="col">Updated</th>
+          <th scope="col">Shared</th>
+          <th scope="col"><span class="sr-only">Action</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.remote_ref) {
+          <tr>
+            <td class="received-name">{{ row.name }}</td>
+            <td>{{ row.owner }}</td>
+            <td>{{ row.media_type }}</td>
+            <td class="received-num">{{ row.record_count }}</td>
+            <td class="received-when">{{ formatTimestamp(row.updated_at) }}</td>
+            <td>{{ sharedVia(row) }}</td>
+            <td class="received-action">
+              @if (row.detector_id) {
+                <span class="received-added">Added</span>
+                <button
+                  type="button"
+                  class="link-btn received-show"
+                  title="Close this list and select your copy on the Detectors card"
+                  (click)="showCopy(row)"
+                >
+                  Show
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn--primary btn--sm received-add"
+                  [disabled]="!!addBlocker(row)"
+                  [title]="addBlocker(row) || 'Add it to your detectors, read-only'"
+                  (click)="add(row)"
+                >
+                  {{ adding() === row.remote_ref ? 'Adding…' : 'Add' }}
+                </button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <div class="form-actions" modal-footer>
+    <!-- Each Add lands at once, so the dismiss is Done: nothing is pending. -->
+    <button class="btn btn--secondary received-done" (click)="close()" title="Close this list">Done</button>
+  </div>
+</vt-modal>

@@ -239,7 +239,9 @@ hatch for per-label data that doesn't fit the core fields - it survives
 every serialisation boundary. An export leaves behind only the numbers
 measured in this server's embedding space: the `rank_at_vote` /
 `score_at_vote` fields of the `"vt:provenance"` metadata record, and
-`detector_meta["threshold"]` (`labelset_for_export`, #5131).
+`detector_meta["threshold"]` (`labelset_for_export`, #5131). The detector's
+training-domain summary does travel, in `detector_meta`, because it says
+which embedder drew it and is refused in any other (#5571).
 
 ## 5. Embedder
 
@@ -424,7 +426,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
 | Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
 | Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
-| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 2 |
 | Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
 | Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
 | Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |

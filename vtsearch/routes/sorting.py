@@ -83,6 +83,7 @@ from vtsearch.state import (
     vote_region_boxes,
 )
 from vtscore.concurrency.progress import sort_progress, update_sort_progress
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 sorting_bp = Blueprint(
     "sorting",
@@ -736,7 +737,9 @@ def get_votes(query: dict):
 @sorting_bp.route("/api/votes/clear", methods=["POST"])
 @sorting_bp.response(200, OkResponseSchema)
 @sorting_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
+@sorting_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_detector_header
+@refuse_linked("active", find_mode_ok=True)
 def clear_votes_route():
     """Clear all votes without clearing medias.
 

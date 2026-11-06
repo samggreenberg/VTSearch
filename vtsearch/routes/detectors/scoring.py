@@ -24,6 +24,7 @@ from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
     AutoFindBrowsePrepResponseSchema,
+    AutoFindRunExportResponseSchema,
     AutoFindRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
@@ -33,6 +34,7 @@ from vtsearch.schemas.detectors import (
     FindTrainingDomainResponseSchema,
 )
 from vtsearch.state import snapshot_medias
+from vtsearch.routes._read_only import refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -551,31 +553,37 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     Returns the baseline's ``stamp``
     (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
     file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
-    the dataset the detector was trained on as the overlap check infers it
-    (the loaded dataset holding most of its labels), ``""`` when none is, with
-    ``labels_held``, how many of the labels it holds: the training-dataset
-    pointer recorded with the baseline (#5501).  ``None`` with no embedder name
-    to stamp it with or no detector file.
+    the dataset the detector was trained on as the overlap check picks it
+    (:func:`~vtsearch.domain_overlap.detector_training_reference`), ``""`` when
+    none is, with ``labels_held``, how many of the labels it holds: the
+    training-dataset pointer recorded with the baseline (#5501).  The same
+    rule as the check, pointer, summary and copied-in media included (#5572):
+    a dataset holding fewer of the labels than the one the pointer names is
+    not the training dataset, so a draw there does not move the pointer to it
+    and replace the summary.  ``None`` with no embedder name to stamp it with
+    or no detector file.
     """
     from vtscore.datasets.registry import get_dataset
     from vtscore.detectors.evidence_baseline import baseline_stamp
     from vtscore.detectors.registry import get_detector
-    from vtscore.detectors.store import _detector_path
+    from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.state.core import get_active_context
-    from vtsearch.domain_overlap import infer_training_reference
+    from vtsearch.domain_overlap import detector_training_reference
 
     active_id = get_active_context().dataset_id
     stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
     entry = get_detector(det_ctx.detector_id) or {}
     if stamp is None or not entry.get("name"):
         return None
-    training_id, counts = infer_training_reference(labelset, active_id)
+    path = _detector_path(entry["name"])
+    reference = detector_training_reference(labelset, active_id, _read_detector(path))
+    training_id = reference.dataset_id
     return {
         "stamp": stamp,
-        "path": _detector_path(entry["name"]),
+        "path": path,
         "training_id": training_id,
         "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
-        "labels_held": counts.get(training_id, 0) if training_id else 0,
+        "labels_held": reference.counts.get(training_id, 0) if training_id else 0,
     }
 
 
@@ -594,9 +602,12 @@ def defer_learned_sort_baseline(
     dataset asks for it.  Only while the sort's head is the one a Find would
     score with (:func:`~vtscore.detectors.model_loading.cached_head_is_current`):
     under the label quota a Find trains the Goods' centroid instead (#4643), and
-    its line is not the sort's.  Runs inside the sort's job, whose active
-    dataset is *ds_ctx*.  Never raises: the baseline is a side channel, and the
-    sort's result is what the job is for.
+    its line is not the sort's.  A sort on the training dataset leaves its
+    training-dataset pointer (#5501) on the same timer either way, alone when
+    there is no baseline to draw (#5514), so a detector trained here and never
+    Tuned still names the dataset its labels are on.  Runs inside the sort's
+    job, whose active dataset is *ds_ctx*.  Never raises: the baseline and the
+    pointer are a side channel, and the sort's result is what the job is for.
     """
     import numpy as np
 
@@ -608,8 +619,7 @@ def defer_learned_sort_baseline(
     if labelset is None or not results or not det_ctx.detector_id:
         return
     try:
-        if not cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx)):
-            return
+        draws_baseline = cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx))
         embedder = det_ctx.embedder or None
         # The stamp names the vectors' width: any scored media's gives it.
         dim = 0
@@ -639,6 +649,7 @@ def defer_learned_sort_baseline(
                 threshold=threshold,
                 embedder=embedder,
                 labels_held=home["labels_held"],
+                draws_baseline=draws_baseline,
             )
         )
     except Exception:  # noqa: BLE001 - see the docstring
@@ -672,9 +683,11 @@ def find_evidence_coverage():
     labelset, so the Stats modal can simply hide the section.  Its one write:
     run on the training dataset, it records the baseline on the detector; run
     anywhere else, it first lands one a learned sort there left waiting
-    (:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md
-    §6.1 (phase v0).
+    (:func:`defer_learned_sort_baseline`).  The write carries the training
+    dataset's pointer and its summary (#5501, #5567).  See
+    docs/plans/coverage-atlas.md §6.1 (phase v0).
     """
+    from vtscore.detectors.domain_summary import domain_summary_for
     from vtscore.detectors.evidence_baseline import (
         discard_baseline_draw,
         draw_baseline,
@@ -711,7 +724,8 @@ def find_evidence_coverage():
     # was resolved in (``det_ctx.embedder``), with its current predicted class
     # from the frozen score vs the live threshold.
     embedder = det_ctx.embedder or None
-    q_ids, q_mat, predicted = scored_queries(scores.items(), snapshot_medias(), embedder, det_ctx.threshold)
+    medias = snapshot_medias()
+    q_ids, q_mat, predicted = scored_queries(scores.items(), medias, embedder, det_ctx.threshold)
     if q_mat is None:
         return _empty_evidence_coverage()
 
@@ -739,13 +753,16 @@ def find_evidence_coverage():
             predicted_positive=predicted,
             labelled=labelled_media_ids(labelset, get_active_context()),
         )
+        held = home["labels_held"] > 0
         record_baseline(
             home["path"],
             baseline,
             det_ctx=det_ctx,
             training_dataset=training_dataset_record(home["training_id"], home["training_name"], home["labels_held"])
-            if home["labels_held"] > 0
+            if held
             else None,
+            # The training dataset's summary rides with the pointer (#5567).
+            domain_summary=domain_summary_for(home["training_id"], medias) if held else None,
         )
     elif home is not None:
         flush_baseline_draw(det_ctx.detector_id)
@@ -786,9 +803,16 @@ def find_training_domain():
 @detector_scoring_bp.response(200, FindCorrectionsToDetectorResponseSchema)
 @detector_scoring_bp.alt_response(400, description="No Find run to take corrections from.")
 @detector_scoring_bp.alt_response(404, description="No active detector to update.")
-@detector_scoring_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@detector_scoring_bp.alt_response(
+    409,
+    description=(
+        "Detector vote state is not aligned with the active dataset, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def find_corrections_to_detector():
     """Fold the Find corrections into the active detector's labelset for *future*
     scoring, leaving the current Find session frozen.
@@ -1035,3 +1059,33 @@ def prep_autofind_run_browse(run_id: str):
     if answer is None:
         abort(404, message="AutoFind results not found")
     return answer
+
+
+@detector_scoring_bp.route("/api/autofind/runs/<run_id>/export", methods=["POST"])
+@detector_scoring_bp.response(200, AutoFindRunExportResponseSchema)
+@detector_scoring_bp.alt_response(
+    404,
+    description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
+)
+@detector_scoring_bp.alt_response(409, description="No results exporter is set up for AutoFind.")
+def export_autofind_run(run_id: str):
+    """Send a finished run's results through the AutoFind exporter, as its finish did (#5584).
+
+    The Find Results dialog's **AutoFind** tab: a way to try the exporter and
+    field values set up on the Settings AutoFind tab without importing another
+    dataset.  The payload is the run's own ``POST /api/auto-detect`` body, so
+    what goes out is what a finished run sends, whatever the dialog lists; the
+    pause (``autofind_export_enabled``) holds back runs, not this button.
+    The exporter's own failure is reported in the status block, not as an
+    error, as a run's ``auto_export`` reports it.
+    """
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.runtime.autofind import AutoFindUnavailable, export_run_now  # noqa: PLC0415
+
+    try:
+        status = export_run_now(run_id, get_current_user())
+    except AutoFindUnavailable as exc:
+        abort(exc.status, message=exc.message)
+    if status is None:
+        abort(404, message="AutoFind results not found")
+    return status

@@ -227,9 +227,13 @@ def cosine_sort_cuts(
     counted = sims < EXAMPLE_SELF_COSINE
     if leave and len(sims) == len(snap):
         counted &= np.fromiter((cid not in leave for cid in snap), dtype=bool, count=len(sims))
-    # The line's rule is the media type's (#5325), read off the first media as the app's check reads its detector's.
+    # The line's rule is the media type's (#5325), read off the first media as the app's check reads its detector's,
+    # in the medias' face space (#5497).
+    from vtscore.media.face.face_ball import face_compat_of
+
     first = next(iter(snap.values()), None) if snap else None
-    rule = centroid_line_rule(first.get("media_type") if isinstance(first, dict) else None)
+    media_type = first.get("media_type") if isinstance(first, dict) else None
+    rule = centroid_line_rule(media_type, face_compat_of(snap) if media_type == "face" else None)
     line = SortLine("centroid", sims[counted], centroid_rule=rule)
     return results, TextSortCuts(line.threshold_at(beta), round(acq, 4), rule, line)
 

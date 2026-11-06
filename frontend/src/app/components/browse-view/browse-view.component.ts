@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, Eleme
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { PEOPLE_MEDIA_TYPE } from '../../utils/people';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
@@ -36,6 +37,7 @@ import {
   type RunBrowseSides,
 } from '../../services/browse-subset.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
+import { notchParam } from '../../utils/results-notch';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { MediasApiService } from '../../services/medias-api.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -353,6 +355,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   resultsRunId = '';
   /** Which of that run's rows the map lays out (`&sides=…`). */
   private resultsSides: RunBrowseSides = 'good';
+  /** The notch of the Threshold that run's rows were split at (`&notch=…`, #5540); `null` for the run's own. */
+  private resultsNotch: number | null = null;
 
   /** Whether the selection panel offers Verified Good / Verified Bad: only on
    *  a Tune-view subset, whose detector the verdicts are votes for. */
@@ -638,6 +642,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.subset = query.get('subset') === '1';
     this.resultsRunId = (this.subset && query.get('from') === 'results' && query.get('run')) || '';
     this.resultsSides = runBrowseSidesParam(query.get('sides'));
+    this.resultsNotch = notchParam(query.get('notch'));
     if (this.subset) {
       const handoff = this.browseSubset.take();
       if (handoff && handoff.ids.length > 0) {
@@ -675,7 +680,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         next: (run) => {
           // The dialog browses a run on its own dataset, so another dataset
           // in the URL can only be a hand-edited link: lay out nothing.
-          const ids = run.dataset_id === datasetId ? runBrowseIds(run, this.resultsSides) : [];
+          const ids = run.dataset_id === datasetId ? runBrowseIds(run, this.resultsSides, this.resultsNotch) : [];
           if (ids.length === 0) {
             this.status.set('error');
             this.errorMessage.set('These Find results list no items on this dataset to browse.');
@@ -1444,6 +1449,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * canonical layout; in subset mode it re-projects the current ``subsetIds``.
    * The fit runs in the background, so the view shows build progress meanwhile.
    */
+  /**
+   * Whether to offer **People** (#5590): a Face dataset's people, a view of
+   * the same dataset beside this one. Not on a subset map (a Find's results or
+   * a detector's positives): People is about the whole dataset, and a
+   * positives map is no registered dataset to open it on.
+   */
+  readonly peopleOffered = computed(
+    () => !this.subset && this.mediaType() === PEOPLE_MEDIA_TYPE && !this.routeDatasetId().startsWith('__detpos__'),
+  );
+
+  /** The dataset id the URL names. */
+  private readonly routeDatasetId = signal(this.route.snapshot.paramMap.get('datasetId') || '');
+
+  /** Open this dataset's People view. Its dataset is loaded and active
+   *  already, so it goes straight there; the view waits out a fit itself. */
+  openPeople(): void {
+    this.router.navigate(['/people', this.routeDatasetId()]);
+  }
+
   onReproject(): void {
     if (this.subset && this.subsetIds.length === 0) return;
     // The same items come back in new positions, and selection is id-based —

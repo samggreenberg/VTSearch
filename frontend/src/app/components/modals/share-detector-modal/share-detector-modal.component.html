@@ -1,0 +1,119 @@
+<vt-modal [open]="true" [title]="'Share: ' + detectorName()" (closed)="close()">
+  @if (note()) {
+    <!-- The container belongs to a source that is not in use here: nothing
+         can change, so the dialog only says why. -->
+    <p class="info-text share-note">{{ note() }}</p>
+  } @else if (loading()) {
+    <p class="info-text">Loading…</p>
+  } @else {
+    <div class="share-body">
+      @if (!hasContainer()) {
+        <p class="info-text share-first">
+          Adding someone, or making it public, shares this detector through
+          <strong>{{ sourceName() }}</strong>: its labels are kept there, up to date as you label, for the
+          people you share it with.
+          @if (replacedBinding()) {
+            <span class="share-replaces">
+              Its labels are auto-exported to <strong>{{ replacedBinding() }}</strong> now; sharing replaces that.
+            </span>
+          }
+        </p>
+      }
+      @if (loadError()) {
+        <p class="error-text">{{ loadError() }}</p>
+      }
+
+      <div class="form-group">
+        <label class="form-label" for="share-recipient">Share with:</label>
+        <div class="share-add-row">
+          @if (sharing.supportsRecipientSearch()) {
+            <vt-plugin-combobox
+              class="share-entry"
+              inputId="share-recipient"
+              placeholder="Search for a person or group"
+              title="Type a name, then pick who to share with"
+              [options]="suggestionOptions()"
+              [filterOptions]="false"
+              (textChange)="onQuery($event)"
+              (picked)="onPick($event)"
+              (keydown.enter)="onEnter($event)"
+            />
+          } @else {
+            <input
+              id="share-recipient"
+              type="text"
+              class="form-input share-entry"
+              autocomplete="off"
+              [placeholder]="'Who to share with, as ' + sourceName() + ' names them'"
+              [title]="'A person or group, as ' + sourceName() + ' names them'"
+              [value]="query()"
+              (input)="onQuery($any($event.target).value)"
+              (keydown.enter)="onEnter($event)"
+            />
+          }
+          <button
+            type="button"
+            class="btn btn--secondary share-add-btn"
+            [disabled]="!!addBlocker()"
+            [title]="addBlocker() || 'Share this detector with them'"
+            (click)="addTyped()"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Shared with:</span>
+        @if (recipients().length) {
+          <ul class="share-recipients">
+            @for (recipient of recipients(); track recipient) {
+              <li class="share-recipient">
+                <span class="share-recipient-name">{{ recipient }}</span>
+                <button
+                  type="button"
+                  class="share-remove-btn"
+                  [disabled]="!!changeBlocker()"
+                  [title]="changeBlocker() || 'Stop sharing with ' + recipient"
+                  [attr.aria-label]="'Remove ' + recipient"
+                  (click)="remove(recipient)"
+                >
+                  &times;
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="info-text share-nobody">Nobody yet.</p>
+        }
+      </div>
+
+      <label
+        class="share-public"
+        [title]="changeBlocker() || 'Share with ' + sourceName() + '’s well-known public group, which everyone is in'"
+      >
+        <input type="checkbox" [checked]="isPublic()" [disabled]="!!changeBlocker()" (change)="setPublic($event)" />
+        Public: share with everyone, through the public group
+      </label>
+    </div>
+  }
+
+  @if (!note() && hasContainer()) {
+    <button
+      modal-footer-start
+      class="btn btn--danger share-stop-btn"
+      [disabled]="busy()"
+      [title]="busy() ? 'Wait for the last change to finish' : 'Archive the shared copy; your detector stays as it is'"
+      (click)="stopSharing()"
+    >
+      Stop Sharing
+    </button>
+  }
+  <div class="form-actions" modal-footer>
+    <!-- Every change above has already landed, so the dismiss is Done (or,
+         read-only, Close): nothing is pending that a Cancel could abandon. -->
+    <button class="btn btn--secondary share-done-btn" (click)="close()" title="Close this dialog">
+      {{ note() ? 'Close' : 'Done' }}
+    </button>
+  </div>
+</vt-modal>

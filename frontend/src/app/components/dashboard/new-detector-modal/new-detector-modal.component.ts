@@ -874,6 +874,14 @@ export class NewDetectorModalComponent implements OnInit {
     return 'Create the detector';
   }
 
+  /** Title for the trained-tab Create & Import button: the action while
+   *  enabled, the step still owed while disabled (#5533). */
+  get trainedSubmitTitle(): string {
+    if (!this.selectedLabelImporter || this.trainedView !== 'form') return 'Choose where to import labels from';
+    if (!this.autoExportReady()) return AUTO_EXPORT_HINT;
+    return 'Create the detector and import labels from the selected source';
+  }
+
   get canSubmitTrained(): boolean {
     return (
       !!this.selectedLabelImporter &&
@@ -1224,11 +1232,12 @@ export class NewDetectorModalComponent implements OnInit {
     return sortRowsByColumn(items, this.demoCols.sortColumn, this.demoCols.sortAsc, demoSortValue);
   }
 
-  /** True when the demo's files are on disk and can be browsed.  Demos
-   *  that still need to be downloaded show a tooltip explaining how to
-   *  fetch them via the Add Dataset modal. */
+  /** True when the demo's source folder is on disk and can be browsed.
+   *  Read from the server's ``browsable`` flag, never from ``status``: a
+   *  hub-fetched or generated demo has no folder at all, so it reads
+   *  ``ready`` once loaded yet every typed path would 404 (#5558). */
   isDemoBrowsable(demo: DemoDatasetEntry): boolean {
-    return demo.status === 'ready' || demo.status === 'needs_embedding';
+    return demo.browsable;
   }
 
   /** Arrow-bound predicate handed to ``<vt-source-picker>`` so its demo
@@ -1237,11 +1246,16 @@ export class NewDetectorModalComponent implements OnInit {
    *  is stable across change-detection cycles. */
   demoRowDisabledFn = (demo: DemoDatasetEntry): boolean => !this.isDemoBrowsable(demo);
 
-  /** Arrow-bound formatter for the ``title`` attribute on demo rows. */
-  demoRowTitleFn = (demo: DemoDatasetEntry): string =>
-    this.isDemoBrowsable(demo)
-      ? `Browse files in ${demo.label}`
-      : 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.';
+  /** Arrow-bound formatter for the ``title`` attribute on demo rows.  A
+   *  demo with no source folder gets its own wording: downloading it
+   *  would not make it browsable. */
+  demoRowTitleFn = (demo: DemoDatasetEntry): string => {
+    if (this.isDemoBrowsable(demo)) return `Browse files in ${demo.label}`;
+    if (!demo.has_source_folder) {
+      return 'This demo has no files on disk to browse: its media is fetched or generated when the dataset loads.';
+    }
+    return 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.';
+  };
 
   /** Map ``activePickerView`` to the ``lfPickerKind`` flag understood by
    *  ``<vt-source-picker>``. */

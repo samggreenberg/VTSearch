@@ -28,9 +28,10 @@ type Dot = 'green' | 'yellow' | 'none';
 /**
  * The Threshold control (#4317): the balance, which way to lean between
  * false positives and false negatives (#4413; the control was the precision
- * floor's, #4246). Mounted in the Find row and the Manual tab, and on the New
+ * floor's, #4246). Mounted in the Find row and the Manual tab, on the New
  * Detector form, which asks for the new detector's balance (#4665) with no
- * line to report on.
+ * line to report on, and in the Find Results dialog, which lists a run split
+ * at the notch picked there without changing any detector's balance (#5540).
  *
  * A horizontal spectrum from False Positives to False Negatives, with three
  * radios under it (`BALANCE_PRESETS`: beta 4, 1 and 1/4, left to right), one
@@ -87,8 +88,9 @@ type Dot = 'green' | 'yellow' | 'none';
 export class BalanceComponent {
   private static nextId = 0;
 
-  /** The detector's balance, F-beta's beta. */
-  readonly value = input<number>(DEFAULT_BETA);
+  /** The detector's balance, F-beta's beta; `null` checks no radio (the Find Results dialog's run of
+   *  detectors cut at different balances, #5540). */
+  readonly value = input<number | null>(DEFAULT_BETA);
   /** The balance's state on the line the list draws; null when there is no line from the detector. */
   readonly balance = input<LineBalance | null>(null);
   /** How many items the line returns; the state line reads the kept count off the balance instead. */
@@ -106,6 +108,9 @@ export class BalanceComponent {
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();
 
+  /** The "Threshold:" heading's own tooltip: the short version of {@link hint} (#5536). */
+  readonly shortHint = 'Where to draw the line: more matches, or surer ones';
+  /** The (?)'s tooltip: the long version. */
   readonly hint =
     'Where to draw the line. Toward False Positives returns more, with more wrong ones in it; ' +
     'toward False Negatives returns only the surest, and misses more.';
@@ -119,12 +124,17 @@ export class BalanceComponent {
   readonly labelId = `${this.groupName}-label`;
 
   /** The radio the balance shows: a balance off the list shows as the preset it will snap to. */
-  readonly selected = computed(() => nearestBalancePreset(this.value()).value);
+  readonly selected = computed(() => {
+    const value = this.value();
+    return value == null ? null : nearestBalancePreset(value).value;
+  });
 
   readonly summary = computed(() => this.lineState()?.text ?? balanceSummary(this.balance()));
   readonly explanation = computed(() => this.lineState()?.title ?? balanceExplanation(this.balance()));
-  /** Why the radios are frozen, on each one, while `locked`. */
-  readonly lockedHint = 'The Threshold is frozen while a test phase runs: moving it would move the line under the picks.';
+  /** Why the radios are frozen, on each one, while `locked`: a test phase by default; a host can say its own. */
+  readonly lockedHint = input(
+    'The Threshold is frozen while a test phase runs: moving it would move the line under the picks.',
+  );
   /** A check is due (#4496): a note says why, and that Autopilot runs it. The server never says so in Find. */
   readonly dueNote = computed(() => checkDueNote(this.balance()));
 
@@ -150,7 +160,7 @@ export class BalanceComponent {
     // the POST would re-cut a line the pass is still drawing.
     effect(() => {
       const v = this.value();
-      if (this.busy() || isBalancePreset(v)) return;
+      if (v == null || this.busy() || isBalancePreset(v)) return;
       const snapped = nearestBalancePreset(v).value;
       untracked(() => this.valueChange.emit(snapped));
     });

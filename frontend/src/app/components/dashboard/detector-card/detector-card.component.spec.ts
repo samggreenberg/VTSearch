@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { provideHttpTesting } from '../../../testing/test-providers';
 import { DetectorCardComponent } from './detector-card.component';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
@@ -352,5 +354,172 @@ describe('DetectorCardComponent', () => {
     btn = (fixture.nativeElement as HTMLElement).querySelector('.jp__cancel') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn.textContent?.trim()).toBe('Cancelling…');
+  });
+});
+
+describe('DetectorCardComponent: detector sharing', () => {
+  let component: DetectorCardComponent;
+  let fixture: ComponentFixture<DetectorCardComponent>;
+  let http: HttpTestingController;
+
+  const base = {
+    id: 'd1',
+    name: 'Cats',
+    media_type: 'image',
+    num_training: 12,
+    created_by: 'me',
+    sync_mode: 'local',
+    sharing: null,
+    sharing_note: null,
+  };
+
+  const NOTE = 'Shared through Team Drive, but detector sharing is off on this server; this is a local copy until that changes.';
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [DetectorCardComponent],
+      providers: [
+        ...provideZoneless(),
+        ...provideHttpTesting(),
+        { provide: DashboardLoadingTasksService, useValue: { isCancelling: () => false } },
+      ],
+    }).compileComponents();
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(DetectorCardComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('currentUser', 'me');
+    fixture.componentRef.setInput('columnOrder', []);
+  });
+
+  afterEach(() => http.verify());
+
+  async function render(detector: Record<string, unknown>): Promise<HTMLElement> {
+    fixture.componentRef.setInput('detector', { ...base, ...detector });
+    await settleZoneless(fixture);
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  async function menuLabels(el: HTMLElement): Promise<string[]> {
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    return Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim() ?? '');
+  }
+
+  it('shows no badge on a detector sharing has not touched', async () => {
+    const el = await render({});
+    expect(el.querySelector('.sharing-badge')).toBeNull();
+    expect(el.querySelector('.name-edit-btn')).toBeTruthy();
+  });
+
+  it('badges a received detector, says who from and that it is read-only, and hides the pencil', async () => {
+    const el = await render({
+      sync_mode: 'linked',
+      sharing: {
+        remote_ref: 'c-1',
+        source_name: 'team',
+        remote_owner: 'ana@example.org',
+        last_synced: 1700000000,
+        integrity: { status: 'clean', count: 0 },
+      },
+    });
+    const badge = el.querySelector('.sharing-badge') as HTMLElement;
+    expect(badge.textContent?.trim()).toBe('Received');
+    expect(badge.classList.contains('badge-download')).toBe(true);
+    expect(badge.title).toContain('Received from ana@example.org');
+    expect(badge.title).toContain('Read-only');
+    expect(badge.title).toContain('Last checked for updates');
+    expect(badge.title).toContain('owner’s');
+    expect(el.querySelector('.name-edit-btn')).toBeNull();
+    // A received draft keeps its inline Delete, which removes the local copy only.
+    expect((el.querySelector('.delete-btn') as HTMLElement).title).toContain('local copy');
+  });
+
+  it('turns the Received badge amber when someone other than the owner wrote to the container', async () => {
+    const el = await render({
+      sync_mode: 'linked',
+      sharing: { remote_ref: 'c-1', source_name: 'team', integrity: { status: 'foreign_modifications', count: 3 } },
+    });
+    const badge = el.querySelector('.sharing-badge') as HTMLElement;
+    expect(badge.classList.contains('badge-warning')).toBe(true);
+    expect(badge.title).toContain('3 votes were modified by someone other than the owner');
+  });
+
+  it("badges a shared detector and reads who it reaches from the container on the badge's first hover", async () => {
+    const el = await render({
+      sharing: { remote_ref: 'c-2', source_name: 'team', last_synced: 1700000000 },
+      labelset_source_status: { source_name: 'team', display_name: 'Team Drive', inherited: false, missing_fields: [] },
+    });
+    const badge = el.querySelector('.sharing-badge') as HTMLElement;
+    expect(badge.textContent?.trim()).toBe('Shared');
+    expect(badge.title).toContain('Shared through Team Drive');
+    expect(badge.title).not.toContain('recipient');
+
+    badge.dispatchEvent(new MouseEvent('mouseenter'));
+    badge.dispatchEvent(new MouseEvent('mouseenter'));
+    http.expectOne('/api/detectors/registry/d1/sharing').flush({
+      detector_id: 'd1',
+      sync_mode: 'local',
+      is_owner: true,
+      recipients: ['bo', 'cy'],
+      public: false,
+    });
+    await settleZoneless(fixture);
+    expect((el.querySelector('.sharing-badge') as HTMLElement).title).toContain('Shared with 2 recipients');
+  });
+
+  it('shows the note on a row whose container is not in use here, and disables the sharing verbs with it', async () => {
+    const el = await render({ sharing: { remote_ref: 'c-2', source_name: 'team' }, sharing_note: NOTE });
+    const badge = el.querySelector('.sharing-badge') as HTMLElement;
+    expect(badge.classList.contains('badge-warning')).toBe(true);
+    expect(badge.title).toContain(NOTE);
+    badge.dispatchEvent(new MouseEvent('mouseenter'));
+    http.expectNone('/api/detectors/registry/d1/sharing');
+
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const share = Array.from(el.querySelectorAll('.menu-item')).find((b) => b.textContent?.includes('Share…')) as
+      | HTMLButtonElement
+      | undefined;
+    expect(share?.disabled).toBe(true);
+    expect(share?.title).toBe(NOTE);
+  });
+
+  it('shows "Remote sync failed" with the error, and opens Share… for the creator', async () => {
+    const shareSpy = vi.fn();
+    component.share.subscribe(shareSpy);
+    const el = await render({ sharing: { remote_ref: 'c-2', source_name: 'team', sync_error: 'quota exceeded' } });
+    const link = el.querySelector('.sync-error') as HTMLButtonElement;
+    expect(link.textContent).toContain('Remote sync failed');
+    expect(link.title).toContain('quota exceeded');
+    link.click();
+    expect(shareSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Share… and Fork only once sharing is on, and emits each', async () => {
+    let el = await render({});
+    expect(await menuLabels(el)).not.toContain('Share…');
+    component.dismissContextMenu();
+
+    fixture.componentRef.setInput('sharingEnabled', true);
+    el = await render({});
+    const labels = await menuLabels(el);
+    expect(labels).toEqual(expect.arrayContaining(['Share…', 'Fork']));
+
+    const forkSpy = vi.fn();
+    component.fork.subscribe(forkSpy);
+    (Array.from(el.querySelectorAll('.menu-item')).find((b) => b.textContent?.includes('Fork')) as HTMLElement).click();
+    expect(forkSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists Check for updates and Fork on a received row, and none of the editing verbs', async () => {
+    const el = await render({ sync_mode: 'linked', sharing: { remote_ref: 'c-1', source_name: 'team' } });
+    const labels = await menuLabels(el);
+    expect(labels).toEqual(expect.arrayContaining(['Check for updates', 'Fork']));
+    for (const absent of ['Rename', 'Import Labels', 'Auto-export…', 'Share…']) expect(labels).not.toContain(absent);
+
+    const checkSpy = vi.fn();
+    component.checkUpdates.subscribe(checkSpy);
+    (Array.from(el.querySelectorAll('.menu-item')).find((b) => b.textContent?.includes('Check for updates')) as HTMLElement).click();
+    expect(checkSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -96,6 +96,21 @@ describe('PluginImportFormComponent (datasource-importer default binding)', () =
     expect(component.canSubmit).toBe(true);
   });
 
+  it('names the first unfilled required field as the reason submit is disabled (#5533)', () => {
+    setImporter({
+      name: 'url_download',
+      fields: [
+        { key: 'url', field_type: 'url', label: 'Media URL', required: true },
+        { key: 'token', field_type: 'text', required: true },
+      ],
+    });
+    expect(component.submitBlocker).toBe('Media URL is required');
+    component.values['url'] = 'https://example.com/a.wav';
+    expect(component.submitBlocker).toBe('token is required');
+    component.values['token'] = 'abc';
+    expect(component.submitBlocker).toBe('');
+  });
+
   it('shows a visible_when field only while its checkbox is ticked (#5343)', async () => {
     setImporter({
       name: 'mailer',

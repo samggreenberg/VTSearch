@@ -223,6 +223,7 @@ def register_app_setting_getters() -> None:
         "signpost_captioner": lambda: dict(settings.get_browse_signpost_captioner()),
         "signpost_vocab": lambda: {mt: list(terms) for mt, terms in settings.get_browse_signpost_vocab().items()},
         "default_labelset_source": lambda: settings.get_default_labelset_source(),
+        "detector_sharing_source": lambda: settings.get_detector_sharing_source(),
         "labelset_source_push_interval": lambda: settings.get_labelset_source_push_interval_seconds(),
     }
     for name, getter in getters.items():

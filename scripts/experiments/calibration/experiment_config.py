@@ -231,6 +231,31 @@ _COCO_TEXTS = {
 }
 
 
+def _fgvc_queries() -> dict[str, str]:
+    """`fgvc_aircraft`'s opening text per cell at :data:`FGVC_LEVEL` (#5490), from the loader's one table.
+
+    Read from ``pilebuild/loaders/fgvc_aircraft.py`` rather than copied here: the same table names the
+    prompts the zero-shot scorers run, and an opening that typed one string while SAM3 scored another
+    would be two questions under one arm name.
+    """
+    import sys  # noqa: PLC0415
+
+    pile = str(Path(__file__).resolve().parent.parent / "pile")
+    if pile not in sys.path:
+        sys.path.append(pile)
+    from pilebuild.loaders import fgvc_aircraft  # noqa: PLC0415
+
+    if FGVC_LEVEL not in fgvc_aircraft.LEVELS:
+        raise ValueError(f"CALIB_FGVC_LEVEL={FGVC_LEVEL!r} is not one of {fgvc_aircraft.LEVELS}")
+    return {c: fgvc_aircraft.prompt_levels(c)[FGVC_LEVEL] for c in fgvc_aircraft.cells()}
+
+
+#: What a user hunting an `fgvc_aircraft` variant types (#5490): ``family`` ("Boeing 737", the
+#: general class), ``variant`` (its real name, an upper bound), or a name no model knows
+#: (``fake_number``, ``fake_name``). Every level is in ``fgvc_aircraft.LEVELS``.
+FGVC_LEVEL = os.environ.get("CALIB_FGVC_LEVEL", "family").strip()
+
+
 EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
@@ -295,6 +320,8 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
         "browser": "an in-app web browser screen",
         "splash": "a splash or loading screen",
     },
+    # `fgvc_aircraft` (#5490): the level CALIB_FGVC_LEVEL names, family by default.
+    "fgvc_aircraft": _fgvc_queries(),
 }
 
 
@@ -451,6 +478,8 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
     "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
+    # FGVC-Aircraft (#5490): the app's two paths, Binary on SigLIP and Region on the pair.
+    "fgvc_aircraft": os.environ.get("CALIB_FGVC_AIRCRAFT_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -522,6 +551,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side", "ik") for size in (1024, 640)},
     # A screen's genre is the whole screen (#4356).
     "apptitude": False,
+    # FGVC's own aircraft box (#5490).
+    "fgvc_aircraft": True,
 }
 
 

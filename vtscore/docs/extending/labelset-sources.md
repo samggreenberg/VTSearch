@@ -14,6 +14,12 @@ an external store (server JSON file, database, S3 object, an LMS
 gradebook); use a [label importer](label-importers.md) for one-shot
 pulls.
 
+A source may also **share** detectors - keep each one's labels in a
+container on an external collaboration service that other people are
+given access to - by implementing the optional
+[sharing contract](#the-sharing-contract). A source can do plain sync,
+sharing, or both.
+
 Subclass [`LabelsetSource`](../../labels/sources/base.py), which
 inherits from `SyncSource[list[dict[str, str]], LabelSet]`. Implement
 `_do_load(field_values)` and `_do_save(labelset, field_values)` — the
@@ -34,6 +40,7 @@ covers the UI / route wiring. This guide focuses on the library API.
 - [Template variables: `{detector_id}` and `{detector_name}`](#template-variables-detector_id-and-detector_name)
 - [How a detector is linked](#how-a-detector-is-linked)
 - [When your `_do_save` and `_do_load_full` run](#when-your-_do_save-and-_do_load_full-run)
+- [The sharing contract](#the-sharing-contract)
 - [Entry-point registration](#entry-point-registration)
 - [Worked example](#worked-example)
 - [Testing pattern](#testing-pattern)
@@ -59,7 +66,8 @@ dispatches to the matching `_do_*` hook. A subclass that overrides
 **unnormalized, unvalidated** input and the framework's path
 confinement never happens.
 
-Required:
+Required (the two methods for a plain sync target; a sharing-only source
+implements [the sharing hooks](#the-sharing-contract) instead):
 
 | Member | Type | Purpose |
 |--------|------|---------|
@@ -218,6 +226,158 @@ that push is a no-op when the merge changed nothing your source lacks.
 Raising from `_do_save` or `_do_load_full` is never fatal: the failure is
 logged, the detector file stays the record, and the next change tries
 again.
+
+## The sharing contract
+
+Sharing keeps a detector's labels in a **container** on an external
+collaboration service - one container per shared detector, one record per
+vote plus a little metadata, a single owner, and recipients (people,
+groups, and the service's well-known public group). It is an **optional
+capability of `LabelsetSource`**, not a separate plugin kind: there is no
+second registry, sentinel or entry-point group. A source opts in by
+overriding the `_do_share_*` hooks below, and the core reads what it can
+do from the derived flags. The types and errors the hooks exchange live in
+[`vtscore/labels/sharing.py`](../../labels/sharing.py); why the design is
+this shape is "Detector sharing" in
+[`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md#detector-sharing).
+
+As with `load` / `save`, the public `share_*` methods (`share_create`,
+`share_refresh`, ...) are framework wrappers: each normalizes
+`field_values`, checks its arguments and your return value, and raises
+`SharingUnsupported` for a hook you did not implement. **Override the
+hooks, never the wrappers.**
+
+Required - override every one, or `supports_sharing` stays false (a class
+that overrides only some logs a warning naming the rest):
+
+| Member | Returns | Purpose |
+|--------|---------|---------|
+| `_do_share_create(labelset, meta, field_values)` | `str` | Create a container owned by the caller and return its opaque `remote_ref`. Also how the core forks a detector, from the forker's local labels |
+| `_do_share_save(remote_ref, labelset, meta, field_values)` | `None` | An owner's save: rewrite the container in place to hold exactly `labelset`'s records, `meta`'s name, `detector_meta` and manifest |
+| `_do_share_refresh(remote_ref, field_values)` | `SharedContainer` | Read the container: records with their identities, owner, recipients, public flag, manifest and who wrote it |
+| `_do_share_list_mine(field_values)` | `list[SharedContainerSummary]` | Containers the caller owns |
+| `_do_share_list_received(field_values)` | `list[SharedContainerSummary]` | Containers shared with the caller - directly, through a group, or publicly - that they do not own |
+| `_do_share_add_recipients(remote_ref, ids, field_values)` | `None` | Share with more identities (owner only) |
+| `_do_share_remove_recipients(remote_ref, ids, field_values)` | `None` | Stop sharing with some (owner only) |
+| `_do_share_set_public(remote_ref, public, field_values)` | `None` | Share with the public group, or stop (owner only) |
+| `_do_share_archive(remote_ref, field_values)` | `None` | Stop sharing: the container leaves every listing and refreshes raise `RemoteNotFound` (owner only) |
+
+Optional:
+
+| Member | Returns | Purpose |
+|--------|---------|---------|
+| `_do_share_search_recipients(query, field_values)` | `list[RecipientSuggestion]` | People and groups matching a non-empty, stripped query, best first, for the share dialog's autocomplete |
+
+Derived flags - read them, never set them; each is computed from which
+hooks your class overrides, the way `ResultsExporter.supported_payloads`
+is, so it cannot drift from the code. All three ride on `to_dict()` and so
+on `GET /api/labelset-sources`:
+
+| Member | True when |
+|--------|-----------|
+| `supports_sync` | `_do_save` and a load hook (`_do_load` or `_do_load_full`) are overridden: the source can be a plain sync target. The New Detector and Auto-export pickers offer only these, so a sharing-only source never shows up there |
+| `supports_sharing` | every required sharing hook is overridden |
+| `supports_recipient_search` | `supports_sharing`, and `_do_share_search_recipients` is overridden too |
+
+The value types (frozen dataclasses) and helpers:
+
+| Member | What it is |
+|--------|------------|
+| `ShareMeta` | What the core passes as `meta`: `name`, `detector_meta`, `manifest` |
+| `SharedRecord` | One vote in a container: `element` (a `LabeledElement`), `created_by`, `last_modified_by`, `modified_at` |
+| `SharedContainer` | What a refresh returns: `remote_ref`, `name`, `owner`, `detector_meta`, `records`, `recipients`, `public`, `updated_at`, `manifest`, `manifest_modified_by` |
+| `SharedContainerSummary` | One listing entry: `remote_ref`, `name`, `owner`, `media_type`, `record_count`, `updated_at`, `shared_via` (`"owner"`, `"direct"`, `"group"` or `"public"`) |
+| `RecipientSuggestion` | One search match: `id`, `display_name`, `kind` (`"user"` or `"group"`) |
+| `Manifest` | `record_count` and `digest`; store it with `Manifest.to_dict()` and read it back with `Manifest.from_dict()` |
+| `build_manifest()` | The manifest of a labelset; the only way to make one |
+| `share_payload()` | `(labelset, meta)` for one detector file - what the core hands your hooks |
+| `active_sharing_source()` | The source the `detector_sharing_source` setting names, or `None` |
+
+### What your hooks receive
+
+`labelset` is the detector file's whole labelset in its exported form,
+exactly what a plain push hands `_do_save`: every dataset's votes, a
+`detector_meta` block, and nothing this server measured - no threshold,
+and no `rank_at_vote` / `score_at_vote` in an element's `vt:provenance`
+(#5131). Store `labelset.elements` as one record per vote; a record is a
+`LabeledElement` dict and nothing else, under the same
+[no-persisted-vectors rule](README.md#shared-rules-for-every-plugin) as a
+detector file. `meta` is a `ShareMeta`: the name to show the container
+under, the same `detector_meta` block, and the labelset's `Manifest`.
+Each hook runs **as the caller**: the core scopes the right user with
+`thread_user`, so resolve them with
+`vtscore.state.current_user.get_current_user()`.
+
+`_do_share_save` is called by the same engine as `_do_save` (see [When your
+`_do_save` and `_do_load_full` run](#when-your-_do_save-and-_do_load_full-run)),
+with the same guarantees: every write of an owner's detector file schedules
+one, paced per detector, never two at once, never twice with the same
+payload, on a background thread **as the detector's creator** - the owner,
+not whichever reader voted. There is no pull before it and no merge after
+it: the owner's file is authoritative, so rewrite the container to hold
+exactly `labelset`, dropping records a recipient added. Nothing calls
+`_do_share_refresh` for an owner, and a received detector never calls
+`_do_share_save`. Raising is not fatal: the core records the message on the
+detector's binding as `sync_error`, keeps the file, and pushes again on the
+next change, so raise a `SharingError` whose message a user can act on.
+
+### Identities are yours
+
+VTSearch usernames and the service's accounts are different namespaces.
+Your source owns the mapping (and any credentials it needs), and reports
+every identity - an owner, a record's `created_by` / `last_modified_by`, a
+recipient, a manifest's writer - as an **opaque string**. The core stores
+and displays them verbatim and only compares them for equality, so report
+the same person the same way every time.
+
+### Records, the manifest and foreign modifications
+
+The services sharing targets keep `created_by` / `last_modified_by` on
+every record, maintained by the server so a client cannot forge them -
+report those, never the caller's assumptions. They enforce **no read-only
+for recipients**, so a recipient can still change the records; the core
+notices because a record whose identities are not the owner's is a
+*foreign modification*. A recipient who *deletes* a record leaves no
+identity behind, which is what the manifest is for: store `meta.manifest`
+on every create and save, and report who last wrote it as
+`manifest_modified_by`. A manifest the owner did not write, or one that
+disagrees with the records (`build_manifest(container.as_labelset())`
+differs from `container.manifest`), is a foreign modification too. The
+digest does not depend on record order, so hand records back in whatever
+order your service keeps them.
+
+### Errors
+
+Raise the typed errors from `vtscore.labels.sharing`, so the core can
+degrade instead of crash:
+
+| Member | Raise it when |
+|--------|---------------|
+| `RemoteNotFound` | `remote_ref` names no container the caller can reach: never created, archived, or deleted |
+| `RemotePermissionDenied` | The container exists but the caller may not do this (a recipient changing who it is shared with) |
+| `SharingError` | Anything else: the service is down, a response is malformed. The base of all of these |
+| `SharingUnsupported` | Raised for you by every hook you do not override; also a `NotImplementedError` |
+
+### Activation
+
+Discovery is automatic, activation is not. A source is used for sharing
+only when the `detector_sharing_source` server setting (library:
+`CoreConfig.detector_sharing_source`) names it, with the same
+`{"source_name": ..., "field_values": {...}}` shape and fixed-values rule
+as `default_labelset_source`: each non-empty value is fixed by the admin,
+typically your service's connection values. `active_sharing_source()` is
+the one reader of that setting; it returns `None` - sharing off - for a
+null setting, and also, with a warning logged once, for an unknown name or
+a source whose `supports_sharing` is false.
+
+The built-in [`shared_folder`](../../labels/sources/shared_folder/__init__.py)
+source implements the whole contract over a directory of JSON files, for
+tests and local development. It is the reference implementation, and its
+module-level `simulate_foreign_modification()` writes what a misbehaving
+recipient would. In this repository,
+`tests_lib/labels/test_sharing_conformance.py` runs the same contract
+tests against every registered source whose `supports_sharing` is true;
+a new in-tree sharing source adds a driver there and is held to it.
 
 ## Entry-point registration
 

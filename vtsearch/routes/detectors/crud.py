@@ -58,6 +58,7 @@ from vtsearch.schemas.detectors import (
     DetectorRenameResponseSchema,
     DetectorsListResponseSchema,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,14 @@ def delete_detector(name: str):
 @detectors_crud_bp.response(200, DetectorRenameResponseSchema)
 @detectors_crud_bp.alt_response(400, description="Empty name after stripping.")
 @detectors_crud_bp.alt_response(404, description="Detector not found.")
-@detectors_crud_bp.alt_response(409, description="A detector with the new name already exists.")
+@detectors_crud_bp.alt_response(
+    409,
+    description=(
+        "A detector with the new name already exists, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
+@refuse_linked("name")
 def rename_detector(body: dict, name: str):
     """Rename a detector."""
     old_path = _detector_path(name)
@@ -315,6 +323,8 @@ def rename_detector(body: dict, name: str):
 @detectors_crud_bp.arguments(DetectorExamplesRequestSchema)
 @detectors_crud_bp.response(200, DetectorExamplesResponseSchema)
 @detectors_crud_bp.alt_response(404, description="Detector not found.")
+@detectors_crud_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("name")
 def set_detector_examples(body: dict, name: str):
     """Set/replace the examples for a detector.
 

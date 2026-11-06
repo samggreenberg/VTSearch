@@ -18,6 +18,10 @@
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it), with the
 # same SBATCH_CONSTRAINT for both arms (#4481). Env: S5241_DATE (2026-10-26), S5241_TAG, S5241_STEPS (150),
 # S5241_GRID, SAM3_SCORES (#5213's shards), SOTA_ROOT, and anything launch.sh reads.
+# #5311's confirmation: S5241_SEEDS (the seeds, "0"; a run dir holds them all, idx seed*288 + cell) and S5241_BETA
+# (1; the run dir's -b suffix as launch.sh spells it, -b025 / -b1 / -b4).
+# #5565: S5241_LINE (fixed:0.5), SAM3's line on the sam3 arm; picks never read it, so a run at another line checks
+# that a cut is priced offline (give it its own S5241_TAG).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
@@ -26,11 +30,21 @@ STEPS="${S5241_STEPS:-150}"
 ARMS=(sig sam3 sam3gmm)
 GRID_SRC="${S5241_GRID:-$S/2026-10-23-regstyles4711-grid/results}"
 SCORES="${SAM3_SCORES:-/expscratch/sgreenberg/sam3-5213/scores}"
-run_of() { echo "sam3open5241${S5241_TAG:-}-$1-b1"; }
+BETA="${S5241_BETA:-1}"
+read -ra SEEDS <<<"${S5241_SEEDS:-0}"
+N_SEEDS=$(( $(printf '%s\n' "${SEEDS[@]}" | sort -n | tail -1) + 1 ))
+BTAG="b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$BETA")"
+run_of() { echo "sam3open5241${S5241_TAG:-}-$1-$BTAG"; }
+seed_idx() {  # N: a seed's first N cells (288 = both paths, 144 = Binary) for every seed in SEEDS
+  local s out=()
+  for s in "${SEEDS[@]}"; do out+=("$((s * 288))-$((s * 288 + $1 - 1))"); done
+  local IFS=,; echo "${out[*]}"
+}
 common_env() {  # ARM: today's app at beta 1, trajectory pass, plus the arm's opening
   local arm="$1"
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-26G}" CALIB_TIME="${CALIB_TIME:-5:00:00}"
-  export SOTA_BETA=1 SOTA_DATE="$D-$(run_of "$arm")" SOTA_PASS=trajectory SOTA_SEEDS=1 SOTA_MAX_STEPS="$STEPS"
+  export SOTA_BETA="$BETA" SOTA_DATE="$D-$(run_of "$arm")" SOTA_PASS=trajectory SOTA_SEEDS="$N_SEEDS"
+  export SOTA_MAX_STEPS="$STEPS"
   export SOTA_RANK_FRAME_STEPS="${SOTA_RANK_FRAME_STEPS:-10,25,50,100,150}"
   export SOTA_PATCH_STYLES=max_patch
   export CALIB_JOB_NAME="$(run_of "$arm")"
@@ -42,7 +56,7 @@ common_env() {  # ARM: today's app at beta 1, trajectory pass, plus the arm's op
   unset CALIB_QUERY_MISS VTSEARCH_SVM_HEAD_C SOTA_EMBEDDERS SOTA_DATASET SOTA_POOL_PREVALENCE SOTA_CELL_PREVALENCE
   unset CALIB_SEED_SAM3 CALIB_SEED_SAM3_PROMPTS CALIB_QUERY_LINE CALIB_QUERY_HOLD_PATCH CALIB_HANDOVER_SHADOW
   if [[ "$arm" == sam3* ]]; then
-    export CALIB_SEED_SAM3="$SCORES" CALIB_SEED_SAM3_PROMPTS=typed CALIB_QUERY_LINE=fixed:0.5
+    export CALIB_SEED_SAM3="$SCORES" CALIB_SEED_SAM3_PROMPTS=typed CALIB_QUERY_LINE="${S5241_LINE:-fixed:0.5}"
     # The hold counts labels, check votes included, so it is set past any session's.
     export CALIB_QUERY_HOLD=100000 CALIB_QUERY_HOLD_PATCH=1 CALIB_QUERY_MISS=0
     # #4776's evidence (held-out Goods' ranks under the head), for a takeover rule; single-vector cells only.
@@ -66,9 +80,9 @@ dirs)
     ln -sfn "$GRID_SRC/prepare_info.json" "$r/prepare_info.json"
     ln -sfn "$GRID_SRC/crops" "$r/crops"
     cat >"$r/grid_shape.json" <<JSON
-{"n_cells": $n, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": 1,
+{"n_cells": $((n * N_SEEDS)), "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $N_SEEDS,
  "max_steps": $st, "cell_order": "seed", "test_bands": "all", "job_name": "$(run_of "$arm")",
- "note": "#5241 arm $arm, Binary + Region (max_patch), beta 1, $st clicks, trajectory pass; grid symlinked from $GRID_SRC"}
+ "note": "#5241 arm $arm, seeds ${SEEDS[*]}, Binary + Region (max_patch), beta $BETA, $st clicks, trajectory pass; grid symlinked from $GRID_SRC"}
 JSON
     echo "$r"
   done
@@ -96,12 +110,12 @@ launch)
   check_arm "$arm"
   common_env "$arm"
   export CALIB_PARTITION=cpu CALIB_CPUS="${CALIB_CPUS:-1}"
-  default=0-287
-  [[ "$arm" == sam3gmm ]] && default=0-143
+  default=$(seed_idx 288)
+  [[ "$arm" == sam3gmm ]] && default=$(seed_idx 144)
   exec bash "$HERE/launch.sh" redo "${3:-$default}"
   ;;
 *)
-  sed -n '2,19p' "$0"
+  sed -n '2,21p' "$0"
   exit 2
   ;;
 esac

@@ -70,8 +70,8 @@
           <div class="form-group" role="group" aria-labelledby="setting-hints-label">
             <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints:<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time and ones that went away when you tried what they showed."></vt-field-hint-icon></span>
             <div class="hint-buttons">
-              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
-              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
+              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" [title]="allHintsHidden() ? 'Every hint is already hidden' : 'Hide every one of Toasty\'s hints'">Hide All</button>
+              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" [title]="noHintsHidden() ? 'No hints are hidden' : 'Show all of Toasty\'s hints again, including ones you hid one at a time'">Show All</button>
             </div>
           </div>
         }
@@ -166,7 +166,7 @@
         <!-- Import -->
         @if (activeSettingsTab() === 'import') {
           <h3>Import</h3>
-          <h4 class="subhead">Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h4>
+          <h4 class="subhead" title="What the Add Dataset form starts with, per media type">Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h4>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes()"
             [defaults]="importDefaults"
@@ -187,7 +187,7 @@
 
         <!-- Browse Map (VTSBrowse projection browser) -->
         @if (activeSettingsTab() === 'browse') {
-          <h3>Browse Map<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
+          <h3 title="How the Browse map looks">Browse Map<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
           <!-- Applies to every media type: this describes your browser's
                rendering capability, not the data. -->
           <div class="form-group">
@@ -370,7 +370,7 @@
 
         <!-- HuggingFace account -->
         @if (activeSettingsTab() === 'huggingface') {
-          <h3>HuggingFace<vt-field-hint-icon hint="Sign in to fetch gated demo datasets and AI models your account can access. Your token is held in memory only, never written to disk."></vt-field-hint-icon></h3>
+          <h3 title="Your HuggingFace sign-in, for gated downloads">HuggingFace<vt-field-hint-icon hint="Sign in to fetch gated demo datasets and AI models your account can access. Your token is held in memory only, never written to disk."></vt-field-hint-icon></h3>
 
           @let hf = hfStatus();
           @if (hf === null) {
@@ -406,7 +406,7 @@
 
         <!-- Server (read-only) -->
         @if (activeSettingsTab() === 'server') {
-          <h3>Server<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
+          <h3 title="Settings this server started with, read-only">Server<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory:</label>

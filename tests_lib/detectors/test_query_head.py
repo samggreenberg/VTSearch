@@ -352,12 +352,32 @@ def single_vector(monkeypatch):
     monkeypatch.setattr(training_calibration, "_patch_space_for", lambda name: False if name == EMBEDDER else None)
 
 
+def test_the_app_hands_over_at_the_quota():
+    """#5556: the app's hold is 0, so past the quota a typed-query detector is the trained head on any space."""
+    from vtscore.detectors.label_quota import QUERY_HOLD_LABELS, query_holds
+
+    assert QUERY_HOLD_LABELS == 0
+    assert not query_holds(3, 4, patch_space=False)
+    assert query_holds(3, 4, patch_space=False, hold=30), "an eval arm can still hold"
+
+
+@pytest.fixture
+def hold30(monkeypatch):
+    """The hold at #4736's 30 labels: the machinery an eval arm (``CALIB_QUERY_HOLD``) or a later count uses."""
+    import vtscore.detectors.label_quota as label_quota
+
+    monkeypatch.setattr(label_quota, "QUERY_HOLD_LABELS", 30)
+
+
+@pytest.mark.usefixtures("hold30")
 class TestTheQueryHold:
-    """On a single-vector space a typed-query detector keeps its query past the quota until QUERY_HOLD_LABELS labels."""
+    """With a hold set, a typed-query detector on a single-vector space keeps its query past the quota until it."""
 
     def test_the_rule_reads_the_counts_and_the_space_only(self):
-        from vtscore.detectors.label_quota import QUERY_HOLD_LABELS, query_holds
+        from vtscore.detectors import label_quota
+        from vtscore.detectors.label_quota import query_holds
 
+        QUERY_HOLD_LABELS = label_quota.QUERY_HOLD_LABELS
         assert QUERY_HOLD_LABELS == 30
         assert query_holds(3, 4, patch_space=False)
         assert query_holds(10, QUERY_HOLD_LABELS - 11, patch_space=False)

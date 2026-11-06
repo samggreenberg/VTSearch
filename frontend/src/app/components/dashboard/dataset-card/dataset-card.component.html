@@ -35,11 +35,11 @@
 </td>
 @if (loadingTask() && !loadingTask()!.error) {
   <!-- Inline progress: replace the middle columns with a progress bar. For a
-       projection build (the Browse button's pre-build) we keep the actions
-       column so the Browse eye stays put and waggles, mirroring how Tune/Train
-       waggle while their job runs; a plain dataset load replaces the actions
-       column too. -->
-  <td [attr.colspan]="taskKind() === 'projection' ? columnOrder().length : columnOrder().length + 1">
+       projection build (the Browse button's pre-build) or a people fit (the
+       People item's) we keep the actions column so the Browse eye or the face
+       stays put and waggles, mirroring how Tune/Train waggle while their job
+       runs; a plain dataset load replaces the actions column too. -->
+  <td [attr.colspan]="keepsActions ? columnOrder().length : columnOrder().length + 1">
     <vt-job-progress
       [cell]="true"
       [header]="taskProgressInfo.header"
@@ -48,7 +48,7 @@
       [eta]="taskProgressInfo.eta"
       [bar]="taskBar"
       [smooth]="true"
-      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : effectiveTaskKind === 'autofind' ? 'Stop this AutoFind' : effectiveTaskKind === 'find' ? 'Stop this Find' : 'Cancel this dataset load'"
+      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : taskKind() === 'people' ? 'Stop waiting for the people' : effectiveTaskKind === 'autofind' ? 'Stop this AutoFind' : effectiveTaskKind === 'find' ? 'Stop this Find' : 'Cancel this dataset load'"
       [cancelling]="taskCancelling"
       (cancel)="onCancelTask()"
     />
@@ -58,6 +58,14 @@
       <div class="card-actions">
         <button class="card-icon-btn" type="button" disabled aria-label="Building the map for browse" title="Building the map…">
           <vt-icon type="eye" [size]="14" class="icon-waggle"></vt-icon>
+        </button>
+      </div>
+    </td>
+  } @else if (taskKind() === 'people') {
+    <td class="actions-col">
+      <div class="card-actions">
+        <button class="card-icon-btn" type="button" disabled aria-label="Finding the people" title="Finding people…">
+          <vt-icon type="face" [size]="14" class="icon-waggle"></vt-icon>
         </button>
       </div>
     </td>

@@ -8,6 +8,7 @@ import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
 import { ContextSwitchService } from '../services/context-switch.service';
+import { DetectorSharingFlowsService } from '../services/detector-sharing-flows.service';
 import { SortingApiService } from '../services/sorting-api.service';
 import { ToastService } from '../services/toast.service';
 import { provideHttpTesting } from '../testing/test-providers';
@@ -274,5 +275,75 @@ describe('errorInterceptor: a 409 for the pair the backend lost (#5155)', () => 
     expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error.mock.calls[0][0].message).toBe('Detector is not loaded');
+  });
+});
+
+describe('errorInterceptor: a read-only detector', () => {
+  let http: HttpClient;
+  let httpMock: HttpTestingController;
+  let toast: { error: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn> };
+  let fork: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    toast = { error: vi.fn(), warning: vi.fn() };
+    fork = vi.fn().mockResolvedValue(null);
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideHttpTesting(errorInterceptor),
+        { provide: ToastService, useValue: toast },
+        { provide: DetectorSharingFlowsService, useValue: { fork } },
+      ],
+    });
+    http = TestBed.inject(HttpClient);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  const readOnlyBody = {
+    code: 409,
+    status: 'Conflict',
+    message: "Detector 'Cats' is a received, read-only copy of ana's; fork it to change it.",
+    error_code: 'detector_read_only',
+    detector_id: 'd1',
+    remote_owner: 'ana',
+  };
+
+  it('answers a 409 detector_read_only with a toast whose action forks the detector', () => {
+    let caught: HttpErrorResponse | undefined;
+    http.post('/api/votes', {}).subscribe({ error: (e: HttpErrorResponse) => (caught = e) });
+    httpMock.expectOne('/api/votes').flush(readOnlyBody, { status: 409, statusText: 'Conflict' });
+
+    // The error still reaches the caller; only the generic toast is replaced.
+    expect(caught?.status).toBe(409);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    const shown = toast.warning.mock.calls[0][0];
+    expect(shown.message).toBe(readOnlyBody.message);
+    expect(shown.action.label).toBe('Fork');
+
+    shown.action.onClick();
+    expect(fork).toHaveBeenCalledWith(expect.objectContaining({ id: 'd1' }), { askName: true });
+  });
+
+  it('keeps the generic error toast for any other 409', () => {
+    http.post('/api/votes', {}).subscribe({ error: () => undefined });
+    httpMock
+      .expectOne('/api/votes')
+      .flush(
+        { code: 409, status: 'Conflict', message: 'A detector with this name already exists.' },
+        { status: 409, statusText: 'Conflict' },
+      );
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays silent for a request that opted out of toasts', () => {
+    http
+      .post('/api/votes', {}, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
+      .subscribe({ error: () => undefined });
+    httpMock.expectOne('/api/votes').flush(readOnlyBody, { status: 409, statusText: 'Conflict' });
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

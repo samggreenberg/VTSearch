@@ -58,6 +58,8 @@ Optional:
 |--------|---------|---------|
 | `icon: str` | `"🏷️"` | Emoji in the UI |
 | `run_cli(field_values)` | delegates to `run()` | Override only when CLI values need different handling |
+| `run_labelset(field_values)` | `{"labels": run(field_values)}` | The import as a serialised labelset, plus a `detector_meta` block when your source carries one. The app's import routes call this rather than `run()`, so a detector imported from a labelset this app exported keeps its training-domain summary (#5571, `vtscore.detectors.domain_summary.adopt_domain_summary`). Override it only when your source can hold the block, as the `server_json_file` importer does |
+| `run_labelset_cli(field_values)` | `{"labels": run_cli(field_values)}` | The CLI's `run_labelset()`, called by `--import-labels-into`. Override it whenever you override `run_labelset()` |
 | `default_detector_name(field_values)` | the first `file` field's filename stem, else `"<display_name> detector"` | The name a detector created from this importer gets by default; the app prefills the New Detector › Trained form's name box with it, live. Keep it cheap: it runs on every form change |
 
 Expose `LABEL_IMPORTER = YourImporter()` at module level.

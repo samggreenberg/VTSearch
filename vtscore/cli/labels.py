@@ -67,6 +67,7 @@ def import_labels_into_detector(
     *create_media_type* and is merged into as usual.
     """
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.domain_summary import adopt_domain_summary, count_imported_labels
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 
     path = _detector_path(det_name)
@@ -76,7 +77,7 @@ def import_labels_into_detector(
             raise DetectorNotFoundError(det_name)
         _check_detector_media_type(create_media_type, "create_media_type")
 
-    label_entries, import_record = _run_label_importer(importer_name, field_values)
+    label_entries, detector_meta, import_record = _run_label_importer(importer_name, field_values)
     existing = LabelSet.from_dict((data or {}).get("labelset") or {})
     applied, skipped = _merge_label_entries(existing, label_entries)
 
@@ -88,6 +89,9 @@ def import_labels_into_detector(
             )
         data = _new_detector_data(det_name, create_media_type)
     data["labelset"] = existing.to_dict()
+    # The sending detector's training-domain summary, when the labelset
+    # carries one and this detector may take it (#5571).
+    adopt_domain_summary(data, detector_meta, labels_held=count_imported_labels(label_entries))
     _write_detector(path, data)
     if created:
         _register_created_detector(det_name, create_media_type, applied, imported=import_record)
@@ -96,11 +100,13 @@ def import_labels_into_detector(
 
 def _run_label_importer(
     importer_name: str, field_values: dict[str, Any]
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, dict[str, Any]]:
     """Validate *field_values* for the named label importer, run it, and return its entries.
 
-    Also returns the run's import record (the importer, its normalized field
-    values, the time), which a detector the import creates keeps (#5334).
+    Also returns the ``detector_meta`` block the source carried (``None``
+    without one; its training-domain summary is kept, #5571) and the run's
+    import record (the importer, its normalized field values, the time),
+    which a detector the import creates keeps (#5334).
     """
     from vtscore.detectors.import_record import build_import_record
     from vtscore.labels.importers import get_label_importer
@@ -111,10 +117,12 @@ def _run_label_importer(
 
     field_values = dict(field_values)
     importer.validate_cli_field_values(field_values)
-    label_entries = importer.run_cli(field_values)
+    labelset = importer.run_labelset_cli(field_values)
+    label_entries = labelset.get("labels") if isinstance(labelset, dict) else labelset
     if not isinstance(label_entries, list):
         raise ValueError(f"Label importer {importer_name!r} returned {type(label_entries).__name__}, expected list.")
-    return label_entries, build_import_record(importer, field_values)
+    meta = labelset.get("detector_meta") if isinstance(labelset, dict) else None
+    return label_entries, meta if isinstance(meta, dict) else None, build_import_record(importer, field_values)
 
 
 def _merge_label_entries(existing: "LabelSet", label_entries: list[dict[str, Any]]) -> tuple[int, int]:

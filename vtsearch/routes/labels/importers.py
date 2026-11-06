@@ -72,9 +72,13 @@ logger = logging.getLogger(__name__)
 from vtscore.datasets.labelset import imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.labels.importers import get_label_importer, list_label_importers
-from vtsearch.errors import error_response
 from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
-from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, run_plugin_or_error, validate_plugin_args
+from vtsearch.routes._plugins import (
+    get_plugin_or_404,
+    plugin_field_options,
+    run_label_importer_or_error,
+    validate_plugin_args,
+)
 from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
@@ -93,6 +97,7 @@ from vtsearch.state import (
     find_missing_entries,
     resolve_media_ids,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 label_importers_bp = Blueprint(
     "label_importers",
@@ -164,6 +169,38 @@ def _sync_after_import() -> None:
 
     sync_labels_to_loaded_detector()
     record_detector_import(get_active_detector_context().detector_id)
+
+
+def _record_import_on_detector(detector_meta: dict | None, label_entries: list[dict], missing: list[dict]) -> None:
+    """Record what an import into the active detector says about where its labels were cast (#5571, #5572).
+
+    The training-domain summary an imported labelset carries is kept on the
+    active detector's file, so labels imported into it bring the overlap
+    check's reference with them, as they do through the Dashboard's import
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, which
+    decides whether the detector may take it), weighed at the labels
+    imported with it.  And *missing*, the entries whose media the import is
+    copying into the active dataset, is recorded against that dataset
+    (:func:`~vtscore.detectors.training_domain.record_ingested_labels`): the
+    dataset holding them says nothing about where the detector was trained.
+    """
+    from vtscore.detectors.domain_summary import adopt_domain_summary_on_file, count_imported_labels
+    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.store import _detector_path
+    from vtscore.detectors.training_domain import record_ingested_labels_on_file
+    from vtscore.state.core import get_active_context, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    name = (get_detector(det_ctx.detector_id) or {}).get("name") if det_ctx.detector_id else None
+    if not name:
+        return
+    path = _detector_path(name)
+    if detector_meta:
+        adopt_domain_summary_on_file(
+            path, detector_meta, det_ctx=det_ctx, labels_held=count_imported_labels(label_entries)
+        )
+    if missing:
+        record_ingested_labels_on_file(path, get_active_context().dataset_id, missing, det_ctx=det_ctx)
 
 
 def _apply_ingested_labels(missing: list[dict], ingested: int) -> dict:
@@ -316,8 +353,10 @@ def label_importer_suggested_name(body: dict, importer_name: str):
 @label_importers_bp.alt_response(404, description="Unknown label importer name.")
 @label_importers_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 @label_importers_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
+@label_importers_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
@@ -334,12 +373,10 @@ def run_label_import(importer_name: str):  # noqa: C901
 
     field_values = validate_plugin_args(importer)
 
-    label_entries, err = run_plugin_or_error(importer, "run", field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
-
-    if not isinstance(label_entries, list):
-        return error_response("Importer did not return a list of label dicts.", 500)
+    label_entries, detector_meta = imported
 
     # Apply labels to global vote state
     origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
@@ -351,16 +388,19 @@ def run_label_import(importer_name: str):  # noqa: C901
     # by _apply_labels, but we report them separately now.
     skipped -= len(missing)
 
+    # Sync updated votes into the loaded model so the dashboard reflects
+    # the new label count (num_training) immediately.
+    if applied > 0:
+        _sync_after_import()
+    # Before the ingest starts, so no check can count the copied-in media as
+    # the dataset's own (#5572).
+    _record_import_on_detector(detector_meta, label_entries, missing)
+
     # Auto-resolve: pull the missing medias in from their origins.  The fetch
     # + embed runs on a background task (issue #2703) and re-applies those
     # labels when it lands, so the counts below describe only the in-request
     # pass; the task publishes its own numbers as ``ingest_result``.
     ingest_task_id = _start_auto_resolve(missing) if missing else ""
-
-    # Sync updated votes into the loaded model so the dashboard reflects
-    # the new label count (num_training) immediately.
-    if applied > 0:
-        _sync_after_import()
 
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingest_task_id:
@@ -395,8 +435,10 @@ def run_label_import(importer_name: str):  # noqa: C901
 @label_importers_bp.arguments(IngestMissingRequestSchema)
 @label_importers_bp.response(200, IngestMissingResponseSchema)
 @label_importers_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
+@label_importers_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("active")
 def ingest_missing(body: dict):
     """Re-ingest missing medias from their origins, then apply their labels."""
     entries = body["entries"]

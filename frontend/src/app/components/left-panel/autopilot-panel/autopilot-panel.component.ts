@@ -21,6 +21,7 @@ import {
   AutopilotState,
   cappedInOpening,
   STOP_CAP_VOTES,
+  TYPICAL_DONE_VOTES,
 } from '../../../services/autopilot-state.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { IconComponent } from '../../icon/icon.component';
@@ -147,6 +148,14 @@ function keptNote(st: AutopilotState): string {
       : 'Autopilot is spot checking the line.';
   return `The detector is trained, and Done stays done. ${why}`;
 }
+
+/**
+ * The vote counter's tooltip (#5539). No step can say how many votes are left,
+ * since nobody knows how many a detector will need, so the counter says how
+ * many it tends to take, and the most Autopilot ever asks for.
+ */
+const VOTE_COUNT_TITLE = `Your votes on this dataset. Most detectors are trained within ${TYPICAL_DONE_VOTES} votes, `
+  + `and Autopilot never asks for more than ${STOP_CAP_VOTES}.`;
 
 /** The Done step's short detail: what said Done. */
 function doneSummary(st: AutopilotState): string {
@@ -295,6 +304,23 @@ export class AutopilotPanelComponent implements OnInit {
       + 'so this search may not find what you are after in this collection. Try a different description '
       + 'or example, or keep voting to keep looking.';
   }
+
+  /**
+   * Every vote so far on this dataset (#5539), Good and Bad: the count the
+   * {@link STOP_CAP_VOTES} cap reads, shown at the top of the panel so a user
+   * mid-run can see how far they have come.
+   */
+  get voteCount(): number {
+    return this.goodVotes().size + this.badVotes().size;
+  }
+
+  /** {@link voteCount} in words: "1 vote", "42 votes". */
+  get voteCountLabel(): string {
+    const n = this.voteCount;
+    return n === 1 ? '1 vote' : `${n} votes`;
+  }
+
+  readonly voteCountTitle = VOTE_COUNT_TITLE;
 
   /** Items still carrying no vote, or ``Infinity`` while the dataset size is
    *  unknown or inconsistent with the vote counts (mirrors the service's

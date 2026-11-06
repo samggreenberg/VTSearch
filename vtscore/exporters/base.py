@@ -368,6 +368,8 @@ class ResultsExporter(PluginBase):
                                "detector_name": "...",
                                "threshold": 0.5,
                                "balance": {...},      # may be absent or None
+                               "beta": 1.0,           # may be absent or None
+                               "lines": [{"beta": 4.0, "threshold": 0.3}, ...],  # may be absent
                                "total_hits": 15,      # len(hits)
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
@@ -424,6 +426,15 @@ class ResultsExporter(PluginBase):
                      ``threshold`` stays the float the hits were cut at,
                      whatever it says.
 
+                     **``beta``** and **``lines``** (#5540; app runs only) are
+                     the balance ``threshold`` was cut at and the cut at each
+                     of the Threshold's presets (``[{"beta", "threshold"}]``,
+                     beta 4, 1 and 1/4).  Informational: the Find Results
+                     dialog lists the run at the notch picked there, and an
+                     export from another notch than the run's sends that
+                     notch's cut as ``threshold`` and its preset as ``beta``,
+                     with no ``balance``, which describes the run's own cut.
+
                      **``training_domain``** (#5501) says how much of the
                      scored dataset looks unlike the dataset the detector was
                      trained on: ``{"reference_dataset_id",
@@ -464,6 +475,7 @@ class ResultsExporter(PluginBase):
                          {
                            "labels": [{...}, ...],
                            "selected_columns": ["label", "md5", ...],
+                           "detector_meta": {...},  # optional
                          }
 
                      Each entry is a
@@ -480,6 +492,13 @@ class ResultsExporter(PluginBase):
                      before an exporter sees it, so no number measured by
                      this server's embedder or head leaves in an export
                      (#5131).
+
+                     A ``detector_meta`` block may ride beside them, holding
+                     the detector's training-domain summary under
+                     ``training_domain_summary`` (#5571): write it along with
+                     the labels when the destination keeps the whole object,
+                     so the receiving instance's overlap check has its
+                     reference.
 
                      ``selected_columns`` is the user's column choice from the
                      Export modal.  Honour it for tabular output; a delivery
