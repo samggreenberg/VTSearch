@@ -24,6 +24,8 @@ import type { Page } from 'playwright';
 import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, REPO, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 // @ts-expect-error - plain .mjs helper, shared with capture.ts
 import { FACE_DATASET, FACE_DETECTOR, faceItem, IMAGE_DATASET, SHARED_PHOTO, SHOWN_FACE } from '../../scripts/screenshots/face-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { RECEIVED, RECIPIENT, SHARED_FOLDER, TAMPERED, unshare } from '../../scripts/screenshots/sharing-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -248,6 +250,39 @@ function icon(s: {
     recipe: s.recipe,
     after: s.after,
   };
+}
+
+/**
+ * Fail a sharing shot unless the app shares through the sharing example's
+ * folder (`sharing-example.mjs`): refresh.sh's own app does; one someone else
+ * started needs `detector_sharing_source` naming `shared_folder`, and
+ * `SHOTS_SHARED_FOLDER` naming its folder when ensure-fixtures.mjs runs.
+ */
+async function sharingReady(h: Helpers): Promise<void> {
+  const capability = await h.app.api('/api/detectors/sharing');
+  if (!capability.enabled || capability.name !== 'shared_folder') {
+    throw new Error(
+      "sharing is off on this app, or not through shared_folder: let refresh.sh start its own app, which shares",
+    );
+  }
+  const received = (await h.app.api('/api/detectors/sharing/received')).received || [];
+  for (const c of [RECEIVED, TAMPERED]) {
+    if (!received.some((r: { remote_ref: string }) => r.remote_ref === c.ref)) {
+      throw new Error(
+        `nobody shares ${c.name} with this app's user${SHARED_FOLDER ? '' : ' (no SHOTS_SHARED_FOLDER)'}: ` +
+          "run ensure-fixtures.mjs with SHOTS_SHARED_FOLDER set to the folder the app's setting names",
+      );
+    }
+  }
+}
+
+/** Open the Detectors card's Received… list and wait for its rows. */
+async function openReceived(page: Page, h: Helpers): Promise<void> {
+  await sharingReady(h);
+  await cleanDashboard(page, h);
+  await page.locator('.received-btn').first().click();
+  await page.waitForSelector('.received-table .received-add', { timeout: 15000 });
+  await h.wait(500);
 }
 
 /** Clean overview: nothing ticked, cursor parked where no row is hovered. */
@@ -1937,6 +1972,95 @@ export const SHOTS: Shot[] = [
       await page.locator('#nmm-filepath').fill('/data/Yellow Smileys-drawings.json');
       await page.locator('#detector-name').fill(DETECTOR);
       await h.wait(700);
+    },
+  },
+
+  // share-a-detector.md (#5580). Sharing is on for every shot (refresh.sh);
+  // what other people share is the sharing example's (sharing-example.mjs).
+  {
+    id: 'share-dialog',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-2-choose-who-gets-it`,
+    caption:
+      'Step 2: in Share, (1) type a name and pick it from the list that opens, or type it and click (2) Add; (3) who it is shared with, each with × to stop; (4) Public; then (5) Done',
+    themes: BOTH,
+    annotations: [
+      { target: '#share-recipient', kind: 'step', step: 1 },
+      { target: '.share-add-btn', kind: 'step', step: 2, at: 'right' },
+      { target: '.share-recipients', kind: 'step', step: 3 },
+      { target: '.share-public', kind: 'step', step: 4 },
+      { target: '.share-done-btn', kind: 'step', step: 5, at: 'right' },
+    ],
+    // Shared with one person already, so the dialog shows the list a reader
+    // manages. Nothing is typed: the suggestions a name opens would cover
+    // "Shared with:", and picking one shares at once.
+    async recipe(page, h) {
+      await sharingReady(h);
+      const det = h.app.named(await h.app.detectors(), DETECTOR);
+      await h.app.api(`/api/detectors/registry/${det.id}/share`, { method: 'POST', body: { add: [RECIPIENT] } });
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Share…' }).first().click();
+      await page.waitForSelector('.share-recipients', { timeout: 15000 });
+      await h.wait(500);
+    },
+    // Stopping sharing archives the container and leaves the detector plain local.
+    after: async (_page, h) => unshare(h.app, DETECTOR),
+  },
+  icon({
+    id: 'icon-received',
+    anchor: 'step-1-open-the-received-list',
+    page: 'share-a-detector.md',
+    caption: 'The Received… button on the Detectors card',
+    target: '.received-btn',
+    recipe: async (page, h) => {
+      await sharingReady(h);
+      await cleanDashboard(page, h);
+    },
+  }),
+  {
+    id: 'share-received-list',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-1-open-the-received-list`,
+    caption: `Received Detectors: what other people share with you; (1) Add the one you want (${RECEIVED.name})`,
+    themes: BOTH,
+    annotations: [
+      // Newest first: Smiling Faces, then Orange Smileys.
+      { target: '.received-table tbody tr:nth-child(2) .received-add', kind: 'step', step: 1, at: 'right' },
+    ],
+    recipe: openReceived,
+  },
+  {
+    id: 'share-received-row',
+    embeddedIn: `${HOWTO}/share-a-detector.md#step-2-use-your-copy`,
+    caption: `Your copy of ${RECEIVED.name}: (1) its Received badge; in its ⋯ menu, (2) Check for updates and (3) Fork`,
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'tr[vt-detector-card] .sharing-badge', hasText: 'Received' }, kind: 'step', step: 1, at: 'right' },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Check for updates' }, kind: 'step', step: 2, at: 'right' },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Fork' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await sharingReady(h);
+      await h.app.api('/api/detectors/sharing/receive', { method: 'POST', body: { remote_ref: RECEIVED.ref } });
+      await cleanDashboard(page, h);
+      await h.overflowMenu(RECEIVED.name);
+    },
+    // Deleting a received detector removes the local copy only.
+    after: async (_page, h) => h.app.dropDetectors(RECEIVED.name),
+  },
+  {
+    id: 'share-integrity',
+    embeddedIn: `${HOWTO}/share-a-detector.md#if-someone-other-than-the-owner-changed-it`,
+    caption: `The warning for ${TAMPERED.name}: two votes were changed by someone other than its owner; (1) Skip foreign records takes only the owner's`,
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'Skip foreign records' }, kind: 'step', step: 1, at: 'right' },
+    ],
+    // Posed: the receive asked first and changed nothing, and no choice is made.
+    async recipe(page, h) {
+      await openReceived(page, h);
+      await page.locator('.received-table tbody tr:nth-child(1) .received-add').first().click();
+      await page.waitForSelector('vt-dialog-host .btn--primary', { timeout: 15000 });
+      await h.wait(500);
     },
   },
 

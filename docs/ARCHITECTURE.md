@@ -22,8 +22,9 @@ component conventions.
 8. [State management](#state-management) (includes [Multi-dataset support](#multi-dataset-support))
 9. [Embedder binding and routing](#embedder-binding-and-routing)
 10. [Authentication and multi-user support](#authentication-and-multi-user-support)
-11. [The settings sync engine](#the-settings-sync-engine)
-12. [Element-level origin tracking](#element-level-origin-tracking)
+11. [Detector sharing](#detector-sharing)
+12. [The settings sync engine](#the-settings-sync-engine)
+13. [Element-level origin tracking](#element-level-origin-tracking)
 
 ---
 
@@ -1103,6 +1104,95 @@ sync-source exports — land in the right file. A single-file
 per-user keys simply have no effect where they sit, and the file is left as
 written (the one exception is the AutoFind keys the built-in `default` user
 reads through to, above — see [Settings files](SETTINGS.md)).
+
+---
+
+## Detector sharing
+
+Detectors are shared between users through an external collaboration service
+that this repository never talks to directly: a `LabelsetSource` written
+elsewhere does, and the repo holds the contract, the registry state, the
+routes, the Dashboard's surfaces and a filesystem-backed test source,
+`shared_folder`. The service model it fits: one *container* per shared
+detector, holding one record per vote plus a little metadata; a single owner;
+recipients (users, groups, and a well-known public group); server-maintained
+`created_by` / `last_modified_by` identities on every record that clients
+cannot forge; **no server-side read-only for recipients**; owner saves that
+rewrite the container in place.
+
+Where the mechanics are documented: the contract a source implements is "The
+sharing contract" in
+[`vtscore/docs/extending/labelset-sources.md`](../vtscore/docs/extending/labelset-sources.md#the-sharing-contract);
+the registry entry's sharing state and the read-only guarantee are in
+[`vtscore/docs/packages/detectors.md`](../vtscore/docs/packages/detectors.md#sharing-state);
+the sync roles and receive / refresh / fork are in
+[`vtscore/docs/packages/labels.md`](../vtscore/docs/packages/labels.md#sharing);
+the routes are "Detector sharing" in [`api/detectors.md`](api/detectors.md#detector-sharing);
+the setting is `detector_sharing_source` in [SETTINGS.md](SETTINGS.md); the
+Dashboard's surfaces are in [FRONTEND.md](FRONTEND.md); and what a user sees is
+[Share a detector, receive one, fork one](user/howto/share-a-detector.md).
+
+**Decisions (owner, 2026-11-05), and why:**
+
+- **Sharing is an optional capability of `LabelsetSource`, not a plugin kind
+  of its own.** The labelset sync engine already pushes a detector's whole
+  labelset to a bound source, paced, deduplicated and run as the detector's
+  creator, on every detector-file write. An owner's paced push is exactly how
+  updates reach recipients, and a received detector must never push, so one
+  engine made *role-aware* (`vtscore.labels.sync.sync_role`) gives both. A
+  second plugin kind would have meant a second engine with the same pacing,
+  dedup and as-the-creator rules to keep in step.
+- **Activation is an explicit server setting, off by default.** Exporters and
+  importers are per-action menus, where offering everything installed is
+  right. Sharing is ambient: it changes the Detectors card, adds push
+  behaviour, and implies a backing service with its own auth and data
+  residency, so it is configuration, never an inference from what happens to
+  be importable. (`shared_folder` is discovered like any built-in, so "the only
+  installed source is active" would have switched sharing on everywhere.)
+- **Received detectors are badged inside the existing tabs.** No new tab: a
+  received detector shows in Drafts or AutoFind with a Received badge and the
+  frozen treatment AutoFind rows already get, and the containers shared with a
+  user live in their own small list (**Received…**), not on the card.
+- **The binding records which source a container belongs to.** An entry's
+  `labelset_source` names the source its `remote_ref` is for, and the setting
+  governs only the ambient surfaces and *new* shares. An entry whose source is
+  not the active one (the deployment moved) is local only, with a note: no
+  push, no refresh, the sharing actions disabled with the reason. It is never
+  pointed at a different source by guesswork.
+
+**Consequences of the service model:**
+
+- **Fork is create, with provenance, not a service call.** The copy a user
+  forks must be the *local* one: after a refresh that skipped foreign records,
+  the local file is the trusted labelset and the container the tampered one. So
+  the core writes a new container from the local labelset and records
+  `forked_from` itself; a source has no fork hook.
+- **A received detector still trains; its labelset is what is frozen.** Its
+  head is trained in RAM from its labelset, or it could not sort, find or run
+  as AutoFind. Refused: any change to its labels or identity (votes, label
+  edits and imports, rename, a backup-source pull that would write the file).
+  Derived numbers (threshold, balance, test verdict, the AutoFind flag) stay
+  writable, because they are the user's, not the owner's.
+- **Receiving is a step of its own.** Listing what is shared with a user names
+  containers; `receive_container` turns one into a local linked detector.
+- **Identity is the source's.** VTSearch usernames and the service's
+  identities are different namespaces, so a source resolves the caller through
+  `get_current_user()` (the push engine runs as the detector's creator under
+  `thread_user`), owns the credential mapping, and reports identities as opaque
+  strings the core stores and displays verbatim.
+- **Deletions are a tamper vector too.** A recipient who deletes a record
+  leaves no `last_modified_by` to inspect, so every owner save writes a
+  manifest (record count and digest) into the container's metadata, and a
+  manifest the owner did not write, or one whose count disagrees with the
+  records, counts as a foreign modification.
+- **The in-app `readers` list is a separate thing.** It is same-server
+  visibility and is untouched by sharing; a received detector can be given
+  readers like any other entry, who see a read-only row.
+
+**Left out on purpose:** unifying `readers` with remote recipients; sharing
+datasets; dual bindings (a shared detector that also pushes to a plain backup
+location: one binding per detector is what the engine and the Dashboard reason
+about); a settings-modal editor for the server setting.
 
 ---
 

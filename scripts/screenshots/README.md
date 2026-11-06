@@ -98,6 +98,24 @@ the slice, change `PEOPLE` or `PHOTOS_PER_PERSON` in `face_fixture.py`, run
 from the new import, and take the face shots again.
 `tests_lib/meta/test_face_example.py` holds the three files to one another.
 
+**Sharing is on, and the sharing example** (#5580). `refresh.sh` starts its app
+with `detector_sharing_source` naming the built-in `shared_folder` source, its
+folder in the fresh data dir, so every shot is taken on a VTSearch that shares:
+the Detectors card has **Received…** and a detector's **⋯** menu **Share…** and
+**Fork**. The setting is a server one, read when the app starts, so it cannot be
+switched on for the sharing shots alone. The folder stands in for the
+collaboration service, and holds what that service would: detectors *other
+people* own, which no request to the app can make (every write is stamped with
+the caller, `default` under `--local`). So `ensure-fixtures.mjs` has
+`sharing_fixture.py` write them straight into the folder, from the definitions
+in `scripts/screenshots/sharing-example.mjs`: `Orange Smileys`, which `alex`
+shares directly, and `Smiling Faces`, shared publicly by `jordan`, two of whose
+votes `riley` has changed (the integrity warning). Both are labelled on
+`drawings`, rewritten every run with pinned times, and found by the `SHOTS_SHARED_FOLDER`
+that `refresh.sh` exports. A recipe that shares or receives something puts it
+back in its `after`; an app someone else started needs the setting and that
+variable for the sharing shots, which fail and say so otherwise.
+
 **Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, a `ring`,
 or a numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
 click-by-click pictures in the guide's *Step by step* section are made of the

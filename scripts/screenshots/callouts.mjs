@@ -37,6 +37,7 @@
  *                                                has one too)
  *   { selector, hasText }                        …whose text contains hasText
  *   { selector, name }                           …whose `.name-cell` reads exactly name
+ *                                                (and a sharing badge, if any)
  *   { x, y, w, h }                               a viewport box, as is
  *
  * A target that resolves to nothing is an error, not a silent omission: a
@@ -83,6 +84,14 @@ const SIZES = {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * What a dashboard row's `.name-cell` reads when the row is called *name*: the
+ * name exactly, then the detector-sharing badge that sits in the same cell on
+ * a received or shared detector (#5578), if there is one. Exact, so the
+ * `drawings` row is never the `drawings-new` one.
+ */
+export const nameCellRe = (name) => new RegExp(`^\\s*${escapeRe(name)}\\s*(?:(?:Received|Shared)\\s*)?$`);
+
 /** The viewport box of *target* (see the module docstring), or null. */
 export async function resolveBox(page, target) {
   if (target && typeof target === 'object' && 'x' in target) return target;
@@ -91,7 +100,7 @@ export async function resolveBox(page, target) {
   if (spec.hasText) loc = loc.filter({ hasText: spec.hasText });
   if (spec.name) {
     loc = loc.filter({
-      has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${escapeRe(spec.name)}\\s*$`) }),
+      has: page.locator('.name-cell', { hasText: nameCellRe(spec.name) }),
     });
   }
   const n = await loc.count();

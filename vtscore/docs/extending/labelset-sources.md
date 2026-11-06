@@ -237,8 +237,9 @@ capability of `LabelsetSource`**, not a separate plugin kind: there is no
 second registry, sentinel or entry-point group. A source opts in by
 overriding the `_do_share_*` hooks below, and the core reads what it can
 do from the derived flags. The types and errors the hooks exchange live in
-[`vtscore/labels/sharing.py`](../../labels/sharing.py); the design is
-[`docs/plans/detector-sharing.md`](../../../docs/plans/detector-sharing.md).
+[`vtscore/labels/sharing.py`](../../labels/sharing.py); why the design is
+this shape is "Detector sharing" in
+[`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md#detector-sharing).
 
 As with `load` / `save`, the public `share_*` methods (`share_create`,
 `share_refresh`, ...) are framework wrappers: each normalizes

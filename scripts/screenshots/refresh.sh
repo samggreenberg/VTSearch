@@ -42,6 +42,14 @@
 # is missing (the weights are non-commercial research only, so they are
 # fetched, never committed).
 #
+# And it shares detectors, through the built-in shared_folder source: the data
+# dir's settings.json names it in detector_sharing_source, with its folder in
+# the data dir too, and SHOTS_SHARED_FOLDER tells ensure-fixtures.mjs where to
+# seed the containers other people share (sharing-example.mjs). The setting is a
+# server one, read when the app starts, so it is on for every shot (#5580): the
+# Detectors card shows Received… and a detector's ⋯ menu Share… and Fork, as
+# they do on a deployment that shares.
+#
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's
 # commit, though: one from any other commit is refused, and named (#4324).
@@ -115,6 +123,10 @@ else
         || { echo "refresh.sh needs the buffalo_s face models; see the message above." >&2; exit 1; }
     rm -rf "$APP_DATA_DIR"
     mkdir -p "$APP_DATA_DIR"
+    export SHOTS_SHARED_FOLDER="$APP_DATA_DIR/shared-detectors"
+    python -c 'import json, sys; json.dump({"detector_sharing_source": {"source_name": "shared_folder",
+        "field_values": {"folder": sys.argv[2]}}}, open(sys.argv[1], "w"), indent=2)' \
+        "$APP_DATA_DIR/settings.json" "$SHOTS_SHARED_FOLDER"
     # `exec`, so $! is the app itself and stop_app's kill reaches it.
     (
         cd "$REPO_ROOT"
