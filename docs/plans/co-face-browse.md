@@ -163,27 +163,15 @@ and is worth revisiting once the view ships.
 
 <!-- item-sep -->
 
-- [ ] #5586 — People partition: merge a Face dataset's crops into people at the face ball's floor
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #5587 — Photo index: which faces share a photo, and which people appear together
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #5589 — People routes: list, person, shared photos, build
-
 <!-- item-sep -->
-
-- [ ] #5588 — Image viewer and Show in photo: outline several faces, coloured by person
-
-<!-- item-sep -->
-
-- [ ] #5590 — People view: a Face dataset's people and who appears with whom
-
-<!-- item-sep -->
-
-- [ ] #5591 — Calibrate the People cut against FHIBE and the VGGFace2 demo (experiment)
 
 <!-- item-sep -->
 
@@ -194,12 +182,3 @@ and is worth revisiting once the view ships.
   After #5589 if taken up. *Recommended Claude model: Sonnet.*
 
 <!-- item-sep -->
-
-### Dependencies
-
-- #5586 and #5587 are independent in code; #5589 needs both.
-- #5588 needs nothing and can run beside the library slices.
-- #5590 needs #5589 and #5588.
-- #5591 needs #5586 for the fit it measures, and can run beside the
-  frontend slices; its outcome is a constant or a linkage choice, so it
-  does not block the view.

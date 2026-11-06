@@ -20,6 +20,72 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **Rebuild Map only when there is something to rebuild** (issue #5615). The Browse map's top-left **Rebuild Map**
+  button used to be there on every map, including one freshly built from exactly the items it shows, where a
+  rebuild could only reshuffle it. It now appears once items have been verified away on a map opened from Tune,
+  which takes them off the map but leaves the rest in the slots they had among them, and goes away again when the
+  rebuilt map lands. A whole dataset's map never shows it: its layout is re-fit on its own whenever the dataset's
+  items change.
+
+## 2026-11-06
+
+### Changed
+
+- **The face search line is calibrated per face embedder** (issue #5497). The face crops' line from two photos
+  at a balance of 1 or more (the cosine floor around a person's photos) used one embedder's numbers whatever
+  embedder made the faces. Each face embedder now has its own, fitted from a labelled face set by
+  `scripts/data/fit_face_ball.py` and kept in `face_ball.json` beside the face models. A Face dataset from an
+  embedder without them keeps the line from before the floor, and a warning says the face search line is not
+  calibrated for that embedder. Nothing changes on the GRID's default face models (buffalo_s), whose numbers
+  are the ones that shipped.
+
+- **Find Results lists its hits in a grid like the Dashboard's** (issue #5584). Click a column heading to sort by it
+  (Score, highest first, to start), click it again to turn the order round, drag a heading onto another to reorder
+  the columns, and drag the line between two to resize them; the order is kept across sessions. The **Columns**
+  checkboxes still decide which columns there are, and the export follows the order on screen, so a run can be sent
+  sorted by name, score, filename or any metadata column. **Sort by** is gone: **Similarity** is now a column, each
+  item's place in the dataset's one-dimensional map, ticked on when wanted and sorted like any other. The thumbnail
+  size buttons sit at the end of the Columns row. The summary names the detectors that ran rather than counting them
+  (past three, the count, with every name on hover), its labels read as the form labels do (`Media type:`,
+  `Detectors:`), and the note under a moved Threshold says plainly what the list shows.
+
+- **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
+  to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls
+  on Caltech-101 (M) by hand before relying on them.` It now quotes every name, gives the count as one word (none
+  when every example is there, else `mostly` or `partly`), and points at a button you can see: `"Mammal detector"
+  learned from "Caltech-256 (S)". Tune it to check its calls on "Caltech-101 (M)".` On Tune it points at the
+  Autopilot tab, and in Find Results at **Browse** or Tune.
+
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
+
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
+- **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
+  say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
+  differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
+  match are left out, and a list longer than four ends in "…" with a count of the rest. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
+- **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
+  to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
+  `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
+  `Include archives' contents: No`, `Importer: Folder`, and the embedder by its picker name (`SigLIP 2 (general
+  images)`, not `Siglip2`). A Media type row that repeated the Type row is gone, and so is an Include media row
+  for a dataset of its own type alone. In both Stats windows, dataset and detector, a stat with no value says `None`
+  instead of `-` (an untrained detector's Last trained says `Never`), and the detector's embedder is named the same
+  way.
+
 ### Added
 
 - **People: a Face dataset's people, and who appears with whom** (issue #5590). A new view, opened from a Face
@@ -97,69 +163,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   votes you have cast on this dataset. No step can say how many are left, since nobody knows how many a detector
   will need, so the count's tooltip, and Toasty while Autopilot sharpens the detector, say how many it tends to
   take: most detectors are trained within 50 votes, and Autopilot never asks for more than 200.
-
-### Changed
-
-- **Rebuild Map only when there is something to rebuild** (issue #5615). The Browse map's top-left **Rebuild Map**
-  button used to be there on every map, including one freshly built from exactly the items it shows, where a
-  rebuild could only reshuffle it. It now appears once items have been verified away on a map opened from Tune,
-  which takes them off the map but leaves the rest in the slots they had among them, and goes away again when the
-  rebuilt map lands. A whole dataset's map never shows it: its layout is re-fit on its own whenever the dataset's
-  items change.
-- **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
-  to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
-  `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
-  `Include archives' contents: No`, `Importer: Folder`, and the embedder by its picker name (`SigLIP 2 (general
-  images)`, not `Siglip2`). A Media type row that repeated the Type row is gone, and so is an Include media row
-  for a dataset of its own type alone. In both Stats windows, dataset and detector, a stat with no value says `None`
-  instead of `-` (an untrained detector's Last trained says `Never`), and the detector's embedder is named the same
-  way.
-
-- **The face search line is calibrated per face embedder** (issue #5497). The face crops' line from two photos
-  at a balance of 1 or more (the cosine floor around a person's photos) used one embedder's numbers whatever
-  embedder made the faces. Each face embedder now has its own, fitted from a labelled face set by
-  `scripts/data/fit_face_ball.py` and kept in `face_ball.json` beside the face models. A Face dataset from an
-  embedder without them keeps the line from before the floor, and a warning says the face search line is not
-  calibrated for that embedder. Nothing changes on the GRID's default face models (buffalo_s), whose numbers
-  are the ones that shipped.
-
-- **Find Results lists its hits in a grid like the Dashboard's** (issue #5584). Click a column heading to sort by it
-  (Score, highest first, to start), click it again to turn the order round, drag a heading onto another to reorder
-  the columns, and drag the line between two to resize them; the order is kept across sessions. The **Columns**
-  checkboxes still decide which columns there are, and the export follows the order on screen, so a run can be sent
-  sorted by name, score, filename or any metadata column. **Sort by** is gone: **Similarity** is now a column, each
-  item's place in the dataset's one-dimensional map, ticked on when wanted and sorted like any other. The thumbnail
-  size buttons sit at the end of the Columns row. The summary names the detectors that ran rather than counting them
-  (past three, the count, with every name on hover), its labels read as the form labels do (`Media type:`,
-  `Detectors:`), and the note under a moved Threshold says plainly what the list shows.
-
-- **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
-  to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls
-  on Caltech-101 (M) by hand before relying on them.` It now quotes every name, gives the count as one word (none
-  when every example is there, else `mostly` or `partly`), and points at a button you can see: `"Mammal detector"
-  learned from "Caltech-256 (S)". Tune it to check its calls on "Caltech-101 (M)".` On Tune it points at the
-  Autopilot tab, and in Find Results at **Browse** or Tune.
-
-- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
-  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
-  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
-  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
-  than "Autopilot picked this for you".
-
-- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
-  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
-  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
-  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
-  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
-  already reads `Importing…` or `Loading…` keeps saying that.
-
-- **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
-  say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
-  differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
-  match are left out, and a list longer than four ends in "…" with a count of the rest. See
-  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
-
-### Added
 
 - **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
   controls now run left to right in the order each acts on the list: the **Threshold**, then **Good** / **Bad** /
