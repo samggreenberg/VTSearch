@@ -412,8 +412,14 @@ class TestSyncStatus:
     def received(self, folder):
         return _receive(_publish(folder))
 
+    @staticmethod
+    def _status(detector_id: str) -> dict:
+        status = labelset_source_status(get_detector(detector_id))
+        assert status is not None, f"entry {detector_id!r} syncs nowhere"
+        return status
+
     def test_the_setting_fills_what_the_source_needs(self, received):
-        assert labelset_source_status(get_detector(received["id"])) == {
+        assert self._status(received["id"]) == {
             "source_name": "shared_folder",
             "display_name": get_labelset_source("shared_folder").display_name,
             "inherited": False,
@@ -424,24 +430,24 @@ class TestSyncStatus:
         entry = register_detector(name="Owned", media_type="image", created_by=OWNER)
         binding = {"source_name": "shared_folder", "field_values": {}, "remote_ref": _publish(folder)}
         update_detector(entry["id"], labelset_source=binding)
-        assert labelset_source_status(get_detector(entry["id"]))["missing_fields"] == []
+        assert self._status(entry["id"])["missing_fields"] == []
 
     def test_the_deployment_default_has_no_say(self, received):
         register_setting_getter(
             "default_labelset_source",
             lambda: {"source_name": "server_json_file", "field_values": {}},
         )
-        status = labelset_source_status(get_detector(received["id"]))
+        status = self._status(received["id"])
         assert status["source_name"] == "shared_folder"
         assert status["missing_fields"] == []
 
     def test_a_setting_that_leaves_a_required_field_empty_says_so(self, received):
         register_setting_getter("detector_sharing_source", lambda: {"source_name": "shared_folder", "field_values": {}})
-        assert labelset_source_status(get_detector(received["id"]))["missing_fields"] == ["folder"]
+        assert self._status(received["id"])["missing_fields"] == ["folder"]
 
     def test_a_binding_whose_source_is_not_in_use_lacks_nothing(self, received):
         _sharing_off()
-        status = labelset_source_status(get_detector(received["id"]))
+        status = self._status(received["id"])
         assert status["source_name"] == "shared_folder"
         assert status["missing_fields"] == []
 
