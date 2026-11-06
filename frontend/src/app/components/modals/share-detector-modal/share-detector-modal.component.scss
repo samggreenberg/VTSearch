@@ -1,0 +1,76 @@
+// The share dialog (#5579): a single column of the recipient entry, who it is
+// shared with, and the Public box.
+
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-sm);
+}
+
+.share-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.share-add-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.share-entry {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-recipients {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-recipient {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: var(--font-md);
+}
+
+.share-recipient-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.share-remove-btn {
+  padding: 0 var(--space-xs);
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-lg);
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: var(--color-bad);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: var(--opacity-disabled);
+  }
+}
+
+.share-public {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-md);
+  cursor: pointer;
+}

@@ -51,6 +51,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   link when its last save did not reach the shared copy. With sharing on, every detector of yours offers **Share…**
   and **Fork**. A detector whose sharing source is no longer in use here says so, and its sharing actions are off.
 
+- **Share a detector, and add the ones shared with you** (issue #5579). **Share…** on a detector of yours opens a
+  dialog of who it is shared with: add a person or group (picked from the sharing service's suggestions as you type,
+  where the service can search, or typed as the service names them), remove one, or make it **Public**. Each change
+  lands at once, and the first one shares the detector, replacing any auto-export it had (the dialog says so first).
+  **Stop Sharing** archives the shared copy; your detector keeps its labels. With sharing on, the Detectors card's
+  header has a **Received…** button listing the detectors other people share with you (owner, type, labels, last
+  update, and whether it came to you directly, by group or publicly); **Add** makes one a read-only detector of
+  yours, selected in Drafts, after asking first if anyone but its owner has written to it.
+
 - **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
   run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
   setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what

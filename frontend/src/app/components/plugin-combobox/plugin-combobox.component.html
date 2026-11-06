@@ -57,7 +57,9 @@
         (click)="pick(opt)"
         (mouseenter)="activeIndex.set(i)"
       >
-        <span class="plugin-combobox-option-label">{{ opt.label }}</span>
+        <span class="plugin-combobox-option-label">{{ opt.label }}@if (opt.tag) {
+          <span class="plugin-combobox-option-tag">{{ opt.tag }}</span>
+        }</span>
         @if (opt.value !== opt.label) {
           <span class="plugin-combobox-option-value">{{ opt.value }}</span>
         }

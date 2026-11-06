@@ -303,7 +303,9 @@ entries, or `null` when it was never tested. Drafts leave it out.
 `{"source_name", "display_name", "inherited", "missing_fields"}`, or `null`
 when they sync nowhere (see [Labelset Sources](settings.md#labelset-sources-sync));
 a non-empty `missing_fields` means the detector is not synced until those
-values are filled in. The binding's field values are never listed.
+values are filled in (for a shared or received detector, those the
+`detector_sharing_source` setting leaves empty). The binding's field values
+are never listed.
 `sync_mode`, `sharing`, `sharing_note` and `forked_from` are the detector's
 sharing state: whether it is shared, received or forked, and its container
 (see [Detector sharing](#detector-sharing)).

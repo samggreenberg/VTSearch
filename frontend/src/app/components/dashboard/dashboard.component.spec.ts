@@ -12,6 +12,8 @@ import { DashboardSelectionService } from '../../services/dashboard-selection.se
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { SharingCapabilityService } from '../../services/sharing-capability.service';
+import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import type { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -283,6 +285,62 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect([...component.selectedDetectorIds]).toEqual(['m9']);
       expect(component.draftDetectors.map((d) => d.id)).toContain('m9');
+    });
+
+    // #5579: the Received list, behind a header button that sharing turns on.
+    /** Answer the capability route as a deployment that shares detectors. */
+    function enableSharing(): void {
+      const caps = TestBed.inject(SharingCapabilityService) as unknown as { capability: WritableSignal<object | null> };
+      caps.capability.set({
+        enabled: true,
+        name: 'shared_folder',
+        display_name: 'Shared folder',
+        icon: '',
+        supports_recipient_search: false,
+        missing_fields: [],
+      });
+    }
+
+    it('shows Received… in the card header only while sharing is on', async () => {
+      flushInitialRequests([], mixed);
+      await fixture.whenStable();
+      const button = (): HTMLButtonElement | null => fixture.nativeElement.querySelector('.received-btn');
+      expect(button()).toBeNull();
+
+      enableSharing();
+      await fixture.whenStable();
+      expect(button()!.textContent!.trim()).toBe('Received…');
+      button()!.click();
+      await fixture.whenStable();
+      expect(TestBed.inject(DashboardModalsService).received.open).toBe(true);
+      expect(fixture.nativeElement.querySelector('vt-received-detectors-modal')).not.toBeNull();
+      httpMock.expectOne('/api/detectors/sharing/received').flush({ received: [] });
+    });
+
+    it('lands a received detector in Drafts, selected, from either tab', () => {
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+      component.onDetectorReceived({ id: 'm9', name: 'Dog barks', media_type: 'audio', sync_mode: 'linked' } as DetectorRegistryEntry);
+      expect(component.detectorTab()).toBe('drafts');
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+
+      // The re-list it asked for carries the copy, which stays selected.
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [...mixed, { id: 'm9', name: 'Dog barks', media_type: 'audio', sync_mode: 'linked' }],
+      });
+      TestBed.tick();
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+    });
+
+    it('shows a held copy on its own tab, and closes the list', () => {
+      flushInitialRequests([], mixed);
+      const modals = TestBed.inject(DashboardModalsService);
+      modals.openReceived();
+      component.showReceivedCopy('m2');
+      expect(modals.received.open).toBe(false);
+      expect(component.detectorTab()).toBe('autofind');
+      expect([...component.selectedDetectorIds]).toEqual(['m2']);
     });
 
     it('leaves the selection alone when a fork is cancelled', async () => {

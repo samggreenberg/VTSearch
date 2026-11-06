@@ -197,6 +197,13 @@
         </button>
         <span class="section-actions-sep" aria-hidden="true"></span>
         }
+        <!-- The detectors other people share with the user (#5579): only
+             while this deployment shares detectors. -->
+        @if (sharing.enabled()) {
+        <button class="btn btn--secondary btn--sm received-btn"
+          (click)="modals.openReceived()"
+          [title]="'Detectors other people share with you through ' + sharing.displayName()">Received…</button>
+        }
         <button #detectorAddBtn class="btn btn--primary btn--sm"
           [disabled]="isContextSwitching"
           (click)="openNewDetectorModal()" [title]="contextSwitchReason || 'Create a new detector'" aria-label="Create a new detector"><span class="plus-icon" aria-hidden="true"
@@ -546,6 +553,22 @@
     [detectorName]="modals.detectorStats.detectorName"
     [soloMediaType]="soloMediaType"
     (closed)="modals.closeDetectorStats()"
+  />
+}
+
+@if (modals.share.open) {
+  <vt-share-detector-modal
+    [detectorId]="modals.share.detectorId"
+    [detectorName]="modals.share.detectorName"
+    (closed)="modals.closeShare()"
+  />
+}
+
+@if (modals.received.open) {
+  <vt-received-detectors-modal
+    (closed)="modals.closeReceived()"
+    (received)="onDetectorReceived($event)"
+    (show)="showReceivedCopy($event)"
   />
 }
 

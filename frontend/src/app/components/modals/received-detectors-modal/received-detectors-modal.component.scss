@@ -1,0 +1,28 @@
+// The Received list (#5579): one row per container shared with the user.
+
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-md);
+}
+
+.received-name {
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.received-num {
+  text-align: right;
+}
+
+.received-when {
+  white-space: nowrap;
+}
+
+.received-action {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.received-added {
+  margin-right: var(--space-sm);
+  color: var(--text-muted);
+}

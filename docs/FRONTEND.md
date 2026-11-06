@@ -184,6 +184,16 @@ one surface starts, Check for updates (with its integrity dialog) and Fork,
 live in `DetectorSharingFlowsService`; the Train view and the 409
 `detector_read_only` toast use the same Fork.
 
+The two sharing dialogs (#5579) open through `DashboardModalsService`:
+`vt-share-detector-modal` (Share…, and the "Remote sync failed" link) sends
+each change as its own `POST .../share` and serialises them, since two first
+changes in flight would create two containers; `vt-received-detectors-modal`
+(the card header's **Received…**, shown on `enabled()`) receives a container
+and, on an `applied: false` answer, asks through the same
+`askAboutForeignRecords` dialog Check for updates uses. The recipient picker is
+the shared `vt-plugin-combobox` with `filterOptions` off, since its options
+are already the server's answer to what was typed.
+
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
 by `AppComponent` inside `@defer` blocks, so any surface can start those flows.

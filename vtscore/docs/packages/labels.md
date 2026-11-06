@@ -260,7 +260,10 @@ values in the default's `field_values` are fixed and overlay the
 detector's own whenever it syncs to the default's source. The result
 carries `missing_fields` (required fields with no value and no default);
 a detector with any is not synced. `labelset_source_status(entry)` is
-the same answer without field values, for listings.
+the same answer without field values, for listings; for a sharing
+binding its fixed values are the `detector_sharing_source` setting's, as
+the push engine reads them, and a binding whose source is not the active
+one lacks nothing (it is not pushed at all).
 
 ```python
 # Link a registered detector to a source (what the app's PUT route stores).
