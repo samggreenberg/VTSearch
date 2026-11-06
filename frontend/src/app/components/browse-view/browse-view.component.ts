@@ -1440,15 +1440,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Re-fit UMAP over the items currently on screen and replace the layout with
-   * a fresh 2-D arrangement. Unlike the bin-shape toggle (which re-bins the
-   * frozen layout) or the Remove-from-Good cull (which re-bins minus points),
-   * this forces a new UMAP fit: useful after culling items from a subset (so
-   * the survivors re-spread) or just to reshuffle into a new arrangement. In
-   * full-dataset mode it re-projects every item and overwrites the persisted
-   * canonical layout; in subset mode it re-projects the current ``subsetIds``.
-   * The fit runs in the background, so the view shows build progress meanwhile.
+   * Whether to offer **Rebuild Map** (#5615): only once the map no longer
+   * shows the items it was laid out from. Verifying items away on a Tune map
+   * culls them in place ({@link dropFromBrowse}): the survivors keep the slots
+   * the fit gave them among items now gone, and a rebuild re-spreads them.
+   * Until then the layout is a fresh fit over exactly what is shown, so a
+   * rebuild would only shuffle it, and the button stays out of the way. A
+   * whole dataset's map never offers it: the server re-fits that layout
+   * itself whenever the dataset's items change.
    */
+  readonly rebuildOffered = computed(() => {
+    const culled = this.culledLayoutId();
+    return culled !== null && this.layout()?.projection_id === culled;
+  });
+
+  /** The ``projection_id`` of the layout items were last verified away from,
+   *  or null. A rebuild lands under a new id, which retires the offer by
+   *  itself; a cull keeps the id (it re-bins in place), so the offer stays. */
+  private readonly culledLayoutId = signal<string | null>(null);
+
   /**
    * Whether to offer **People** (#5590): a Face dataset's people, a view of
    * the same dataset beside this one. Not on a subset map (a Find's results or
@@ -1468,6 +1478,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.router.navigate(['/people', this.routeDatasetId()]);
   }
 
+  /**
+   * Re-fit UMAP over the items currently on screen and replace the layout with
+   * a fresh 2-D arrangement. Unlike the bin-shape toggle (which re-bins the
+   * frozen layout) or the verify cull (which re-bins minus points), this forces
+   * a new UMAP fit, so the survivors of a cull re-spread. In subset mode, the
+   * only one that offers it ({@link rebuildOffered}), it re-projects the
+   * current ``subsetIds``; in full-dataset mode it would re-project every item
+   * and overwrite the persisted canonical layout. The fit runs in the
+   * background, so the view shows build progress meanwhile.
+   */
   onReproject(): void {
     if (this.subset && this.subsetIds.length === 0) return;
     // The same items come back in new positions, and selection is id-based —
@@ -1560,6 +1580,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.status.set('done');
       return;
     }
+    // This layout now holds gaps where the culled items were: offer a rebuild
+    // (#5615). Marked before the re-bin is even asked for, so the offer stands
+    // if that request fails and the map is left showing the verified items.
+    this.culledLayoutId.set(this.layout()?.projection_id ?? null);
     this.projectionApi
       .subsetRemove(removedIds)
       .pipe(takeUntilDestroyed(this.destroyRef))

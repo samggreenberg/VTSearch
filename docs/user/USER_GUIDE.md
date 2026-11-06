@@ -2166,9 +2166,7 @@ edge-to-edge, and **hexagons** for text, where the tile is a density cell
 rather than a picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
-Top-left, **Rebuild Map** shuffles the items into a fresh layout
-(handy when a cluster lands somewhere awkward). To return to the
-inventory, use the **Dashboard** button in the top bar.
+To return to the inventory, use the **Dashboard** button in the top bar.
 
 ### Looking inside a tile
 
@@ -2218,6 +2216,10 @@ Browse.
 Browse can also open **scoped to a Tune result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
+Verified items leave the map and the rest stay where they were, so once
+you have verified some, a **Rebuild Map** button appears at the top left
+to lay the remaining items out afresh. It is there only then: a map that
+still shows everything it was built from has nothing to rebuild.
 (See [Tuning a detector](#tuning-a-detector), and
 [Explore a dataset with Browse](howto/explore-with-browse.md).)
 

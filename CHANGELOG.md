@@ -20,6 +20,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **Rebuild Map only when there is something to rebuild** (issue #5615). The Browse map's top-left **Rebuild Map**
+  button used to be there on every map, including one freshly built from exactly the items it shows, where a
+  rebuild could only reshuffle it. It now appears once items have been verified away on a map opened from Tune,
+  which takes them off the map but leaves the rest in the slots they had among them, and goes away again when the
+  rebuilt map lands. A whole dataset's map never shows it: its layout is re-fit on its own whenever the dataset's
+  items change.
+
 ## 2026-11-06
 
 ### Changed

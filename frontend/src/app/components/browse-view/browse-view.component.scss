@@ -54,9 +54,9 @@
 }
 
 // Top-left overlay cluster, anchored to ``.browse-main`` like the other
-// overlays. Stacks the Back affordance (to Find in subset mode, to the
-// dashboard in full-dataset mode) above the Re-project button so the two
-// never overlap regardless of mode.
+// overlays. Stacks the Back affordance (subset mode) above the Rebuild Map
+// button (once items have been verified away) and People (a Face dataset) so
+// they never overlap, whichever of them a map has.
 .browse-tools-left {
   position: absolute;
   top: var(--space-md);
@@ -66,9 +66,15 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-sm);
+  // Toasty's tile-details hint stands under this cluster, and a whole
+  // dataset's map of anything but faces has no button in it at all (#5615).
+  // An empty box has no size for the hint to stand on, so keep it one pixel:
+  // the hint then stands at the map's top-left corner, where the buttons go.
+  min-width: 1px;
+  min-height: 1px;
 }
 
-// Re-fit UMAP over the displayed items into a fresh layout. The icon sits
+// Re-fit UMAP over the remaining items into a fresh layout. The icon sits
 // inline with the label; mirrors the secondary-button look of ``.browse-back``.
 .browse-reproject {
   display: inline-flex;
