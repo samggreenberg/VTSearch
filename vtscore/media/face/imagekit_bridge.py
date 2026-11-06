@@ -14,7 +14,9 @@ disk, and Face is on exactly when they are there (:func:`face_models`):
   block; the schema is in ``imagekit/README.md``).  Unset, the app looks for
   one at :func:`default_config_path`, ``imagekit/face.json`` in the models
   folder (``VTSEARCH_MODELS_DIR``), so dropping a models directory there turns
-  Face on with no environment to set.
+  Face on with no environment to set.  Whichever it is (:func:`config_path`),
+  the face ball's floors are read beside it (``face_ball.json``,
+  :mod:`vtscore.media.face.face_ball`), so a pack directory moves as one unit.
 * ``IMAGEKIT_FACE_PROVIDER`` picks the provider; unset, the config's own
   ``provider`` key, else ``oss``.  The ``ext`` provider imports the backend
   module ``IMAGEKIT_EXT_BACKEND`` names, else the config's ``ext_backend``,
@@ -109,6 +111,18 @@ def default_config_path() -> Path:
     return Path(paths.MODELS_CACHE_DIR).expanduser() / DEFAULT_CONFIG_RELPATH
 
 
+def config_path() -> Path:
+    """The pipeline config the app reads: the one :data:`CONFIG_ENV_VAR` names, else :func:`default_config_path`.
+
+    Whether or not the file exists; :func:`face_models` says.  Everything that sits beside the
+    pack reads it from here, the face ball's ``face_ball.json`` included
+    (:func:`vtscore.media.face.face_ball.face_ball_path`), so a config named elsewhere brings
+    its own floors rather than the models folder's (#5621).
+    """
+    named = os.environ.get(CONFIG_ENV_VAR, "").strip()
+    return Path(named).expanduser() if named else default_config_path()
+
+
 def runtime_options() -> "RuntimeOptions":
     """The app's device and thread settings as :class:`imagekit.runtime.RuntimeOptions`."""
     from imagekit.runtime import RuntimeOptions  # noqa: PLC0415
@@ -175,7 +189,7 @@ def _check() -> FaceModels:
     from imagekit.face.pipeline import DEFAULT_PROVIDER, available_providers, read_pipeline_config  # noqa: PLC0415
 
     named = os.environ.get(CONFIG_ENV_VAR, "").strip()
-    path = Path(named).expanduser() if named else default_config_path()
+    path = config_path()
     provider = _env_provider() or DEFAULT_PROVIDER
     if not named and not path.is_file():
         return FaceModels(

@@ -100,6 +100,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The face ball's floors are read beside the face pipeline config in use** (issue #5621). `face_ball.json`
+  used to be read from the models folder's `imagekit` directory whatever config `IMAGEKIT_FACE_CONFIG` named, so
+  a server pointed at a pack elsewhere had no calibrated face search line and no people. It is now read beside
+  that config (the same file in the models folder's `imagekit` directory when the variable is unset), and
+  `scripts/data/fit_face_ball.py` writes there by default: a pack directory carries its floors with it. A
+  deployment that names a config outside its `imagekit` directory moves (or links) its `face_ball.json` beside
+  that config. The user-docs screenshot harness, which runs its app on a pinned buffalo_s pack of its own, now
+  writes the shipped buffalo_s entry beside that pack, so its face shots show the deployed cut.
+
 - **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
   to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
   `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
