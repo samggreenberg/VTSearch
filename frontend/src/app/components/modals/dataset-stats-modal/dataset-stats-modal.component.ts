@@ -12,7 +12,7 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
 import { NO_VALUE } from '../../../utils/no-value';
-import type { DatasetSourceRow } from '../../../generated/api-client/models/dataset-source-row';
+import type { OriginRow } from '../../../generated/api-client/models/origin-row';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -210,12 +210,12 @@ export class DatasetStatsModalComponent implements OnInit {
   }
 
   /** The importer's recorded fields, labelled and worded by the server. */
-  get originParams(): DatasetSourceRow[] {
+  get originParams(): OriginRow[] {
     return this.stats()?.source_rows ?? [];
   }
 
   /** The row's tooltip: the importer field's description, else its raw key. */
-  paramTitle(row: DatasetSourceRow): string {
+  paramTitle(row: OriginRow): string {
     return row.description || `Importer field: ${row.key}`;
   }
 

@@ -31,6 +31,8 @@ describe('DetectorStatsModalComponent', () => {
     readers: [],
     test_verdicts: [] as ReturnType<typeof wireVerdict>[],
     imported: null as { importer: string; params: Record<string, string>; imported_at: number } | null,
+    importer_display_name: '',
+    imported_rows: [] as { key: string; label: string; value: string; description: string }[],
   };
 
   beforeEach(async () => {
@@ -112,21 +114,53 @@ describe('DetectorStatsModalComponent', () => {
       return Array.from(el.querySelectorAll('.section-title')).map((h) => h.textContent?.trim());
     }
 
-    it('names the importer, the fields it ran with and when, for an imported detector', async () => {
-      const el = await load({
-        ...mockStats,
-        imported: { importer: 'server_json_file', params: { filepath: '/data/labels/cats.json' }, imported_at: 1700000000 },
-      });
+    const imported = { importer: 'server_json_file', params: { filepath: '/data/labels/cats.json' }, imported_at: 1700000000 };
 
-      expect(sectionTitles(el)).toContain('Import');
-      const rows = Array.from(el.querySelectorAll('tr')).map((tr) =>
+    function rowTexts(el: HTMLElement): string[] {
+      return Array.from(el.querySelectorAll('tr')).map((tr) =>
         Array.from(tr.querySelectorAll('td'))
           .map((td) => td.textContent?.trim())
           .join(' '),
       );
-      expect(rows).toContain('Importer server_json_file');
-      expect(rows).toContain('Filepath /data/labels/cats.json');
+    }
+
+    // Issue #5620: the rows read in the import form's words, as the server
+    // words them, not as the record spells its keys.
+    it('names the importer and its fields the way the import form does, and when', async () => {
+      const el = await load({
+        ...mockStats,
+        imported,
+        importer_display_name: 'Server JSON File',
+        imported_rows: [
+          { key: 'filepath', label: 'Server path', value: '/data/labels/cats.json', description: 'A labels file on the server.' },
+        ],
+      });
+
+      expect(sectionTitles(el)).toContain('Import');
+      const rows = rowTexts(el);
+      expect(rows).toContain('Importer Server JSON File');
+      expect(rows).toContain('Server path /data/labels/cats.json');
+      expect(rows).not.toContain('Importer server_json_file');
       expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported None')).toBe(true);
+      const label = Array.from(el.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).find(
+        (td) => td.textContent?.trim() === 'Server path',
+      )!;
+      expect(label.title).toBe('A labels file on the server.');
+    });
+
+    it('falls back to the recorded name and key for an importer that is no longer registered', async () => {
+      const el = await load({
+        ...mockStats,
+        imported: { ...imported, importer: 'gone' },
+        importer_display_name: '',
+        imported_rows: [{ key: 'filepath', label: 'Filepath', value: '/data/labels/cats.json', description: '' }],
+      });
+
+      expect(rowTexts(el)).toContain('Importer gone');
+      const label = Array.from(el.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).find(
+        (td) => td.textContent?.trim() === 'Filepath',
+      )!;
+      expect(label.title).toBe('Importer field: filepath');
     });
 
     it('is absent for a detector no importer created', async () => {

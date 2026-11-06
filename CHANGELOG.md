@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The detector Stats window's Import section reads as words too** (issue #5620). A detector made from imported
+  labels (**New Detector › Trained**) listed its importer and fields as recorded: `Importer: server_json_file`,
+  `Filepath: /data/labels/cats.json`. It now uses the import form's own names and labels, as the dataset window does
+  (#5617): `Importer: Server JSON File`, `Server path: /data/labels/cats.json`, and a checkbox as `Yes` / `No`.
+  Hovering a row shows the field's description.
+
 - **The face ball's floors are read beside the face pipeline config in use** (issue #5621). `face_ball.json`
   used to be read from the models folder's `imagekit` directory whatever config `IMAGEKIT_FACE_CONFIG` named, so
   a server pointed at a pack elsewhere had no calibrated face search line and no people. It is now read beside
