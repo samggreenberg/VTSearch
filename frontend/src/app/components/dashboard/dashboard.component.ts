@@ -27,6 +27,8 @@ import { PeoplePrepService } from '../../services/people-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { SharingCapabilityService } from '../../services/sharing-capability.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -144,6 +146,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
   private autofindSetup = inject(AutoFindSetupService);
+  private sharingFlows = inject(DetectorSharingFlowsService);
+  /** Public: each detector row reads `sharing.enabled()` for its menu. */
+  readonly sharing = inject(SharingCapabilityService);
   private hints = inject(HintsService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
@@ -956,13 +961,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** A received detector's "Check for updates": the owner's latest labels,
+   *  through the integrity dialog when someone else has written to them. */
+  checkDetectorUpdates(model: DetectorRegistryEntry): void {
+    void this.sharingFlows.checkForUpdates(model);
+  }
+
+  /** "Fork": a copy of the user's own, which lands in Drafts selected. */
+  async forkDetector(model: DetectorRegistryEntry): Promise<void> {
+    const entry = await this.sharingFlows.fork(model, { askName: true });
+    if (!entry) return;
+    // Selected ahead of the refresh that lists it, as a created detector is.
+    this.dashSelection.setDetectorTab('drafts');
+    this.dashSelection.selectOnly('detector', [entry.id]);
+  }
+
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId.set(model.id);
     // No AutoFind caveat needed here: AutoFind rows are frozen (no Delete
     // affordance), so only draft detectors can reach this dialog.
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      '(This deletes your labels. The underlying media is unaffected.)',
+      model.sync_mode === 'linked'
+        ? "(This deletes your received copy. The owner's detector and the underlying media are unaffected.)"
+        : '(This deletes your labels. The underlying media is unaffected.)',
     );
     this.deletingDetectorId.set('');
     if (!ok) return;

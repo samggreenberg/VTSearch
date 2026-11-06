@@ -195,18 +195,16 @@ dialog's input; and each refusal carries an `error_code` to branch on
 
 ### Dashboard
 
-- A **Received** badge on linked rows, with the frozen treatment, plus "Check
-  for updates" and "Fork" in the menu. Delete stays and removes the local copy
-  only. Move to AutoFind stays: the flag is local and the guard allows it.
-- A **Shared** badge on owned rows with a container, "Share…" in the menu
-  (replacing "Auto-export…" for that binding), and a "Remote sync failed"
-  link where the auto-export warning sits today.
-- A note, and disabled actions, on a row whose source is not the active one.
+The badges, the read-only treatment and the row's verbs shipped in #5578; the
+permanent notes are in `docs/FRONTEND.md` (the Dashboard and Label view
+sections). What the dialogs slice builds on: "Share…" (and the "Remote sync
+failed" link) opens `DashboardModalsService.openShare`, which nothing renders
+yet; `SharingCapabilityService` is the switch to show the header button on;
+and `DetectorSharingFlowsService.askAboutForeignRecords` is the integrity
+dialog, for the receive flow to reuse.
+
 - A **Received…** button in the card header, shown only when sharing is on,
   opening the list of containers available to the user with an Add action.
-- Voting and label editing on a linked detector are disabled up front from
-  `sync_mode`, with a fork affordance; the 409 is the backstop and shows a
-  toast with a Fork action.
 
 ### Out of scope
 

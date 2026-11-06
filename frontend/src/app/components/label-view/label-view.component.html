@@ -49,6 +49,7 @@
       [collapsed]="panelHide.left()"
       [autopilotEnabled]="autopilotEnabled()"
       [autopilotDisabled]="autopilotDisabled"
+      [readOnly]="readOnly()"
       [autopilotOnly]="autopilotOnly()"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
@@ -81,8 +82,10 @@
       [exhaustedDetail]="exhaustedDetail()"
       [advancePending]="advancePending()"
       [voteHint]="voteHint()"
+      [readOnly]="readOnly()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
+      (forkRequested)="onFork()"
     />
   </div>
   <div

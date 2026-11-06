@@ -172,6 +172,18 @@ the component —
   reads are `computed` over the selection and the registry — the pulldown
   needs no push, and there is no per-mutation mirror call to forget.
 
+**Detector sharing on the card** (#5578). What the registry listing says about
+an entry (`sync_mode`, `sharing`, `sharing_note`) is read in one place,
+`utils/detector-sharing.ts`, and the card and its menu builder
+(`buildDetectorCardMenuItems`) only render it: a received (`linked`) row gets
+the frozen treatment, a Received or Shared badge, and its own verbs. The
+ambient verbs (Share…, a Fork of one's own detector) wait on
+`SharingCapabilityService.enabled()`, so a deployment without sharing sees
+today's card; what the listing already shows does not. The two flows more than
+one surface starts, Check for updates (with its integrity dialog) and Fork,
+live in `DetectorSharingFlowsService`; the Train view and the 409
+`detector_read_only` toast use the same Fork.
+
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
 by `AppComponent` inside `@defer` blocks, so any surface can start those flows.
@@ -212,6 +224,14 @@ phase wiring (including the effects that start a spot check) and the re-sort
 prompt. What outlives the view is root: `SortStateService` (the ranking, the
 line, the balance), `VoteStateService`, `AutopilotStateService` (the phase
 machine) and `PanelHideStateService` (the side-panel folds, shared with Tune).
+
+**A received detector is read-only up front** (#5578).
+`ActiveDetectorService.readOnly` turns off the centre's Good / Bad (with a
+Fork in their place), the vote keys, undo and redo, a vote from a grid or the
+Labels panel, and Autopilot. The server's 409 `detector_read_only` stays the
+backstop, answered by `errorInterceptor` with a Fork toast. A fork of the
+detector on screen, wherever it started, moves Train to the copy
+(`DetectorSharingFlowsService.forked$`).
 
 **Ordering rules.** These keep what the view serves independent of which
 request answers first (#4318):
@@ -410,6 +430,8 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
+| `SharingCapabilityService` | Whether the deployment shares detectors (`GET /api/detectors/sharing`), fetched once after sign-in |
+| `DetectorSharingFlowsService` | Check for updates (with the integrity dialog) and Fork, for every surface that starts them, and `forked$` for the views that follow a fork |
 | `SettingsPanelService` | Opens the app shell's Settings modal on a chosen tab, optionally with the settings importer up, and resolves on close with whether an import was applied. `AutoFindSetupService` uses it for the question a first AutoFind detector asks (#5344) |
 | `AutoFindService` | The end of a background AutoFind: opens the results of a Find this tab started (the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, a dataset's ⋯ **Run AutoFind**, or a Find that landed while the dialog was open) with a **View Results** action, and holds the run the app-root Find Results dialog shows. AutoFind is the unattended path and never opens the dialog on its own (#4615) |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |

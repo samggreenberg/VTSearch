@@ -11,6 +11,8 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindSetupService } from '../../services/autofind-setup.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import type { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -256,6 +258,39 @@ describe('DashboardComponent', () => {
 
       expect(component.detectorTab()).toBe('drafts');
       expect(component.selectedDetectorIds.has('m4')).toBe(true);
+    });
+
+    // #5578: a fork is a new draft. From either tab it lands in Drafts,
+    // selected, ahead of the registry refresh that lists it.
+    it('lands a fork in Drafts, selected, even when it was started on the AutoFind tab', async () => {
+      const fork = vi
+        .spyOn(TestBed.inject(DetectorSharingFlowsService), 'fork')
+        .mockResolvedValue({ id: 'm9', name: 'Frozen B (fork)', media_type: 'audio' } as DetectorRegistryEntry);
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+
+      await component.forkDetector(component.autofindDetectors[0]);
+      expect(fork).toHaveBeenCalledWith(expect.objectContaining({ id: 'm2' }), { askName: true });
+      expect(component.detectorTab()).toBe('drafts');
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+
+      // The refresh that lists the copy keeps it selected.
+      component.refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [...mixed, { id: 'm9', name: 'Frozen B (fork)', media_type: 'audio', sync_mode: 'forked' }],
+      });
+      TestBed.tick();
+      expect([...component.selectedDetectorIds]).toEqual(['m9']);
+      expect(component.draftDetectors.map((d) => d.id)).toContain('m9');
+    });
+
+    it('leaves the selection alone when a fork is cancelled', async () => {
+      vi.spyOn(TestBed.inject(DetectorSharingFlowsService), 'fork').mockResolvedValue(null);
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autofind');
+      await component.forkDetector(component.autofindDetectors[0]);
+      expect(component.detectorTab()).toBe('autofind');
     });
 
     it('disables Train for a frozen detector with an explanatory hint', () => {

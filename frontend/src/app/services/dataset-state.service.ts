@@ -134,6 +134,21 @@ export class DatasetStateService {
     this.refreshTrigger$.next();
   }
 
+  /**
+   * Merge *changes* into one detector's entry in place, from a response that
+   * already carries them (a sharing refresh's `last_synced` and integrity),
+   * so the row updates without a whole-registry reload. A no-op for an id the
+   * registry does not hold; the next {@link refresh} is the authority.
+   */
+  patchDetector(id: string, changes: Partial<DetectorRegistryEntry>): void {
+    const list = this._detectors();
+    const index = list.findIndex((d) => d.id === id);
+    if (index < 0) return;
+    const next = list.slice();
+    next[index] = { ...list[index], ...changes };
+    this._detectors.set(next);
+  }
+
   clear(): void {
     this._datasets.set([]);
     this._detectors.set([]);
