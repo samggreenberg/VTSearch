@@ -127,6 +127,9 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
+  /** The detector is a received, read-only copy: the host also sets
+   *  {@link autopilotDisabled}, and this says why instead of the no-seed reason. */
+  readonly readOnly = input(false);
   /**
    * The server's `autopilot_only` lock (#4666): Train has no Manual tab and
    * Tune no Review tab, and neither renders its tab bar. Train stays on
@@ -357,6 +360,13 @@ export class LeftPanelComponent implements OnInit {
    * the unverified positives. Gates the Find work-queue action buttons —
    * Browse / To Dataset / Export all operate on exactly this set.
    */
+  /** Why the work queue's Browse / To Dataset / Export buttons are disabled,
+   *  or ``''`` while they are not: a disabled button always says why (#5533). */
+  get queueActionsBlocker(): string {
+    if (this.disabled()) return 'Wait for the current run to finish';
+    return this.unverifiedGoodCount === 0 ? 'No unreviewed likely matches left' : '';
+  }
+
   get unverifiedGoodCount(): number {
     const order = this.sortOrder();
     const threshold = this.threshold();

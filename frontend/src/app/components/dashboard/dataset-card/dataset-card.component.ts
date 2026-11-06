@@ -95,6 +95,8 @@ export class DatasetCardComponent {
   readonly delete = output<void>();
   readonly load = output<void>();
   readonly browse = output<void>();
+  /** The People item (a Face dataset's only): open its people (#5590). */
+  readonly people = output<void>();
   readonly autofind = output<void>();
   readonly security = output<void>();
   readonly cancelTask = output<string>();
@@ -162,6 +164,9 @@ export class DatasetCardComponent {
         break;
       case 'browse':
         this.browse.emit();
+        break;
+      case 'people':
+        this.people.emit();
         break;
       case 'autofind':
         this.autofind.emit();
@@ -244,10 +249,14 @@ export class DatasetCardComponent {
 
   /** Tooltip for the name: which datasets came from the same import, or none
    *  when the dataset has no siblings. The name already ends in its kind of
-   *  media and the Type column shows it too, so the name carries no badge (#5461). */
+   *  media and the Type column shows it too, so the name carries no badge (#5461).
+   *  Several siblings are a bulleted list, one per line, not a comma-joined
+   *  row of long names (#5532). */
   get importSiblingsTitle(): string | null {
     const siblings = this.importSiblings() ?? [];
-    return siblings.length ? `Imported together with ${siblings.join(', ')}` : null;
+    if (siblings.length === 0) return null;
+    if (siblings.length === 1) return `Imported together with ${siblings[0]}`;
+    return ['Imported together with:', ...siblings.map((name) => `• ${name}`)].join('\n');
   }
 
   /** The Type cell's icon, as the media-type registry serves it (the
@@ -259,6 +268,13 @@ export class DatasetCardComponent {
   capitalizeType(type: string | undefined): string {
     if (!type) return '-';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  /** A projection build or a people fit keeps the actions column beside its
+   *  bar, with its own icon waggling there; a load takes the whole row. */
+  get keepsActions(): boolean {
+    const kind = this.taskKind();
+    return kind === 'projection' || kind === 'people';
   }
 
   /** The vocabulary the inline row speaks: a background AutoFind or Find on

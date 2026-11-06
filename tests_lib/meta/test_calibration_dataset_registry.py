@@ -208,6 +208,41 @@ class TestRicoSuaveIsRunnable:
         assert pc.DATASETS["apptitude"]["boxed"] is False
 
 
+class TestFgvcAircraftIsRunnable:
+    """#5490: sibling aircraft variants, opening on the level the loader's one prompt table names."""
+
+    def test_it_has_a_roster_the_pile_builds(self, cfg, pc):
+        assert cfg.DATASET_EMBEDDERS["fgvc_aircraft"]
+        for emb in cfg.DATASET_EMBEDDERS["fgvc_aircraft"]:
+            assert pc.embeds(cfg.learn_embedder(emb), "fgvc_aircraft"), f"fgvc_aircraft x {emb} is never built"
+
+    def test_every_cell_types_the_loaders_text(self, cfg):
+        from pilebuild.loaders import fgvc_aircraft
+
+        want = {c: fgvc_aircraft.prompt_levels(c)[cfg.FGVC_LEVEL] for c in fgvc_aircraft.cells()}
+        assert cfg.EXPERIMENT_QUERIES["fgvc_aircraft"] == want
+
+    def test_it_is_boxed_so_the_region_arm_runs(self, cfg, pc):
+        assert cfg.BOXED_BY_DATASET["fgvc_aircraft"] is True
+        assert pc.DATASETS["fgvc_aircraft"]["boxed"] is True
+
+    def test_cells_are_variants_with_siblings(self):
+        from pilebuild.loaders import fgvc_aircraft
+
+        assert len(fgvc_aircraft.cells()) == 46
+        assert all(len(f.variants) >= 2 for f in fgvc_aircraft.FAMILIES.values())
+
+    def test_no_invented_name_is_a_real_one(self):
+        """An unknown-class level must not collide with any variant's or family's real name."""
+        from pilebuild.loaders import fgvc_aircraft
+
+        real = {t for c in fgvc_aircraft.cells() for k, t in fgvc_aircraft.prompt_levels(c).items() if k == "variant"}
+        real |= {f.name for f in fgvc_aircraft.FAMILIES.values()}
+        fake = {t for f in fgvc_aircraft.FAMILIES.values() for t in (f.fake_number, f.fake_name)}
+        assert len(fake) == 2 * len(fgvc_aircraft.FAMILIES)
+        assert not fake & real
+
+
 class TestTrainMixCells:
     """#4160: a mixed cell is enumerated per class and opens on its class's text."""
 

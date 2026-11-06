@@ -1,7 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
-import { Subscription, pairwise } from 'rxjs';
+import { Subscription, filter, map, pairwise, switchMap, take } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import type { VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
@@ -37,6 +37,11 @@ import { AutopilotStateService, cappedInOpening, type AutopilotPhase } from '../
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
+import { ActiveDetectorService } from '../../services/active-detector.service';
+import { ContextSwitchService } from '../../services/context-switch.service';
+import { DatasetStateService } from '../../services/dataset-state.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { READ_ONLY_HINT } from '../../utils/detector-sharing';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
@@ -101,6 +106,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private newThingFlows = inject(NewThingFlowsService);
   private sourcePhoto = inject(SourcePhotoService);
   private toast = inject(ToastService);
+  private activeDetector = inject(ActiveDetectorService);
+  private contextSwitch = inject(ContextSwitchService);
+  private datasetState = inject(DatasetStateService);
+  private sharingFlows = inject(DetectorSharingFlowsService);
   panelState = inject(LabelViewPanelStateService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
@@ -120,6 +129,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  Empty when no trainable model is active; the right pane then falls
    *  back to cid-based vote display. */
   readonly trainableModelName = signal<string | null>(null);
+  /**
+   * The active detector is a received, read-only copy: the centre's Good / Bad
+   * are disabled with a Fork, a vote from the grids or the Labels panel is
+   * refused with the same offer, and Autopilot (which only asks for votes)
+   * stays off. The server's 409 `detector_read_only` is the backstop.
+   */
+  readonly readOnly = this.activeDetector.readOnly;
   readonly labelingStatus = signal<LabelingStatusResponse | null>(null);
   /** Each side's open width: what the divider set, kept while the side is folded. */
   readonly leftWidth = signal(260);
@@ -188,9 +204,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * ends it), then, on that run (as the hand-off, see
    * `AutopilotStateService.startedUntrained`), `fix-votes` for
    * the run's first vote and one hint per phase after it, until the run
-   * reaches Done, when the hand-off under the Dashboard button takes over. The
-   * Spot Check step has none: its picks are just the next items, and there is
-   * nothing to do differently (#5136). Nothing shows while that hand-off is up.
+   * reaches Done, when the hand-off under the Dashboard button takes over.
+   * Every step has one, Spot Check's included (#5538): its picks are just the
+   * next items (#5136), so its hint, like the others, says to keep clicking.
+   * Nothing shows while that hand-off is up.
    */
   private readonly trainHint = computed<VoteHintId | 'fix-votes' | null>(() => {
     const run = this.autopilotRun();
@@ -232,6 +249,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'hard':
       case 'new':
         return 'keep-voting';
+      case 'spot':
+        return 'spot-check';
       default:
         return null;
     }
@@ -415,6 +434,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor() {
     // #4736: the runner asks the view whether this run holds its typed query.
     this.sortRunner.holdsTypedQuery = () => this.autopilotHoldsTypedQuery;
+
+    this.followForks();
 
     // #4496: Autopilot checks when the server says one is due. The balance
     // lands with each learned sort, and the check waits for the sort to settle.
@@ -1372,6 +1393,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    if (this.readOnly()) {
+      this.refuseReadOnlyVote();
+      return;
+    }
     this.voteState
       .submitToggleVoteAndRecord(event.id, event.vote, this.mediaDisplayName(event.id))
       .pipe(this.pairScope.scoped())
@@ -1380,6 +1405,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.onMediaVoted(event);
         },
       });
+  }
+
+  /** A vote on a received detector, from somewhere without its own disabled
+   *  state (a grid card, the Labels panel): say why, and offer the way out. */
+  private refuseReadOnlyVote(): void {
+    this.toast.warning({
+      message: `${READ_ONLY_HINT}: this detector's labels are its owner's.`,
+      action: { label: 'Fork', title: 'Make a copy of your own that you can vote on', onClick: () => this.onFork() },
+      dedupKey: 'read-only-vote',
+    });
+  }
+
+  /** Fork the active received detector; {@link followForks} moves Train to the copy. */
+  onFork(): void {
+    const detector = this.activeDetector.detector();
+    if (detector) void this.sharingFlows.fork(detector, { askName: true });
+  }
+
+  /**
+   * Carry on in the copy when the detector Train is on is forked — from the
+   * read-only line, or from the toast a refused vote raised: once the registry
+   * lists the copy, switch to it, where voting is open.
+   */
+  private followForks(): void {
+    this.sharingFlows.forked$
+      .pipe(
+        filter(({ sourceId }) => sourceId === this.activeDetector.detectorId()),
+        switchMap(({ entry }) => {
+          const datasetId = this.activeContext.datasetId;
+          return this.datasetState.detectors$.pipe(
+            filter((list) => list.some((d) => d.id === entry.id)),
+            take(1),
+            map(() => ({ datasetId, detectorId: entry.id })),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(({ datasetId, detectorId }) => this.contextSwitch.switchTo(datasetId, detectorId));
   }
 
   private mediaDisplayName(id: number): string {
@@ -1474,9 +1537,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * embedder can't search by text, the detector carries no media-example seed,
    * and there aren't yet enough labels for Learn sort. Bound into the
    * left-panel to disable the Autopilot tab; it re-enables automatically once
-   * the user labels a good and a bad (Learn sort becomes available).
+   * the user labels a good and a bad (Learn sort becomes available). Also
+   * true for a received detector ({@link readOnly}), until it is forked.
    */
   get autopilotDisabled(): boolean {
+    // Every Autopilot step asks for votes, which a received detector refuses.
+    if (this.readOnly()) return true;
     if (this.textSupported) return false;
     if (this.labelSession.mediaExampleFilenames.length > 0) return false;
     // The labelset only means anything once `/api/votes` has answered for the

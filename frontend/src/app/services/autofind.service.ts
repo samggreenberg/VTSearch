@@ -36,8 +36,14 @@ import { ToastService } from './toast.service';
  *  - an import whose dataset none of the user's AutoFind detectors applies to
  *    finishes as a `skipped` row, shown as an info toast giving the reason.
  *
+ * A run whose dataset looks unlike a detector's training dataset carries the
+ * detector in its row's `domain_shifts` (#5501): the announcing toast turns to
+ * a warning and names each one, in Tune's words. The Find Results dialog says
+ * the same per detector.
+ *
  * The dialog itself is mounted once in `AppComponent`, reading {@link results},
- * so a run's results can be opened from any view. Failed runs need nothing
+ * so a run's results can be opened from any view. A run's failed auto-export
+ * shows there only the first time the run is opened (#5543). Failed runs need nothing
  * here: `ToastService` already turns a failed task row into an error toast.
  */
 @Injectable({ providedIn: 'root' })
@@ -61,6 +67,9 @@ export class AutoFindService {
    *  {@link results} is set: two runs landing in one SSE batch must not both
    *  open it, the second replacing the first. */
   private opening = false;
+  /** Runs whose failed auto-export the dialog has already shown; see
+   *  {@link reportExportFailureOnce}. */
+  private readonly exportFailureShown = new Set<string>();
 
   constructor() {
     this.auth.status$.subscribe((status) => (this.currentUser = status?.user ?? ''));
@@ -69,6 +78,7 @@ export class AutoFindService {
     this.progressEvents.serverReset$.subscribe(() => {
       this.openWhenDone.clear();
       this.handled.clear();
+      this.exportFailureShown.clear();
     });
   }
 
@@ -99,7 +109,7 @@ export class AutoFindService {
     this.findApi.getAutofindRun(runId, context).subscribe({
       next: (run) => {
         this.opening = false;
-        this.results.set(run);
+        this.results.set(this.reportExportFailureOnce(runId, run));
       },
       error: () => {
         this.opening = false;
@@ -113,6 +123,26 @@ export class AutoFindService {
 
   closeResults(): void {
     this.results.set(null);
+  }
+
+  /**
+   * *run* as the dialog should show it: with its failed auto-export the first
+   * time the dialog opens run *runId*, and without it after that (#5543).
+   *
+   * The failure is the record of the one export the run made when it
+   * finished. Opening the run again, from Browse's Back or a second View
+   * Results, re-reads that record and sends nothing. Shown again, the line
+   * reads as a new failure. A successful export stays: its line and its
+   * **Open** button are still worth having.
+   */
+  private reportExportFailureOnce(runId: string, run: AutoDetectResultsData): AutoDetectResultsData {
+    if (run.auto_export?.success !== false) return run;
+    if (!this.exportFailureShown.has(runId)) {
+      this.exportFailureShown.add(runId);
+      return run;
+    }
+    const { auto_export: _shown, ...rest } = run;
+    return rest;
   }
 
   private onTasks(tasks: LoadingTask[]): void {
@@ -152,12 +182,18 @@ export class AutoFindService {
     const message = `${what} finished on "${info.dataset_name}": ${found}`;
     const ax = info.auto_export;
     const exportFailed = ax?.success === false;
-    const detail = exportFailed
+    const outcome = exportFailed
       ? `${detectorWord}. ${autoExportFailure(ax)}`
       : ax?.success
         ? `${detectorWord}. ${ax.message ?? `Sent via ${ax.exporter_display_name}.`}`
         : `${detectorWord}.`;
-    const show = exportFailed ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);
+    // Tune's training-domain warning, for each detector this dataset looks
+    // unlike the training dataset of (#5501): an AutoFind opens nothing on
+    // its own, so this notice is where the user first hears of it.
+    const shifts = (info.domain_shifts ?? []).map((s) => `\u26A0 ${s.detector_name}: ${s.message}.`);
+    const detail = [outcome, ...shifts].join(' ');
+    const warn = exportFailed || shifts.length > 0;
+    const show = warn ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);
     show({
       message,
       detail,

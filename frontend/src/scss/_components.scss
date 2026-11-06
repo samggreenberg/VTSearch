@@ -190,15 +190,16 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // --- Segmented toggle ---
 //
 // A connected row of buttons acting as a single-select control: the
-// View/Focus pickers in Settings and the size/focus toggles in the
-// center-panel view toolbar. Buttons share a border (overlapped via a
+// View/Focus pickers in Settings, the size/focus toggles in the
+// center-panel view toolbar, and Find Results' Good/Bad/Both and Sort by
+// rows. Buttons share a border (overlapped via a
 // negative left margin, with the active/hovered button raised on top so its
 // border wins on both sides) and the group's outer corners are rounded. The
 // selected button fills with the accent and gains an inset shadow.
 //
 // Variants:
 //   .segmented-toggle--stretch  equal-width buttons filling the row (labelled toggles)
-//   .segmented-toggle--compact  dense, icon-only buttons (toolbars)
+//   .segmented-toggle--compact  dense buttons (toolbars, short labelled rows)
 .segmented-toggle {
   display: inline-flex;
 }
@@ -220,7 +221,12 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  color: var(--text-secondary);
+  // The resting ink. A variant recolours its buttons by setting `--seg-ink`,
+  // never `color`: a variant's selector outranks the one-class `--active`
+  // below, so its `color` would also land on the active button's accent fill.
+  // The compact variant's muted grey did that, at 1.2:1 in every theme, and
+  // left Find Results' selected Good and Score unreadable (#5500).
+  color: var(--seg-ink, var(--text-secondary));
   font-size: var(--font-sm);
   font-weight: var(--weight-medium);
   cursor: pointer;
@@ -242,7 +248,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   &:hover:not(:disabled):not(.segmented-toggle__btn--active) {
     color: var(--text-primary);
     background: var(--bg-hover);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
   &:disabled {
@@ -255,18 +261,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     color: var(--toggle-active-text);
     border-color: var(--accent);
     box-shadow: inset 0 1px 3px var(--shadow-dropdown);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 }
 
-// Dense, icon-only variant for toolbars: smaller footprint, muted resting
-// colour, tighter corners, and a border-highlight hover (no fill) to suit a
-// packed row of glyph buttons.
+// Dense variant for toolbars and short labelled rows: smaller footprint, muted
+// resting colour, tighter corners, and a border-highlight hover (no fill) to
+// suit a packed row of buttons.
 .segmented-toggle--compact .segmented-toggle__btn {
   min-width: 26px;
   height: 22px;
   padding: 0 var(--space-sm);
-  color: var(--text-muted);
+  --seg-ink: var(--text-muted);
 
   &:first-child {
     border-radius: var(--radius-sm) 0 0 var(--radius-sm);
@@ -918,6 +924,30 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   margin: 0;
   font-size: var(--font-md);
   color: var(--text-secondary);
+}
+
+// Names set out one per line, bulleted, in place of a comma-joined run: the
+// datasets a bulk delete is about to remove, the detectors a run skipped. A
+// row of long names ("Celebrities in Context (S) – Image", …) is hard to
+// read, and a name with a comma in it splits in two (#5532). Inherits its
+// colour and size from the text it sits under.
+.name-list {
+  margin: var(--space-sm) 0;
+  padding-left: var(--space-2xl);
+  list-style: disc;
+
+  li {
+    overflow-wrap: anywhere;
+  }
+
+  li + li {
+    margin-top: var(--space-xs);
+  }
+
+  // Ending its container, the list leaves the space below to the container.
+  &:last-child {
+    margin-bottom: 0;
+  }
 }
 
 // Canonical empty-state primitive: the centered, muted placeholder shown

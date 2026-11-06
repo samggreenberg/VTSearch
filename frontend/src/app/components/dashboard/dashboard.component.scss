@@ -8,9 +8,11 @@
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  overflow: hidden;
   // Positioning context for Toasty's hints (`<vt-toasty-hint>`), which stand
-  // beside a panel's + button or above the Train button.
+  // beside a panel's + button or above the Train button. No `overflow: hidden`
+  // here: it would clip a hint the user drags out into the blank space either
+  // side of this column (#5531). The panels scroll inside themselves, and
+  // `.main-content` still clips at the window's edge.
   position: relative;
   // Width of each Train / Tune / Find group.
   --action-btn-group-width: 220px;

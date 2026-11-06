@@ -90,7 +90,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="browse.emit()"
               aria-label="Browse unverified positives"
-              [title]="'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Browse the likely matches you haven\'t reviewed yet as their own map' + queueFacesNote()"
             >
               <vt-icon type="eye" [size]="14"></vt-icon>
             </button>
@@ -99,7 +99,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="toDataset.emit()"
               aria-label="Unverified positives to dataset"
-              [title]="'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Promote the likely matches you haven\'t reviewed yet into their own dataset' + queueFacesNote()"
             >
               <vt-icon type="cubes" [size]="14"></vt-icon>
             </button>
@@ -108,7 +108,7 @@
               [disabled]="disabled() || unverifiedGoodCount === 0"
               (click)="unverifiedExport.emit()"
               aria-label="Export unverified positives"
-              [title]="'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
+              [title]="queueActionsBlocker || 'Export the likely matches you haven\'t reviewed yet — e.g. to re-import as a dataset' + queueFacesNote()"
             >
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
@@ -210,7 +210,9 @@
           [attr.aria-selected]="activeTab() === 'autopilot'"
           [disabled]="autopilotDisabled()"
           (click)="setTab('autopilot')"
-          [title]="autopilotDisabled()
+          [title]="readOnly()
+            ? 'Read-only: fork to edit. Autopilot asks for votes, and this received detector\'s labels are its owner\'s.'
+            : autopilotDisabled()
             ? 'Autopilot needs a way to start its first sort. This dataset\'s embedder can\'t search by text, so label a few good and bad examples in Manual mode to enable it.'
             : 'Autopilot guides you through labeling in phases: good examples, bad examples, refining the good/bad cutoff, and covering a broad mix of items.'"
         ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
@@ -330,7 +332,13 @@
       </div>
     } @else {
       <div class="tab-panel-autopilot" [class.collapsed]="folded()" role="tabpanel" aria-label="Autopilot mode">
-        @if (autopilotOnly() && autopilotDisabled() && !folded()) {
+        @if (autopilotOnly() && readOnly() && !folded()) {
+          <p class="info-text autopilot-blocked-note" role="note">
+            Read-only: fork to edit. Autopilot asks for votes, and this detector is a
+            received copy whose labels are its owner's. Fork it from the Dashboard, or
+            with the Fork under the Good and Bad buttons.
+          </p>
+        } @else if (autopilotOnly() && autopilotDisabled() && !folded()) {
           <!-- No Manual to fall back to (#4666): say why nothing is running.
                Collapsed, the panel keeps its strip and the toggle that opens it. -->
           <p class="info-text autopilot-blocked-note" role="note">

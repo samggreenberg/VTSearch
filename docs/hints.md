@@ -36,7 +36,14 @@ and **Bad** stay bold when they name a vote ("You already labeled this
 No semicolons: each instruction is its own sentence. Autopilot's hints are for
 someone who just wants to click (#5143): no counts, targets, scores or metric
 names, and no keyboard shortcuts. Say what Autopilot is doing and what to do
-next, and leave the details to its panel.
+next, and leave the details to its panel. Every Autopilot step has one, so
+the user who just wants to click is never left without a hint (#5538).
+**Toasty speaks as Autopilot**, in the first person: "I'm looking for Goods
+now", "my step on the left", never "Autopilot is looking for…" or
+"VTSearch…" (#5538). The panel and its buttons keep the name Autopilot.
+The one exception to no counts is `keep-voting`, which says how many votes a
+detector usually takes and the most Autopilot asks for (#5539): deep in a run,
+the user wants to know roughly how far is left, and no light can tell them.
 
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
@@ -114,25 +121,28 @@ an item the user picked, so it shows on any run.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `start-voting` | happy | Autopilot picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running with an item on screen, on a detector with no labels and nothing voted, or on the run that trains the detector before it has cast a vote. The first vote ends it. |
+| `start-voting` | happy | I picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running with an item on screen, on a detector with no labels and nothing voted, or on the run that trains the detector before it has cast a vote. The first vote ends it. |
 | `fix-votes` | happy | Your vote went to **Labels** on the right. Open here to change it, or keep clicking. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
-| `revote` | happy | You already labeled this **{label}**. Click **{other}** to change it, or Autopilot's step on the left to carry on. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
-| `find-goods` | happy | Autopilot is looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
-| `find-bads` | happy | Autopilot is looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
-| `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
-| `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
+| `revote` | happy | You already labeled this **{label}**. Click **{other}** to change it, or my step on the left to carry on. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
+| `find-goods` | happy | I'm looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
+| `find-bads` | happy | I'm looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
+| `find-more` | happy | I'm looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
+| `keep-voting` | happy | I'm sharpening your detector now. Keep clicking. Most detectors are trained within {typical} votes, and I never ask for more than {cap}. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
+| `spot-check` | happy | I'm double-checking your detector now. Keep clicking. | As `find-goods`, in **Spot Check**: the check before Done, or one Autopilot runs earlier when the labels separate weakly. Its picks are just the next items (#5136), so it stands over **Good** / **Bad** like the other phase hints. |
 | `resort-prompt` | happy | This example isn't finding many Goods. Try a different one or keep clicking. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
-| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it, and so does leaving the Train view (#5354). |
+| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work. You can keep voting, but you don't need to. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it, and so does leaving the Train view (#5354). |
 | `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item, before it finishes or as it reaches Done (#5151): with nothing left to label, this one takes over from `autopilot-done`. The next vote ends it, and so does leaving the Train view. |
 
 In `revote`, `{label}` is the item's label ("Good" or "Bad") and `{other}`
-the other one.
+the other one. In `keep-voting`, `{typical}` is about how many votes a run
+takes to reach Done, 50 (`TYPICAL_DONE_VOTES`), and `{cap}` is Autopilot's vote
+cap, 200 (`STOP_CAP_VOTES`), both in `autopilot-state.service.ts`.
 
 ## Tune view
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
+| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is in the centre panel and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
 | `test-done` | happy | The test is done. Click **Move to AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
 | `review` | happy | Every item is here, best match first. Click one to check it with **Good** or **Bad**, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 
@@ -154,7 +164,7 @@ list's "Click bins on the canvas" line: Toasty is saying it.
 |---|---|---|---|
 | `browse-pan-zoom` | happy | This map shows your {media}, with similar ones near each other. Drag to pan or wheel to zoom. | The user has never moved a map. Stands under the zoom buttons. Any move retires it: a drag, the wheel, a double-click, the zoom buttons, the arrow keys, a minimap jump or zoom to fit. |
 | `browse-thumbnail-size` | happy | These buttons change how large the thumbnails appear. Try making them larger or smaller. | The user has never resized a map's thumbnails, on a map whose tiles show them (not text, whose tiles are density cells). Stands under the two size buttons, and either one retires it. |
-| `browse-tile-details` | happy | Each tile holds the items that landed there. Right-click one to see them all. | The user has never right-clicked a tile to open its bin details. Stands under the buttons at the map's top left (**Rebuild Map**), reaching over the map. |
+| `browse-tile-details` | happy | Each tile holds the items that landed there. Right-click one to see them all. | The user has never right-clicked a tile to open its bin details. Stands at the map's top left, under whatever buttons are there (**← Back** on a map opened from Tune or Find results, **Rebuild Map** once items have been verified away, **People** on a Face dataset), reaching over the map. |
 | `browse-select` | happy | Nothing is selected yet. Click a tile to add its items here. | The user has never selected anything on a map. Stands under the Selection panel's sort row, in place of the empty list's own line. The first selection retires it: a tile clicked or boxed, select-all, or an item picked in the bin details. |
 | `browse-verify` | happy | These are your detector's matches. Select any that are wrong, then click **Verified Bad**. | On a map opened from Tune, the one kind whose Selection panel has **Verified Good** and **Verified Bad**, the user has never verified items on a map. Stands where `browse-select` does, below **Verified Bad**, and either button retires it. |
 

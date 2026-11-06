@@ -278,11 +278,12 @@ def validate_exporter_field_values(plugin: PluginBase, field_values: dict) -> di
     return validated
 
 
-def run_plugin_or_error(plugin: PluginBase, method: str, *args):
+def run_plugin_or_error(plugin: PluginBase, method: str, *args, verb: str = ""):
     """Call a plugin method, catching ValueError and unexpected exceptions.
 
     Returns ``(result, None)`` on success or ``(None, (response, status))``
-    on failure.
+    on failure.  An unexpected failure reads ``"<verb> failed: ..."``, *verb*
+    defaulting to *method* in words.
     """
     try:
         result = getattr(plugin, method)(*args)
@@ -290,6 +291,27 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
         return None, error_response(str(exc), 400)
     except Exception as exc:
         logger.exception("%s.%s() failed: %s", type(plugin).__name__, method, exc)
-        verb = method.replace("_", " ").capitalize()
+        verb = verb or method.replace("_", " ").capitalize()
         return None, error_response(f"{verb} failed: {exc}", 500, detail=format_exception_detail(exc))
     return result, None
+
+
+def run_label_importer_or_error(
+    importer: PluginBase, field_values: dict
+) -> tuple[tuple[list[dict], dict | None] | None, Any]:
+    """Run a label importer's :meth:`~vtscore.labels.importers.base.LabelImporter.run_labelset`.
+
+    Returns ``((label entries, detector_meta), None)``, or ``(None, (response,
+    status))`` when the run failed or its ``labels`` is not a list.  The entries
+    are the run's own dicts, for the routes to apply; ``detector_meta`` is the
+    block the source carried (``None`` without one), whose training-domain
+    summary an importing detector keeps (#5571).
+    """
+    labelset, err = run_plugin_or_error(importer, "run_labelset", field_values, verb="Run")
+    if err:
+        return None, err
+    entries = labelset.get("labels") if isinstance(labelset, dict) else None
+    if not isinstance(labelset, dict) or not isinstance(entries, list):
+        return None, error_response("Importer did not return a list of label dicts.", 500)
+    meta = labelset.get("detector_meta")
+    return (entries, meta if isinstance(meta, dict) else None), None

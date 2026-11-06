@@ -56,6 +56,22 @@ describe('GenericFormPickerComponent', () => {
     expect(component.canSubmit()).toBe(true);
   });
 
+  it('names the first missing required field as the reason Import is disabled (#5533)', () => {
+    openAndFlush();
+    expect(component.submitBlocker()).toBe('Path is required');
+    component.setFormValue('path', '/data/sounds');
+    expect(component.submitBlocker()).toBe('');
+  });
+
+  it('asks for a ticked kind of media when Multi-Dataset has none (#5533)', () => {
+    openAndFlush();
+    component.setFormValue('path', '/data/sounds');
+    component.setMultiDataset(true);
+    component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
+    expect(component.submitBlocker()).toBe('Tick at least one kind of media to import');
+    expect(component.canSubmit()).toBe(false);
+  });
+
   it('requires a visible_when field only while its condition holds (#5343)', () => {
     const conditional = {
       ...importer,

@@ -227,7 +227,8 @@ class TestEagerBundleComposition:
     this: #3811 reclaimed ~38kB, so a re-added FormsModule would still fit
     under the number while silently spending the margin that exists so a
     framework bump does not turn the gate red for everyone (#3795).  The same
-    goes for @angular/cdk/a11y, which #5297 took off the eager path.
+    goes for @angular/cdk/a11y, which #5297 took off the eager path, and for
+    the toast stack, which #5505 put behind `@defer`.
     """
 
     @staticmethod
@@ -291,6 +292,36 @@ class TestEagerBundleComposition:
             "showModal(), which handles focus natively (#5297); a lazy component may\n"
             "still use the CDK. If the eager import is genuinely required, re-audit\n"
             "the budget in frontend/angular.json rather than deleting this."
+        )
+
+    def test_toast_container_is_not_eager(self):
+        # The Dismiss All button's label is written only in vt-toast-container's
+        # template, which compiles into the component's own chunk.  The
+        # `vt-toast-container` tag name is no marker: AppComponent's template
+        # still names it inside the `@defer` block, on the eager path.
+        assert "Dismiss all notifications" not in self._eager_bundle_text(), (
+            "vt-toast-container (~12kB) is back in the EAGER bundle.\n"
+            "AppComponent mounts it inside `@defer (on immediate)` (#5505), and Angular\n"
+            "only splits a component off when nothing outside a @defer block uses it:\n"
+            "most likely the `@defer` wrapper was dropped, or something eager now\n"
+            "references ToastContainerComponent directly (a viewChild, a second\n"
+            "un-deferred <vt-toast-container>). Toasts need no eager renderer --\n"
+            "ToastService holds the stack, so one raised before the chunk lands shows\n"
+            "on arrival. If the eager import is genuinely required, re-audit the\n"
+            "budget in frontend/angular.json rather than deleting this."
+        )
+
+    def test_card_menu_is_not_eager(self):
+        # The detector card's Browse label is written only in
+        # `card-context-menu-items.ts`, which the lazy Dashboard imports.
+        assert "Browse this detector's positives" not in self._eager_bundle_text(), (
+            "The dashboard card menu (card-context-menu-items.ts) is in the EAGER bundle.\n"
+            "Something on the eager path imports from it -- most likely a route guard,\n"
+            "which app.routes.ts loads eagerly. The People guard once took\n"
+            "PEOPLE_MEDIA_TYPE from it and put the bundle over budget; a constant a\n"
+            "guard needs belongs in a module of its own (utils/people.ts).\n"
+            "If the eager import is genuinely required, re-audit the budget in\n"
+            "frontend/angular.json rather than deleting this."
         )
 
 

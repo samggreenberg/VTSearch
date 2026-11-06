@@ -102,8 +102,12 @@ BAD_QUOTA = 4
 DRY_BAD_QUOTA = 16
 
 #: Labels through which a typed-query detector on a single-vector space keeps giving its
-#: query's own set past the quota (#4736): :func:`query_holds`.
-QUERY_HOLD_LABELS = 30
+#: query's own set past the quota (#4736): :func:`query_holds`.  ``0`` since #5556: the
+#: trained head from the quota, because no count changes where the app says stop (no session
+#: stops before 31 labels) and every label held past the quota costs the path there
+#: (+0.023 / +0.022 / +0.005 at beta 1/4 / 1 / 4, the owner's choice of one count).  The
+#: hold itself stays, for an eval arm (``CALIB_QUERY_HOLD``) or a later count.
+QUERY_HOLD_LABELS = 0
 
 #: Bads before the Goods quota at which a typed query on a patch space has missed (#4800):
 #: :func:`query_missed`.  The first Bad: the owner's choice over the Bads quota (4), which
@@ -179,7 +183,7 @@ def label_quota(n_good: int, n_bad: int, *, dry_bad_quota: int | None = DRY_BAD_
     return LabelQuota(int(n_good), int(n_bad), dry_bad_quota)
 
 
-def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int = QUERY_HOLD_LABELS) -> bool:
+def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int | None = None) -> bool:
     """Whether a typed-query detector still gives its query's own set at these counts (#4736).
 
     True on a known single-vector space (*patch_space* ``False``) while the
@@ -187,8 +191,9 @@ def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int 
     not know (``None``), has no hold.  It reads the counts only, as the quota
     does, and says nothing about a detector without a typed query: the caller
     asks only for one that has.  *hold* is the app's :data:`QUERY_HOLD_LABELS`
-    except in an eval arm.
+    (read at call time) except in an eval arm.
     """
+    hold = QUERY_HOLD_LABELS if hold is None else hold
     return patch_space is False and int(n_good) + int(n_bad) < int(hold)
 
 

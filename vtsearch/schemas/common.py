@@ -1,12 +1,15 @@
 """Validators and base schemas shared across :mod:`vtsearch.schemas`.
 
-Two things live here, each shared by several sibling schema modules:
+Three things live here, each shared by several sibling schema modules:
 
 * :func:`list_of_strings` — the "reject non-``str`` list items at the schema
   layer" validator, used by ``datasets.py`` and ``detectors.py``.
 * :class:`PluginExtrasSchema` — the ``unknown = INCLUDE`` + ``post_dump``
   re-merge pair that lets a plugin descriptor's undeclared keys reach the
   client.
+* :class:`OriginRowSchema` — one recorded import param worded for a Stats
+  window, the wire shape of :class:`vtscore.plugins.origin_rows.OriginRow`;
+  a dataset's ``source_rows`` and a detector's ``imported_rows`` both carry it.
 
 Deliberately *not* here: a shared base for ``unknown`` on its own.  That
 setting is a per-schema semantic decision rather than boilerplate — see the
@@ -16,7 +19,7 @@ be a bad trade.
 
 from __future__ import annotations
 
-from marshmallow import INCLUDE, Schema, ValidationError, post_dump
+from marshmallow import INCLUDE, Schema, ValidationError, fields, post_dump
 
 
 def list_of_strings(value: object) -> None:
@@ -62,3 +65,31 @@ class PluginExtrasSchema(Schema):
                 if key not in data:
                     data[key] = value
         return data
+
+
+class OriginRowSchema(Schema):
+    """One recorded import param, worded for a Stats window (#5617, #5620).
+
+    The wire shape of :class:`vtscore.plugins.origin_rows.OriginRow`: a
+    dataset's ``source_rows`` and a detector's ``imported_rows`` are lists of
+    these.
+    """
+
+    key = fields.String(required=True, metadata={"description": "The raw param key."})
+    label = fields.String(
+        required=True,
+        metadata={"description": "The importer field's own label, or the key spelled out when it names no field."},
+    )
+    value = fields.String(
+        required=True,
+        metadata={
+            "description": (
+                "The value as the importer words it (its ``describe_origin_param``): Yes/No for a checkbox, "
+                "a media type's name, the converters an import ran (``Images → Faces``)."
+            )
+        },
+    )
+    description = fields.String(
+        required=True,
+        metadata={"description": "The importer field's description; empty when the key names no field."},
+    )

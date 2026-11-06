@@ -14,6 +14,8 @@ import pytest
 from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.evidence_baseline import EVIDENCE_BASELINE_KEY
+from vtscore.detectors.domain_summary import stored_domain_summary
+from vtscore.detectors.training_domain import TRAINING_DATASET_KEY
 from vtscore.detectors.registry import get_detector
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 from vtscore.state.core import get_active_context, get_active_detector_context
@@ -93,7 +95,9 @@ class TestTheTrainingBaseline:
         """Make the training dataset another one, as on a dataset the detector meets after a handoff."""
         import vtsearch.domain_overlap as domain_overlap
 
-        monkeypatch.setattr(domain_overlap, "infer_training_reference", lambda _labelset, _active: ("elsewhere", {}))
+        monkeypatch.setattr(
+            domain_overlap, "infer_training_reference", lambda _labelset, _active, **_kw: ("elsewhere", {})
+        )
 
     def test_on_its_training_dataset_the_baseline_is_drawn_and_recorded(self, client, detector_path):
         data = client.get("/api/find/evidence-coverage").get_json()
@@ -110,6 +114,12 @@ class TestTheTrainingBaseline:
         assert stored["dataset_id"] == data["baseline_dataset_id"]
         assert stored["n_pos"] + stored["n_neg"] == data["n_baseline"]
         assert stored["k"] == data["k"] and stored["alpha"] == data["alpha"]
+        # The same write records the training dataset, for the overlap check to follow when it is unloaded (#5501).
+        training = data_on_disk[TRAINING_DATASET_KEY]
+        assert training["dataset_id"] == data["baseline_dataset_id"]
+        assert training["labels_held"] == 6
+        # A training dataset with no registry entry has no embedder to stamp a summary with (#5567).
+        assert stored_domain_summary(data_on_disk) is None
 
     def test_elsewhere_the_recorded_baseline_is_read(self, client, detector_path, monkeypatch):
         home = client.get("/api/find/evidence-coverage").get_json()
@@ -162,6 +172,31 @@ class TestTheBaselineFromTheTrainView:
         register_context(ctx)
         add_loaded_id(entry["id"])
         return entry, ctx
+
+    @pytest.fixture
+    def stub_summary(self, monkeypatch):
+        """A summary for any dataset: the fixture's 20 media are too few to calibrate a real one (#5567).
+
+        What is under test here is that the sort and the route record one with the
+        pointer; the summary itself is pinned in ``tests_lib``.
+        """
+        import vtscore.detectors.domain_summary as domain_summary
+
+        def build(medias, *, dataset_id, dataset_name, embedder, media_type):
+            first = medias[min(medias)]
+            return {
+                "format": domain_summary.SUMMARY_FORMAT,
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "media_type": media_type,
+                "embedder": embedder,
+                "dim": 8,
+                "n_reference": len(medias),
+                "anchors": [domain_summary._anchor_entry(first)],
+                "calibration": [0.5] * 40,
+            }
+
+        monkeypatch.setattr(domain_summary, "build_domain_summary", build)
 
     @pytest.fixture
     def trained(self, client, tmp_path):
@@ -229,16 +264,24 @@ class TestTheBaselineFromTheTrainView:
         assert EVIDENCE_BASELINE_KEY not in (_read_detector(trained["path"]) or {})
         assert not wait_for_baseline_draws(timeout=0)
 
-    def test_under_the_label_quota_the_sort_leaves_nothing(self, client, tmp_path, quiet_forever):
-        """Three Bads: a Find there trains the Goods' centroid, whose line is not the sort's."""
+    def test_under_the_label_quota_the_sort_leaves_no_baseline(self, client, tmp_path, quiet_forever):
+        """Three Bads: a Find there trains the Goods' centroid, whose line is not the sort's.
+
+        The sort still leaves the training-dataset pointer waiting (#5514), and
+        the read off the training dataset lands it, with no baseline.
+        """
         from vtscore.detectors.evidence_baseline import wait_for_baseline_draws
 
         trained = self._train(client, tmp_path, bad_ids=[18, 19, 20])
-        assert wait_for_baseline_draws(timeout=0)
+        assert not wait_for_baseline_draws(timeout=0)
+        a_entry, _a_ctx = trained["a"]
         _b_entry, b_ctx = trained["b"]
         data = self._find_and_read(client, b_ctx, trained["detector_id"])
         assert data["available"] is True
         assert data["baseline"] == "none"
+        on_disk = _read_detector(trained["path"]) or {}
+        assert EVIDENCE_BASELINE_KEY not in on_disk
+        assert on_disk[TRAINING_DATASET_KEY]["dataset_id"] == a_entry["id"]
 
     def test_another_dataset_reads_the_baseline_the_sort_left(self, client, quiet_forever, trained):
         from vtscore.detectors.evidence_baseline import baseline_stamp, stored_baseline
@@ -261,16 +304,22 @@ class TestTheBaselineFromTheTrainView:
         stamp = baseline_stamp(labelset, DEFAULT_AUDIO_EMBEDDER, dim)
         assert stored_baseline(_read_detector(trained["path"]), stamp) is not None
 
-    def test_it_is_the_baseline_a_tune_on_the_training_dataset_draws(self, client, quiet_forever, trained):
+    def test_it_is_the_baseline_a_tune_on_the_training_dataset_draws(
+        self, client, quiet_forever, stub_summary, trained
+    ):
         """The sort and the route call the same pieces, so they agree on what the training baseline is."""
         from vtscore.detectors.evidence_baseline import flush_baseline_draw
 
         assert flush_baseline_draw(trained["detector_id"]) is True
-        from_the_sort = (_read_detector(trained["path"]) or {})[EVIDENCE_BASELINE_KEY]
+        from_the_sort = _read_detector(trained["path"]) or {}
         _a_entry, a_ctx = trained["a"]
         data = self._find_and_read(client, a_ctx, trained["detector_id"])
         assert data["baseline"] == "training"
-        assert (_read_detector(trained["path"]) or {})[EVIDENCE_BASELINE_KEY] == from_the_sort
+        from_the_route = _read_detector(trained["path"]) or {}
+        assert from_the_route[EVIDENCE_BASELINE_KEY] == from_the_sort[EVIDENCE_BASELINE_KEY]
+        # So do the training dataset's summaries (#5567).
+        assert stored_domain_summary(from_the_route) is not None
+        assert stored_domain_summary(from_the_route) == stored_domain_summary(from_the_sort)
 
     @pytest.fixture
     def quiet_now(self, monkeypatch):
@@ -279,20 +328,52 @@ class TestTheBaselineFromTheTrainView:
 
         monkeypatch.setattr(evidence_baseline, "DRAW_QUIET_SECONDS", 0.0)
 
-    def test_once_the_votes_stop_it_is_recorded_and_the_session_survives(self, client, quiet_now, trained):
+    def test_once_the_votes_stop_it_is_recorded_and_the_session_survives(
+        self, client, quiet_now, stub_summary, trained
+    ):
         """The background draw writes the detector file; the Train view's state in memory must not read it as an edit."""
         from vtscore.detectors.evidence_baseline import wait_for_baseline_draws
 
         assert wait_for_baseline_draws(timeout=30.0)
         a_entry, _a_ctx = trained["a"]
-        stored = (_read_detector(trained["path"]) or {}).get(EVIDENCE_BASELINE_KEY)
+        on_disk = _read_detector(trained["path"]) or {}
+        stored = on_disk.get(EVIDENCE_BASELINE_KEY)
         assert stored is not None and stored["dataset_id"] == a_entry["id"]
+        # The training-dataset pointer lands with it (#5501), and the dataset's summary (#5567).
+        assert on_disk[TRAINING_DATASET_KEY]["dataset_id"] == a_entry["id"]
+        assert on_disk[TRAINING_DATASET_KEY]["labels_held"] > 0
+        summary = stored_domain_summary(on_disk)
+        assert summary is not None
+        assert summary["dataset_id"] == a_entry["id"] and summary["embedder"] == a_entry["embedder"]
+        assert summary["n_reference"] == a_entry["num_items"]
 
         det_ctx = get_active_detector_context()
         assert det_ctx.last_learned_scores and det_ctx.line_ranking is not None
         assert client.get("/api/votes").status_code == 200
         # No rehydrate: the scores and the ranking the sort left are still there.
         assert det_ctx.last_learned_scores and det_ctx.line_ranking is not None
+
+    def test_under_the_label_quota_the_pointer_is_recorded_once_the_votes_stop(self, client, tmp_path, quiet_now):
+        """#5514: no baseline to draw, but the training dataset is still recorded, so the domain check can follow it."""
+        from vtscore.detectors.evidence_baseline import wait_for_baseline_draws
+        from vtscore.detectors.training_domain import recorded_training_dataset
+
+        trained = self._train(client, tmp_path, bad_ids=[18, 19, 20])
+        assert wait_for_baseline_draws(timeout=30.0)
+        a_entry, _a_ctx = trained["a"]
+        on_disk = _read_detector(trained["path"]) or {}
+        assert EVIDENCE_BASELINE_KEY not in on_disk
+        assert recorded_training_dataset(on_disk) == {
+            "dataset_id": a_entry["id"],
+            "dataset_name": "train-a",
+            "labels_held": 6,
+        }
+
+        det_ctx = get_active_detector_context()
+        assert det_ctx.last_learned_scores
+        assert client.get("/api/votes").status_code == 200
+        # No rehydrate: the write does not read as an outside edit.
+        assert det_ctx.last_learned_scores
 
     def test_unloading_the_detector_lands_the_waiting_draw(self, client, quiet_forever, trained):
         """An unloaded detector is something another process may read next, so its baseline lands now."""

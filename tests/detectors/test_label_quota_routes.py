@@ -113,7 +113,7 @@ class TestFindLabel:
             "good_quota": 3,
             "bad_quota": 4,
             "dry_bad_quota": 16,
-            "hold_labels": 30,
+            "hold_labels": 0,  # QUERY_HOLD_LABELS since #5556
             "hold_owed": 0,
         }
         assert body["threshold"] == 0.5

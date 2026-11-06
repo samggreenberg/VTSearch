@@ -199,11 +199,11 @@ describe('line-balance (#4413)', () => {
 
   describe('the balance control copy', () => {
     it("shows a check's range as a number", () => {
-      expect(rangePercent(SAMPLE_RANGE)).toBe('11–73%');
+      expect(rangePercent(SAMPLE_RANGE)).toBe('42 ± 31%');
     });
 
     it.each<[BalanceStatus, string]>([
-      ['checked', "Checked the 32 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32 more kept"],
+      ['checked', "Checked the 32 kept you hadn't voted on · likely 78 ± 23% right, about half of them found (checked 5) · 32 more kept"],
       ['unchecked', '32 more kept, unchecked'],
     ])('summarises %s', (status, expected) => {
       expect(balanceSummary(lineBalance(status))).toBe(expected);
@@ -247,11 +247,11 @@ describe('line-balance (#4413)', () => {
       // The line kept 20 when the check started; its votes and the retrain after them leave 16 kept now.
       const balance = lineBalance('checked', { count: 16, audited: 64, keptAtCheck: 20 });
       expect(balanceSummary(balance)).toBe(
-        "Checked the 20 kept you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 16 more kept",
+        "Checked the 20 kept you hadn't voted on · likely 78 ± 23% right, about half of them found (checked 5) · 16 more kept",
       );
       const tooltip = balanceExplanation(balance)!;
       expect(tooltip).toContain("When the check started, the line kept the top 20 you hadn't voted on.");
-      expect(tooltip).toContain("5 of the check's random picks fell among them and 5 were right, so likely 55–100% of them are");
+      expect(tooltip).toContain("5 of the check's random picks fell among them and 5 were right, so likely 78 ± 23% of them are");
       expect(tooltip).toContain("The line keeps the top 16 you haven't voted on now");
       expect(tooltip).not.toContain('64');
     });
@@ -265,7 +265,7 @@ describe('line-balance (#4413)', () => {
     it('names the audited set where a server before #4483 sends no kept count (#4914)', () => {
       // Advisory (every preset since #4452): the walk ended on the top 64, the line keeps 16.
       expect(balanceSummary(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null }))).toBe(
-        "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 16 more kept",
+        "Checked the top 64 you hadn't voted on · likely 78 ± 23% right, about half of them found (checked 5) · 16 more kept",
       );
       expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, keptAtCheck: null }))).toContain(
         "A check of 5 random picks from the top 64 you hadn't voted on found 5 right",
@@ -278,10 +278,10 @@ describe('line-balance (#4413)', () => {
 
     it('carries the precision range wide as the check left it, and the recall in words', () => {
       const text = balanceSummary(lineBalance('checked', { precision: SAMPLE_RANGE }))!;
-      expect(text).toContain('11–73%');
+      expect(text).toContain('42 ± 31%');
       expect(text).toContain('(checked 5)');
       expect(text).toContain('about half of them found');
-      expect(text).not.toContain('30–70%');
+      expect(text).not.toContain('50 ± 20%');
     });
 
     it('has nothing to summarise or explain without a state', () => {
@@ -292,8 +292,8 @@ describe('line-balance (#4413)', () => {
     it('explains a trimmed line (beta above 1) by its check, both ranges as numbers, as the set where the balance peaked', () => {
       const why = balanceExplanation(lineBalance('checked', { beta: 2 }))!;
       expect(why).toBe(
-        "A check of 5 random picks from the top 32 you hadn't voted on, which the line keeps, found 5 right, so likely 55–100% of them are, " +
-          "with likely 30–70% of all the matches you hadn't voted on among them: the set where the check's balance peaked.",
+        "A check of 5 random picks from the top 32 you hadn't voted on, which the line keeps, found 5 right, so likely 78 ± 23% of them are, " +
+          "with likely 50 ± 20% of all the matches you hadn't voted on among them: the set where the check's balance peaked.",
       );
       expect(why).not.toMatch(/estimate|enough|short/i);
     });
@@ -347,7 +347,7 @@ describe('line-balance (#4413)', () => {
 
   describe('rangeTitle', () => {
     it('names the picks the range comes from', () => {
-      expect(rangeTitle(SAMPLE_RANGE)).toBe('Likely 11–73% right, from 5 random picks (2 right).');
+      expect(rangeTitle(SAMPLE_RANGE)).toBe('Likely 42 ± 31% right, from 5 random picks (2 right).');
     });
 
     it('adds the stale sentence for a stale range', () => {

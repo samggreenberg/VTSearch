@@ -239,12 +239,12 @@ class FinalizeProgress:
     A skipped sub-stage (opt-in near-dup merge, deferred coverage atlas above
     the size threshold, opt-out projection) simply leaves its slice unfilled;
     the next :meth:`begin` jumps the bar forward, which is monotonic and fine.
-    """
 
-    #: Resolution of the synthetic within-step counter forwarded to the real
-    #: tracker. The finalize fraction (0..1) is reported as ``current`` out of
-    #: this ``total`` so the tracker's overall math sees a normal sub-step.
-    _SCALE = 1000
+    The slotted fraction travels as the tracker's ``within`` override, and the
+    sub-stage's own ``current``/``total`` pass through untouched, so the UI
+    shows what that sub-stage is actually counting (``2/3 Saving to
+    registry…``) rather than a count against an arbitrary scale (#5492).
+    """
 
     #: Static fallback finalize sub-stage shares, used when no measured
     #: ``(device, media_type)`` row exists in the finalize sub-slot cost model.
@@ -263,6 +263,7 @@ class FinalizeProgress:
         ("registry", 0.45),
         ("projection", 0.05),
         ("similarity_order", 0.02),
+        ("people", 0.01),
     )
 
     def __init__(self, tracker, media_type: str = "") -> None:
@@ -298,11 +299,12 @@ class FinalizeProgress:
         # step/total_steps are redundant, so drop them and stamp step 4 here.
         kwargs.pop("step", None)
         kwargs.pop("total_steps", None)
+        kwargs["within"] = frac
         self._tracker.update(
             status,
             message,
-            current=int(frac * self._SCALE),
-            total=self._SCALE,
+            current=current,
+            total=total,
             step=_TOTAL_LOAD_STEPS,
             total_steps=_TOTAL_LOAD_STEPS,
             **kwargs,
@@ -387,7 +389,9 @@ class AdaptiveLoadPacer:
     sub-phases, a composite within-step fraction (via the tracker's ``within``
     override). The caller's ``current``/``total`` always pass through, so byte
     and item counts stay visible in the UI; pacing is controlled purely through
-    the weight vector and the override.
+    the weight vector and the override. A caller may pass ``within`` itself (the
+    embed loop and the finalize proxy do): the pacer then takes it as the
+    phase's fraction in place of ``current``/``total``.
 
     Multi-download caller convention: the pacer cannot tell a fresh archive's
     restarting fraction from within-phase jitter, so a source that fetches
@@ -441,10 +445,19 @@ class AdaptiveLoadPacer:
             self._tracker.update(status, message, current, total, step=step, total_steps=None, **kwargs)
             return
 
+        # A caller that composites its own sub-phases (EmbedLoopProgress across
+        # bound embedders, FinalizeProgress across finalize sub-stages) reports
+        # the phase's fraction as ``within`` and leaves ``current``/``total`` as
+        # the real counts for display.  Those counts restart per sub-phase, so
+        # pacing off them would read the first embedder's pass as the whole
+        # embed phase finishing.
+        caller_within = kwargs.pop("within", None)
         now = time.monotonic()
         if phase != self._phase:
             self._begin_phase(phase, now)
-        if total and total > 0:
+        if caller_within is not None:
+            self._frac = min(max(self._frac, float(caller_within)), 1.0)
+        elif total and total > 0:
             self._frac = min(max(self._frac, current / total), 1.0)
         self._observe_phase_rate(now)
         self._raw = max(self._raw, self._consumed + self._span * self._frac)
@@ -460,6 +473,10 @@ class AdaptiveLoadPacer:
             before = sum(self._weights[: s - 1])
             ws = self._weights[s - 1]
             kwargs["within"] = (self._raw - before) / ws if ws > 0 else 1.0
+        elif caller_within is not None:
+            # A step this phase has to itself: the weights give it the whole
+            # step's slice, so the caller's fraction maps onto it as-is.
+            kwargs["within"] = caller_within
         self._tracker.update(status, message, current, total, step=s, total_steps=_TOTAL_LOAD_STEPS, **kwargs)
 
     # -- pacing internals ---------------------------------------------------

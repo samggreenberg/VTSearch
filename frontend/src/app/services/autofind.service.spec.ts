@@ -166,6 +166,39 @@ describe('AutoFindService', () => {
     expect(service.results()).toEqual(run);
   });
 
+  it('turns the notice to a warning naming each detector whose training domain this dataset is not (#5501)', () => {
+    loadingTasks$.next([
+      finished(
+        {},
+        info({
+          domain_shifts: [
+            {
+              detector_name: 'Mammal',
+              reference_dataset_name: 'Caltech-101 (S)',
+              frac_atypical: 0.68,
+              message: '68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift',
+            },
+          ],
+        }),
+      ),
+    ]);
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    const opts = toast.warning.mock.calls[0][0];
+    expect(opts.message).toBe('AutoFind finished on "Birds": 5 hits');
+    expect(opts.detail).toBe(
+      '2 detectors. \u26A0 Mammal: 68% of this dataset looks atypical vs Caltech-101 (S): likely domain shift.',
+    );
+    expect(opts.action.label).toBe('View Results');
+  });
+
+  it('keeps a run with no domain shift a success', () => {
+    loadingTasks$.next([finished({}, info({ domain_shifts: [] }))]);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success.mock.calls[0][0].detail).toBe('2 detectors.');
+  });
+
   it('announces each run once, however often the row is re-sent', () => {
     loadingTasks$.next([finished()]);
     loadingTasks$.next([finished()]);
@@ -213,6 +246,53 @@ describe('AutoFindService', () => {
       finished({}, info({ auto_export: { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: true } })),
     ]);
     expect(toast.success.mock.calls[0][0].detail).toContain('Sent via Webhook (HTTP POST).');
+  });
+
+  describe('a failed auto-export in the dialog (#5543)', () => {
+    const failed = { exporter: 'webhook', exporter_display_name: 'Webhook (HTTP POST)', success: false, error: 'Webhook URL is required.' };
+
+    it('shows it the first time the dialog opens the run', () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
+
+    it("leaves it out when the run reopens, as Browse's Back reopens it", () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_1');
+      const reopened = service.results();
+      expect(reopened?.auto_export).toBeUndefined();
+      // Only the stale line goes; the results themselves are all there.
+      expect(reopened).toEqual(run);
+    });
+
+    it("still shows another run's failure the first time", () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_2');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
+
+    it('keeps a successful export on every open, for its Open button', () => {
+      const sent = { ...failed, success: true, error: undefined, open_url: 'https://example.com/r' };
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: sent }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(sent);
+    });
+
+    it('shows it again for a run of the same id after the backend restarts', () => {
+      findApi.getAutofindRun.mockReturnValue(of({ ...run, auto_export: failed }));
+      service.openResults('_autofind_1');
+      service.closeResults();
+      serverReset$.next();
+      service.openResults('_autofind_1');
+      expect(service.results()?.auto_export).toEqual(failed);
+    });
   });
 
   it('says so when the results have expired', () => {

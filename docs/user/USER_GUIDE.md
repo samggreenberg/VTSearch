@@ -71,8 +71,10 @@ need to think about sort modes or selection strategies directly.
 > scenes - and a detector that learns to find the **yellow smiley faces**
 > among them. VTSearch draws the pictures itself, so you can make the very
 > same ones and follow along (see
-> [Step by step](#step-by-step-your-first-search)). Screenshots follow your
-> light or dark theme.
+> [Step by step](#step-by-step-your-first-search)). The one exception is
+> [Faces](#faces-find-a-person-in-a-set-of-photos), shot on photos from the
+> Celebrities in Context demo, since drawings have no faces to find.
+> Screenshots follow your light or dark theme.
 
 ### Words this guide uses
 
@@ -344,6 +346,9 @@ picks up where it leaves off.
 
 - [Move a detector to another VTSearch](howto/move-a-detector.md): export its
   answers and rebuild it elsewhere.
+- [Share a detector, receive one, fork one](howto/share-a-detector.md): on a
+  VTSearch that shares, give a detector to other people, add the ones they
+  share with you, and fork one to change it.
 - [Add labels you already have](howto/import-labels.md): import answers from a
   CSV file.
 - [Run your detectors on new pictures from the command line](howto/autofind-from-the-command-line.md):
@@ -401,7 +406,13 @@ VTSearch ships two populated categories, which boil down to two choices:
   importer; media must already be somewhere the server can see):
   - **Folder** - browse the server's filesystem and import a directory of
     media files, or an archive to unpack.
-  - **Manifest** - point at a `.txt`/`.list` file of media paths. It also
+  - **Manifest** - point at a `.txt`/`.list` file of media paths, one per
+    line. A line that names no file (a stray CSV header, the tail of a
+    quoted value that held a line break, a typo) is skipped and listed in
+    a warning toast with its line number and reason; the rest still
+    import. A CSV row is read for its path column (the column a header row
+    names `path`, `filepath`, `image`, …, else the first), and its other
+    columns are ignored. It also
     accepts a `.npz` archive of pre-computed fingerprints, so you can
     import media you have already processed offline without doing the work
     twice (see [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz)),
@@ -419,8 +430,8 @@ plugin guide, `docs/EXTENDING-plugins.md`.
 The **Downloaded Media** catalogue is a table: pick a media type from the
 dropdown, click the dataset you want to choose it, then click **Import**.
 Each row carries a readiness badge: **Ready** (cached and analysed),
-**Needs setup** (cached, but still to be analysed with the embedder you
-chose) or **Needs Download**. See [Load a ready-made demo dataset](howto/load-a-demo.md).
+**Needs setup** (nothing left to download, but still to be analysed with the
+embedder you chose) or **Needs Download**. See [Load a ready-made demo dataset](howto/load-a-demo.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.webp" />
@@ -530,8 +541,10 @@ datasets of the same type reuse the downloaded model.
 
 The **Advanced** section starts from your saved defaults for the kind of media
 being imported. When an import's settings differ from them, the notification
-that follows it offers **Save as Default**: click it, and the next import of
-that kind starts the same way. It covers the embedder, clipper, included media
+that follows it offers **Save as Default** and lists what saving would change,
+one setting at a time (`Embedder: DINOv3, Merge near-duplicates: on`), cut short
+with "…" when there are more than four. Click it, and the next import of that
+kind starts the same way. It covers the embedder, clipper, included media
 and cleanup, **Build Browse map now** and **Merge near-duplicates**, and, for a
 [Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder) import,
 **Multi-Dataset** itself with the rows you ticked. A Multi-Dataset import is
@@ -635,6 +648,11 @@ you left it. If the Image
 dataset isn't loaded, the window offers to load it first. A face whose photo
 isn't in the Image dataset (you left that image out, say) has no button.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/show-in-photo.dark.webp" />
+  <img src="assets/show-in-photo.light.webp" alt="Show in photo from Train: the photo a face was cut from, opened over the ranking with that face outlined, and ← Back to return to the face" width="720" />
+</picture>
+
 **Collapse to photos.** On the same kind of Face dataset, the list in Train's
 **Manual** tab and Tune's **Review** tab has a **Show: Faces | Photos** switch
 under its header. **Photos** shows the ranking as the photos the faces came
@@ -648,6 +666,53 @@ Good. Votes always go on the face, never the photo, and the counts and Tune's
 line above the photos reminds you. A face whose photo isn't in the Image
 dataset shows on its own, marked "photo not found". If the Image dataset isn't
 loaded, the list offers to load it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/collapse-to-photos.dark.webp" />
+  <img src="assets/collapse-to-photos.light.webp" alt="Train's Manual list with Show set to Photos: each photo once, where its best face ranks, every ranked face in it outlined (a voted Good in green, faces below the line faintly) and a small picture of each face underneath" width="400" />
+</picture>
+
+**People.** A Face dataset can also be read as the people in it: VTSearch
+merges the faces that are one person, at the same cut Find uses to say a face
+is someone's, and shows who appears with whom in the photos. Open it from the
+Face dataset's **⋯** menu on the Dashboard (**People**), or with the
+**People** button in its Browse toolbar. The first time, the dataset's row
+shows the people being found; after that, People opens at once.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/people-view.dark.webp" />
+  <img src="assets/people-view.light.webp" alt="The People view of a Face dataset: everyone in it on the left, Person 1's faces in the middle with one shown large, and on the right the people Person 1 appears with, the photos they share with Person 2 underneath, Person 1 and Person 2 outlined and anyone else dashed" width="720" />
+</picture>
+
+The view has three panes:
+
+- **People**, on the left: everyone, the person with the most faces first,
+  each with how many faces and photos they are in. People are numbered by
+  rank (`Person 1`), and **Rebuild people** can renumber them. **At least _N_
+  faces** folds away the people seen only once or twice; **+_K_ with fewer**
+  lists them again. **Unplaced**, last, holds the faces that matched no one,
+  usually faces too small, turned away or covered to say whose they are.
+- **The person**, in the middle: one face shown large, with its details and a
+  **Show in photo** button, over all their faces. Point at a face to see it
+  large, and click it to keep it there.
+- **Appears with**, on the right: the people who share a photo with them, the
+  most shared first. Click one to see the photos the two share underneath.
+  In each photo the person in the middle is outlined most heavily, the person
+  they appear with next, and anyone else faintly, with dashes; hover a box to
+  see whose face it is. Click a photo to open it large, with the same
+  outlines.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/show-in-photo-people.dark.webp" />
+  <img src="assets/show-in-photo-people.light.webp" alt="A shared photo opened from People: the person in the middle outlined most heavily, the person they appear with next, and the others dashed" width="720" />
+</picture>
+
+The photos come from the Image dataset the import made beside the faces. If
+it isn't loaded, **Appears with** offers to load it; the people and their
+faces don't need it. A face embedder VTSearch has no cut for (one a plugin
+added) shows no people, and says so. People only shows: it adds no votes,
+labels or detectors, and two people merged by mistake (or one split in two)
+stay that way until **Rebuild people** finds them differently.
 
 ### Running AutoFind on a new dataset
 
@@ -664,24 +729,40 @@ The run shows on the new dataset's Dashboard row while it works, and its
 calibrates and scores, and counts the labels and then the items it has
 scored, so it moves even when there is only one detector. When it finishes, a notice tells you how many hits
 it found; its **View Results** button opens the **Find Results**
-dialog, which lists every item each detector called Good. The controls above
-the list change what it shows: **Good**, **Bad** or **Both**; **Sort by**
-**Score** (highest first, across every detector) or **Similarity**
-(look-alikes side by side, by a one-dimensional map of the whole dataset
-that VTSearch builds along with its Browse map, so a dataset you have not
-browsed yet takes a moment the first time); and **Columns**, a checkbox per
-column, including a **Thumbnail** of each item, whose size the two picture
-buttons set. Below the list, the tabs say where the listed rows go:
+dialog, which lists every item each detector called Good, under a line
+naming the detectors that ran (past three, their count, with every name on
+hover). The controls above the list change what it shows, left to right in
+the order each acts on it: the **Threshold**, whose three radios show what
+each notch of [Tune's Threshold](#tuning-a-detector) would have called Good -
+the same scores, split where that notch draws the line, with nothing
+retrained and no detector's own Threshold changed (the radios are frozen
+when no notch would list anything different); **Good**, **Bad** or
+**Both**; and **Columns**, a checkbox per column, including a
+**Thumbnail** of each item, whose size the two picture buttons at the end
+of that row set, and a **Similarity** column: each item's place in a
+one-dimensional map of the whole dataset that VTSearch builds along with its
+Browse map (so a dataset you have not browsed yet takes a moment the first
+time you tick it). The list itself is a grid like the Dashboard's: click a
+column heading to sort by it (Score, highest first, to start; sort by
+Similarity for look-alikes side by side), click it again to turn the order
+round, drag a heading onto another to reorder the columns, and drag the line
+between two headings to resize them (a click on the line fits the column to
+its contents). Below the list, the tabs say where the listed rows go:
 **Clipboard** first, then each exporter, with whatever it needs filled in
-under its tab. **Export** sends the rows, in the ticked columns, to the open
-tab's destination, and **Export and Close** does the same and closes the
-dialog. A detector with too few
+under its tab, and last **AutoFind**, which sends the run through the
+exporter you set up on the Settings **AutoFind** tab exactly as a finished
+run does, so you can try that setup without importing another dataset; its
+tab shows, read-only, what will go where. **Export** sends the rows, in the
+ticked columns and in the order listed, to the open tab's destination, and
+**Export and Close** does the same and closes the dialog. A detector with too few
 labels for a trained one runs as its typed description, or as the Goods'
 centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too, unless you untick **Export results when AutoFind
-finishes** there to pause it. If none of your AutoFind detectors can run on the new
+finishes** there to pause it. If that export failed, the dialog says so
+the first time it opens the run. It doesn't repeat it when you open the
+run again, since opening it sends nothing. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
 of embedder the dataset doesn't have - a notice says so instead.
 
@@ -715,6 +796,14 @@ the results open again. While the dialog is open, the server starts building
 the map of the Good results whenever it has nothing else to do, so Browse often
 opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
+
+Every Find and AutoFind also checks each detector against the dataset it was
+trained on. When the dataset it ran on looks unlike that one, the Find Results
+dialog says so under its summary ("68% of this dataset looks atypical vs
+**photos**: likely domain shift"), an AutoFind's notice turns to a warning
+naming the detector, and the exported results carry the figure. See
+[Decide how far to trust a detector](howto/trust-a-detector.md) for what to do
+about it.
 
 ### Pre-computed embeddings (.npz)
 
@@ -916,28 +1005,36 @@ shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal; Spot Check stays
 yellow until the check ends. Hover the light for the details.
 
+Above the phases, the panel counts your votes on this dataset so far
+(**42 votes**), Goods and Bads together. No phase can say how many votes
+are left, since nobody knows how many your detector will need, but most
+detectors are trained within 50, and Autopilot never asks for more than
+200. Hover the count for the same reminder.
+
 When the phases are done, Autopilot shows **Done!** and Toasty
 appears under the top bar's **Dashboard** button to say the detector is
-trained: keep voting and it keeps improving (your next vote sends Toasty
-away), or click **Dashboard** to export it or run it over another dataset.
+trained: click **Dashboard** to export it or run it over another dataset.
+You can keep voting (your next vote sends Toasty away), but you don't need
+to.
 Nothing happens on its own, and the hint only appears for the run that
 trained the detector - coming back later to refine it further will not
 raise it again. If you label every item before then, Toasty says so instead
 and points you back to the Dashboard. When you open the Train view on a
 detector with no labels yet, Toasty also stands over the **Good** / **Bad**
 buttons: asking for your first vote, then, through the run that trains the
-detector, saying what the current phase is after and how many Goods or Bads
-it still needs. See [Toasty's hints](#toastys-hints).
+detector, saying in a few words what Autopilot is doing at each step, Spot
+Check included, and to keep clicking. While Autopilot sharpens the detector
+he also says how long that usually takes: most detectors are trained within
+50 votes, and Autopilot never asks for more than 200. See
+[Toasty's hints](#toastys-hints).
 
-Once **Done!** is reached it stays checked, and a seventh step, **Keep
-Improving.**, takes over for as long as you keep labeling. It is
-optional. Its light shows whichever of the smart, stable and span
-indicators is furthest behind, and its line says what Autopilot is
-offering now. A new vote can knock an indicator off green for a while
-as the detector takes it in; Autopilot then goes back to borderline
-items (**Showing boundary items**) or a broad mix (**Showing diverse
-items**) until it recovers, but the panel does not drop back to Refine
-Boundary.
+Once **Done!** is reached it stays the current step, checked, for as
+long as you keep labeling: no step follows it. A new vote can knock an
+indicator off green for a while as the detector takes it in. If you vote
+on, Autopilot then offers borderline items or a broad mix until it
+recovers, but the panel does not drop back to Refine Boundary: the line
+under **Done!** reads **Detector trained**, where it otherwise says what
+reached Done.
 
 ### Document collections stop on a dry run
 
@@ -984,7 +1081,7 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
   without enough matches before it asks whether to sort by something else
   (default 10; see [Get Autopilot unstuck](howto/unstick-autopilot.md)).
 - **Goal diversity** - how much of your collection phase 4 must cover
-  before finishing (default 40).
+  before finishing (default 0, which skips the phase).
 
 Raising these numbers trains a more thorough detector at the cost of
 more labelling effort.
@@ -1044,7 +1141,7 @@ as they stood when the check started: of those, it counts the picks that
 fell among them. When it ends, Autopilot carries on, and the note under the
 Threshold, on the **Manual** tab, shows what it found:
 
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - when the check started the
   line kept 36 items you hadn't voted on; now, with the check's own picks
   voted and the line re-drawn, it keeps 30 more besides your votes. The range
@@ -1062,7 +1159,8 @@ most of the matches near the top, the items left there hold few of them, so
 the check before **Done!** can read low after a session that went well.
 
 **The likely range** says how much of the items the line kept, when the
-check started, is probably right. It comes from your picks alone, never from
+check started, is probably right. It reads as its centre and how far it
+reaches either way: *68 ± 13%* is roughly 55% to 80%. It comes from your picks alone, never from
 the detector's own guess: the picks that fell in each band's part of that
 set bound that part, exactly for its size (in a band of 8, 4 right of 5
 means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
@@ -1199,7 +1297,7 @@ note under the spectrum says what the line keeps:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
   on, besides your votes, and nothing has measured them yet.
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+- **Checked the 36 kept you hadn't voted on · likely 68 ± 13% right, about half
   of them found (checked 12) · 30 more kept** - a spot check has measured
   it; see [How close the line got](#how-close-the-line-got).
 - **12 pass the verification gate** - on a pattern-matching (**Structural**)
@@ -1473,9 +1571,14 @@ unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
 top of the list or the detector's own guess: the ranked list is cut into
 bands on either side of the line, and each round deals five pictures drawn at
-random from one band. A pick carries no rank and no score (that would be the
-ranking talking, not the sample), and the dots above it count only how many
-of the round are left. Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`); `↓` goes back a pick and takes its vote back.
+random from one band. The picks come one at a time in the centre, as in
+Train's Autopilot, with nothing over them to say they are a test: a pick
+carries no rank and no score (that would be the ranking talking, not the
+sample). Vote each one **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`). To put a
+slip right, `↓` walks back through the picks you have voted, from any round
+and from the verdict at **Done!** too, each with its vote lit; vote it again
+to correct it, and `↑` takes you back to where you were. A correction moves
+the ranges at once; the rounds already dealt stay as they were.
 
 The phases, each with a light that climbs red, yellow, green as it nears its
 end, as Train's do:
@@ -1506,14 +1609,15 @@ Positives** to keep more, or train the detector further.
 The **Threshold** sits above the phases (and above the list on **Review**).
 It is frozen from the first round of picks until **Done!**, because moving
 the line would move the bands under the picks. The note under it reads this
-collection's result (*Tested · likely 70–85% right, about half of them found
+collection's result (*Tested · likely 78 ± 8% right, about half of them found
 (checked 32) · 64 kept*), or *Untested · top 64 kept*; it never shows the
 check Train ran, which measured the training collection and would read as
 this one's.
 
 ### The result
 
-The right pane shows the result as it forms:
+The right pane shows the result as it forms. Each range reads as its centre
+and how far it reaches either way (*78 ± 8%* is roughly 70% to 85%):
 
 - **Balance (F-beta)** - the one number that weighs the two kinds of mistake
   the way the Threshold does, with its likely range.
@@ -1534,8 +1638,11 @@ The right pane shows the result as it forms:
 - **Picks by band** - where the picks came from and what each band said.
 
 At **Done!** the verdict takes the middle of the screen, where the picks
-were: it reads the ranges in a sentence, and offers three ways out, as Toasty
-does when Autopilot finishes in Train. If the result is out of date, or the
+were. It lays the ranges out as a form, one value to a row: **Line Keeps**
+(how many items the line keeps), **Fraction Correct** (the likely share of
+them that is right) and **Fraction Found** (the likely share of all the
+matches the line keeps; in words, for a detector with no class model). It
+then offers three ways out, as Toasty does when Autopilot finishes in Train. If the result is out of date, or the
 line has moved since the test, a note over the verdict says so. The right pane
 keeps the numbers behind it.
 
@@ -1555,7 +1662,7 @@ keeps the numbers behind it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/test-verdict.dark.webp" />
-  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
+  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Tune view: the form reading the ranges (Line Keeps, Fraction Correct, Fraction Found), Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
 </picture>
 
 **The verdict is kept on the detector.** Reaching Done saves it with the
@@ -1805,7 +1912,7 @@ with bulk-action and per-card controls.
     positives**, **Stats**, **Export labels**) stay available, and
     **Tune** and **Find** work as usual. Under each name is the latest
     [test verdict](#the-result) the detector keeps (*Tested on
-    drawings-new: likely 70-85% right, about half of them found (34
+    drawings-new: likely 78 ± 8% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
     since, or *Untested*: an AutoFind detector ships its matches
     unchecked, and this is what it was measured to ship.
@@ -1900,9 +2007,12 @@ In the Train view he asks for your first vote over **Good** / **Bad** while
 Autopilot runs on a detector with no labels. Once you have voted, he moves
 beside the **Labels** panel until your next vote, saying that your votes go
 there and that you can change one by clicking it. Then he is back over **Good** / **Bad** through the run
-that trains the detector, saying what each phase is after and how far along it
-is (how many Goods and Bads it still needs, then that the detector retrains on
-every vote until the lights go green). On any run, when you click an item you
+that trains the detector, saying at every step what Autopilot is doing
+(looking for Goods, then Bads, then sharpening and double-checking your
+detector) and to keep clicking. While it sharpens the detector he adds that
+most detectors are trained within 50 votes, and that it never asks for more
+than 200. He speaks as Autopilot, in the first person:
+"I'm looking for Goods now. Keep clicking." On any run, when you click an item you
 have already labeled, he says what it is labeled, which button changes it, and
 that clicking Autopilot's current step on the left (or `↑`) goes back to
 Autopilot's pick. He explains the **Update Sort
@@ -2056,9 +2166,7 @@ edge-to-edge, and **hexagons** for text, where the tile is a density cell
 rather than a picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
-Top-left, **Rebuild Map** shuffles the items into a fresh layout
-(handy when a cluster lands somewhere awkward). To return to the
-inventory, use the **Dashboard** button in the top bar.
+To return to the inventory, use the **Dashboard** button in the top bar.
 
 ### Looking inside a tile
 
@@ -2108,6 +2216,10 @@ Browse.
 Browse can also open **scoped to a Tune result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
+Verified items leave the map and the rest stay where they were, so once
+you have verified some, a **Rebuild Map** button appears at the top left
+to lay the remaining items out afresh. It is there only then: a map that
+still shows everything it was built from has nothing to rebuild.
 (See [Tuning a detector](#tuning-a-detector), and
 [Explore a dataset with Browse](howto/explore-with-browse.md).)
 

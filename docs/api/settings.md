@@ -183,7 +183,13 @@ GET /api/labelset-sources
 ```
 
 → JSON array of source plugin objects, the same shape as the settings-source
-list.
+list plus three capability flags, each derived from the hooks the source
+implements: `supports_sync` (it can be a plain sync target, the kind a
+detector's binding above names), `supports_sharing` (it implements detector
+sharing; see the library guide's [The sharing
+contract](../../vtscore/docs/extending/labelset-sources.md#the-sharing-contract))
+and `supports_recipient_search`. A sharing-only source reports
+`supports_sync: false`.
 
 ### Get the deployment-wide labelset source
 
@@ -244,7 +250,16 @@ To clear the detector's own binding (it then follows the default again):
 → `{"ok": true, "message": "..."}` (the message counts any labels it restored)
 
 400 if a value is missing or not allowed, 403 unless the caller created the
-detector, 404 if the detector or `source_name` is unknown.
+detector, 404 if the detector or `source_name` is unknown. 409, whatever the
+body, when the binding is not this route's to change: `error_code:
+"detector_read_only"` for a received detector, `"detector_shared"` for one
+that syncs to a container it owns (replacing that binding would leave its
+recipients with a copy that never updates; [stop sharing
+it](detectors.md#stop-sharing-a-detector) first, which archives the
+container), and `"sharing_unavailable"` - the message saying why - when its
+container's source is not this server's active sharing source (the binding
+waits for that source to come back; a fork is a plain copy that can sync
+anywhere).
 
 ### Force sync from labelset source
 
@@ -261,7 +276,11 @@ labels are pushed back.
 
 If no source is configured (or the source is empty): `{"ok": false, "message": "..."}`
 (still 200). 403 if the caller cannot access the detector, 404 if it does not
-exist.
+exist. 409 when there is nothing to pull into it: `error_code:
+"detector_read_only"` for a received detector (it changes only by refresh),
+`"detector_shared"` for one whose labels are pushed to a container it owns
+(they are never pulled back), and `"sharing_unavailable"` - the message
+saying why - when its sharing source is not this server's active one.
 
 A rename moves a `{detector_name}`-templated server file to the new name's
 path itself; see [Rename detector](detectors.md#rename-detector).

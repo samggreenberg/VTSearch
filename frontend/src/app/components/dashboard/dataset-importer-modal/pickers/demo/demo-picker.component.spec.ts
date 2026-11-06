@@ -53,13 +53,21 @@ describe('DemoPickerComponent', () => {
 
   it('selecting a row records the selection without submitting', () => {
     openAndFlush();
-    let emitted = false;
-    component.demoDatasetSelected.subscribe(() => (emitted = true));
+    let started = false;
+    component.importStarted.subscribe(() => (started = true));
 
     component.selectDemo(mockDemos[0] as any);
     expect(component.selectedDemo()).toBe(mockDemos[0] as any);
     expect(component.demoDatasetName()).toBe('GTZAN');
-    expect(emitted).toBe(false);
+    httpMock.expectNone('/api/dataset/load-demo');
+    expect(started).toBe(false);
+  });
+
+  it('says to pick a demo while none is selected, the reason Import is disabled (#5533)', () => {
+    openAndFlush();
+    expect(component.submitBlocker).toBe('Select a demo dataset from the list');
+    component.selectDemo(mockDemos[0] as any);
+    expect(component.submitBlocker).toBe('');
   });
 
   // Zoneless oracle (docs/FRONTEND.md, *Testing*): the parent calls these
@@ -87,25 +95,88 @@ describe('DemoPickerComponent', () => {
     httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'audio').flush({ converters: [] });
   });
 
-  it('submit() emits demoDatasetSelected with the composed payload', () => {
-    openAndFlush();
-    component.selectDemo(mockDemos[0] as any);
+  // #5498: the picker starts the import itself and the modal closes only on
+  // the server's answer, so the wait shows as "Importing…" rather than as
+  // nothing, and a second click cannot start a second import.
+  describe('submit()', () => {
+    it('POSTs load-demo with the composed body, and announces the start only once the server answers', () => {
+      openAndFlush();
+      component.selectDemo(mockDemos[0] as any);
+      let started = false;
+      component.importStarted.subscribe(() => (started = true));
 
-    let payload: any = null;
-    component.demoDatasetSelected.subscribe((d) => (payload = d));
-    component.submit();
+      component.submit();
+      const req = httpMock.expectOne('/api/dataset/load-demo');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ name: 'gtzan', dataset_name: 'GTZAN', embedder: 'clap' });
+      expect(component.submitting()).toBe(true);
+      expect(started).toBe(false);
 
-    expect(payload).toBeTruthy();
-    expect(payload.name).toBe('gtzan');
-    expect(payload.dataset_name).toBe('GTZAN');
-  });
+      req.flush({ ok: true, message: 'Loading started', task_id: '_loading_1', task_ids: ['_loading_1'] });
+      expect(component.submitting()).toBe(false);
+      expect(started).toBe(true);
+    });
 
-  it('does nothing on submit() with no selection', () => {
-    openAndFlush();
-    let emitted = false;
-    component.demoDatasetSelected.subscribe(() => (emitted = true));
-    component.submit();
-    expect(emitted).toBe(false);
+    it('sends the ingest toggles and the AutoFind choice', () => {
+      fixture.componentRef.setInput('buildProjection', true);
+      fixture.componentRef.setInput('mergeNearDuplicates', true);
+      fixture.componentRef.setInput('autofind', false);
+      openAndFlush();
+      component.selectDemo(mockDemos[0] as any);
+
+      component.submit();
+      const body = httpMock.expectOne('/api/dataset/load-demo').request.body;
+      expect(body.build_projection).toBe('true');
+      expect(body.merge_near_duplicates).toBe('true');
+      expect(body.autofind).toBe('false');
+    });
+
+    it('ignores a second click while the first is out', () => {
+      openAndFlush();
+      component.selectDemo(mockDemos[0] as any);
+
+      component.submit();
+      component.submit();
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
+    });
+
+    it('keeps the modal open on a refusal, saying why, and lets the user try again', () => {
+      openAndFlush();
+      component.selectDemo(mockDemos[0] as any);
+      let started = false;
+      component.importStarted.subscribe(() => (started = true));
+
+      component.submit();
+      httpMock
+        .expectOne('/api/dataset/load-demo')
+        .flush({ message: 'Invalid dataset name' }, { status: 400, statusText: 'Bad Request' });
+      expect(started).toBe(false);
+      expect(component.submitting()).toBe(false);
+      expect(component.submitError()).toBe('Invalid dataset name');
+
+      component.submit();
+      expect(component.submitError()).toBe('');
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_2' });
+      expect(started).toBe(true);
+    });
+
+    it('paints the refusal under the form', async () => {
+      openAndFlush();
+      component.selectDemo(mockDemos[0] as any);
+      component.submit();
+      httpMock
+        .expectOne('/api/dataset/load-demo')
+        .flush({ message: 'Invalid dataset name' }, { status: 400, statusText: 'Bad Request' });
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.error-text')?.textContent).toContain('Invalid dataset name');
+    });
+
+    it('does nothing with no selection', () => {
+      openAndFlush();
+      component.submit();
+      httpMock.expectNone('/api/dataset/load-demo');
+      expect(component.submitting()).toBe(false);
+    });
   });
 
   it('offers an optional "Convert to" target (e.g. Face) for an embeddable tab with a registered converter', () => {
@@ -132,12 +203,11 @@ describe('DemoPickerComponent', () => {
     expect(component.selectedConverterTarget()).toBe('face');
 
     component.selectDemo(mockDemos[0] as any);
-    let payload: any = null;
-    component.demoDatasetSelected.subscribe((d) => (payload = d));
     component.submit();
 
-    expect(payload.converter).toBe('image2face');
-    expect(payload.embedder).toBe('face');
+    const body = httpMock.expectOne('/api/dataset/load-demo').request.body;
+    expect(body.converter).toBe('image2face');
+    expect(body.embedder).toBe('face');
   });
 
   describe('Multi-Dataset: a demo as linked datasets', () => {
@@ -185,10 +255,9 @@ describe('DemoPickerComponent', () => {
 
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: true })));
       component.selectDemo(celebs as any);
-      let payload: any = null;
-      component.demoDatasetSelected.subscribe((d) => (payload = d));
       component.submit();
 
+      const payload = httpMock.expectOne('/api/dataset/load-demo').request.body;
       expect(payload.name).toBe('celebrity_together_s');
       expect(payload.outputs).toEqual([
         { media_type: 'image', category: 'image', source_specs: [{ source_type: 'image', converter: null, params: {} }] },
@@ -212,6 +281,8 @@ describe('DemoPickerComponent', () => {
       component.setMultiDataset(true);
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
       expect(component.hasOutputs).toBe(false);
+      component.selectDemo(celebs as any);
+      expect(component.submitBlocker).toBe('Tick at least one kind of media to import');
     });
 
     it('a new tab starts from one dataset again', () => {

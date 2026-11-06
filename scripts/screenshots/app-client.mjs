@@ -96,14 +96,18 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
   }
 
   /**
-   * Create (if absent) and load a trainable image detector on *dataset*, seeded
-   * by *text*. *embedderType* locks it to one of the dataset's embedder types
-   * (`patch_semantic` for region voting); a detector already locked to a
-   * different type is dropped and made again.
+   * Create (if absent) and load a trainable detector of *mediaType* on
+   * *dataset*, seeded by *text*. *embedderType* locks it to one of the
+   * dataset's embedder types (`patch_semantic` for region voting); a detector
+   * already locked to a different type, or made for another media type, is
+   * dropped and made again.
    */
-  async function ensureDetector(name, dataset, text = query, embedderType = '') {
+  async function ensureDetector(name, dataset, text = query, embedderType = '', mediaType = 'image') {
     let existing = named(await detectors(), name);
-    if (existing && embedderType && existing.embedder_type !== embedderType) {
+    if (
+      existing &&
+      ((embedderType && existing.embedder_type !== embedderType) || (existing.media_type && existing.media_type !== mediaType))
+    ) {
       await dropDetectors(name);
       existing = undefined;
     }
@@ -115,7 +119,7 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
           dataset: dataset.id,
           body: {
             name,
-            media_type: 'image',
+            media_type: mediaType,
             text_query: text,
             ...(embedderType ? { embedder_type: embedderType } : {}),
           },

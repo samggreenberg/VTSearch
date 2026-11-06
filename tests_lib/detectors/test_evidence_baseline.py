@@ -7,7 +7,10 @@ Pinned here: what the stamp covers (any vote, the embedder, its width, ``k`` and
 read-modify-write that keeps every other key of the detector file.  And the
 draw a learned sort leaves (#5120): that it is the evidence route's draw over
 the same inputs, that it refuses once the detector has moved on, and that it
-lands once the sorts go quiet, or at once when a reader flushes it.
+lands once the sorts go quiet, or at once when a reader flushes it.  And the
+pointer-only draw a sort with no baseline to draw leaves (#5514): that it
+records the training dataset alone, once, and nothing once the detector has
+moved on.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from vtscore.detectors.evidence_baseline import (
     flush_baseline_draw,
     labelset_evidence,
     record_baseline,
+    record_training_dataset,
     scored_queries,
     stored_baseline,
     wait_for_baseline_draws,
@@ -35,6 +39,7 @@ from vtscore.detectors.evidence_baseline import (
 from vtscore.detectors.evidence_coverage import reference_cutoffs
 from vtscore.detectors.labelset_elements import stable_element_id
 from vtscore.detectors.store import _read_detector, _write_detector
+from vtscore.detectors.training_domain import TRAINING_DATASET_KEY, training_dataset_record
 from vtscore.state.core import DatasetContext, DetectorContext
 
 
@@ -115,6 +120,21 @@ class TestRecordingIt:
     def test_no_detector_file_writes_nothing(self, tmp_path):
         assert record_baseline(tmp_path / "gone.json", {"cut_pos": 0.1}) is False
         assert not (tmp_path / "gone.json").exists()
+
+    def test_the_training_dataset_rides_in_the_same_write(self, tmp_path):
+        """#5501: a baseline is drawn on the training dataset, so it records the pointer the overlap check follows."""
+        path = tmp_path / "birds.json"
+        _write_detector(path, {"name": "birds"})
+        baseline = _baseline(_stamp(_labels("good", "bad")))
+        training = training_dataset_record("ds", "Photos", 2)
+        assert record_baseline(path, baseline, training_dataset=training) is True
+        data = _read_detector(path)
+        assert data is not None
+        assert data[EVIDENCE_BASELINE_KEY] == baseline
+        assert data[TRAINING_DATASET_KEY] == {"dataset_id": "ds", "dataset_name": "Photos", "labels_held": 2}
+        assert record_baseline(path, baseline, training_dataset=training) is False
+        # A new count alone is a change worth writing.
+        assert record_baseline(path, baseline, training_dataset=training_dataset_record("ds", "Photos", 3)) is True
 
 
 _EMBEDDER = "emb"
@@ -242,6 +262,19 @@ class TestDeferringIt:
         assert flush_baseline_draw("det-a") is False
         assert wait_for_baseline_draws(timeout=0)
 
+    def test_a_landed_draw_records_its_training_dataset(self, tmp_path):
+        pending = dataclasses.replace(_world(tmp_path), labels_held=4)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        data = _read_detector(pending.path) or {}
+        assert data[TRAINING_DATASET_KEY] == {"dataset_id": "ds-a", "dataset_name": "A", "labels_held": 4}
+
+    def test_a_draw_holding_no_labels_records_no_pointer(self, tmp_path):
+        pending = _world(tmp_path)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        assert TRAINING_DATASET_KEY not in (_read_detector(pending.path) or {})
+
     def test_a_newer_sort_replaces_the_waiting_draw(self, tmp_path):
         older = _world(tmp_path)
         newer = dataclasses.replace(older, dataset_name="A, renamed")
@@ -291,3 +324,77 @@ class TestDeferringIt:
         assert flush_baseline_draw("det-none") is False
         discard_baseline_draw("det-none")
         assert wait_for_baseline_draws(timeout=0)
+
+
+class TestAPointerOnlyDraw:
+    """#5514: a sort whose head is not a Find's leaves the training-dataset pointer to land alone."""
+
+    @staticmethod
+    def _pointer_only(tmp_path) -> PendingDraw:
+        return dataclasses.replace(_world(tmp_path), labels_held=4, draws_baseline=False)
+
+    def test_it_draws_no_baseline(self, tmp_path):
+        assert self._pointer_only(tmp_path).draw() is None
+
+    def test_a_flush_records_the_pointer_alone(self, tmp_path):
+        pending = self._pointer_only(tmp_path)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        data = _read_detector(pending.path) or {}
+        assert data[TRAINING_DATASET_KEY] == {"dataset_id": "ds-a", "dataset_name": "A", "labels_held": 4}
+        assert EVIDENCE_BASELINE_KEY not in data
+        # The rest of the file is kept.
+        assert data["name"] == "birds" and data["labelset"] == pending.labelset.to_dict()
+
+    def test_once_quiet_it_lands_on_its_own(self, tmp_path):
+        pending = self._pointer_only(tmp_path)
+        defer_baseline_draw(pending, quiet=0.0)
+        assert wait_for_baseline_draws(timeout=30.0)
+        assert TRAINING_DATASET_KEY in (_read_detector(pending.path) or {})
+
+    def test_a_run_of_sorts_writes_the_file_once(self, tmp_path):
+        """One write per change: a sort that finds the pointer already recorded leaves the file alone."""
+        pending = self._pointer_only(tmp_path)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is False
+
+    def test_a_draw_holding_no_labels_records_nothing(self, tmp_path):
+        pending = dataclasses.replace(self._pointer_only(tmp_path), labels_held=0)
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is False
+        assert TRAINING_DATASET_KEY not in (_read_detector(pending.path) or {})
+
+    def test_a_vote_since_records_nothing(self, tmp_path):
+        pending = self._pointer_only(tmp_path)
+        pending.det_ctx.cached_labelset = LabelSet([*pending.labelset.elements, _element(pending.medias[4], "good")])
+        assert pending.moved_on()
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is False
+        assert TRAINING_DATASET_KEY not in (_read_detector(pending.path) or {})
+
+    def test_recording_it_repoints_the_detectors_cached_labelset(self, tmp_path):
+        pending = self._pointer_only(tmp_path)
+        before = pending.det_ctx.cached_labelset
+        defer_baseline_draw(pending, quiet=3600.0)
+        assert flush_baseline_draw("det-a") is True
+        assert pending.det_ctx.cached_labelset is not before
+        assert pending.det_ctx.cached_labelset_mtime == pending.path.stat().st_mtime
+
+
+class TestRecordingThePointerAlone:
+    def test_it_writes_only_when_the_pointer_changes(self, tmp_path):
+        path = tmp_path / "birds.json"
+        _write_detector(path, {"name": "birds", EVIDENCE_BASELINE_KEY: {"k": 5}})
+        pointer = training_dataset_record("ds-a", "A", 3)
+        assert record_training_dataset(path, pointer) is True
+        assert record_training_dataset(path, pointer) is False
+        assert record_training_dataset(path, training_dataset_record("ds-a", "A", 4)) is True
+        data = _read_detector(path) or {}
+        assert data[TRAINING_DATASET_KEY]["labels_held"] == 4
+        # A baseline already recorded is left as it was.
+        assert data[EVIDENCE_BASELINE_KEY] == {"k": 5}
+
+    def test_no_detector_file_no_write(self, tmp_path):
+        assert record_training_dataset(tmp_path / "missing.json", training_dataset_record("ds-a", "A", 3)) is False

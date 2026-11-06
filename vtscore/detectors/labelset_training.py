@@ -60,6 +60,7 @@ from vtscore.detectors.labelset_matrix import (
     labelset_calibrating_groups,
     labelset_resolution_report,
 )
+from vtscore.media.face.face_ball import face_compat_of
 from vtscore.detectors.labelset_structural import maybe_labelset_structural_rerank, populate_label_local_features
 
 __all__ = [
@@ -140,7 +141,10 @@ def train_from_labelset(
 
     quota_tier = quota_from_groups(groups).tier
     # The face crops' ball holds past the quota from beta 1 up (#5478); a typed query reads the quota's own tier.
-    tier = face_ball_tier(quota_tier, media_type or det_ctx.media_type, _centroid_beta(det_ctx), _n_goods(y_list))
+    det_ctx.face_compat = face_compat_of(snap)
+    tier = face_ball_tier(
+        quota_tier, media_type or det_ctx.media_type, _centroid_beta(det_ctx), _n_goods(y_list), det_ctx.face_compat
+    )
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
@@ -286,7 +290,8 @@ def labelset_train_and_score(
         from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
 
         quota_tier = quota_from_groups(groups).tier
-        tier = face_ball_tier(quota_tier, media_type or det_ctx.media_type, beta, _n_goods(y_list))
+        det_ctx.face_compat = face_compat_of(clips_dict)
+        tier = face_ball_tier(quota_tier, media_type or det_ctx.media_type, beta, _n_goods(y_list), det_ctx.face_compat)
         labelled = set(labeled_media_labels(labelset, clips_dict))
         if text_query and _query_tier(quota_tier, labelset, det_ctx.embedder):
             installed = install_query_head(

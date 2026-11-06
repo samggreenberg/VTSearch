@@ -113,6 +113,25 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     expect(votingOverlay().querySelector('.btn-good.voted')).not.toBeNull();
   });
 
+  // #5578: a received detector's labels are its owner's. The vote keys and
+  // undo do nothing, and the overlay says so with a Fork the host answers.
+  it('takes no keyboard vote or undo on a read-only detector, and forwards the Fork', async () => {
+    fixture.componentRef.setInput('readOnly', true);
+    await settleZoneless(fixture);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    await settleZoneless(fixture);
+    httpMock.expectNone('/api/medias/1/vote');
+
+    expect((votingOverlay().querySelector('.btn-good') as HTMLButtonElement).disabled).toBe(true);
+    expect(votingOverlay().querySelector('.read-only-hint')?.textContent).toContain('Read-only: fork to edit');
+    let forked = 0;
+    component.forkRequested.subscribe(() => forked++);
+    (votingOverlay().querySelector('.fork-btn') as HTMLButtonElement).click();
+    expect(forked).toBe(1);
+  });
+
   it('shows the undo toast after a keyboard Cmd/Ctrl-Z, with no manual detectChanges', async () => {
     // Land a vote first so the undo stack has an entry to pop.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
@@ -430,6 +449,44 @@ describe('CenterPanelComponent', () => {
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
     expect(component.voteState.goodVotes.has(1)).toBe(true);
+  });
+
+  /**
+   * #5502: Tune's test votes its picks on this same pane, but the votes are the
+   * test's: the host sends them, so the pane only swipes and emits, lights the
+   * buttons from the host's vote, keeps undo off and draws no region.
+   */
+  describe('with the votes the host\'s (#5502)', () => {
+    beforeEach(() => {
+      fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image' });
+      fixture.componentRef.setInput('hostVotes', true);
+      component.showAnimations.set(false);
+      TestBed.tick();
+    });
+
+    it('emits the vote and sends nothing of its own', () => {
+      let emitted: { id: number; vote: string } | undefined;
+      component.mediaVoted.subscribe((e: { id: number; vote: string }) => (emitted = e));
+      component.castVote('bad');
+      httpMock.expectNone('/api/medias/1/vote');
+      expect(emitted).toEqual({ id: 1, vote: 'bad' });
+      expect(component.voteState.badVotes.has(1)).toBe(false);
+      expect(component.isVoting()).toBe(false);
+    });
+
+    it("lights the host's vote, not the vote state's", () => {
+      vi.spyOn(component.voteState, 'effectiveGood').mockReturnValue(true);
+      expect(component.isGood).toBe(false);
+      fixture.componentRef.setInput('hostVote', 'bad');
+      expect(component.isBad).toBe(true);
+      expect(component.isGood).toBe(false);
+    });
+
+    it('offers no region to draw: a host-owned vote carries none', () => {
+      expect(component.regionDrawOffered).toBe(false);
+      fixture.componentRef.setInput('hostVotes', false);
+      expect(component.regionDrawOffered).toBe(true);
+    });
   });
 
   /**

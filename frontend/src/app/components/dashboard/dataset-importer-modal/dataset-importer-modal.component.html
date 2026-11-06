@@ -55,7 +55,7 @@
         (mergeNearDuplicatesChange)="onMergeNearDuplicatesChange($event)"
         (typeDefaultsApplied)="onTypeDefaultsApplied($event)"
         [autofind]="autofindFlag"
-        (demoDatasetSelected)="onDemoDatasetSelected($event)"
+        (importStarted)="importStarted.emit()"
       ></vt-demo-picker>
     </ng-container>
 
@@ -95,7 +95,7 @@
       @if (localFolderPicker().pickerKind() === 'folder') {
         <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
-        <p class="info-text">
+        <p class="info-text" title="A text file of server paths, or a .npz">
           Upload a single file from <strong>this computer</strong> that lists the media to import.<vt-field-hint-icon hint="A UTF-8 text file with one server-side path per line, or a .npz archive of paths plus their pre-computed fingerprints."></vt-field-hint-icon>
         </p>
       }
@@ -189,7 +189,7 @@
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit()">
+      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit()" [title]="genericFormPicker().submitBlocker()">
         @if (genericFormPicker().submitting()) {
           Importing…
         } @else {
@@ -202,7 +202,7 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="localFolderPicker().submit()" [disabled]="localFolderPicker().submitting() || localFolderPicker().files().length === 0 || !localFolderPicker().hasOutputs">
+      <button class="btn btn--primary" (click)="localFolderPicker().submit()" [disabled]="localFolderPicker().submitting() || !!localFolderPicker().submitBlocker" [title]="localFolderPicker().submitBlocker">
         @if (localFolderPicker().submitting()) {
           Uploading…
         } @else {
@@ -215,7 +215,7 @@
   @if (activePickerView === 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="serverFolderPicker().submit()" [disabled]="serverFolderPicker().submitting() || !serverFolderPicker().folderPath() || !serverFolderPicker().hasOutputs">
+      <button class="btn btn--primary" (click)="serverFolderPicker().submit()" [disabled]="serverFolderPicker().submitting() || !!serverFolderPicker().submitBlocker" [title]="serverFolderPicker().submitBlocker">
         @if (serverFolderPicker().submitting()) {
           Importing…
         } @else {
@@ -228,7 +228,13 @@
   @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo() || !demoPicker().hasOutputs">Import</button>
+      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="demoPicker().submitting() || !!demoPicker().submitBlocker" [title]="demoPicker().submitBlocker">
+        @if (demoPicker().submitting()) {
+          Importing…
+        } @else {
+          Import
+        }
+      </button>
     </div>
   }
 </vt-modal>

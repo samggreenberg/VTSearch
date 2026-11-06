@@ -1,7 +1,7 @@
 <div class="vote-section">
   <div class="vote-section-header">
     <div class="vote-section-heading">
-      <h3 [class]="label()" [title]="label() === 'good' ? 'Items you have marked as positive examples (' + ids().length + ')' : 'Items you have marked as negative examples (' + ids().length + ')'">
+      <h3 class="vote-section-title" [class]="label()" [title]="label() === 'good' ? 'Items you have marked as positive examples (' + ids().length + ')' : 'Items you have marked as negative examples (' + ids().length + ')'">
         {{ headingLabel() ?? (label() === 'good' ? 'Goods' : 'Bads') }} ({{ ids().length | number }})
       </h3>
       @if (foldedNote()) {

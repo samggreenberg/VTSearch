@@ -46,20 +46,28 @@ def _centroid_beta(det_ctx) -> float | None:
     return detector_beta(det_ctx) if isinstance(det_ctx, DetectorContext) else line_knobs()["beta"]
 
 
-def face_ball_tier(tier: str, media_type: str | None, beta: float | None, n_goods: int) -> str:
+def face_ball_tier(
+    tier: str, media_type: str | None, beta: float | None, n_goods: int, compat: str | None = None
+) -> str:
     """*tier*, or the Goods' centroid where the face crops' ball holds past the quota (#5478).
 
     On face crops, from a balance of 1 up and with two Goods or more, Find and
     Test give the Goods' centroid cut by the ball
-    (:data:`~vtscore.detectors.centroid_head.FACE_BALL_RULE`) in place of the
+    (:func:`~vtscore.detectors.centroid_head.face_ball_rule`) in place of the
     trained head: on FHIBE it gained +0.010 to +0.019 F-beta over a session.
-    The Train view's learned sort, and so what Autopilot asks, is still the
-    trained head.  Every other tier, media type and balance is *tier*.
+    Only in a face space (*compat*) that has a ball (#5497); in any other the
+    trained head stands.  The Train view's learned sort, and so what Autopilot
+    asks, is still the trained head.  Every other tier, media type and balance
+    is *tier*.
     """
-    from vtscore.detectors.centroid_head import FACE_BALL_RULE, centroid_line_rule, face_ball_holds
+    from vtscore.detectors.centroid_head import centroid_line_rule, face_ball_holds, is_face_ball_rule
     from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED
 
-    if tier == TIER_TRAINED and centroid_line_rule(media_type) == FACE_BALL_RULE and face_ball_holds(beta, n_goods):
+    if (
+        tier == TIER_TRAINED
+        and face_ball_holds(beta, n_goods)
+        and is_face_ball_rule(centroid_line_rule(media_type, compat))
+    ):
         return TIER_CENTROID
     return tier
 
@@ -89,7 +97,8 @@ def install_centroid_head(
     and *beta* is the balance the line is drawn at (#4732): the detector's own,
     as a trained head's is.  *line_mask* flags the scored media the line counts:
     the unvoted ones (#4779, :func:`_unvoted_mask`).  The line is drawn by the
-    detector's media type's rule (:func:`~vtscore.detectors.centroid_head.centroid_line_rule`, #5325).
+    detector's media type's rule (:func:`~vtscore.detectors.centroid_head.centroid_line_rule`, #5325),
+    in the face space of the corpus it last trained on (``det_ctx.face_compat``, #5497).
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
     the centroid has no calibration folds, no fitted cut and no labels line.  It
@@ -104,7 +113,7 @@ def install_centroid_head(
     """
     from vtscore.detectors.centroid_head import centroid_line_rule, fit_centroid
 
-    rule = centroid_line_rule(getattr(det_ctx, "media_type", None))
+    rule = centroid_line_rule(getattr(det_ctx, "media_type", None), getattr(det_ctx, "face_compat", None))
     head, threshold, line = fit_centroid(goods, score, rule=rule, beta=beta, line_mask=line_mask)
     voted = [] if ids is None or line_mask is None else [i for i, n in zip(ids, line_mask, strict=True) if not n]
     _store_quota_head(det_ctx, head, threshold, line, labelset, _quota_ranking(head, score, ids, voted))

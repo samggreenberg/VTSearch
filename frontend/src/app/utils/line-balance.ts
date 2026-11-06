@@ -215,9 +215,26 @@ export function nearestBalancePreset(b: number): BalancePreset {
   });
 }
 
-/** "11–73%" for a range: what a check measured stays a number (#4298). */
+/**
+ * A likely range as its centre and half-width, rounded to whole units of
+ * `1 / scale`: [0.91, 1.00] at scale 100 is `[96, 5]`. Both come from the
+ * rounded ends, so the same range always reads the same, free of float noise
+ * at the halves.
+ */
+export function midHalfWidth(range: Pick<LikelyRange, 'lo' | 'hi'>, scale: number): [number, number] {
+  const lo = Math.round(range.lo * scale);
+  const hi = Math.round(range.hi * scale);
+  return [Math.round((lo + hi) / 2), Math.round((hi - lo) / 2)];
+}
+
+/**
+ * "42 ± 31%" for a range: what a check measured stays a number (#4298), read
+ * as its centre and how far either way it likely reaches (#5503), not as its
+ * two ends.
+ */
 export function rangePercent(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
-  return `${Math.round(range.lo * 100)}–${Math.round(range.hi * 100)}%`;
+  const [mid, delta] = midHalfWidth(range, 100);
+  return `${mid} ± ${delta}%`;
 }
 
 /**

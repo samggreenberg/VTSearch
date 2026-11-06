@@ -26,6 +26,20 @@ have been quiet for :data:`DRAW_QUIET_SECONDS`.  A newer sort's replaces it,
 so a burst of votes costs one draw.  A reader that cannot wait lands it at once
 with :func:`flush_baseline_draw`, and a normal exit lands any still waiting
 (a SIGKILL loses it, and the next test on the training dataset draws it).
+
+**The training-dataset pointer rides the same write** (#5501): the dataset a
+draw is made on is the detector's training dataset, so it is recorded with the
+baseline.  A sort whose head is not the one a Find scores with (a centroid
+under the label quota, a typed-query detector's hold) has no baseline to draw,
+but it is still on the training dataset, so it leaves a pointer-only draw
+(``draws_baseline=False``) that lands the pointer alone, on the same timer
+(#5514): a detector trained in the Train view and never Tuned there still
+names its training dataset, and a run of votes still costs one write.
+
+**So does the training dataset's summary** (#5567): wherever the pointer is
+written, the dataset it names is summarised
+(:func:`~vtscore.detectors.domain_summary.domain_summary_for`) and recorded
+with it, so the overlap check can still run where the dataset never arrives.
 """
 
 from __future__ import annotations
@@ -99,8 +113,23 @@ def stored_baseline(detector_data: Mapping[str, Any] | None, stamp: Mapping[str,
     return dict(baseline)
 
 
-def record_baseline(path: Path, baseline: Mapping[str, Any], *, det_ctx: "DetectorContext | None" = None) -> bool:
+def record_baseline(
+    path: Path,
+    baseline: Mapping[str, Any],
+    *,
+    det_ctx: "DetectorContext | None" = None,
+    training_dataset: Mapping[str, Any] | None = None,
+    domain_summary: Mapping[str, Any] | None = None,
+) -> bool:
     """Record *baseline* on the detector file at *path*, unless it already holds it; whether it wrote.
+
+    A baseline is only ever drawn on the detector's training dataset, so
+    *training_dataset* (:func:`~vtscore.detectors.training_domain.training_dataset_record`),
+    when given, is recorded in the same write: the pointer the overlap check
+    follows when that dataset is not loaded (#5501).  So is *domain_summary*
+    (:func:`~vtscore.detectors.domain_summary.domain_summary_for`), the
+    summary of that dataset it reads when the dataset is not here at all
+    (#5567).
 
     The read-modify-write runs under ``label_sync_write_lock``, as every other
     detector-JSON writer's does, so a vote landing meanwhile is never lost.
@@ -111,15 +140,62 @@ def record_baseline(path: Path, baseline: Mapping[str, Any], *, det_ctx: "Detect
     Never call this holding :data:`vtscore.state.core._state_lock`: the label
     sync takes that lock while it holds the write lock.
     """
+    updates: dict[str, Any] = {EVIDENCE_BASELINE_KEY: dict(baseline)}
+    updates.update(_training_updates(training_dataset, domain_summary))
+    return _record_on_detector(path, updates, det_ctx)
+
+
+def record_training_dataset(
+    path: Path,
+    training_dataset: Mapping[str, Any],
+    *,
+    det_ctx: "DetectorContext | None" = None,
+    domain_summary: Mapping[str, Any] | None = None,
+) -> bool:
+    """Record *training_dataset* without a baseline on the detector file at *path*, unless it holds it; whether it wrote.
+
+    The pointer :func:`record_baseline` writes with a baseline, for a detector
+    on its training dataset with no baseline to draw there (#5514), and the
+    dataset's *domain_summary* with it when given (#5567).  Written as
+    :func:`record_baseline` writes, under the same lock and with the same
+    re-pointing of *det_ctx*'s cached labelset; the same lock rule applies.
+    """
+    return _record_on_detector(path, _training_updates(training_dataset, domain_summary), det_ctx)
+
+
+def _training_updates(
+    training_dataset: Mapping[str, Any] | None, domain_summary: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """The detector-JSON keys naming its training dataset: the pointer, and the summary when there is one.
+
+    A summary is only ever recorded beside the pointer to the dataset it
+    summarises, so a pointer that moves to another dataset never leaves the
+    old dataset's summary behind.
+    """
+    from vtscore.detectors.domain_summary import DOMAIN_SUMMARY_KEY  # noqa: PLC0415
+    from vtscore.detectors.training_domain import TRAINING_DATASET_KEY  # noqa: PLC0415
+
+    if training_dataset is None:
+        return {}
+    updates: dict[str, Any] = {TRAINING_DATASET_KEY: dict(training_dataset)}
+    if domain_summary is not None and domain_summary.get("dataset_id") == training_dataset.get("dataset_id"):
+        updates[DOMAIN_SUMMARY_KEY] = dict(domain_summary)
+    return updates
+
+
+def _record_on_detector(path: Path, updates: Mapping[str, Any], det_ctx: "DetectorContext | None") -> bool:
+    """Merge *updates* into the detector file at *path* unless it holds them all already; whether it wrote."""
     from vtscore.detectors.dataset_sync import _repoint_labelset_cache  # noqa: PLC0415
     from vtscore.detectors.labelset_ops import label_sync_write_lock  # noqa: PLC0415
     from vtscore.detectors.store import _read_detector, _write_detector  # noqa: PLC0415
 
     with label_sync_write_lock:
         data = _read_detector(path)
-        if data is None or data.get(EVIDENCE_BASELINE_KEY) == dict(baseline):
+        if data is None:
             return False
-        data[EVIDENCE_BASELINE_KEY] = dict(baseline)
+        if all(data.get(key) == value for key, value in updates.items()):
+            return False
+        data.update(updates)
         _write_detector(path, data)
     if det_ctx is not None:
         _repoint_labelset_cache(det_ctx, path)
@@ -225,7 +301,11 @@ class PendingDraw:
     *dataset* it scored, and *threshold* its line; *labelset* is the labels it
     trained on, whose vectors in *embedder* *det_ctx* holds.  *stamp*,
     *dataset_id* / *dataset_name* and *path* say what the baseline is recorded
-    as and where.  Nothing is computed until :meth:`draw`.
+    as and where, and *labels_held* how many of the labels *dataset* holds, for
+    the training-dataset pointer recorded with it (#5501).  *draws_baseline*
+    is false when the sort's head is not the one a Find scores with, so there is
+    no baseline to draw and only the pointer lands (#5514).  Nothing is
+    computed until :meth:`draw`.
     """
 
     detector_id: str
@@ -240,18 +320,44 @@ class PendingDraw:
     results: Sequence[Mapping[str, Any]]
     threshold: float
     embedder: str | None
+    labels_held: int = 0
+    draws_baseline: bool = True
 
-    def draw(self) -> dict[str, Any] | None:
-        """The baseline, or ``None`` when the detector has moved on since: a vote, or its labels re-read in another space."""
+    def moved_on(self) -> bool:
+        """Whether the detector has moved on since the sort: a vote, or its labels re-read in another space."""
         from vtscore.detectors.learned_sort import resolve_active_labelset  # noqa: PLC0415
-        from vtscore.detectors.training_domain import labelled_media_ids  # noqa: PLC0415
 
         current, _media_type = resolve_active_labelset(self.det_ctx)
         if current is None or (self.det_ctx.embedder or None) != self.embedder:
+            return True
+        stamp = self.stamp
+        return baseline_stamp(current, stamp["embedder"], stamp["dim"], k=stamp["k"], alpha=stamp["alpha"]) != dict(
+            stamp
+        )
+
+    def training_dataset(self) -> dict[str, Any] | None:
+        """The training-dataset pointer to record (#5501), or ``None`` when *dataset* holds none of the labels."""
+        from vtscore.detectors.training_domain import training_dataset_record  # noqa: PLC0415
+
+        if self.labels_held <= 0:
+            return None
+        return training_dataset_record(self.dataset_id, self.dataset_name, self.labels_held)
+
+    def domain_summary(self) -> dict[str, Any] | None:
+        """The summary of *dataset* to record with the pointer (#5567), or ``None`` when there is none to draw."""
+        from vtscore.detectors.domain_summary import domain_summary_for  # noqa: PLC0415
+
+        if self.labels_held <= 0:
+            return None
+        return domain_summary_for(self.dataset_id, self.medias)
+
+    def draw(self) -> dict[str, Any] | None:
+        """The baseline, or ``None`` when there is none to draw (*draws_baseline*) or the detector has :meth:`moved_on`."""
+        from vtscore.detectors.training_domain import labelled_media_ids  # noqa: PLC0415
+
+        if not self.draws_baseline or self.moved_on():
             return None
         stamp = self.stamp
-        if baseline_stamp(current, stamp["embedder"], stamp["dim"], k=stamp["k"], alpha=stamp["alpha"]) != dict(stamp):
-            return None
         evidence = labelset_evidence(self.det_ctx, self.labelset)
         if evidence is None:
             return None
@@ -310,10 +416,30 @@ def _take_locked(detector_id: str, pending: PendingDraw | None = None) -> Pendin
 
 
 def _land(pending: PendingDraw) -> bool:
-    """Draw *pending* and record it; whether it wrote.  Its detector is marked in flight by the caller."""
+    """Draw *pending* and record it, or record its pointer alone; whether it wrote.
+
+    Its detector is marked in flight by the caller.  A pointer-only draw lands
+    under the same rule as a baseline: not once the detector has moved on,
+    since the next sort leaves a fresher one.
+    """
     try:
+        training = pending.training_dataset()
+        if not pending.draws_baseline:
+            if training is None or pending.moved_on():
+                return False
+            return record_training_dataset(
+                pending.path, training, det_ctx=pending.det_ctx, domain_summary=pending.domain_summary()
+            )
         baseline = pending.draw()
-        return baseline is not None and record_baseline(pending.path, baseline, det_ctx=pending.det_ctx)
+        if baseline is None:
+            return False
+        return record_baseline(
+            pending.path,
+            baseline,
+            det_ctx=pending.det_ctx,
+            training_dataset=training,
+            domain_summary=pending.domain_summary() if training is not None else None,
+        )
     except Exception:  # noqa: BLE001 - a side channel: the next test on the training dataset draws it
         logger.exception("Failed to draw the Evidence baseline of detector %s", pending.detector_id)
         return False

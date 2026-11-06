@@ -289,3 +289,15 @@ describe('formatEta', () => {
     expect(formatEta(12.4)).toBe('About 12 sec left');
   });
 });
+
+describe('formatProgressHeader for a People fit (#5590)', () => {
+  it("names the job, says what it does, and keeps the fit's message as the detail", () => {
+    const info = formatProgressHeader(
+      { status: 'building', message: 'Finding people among 1200 faces…', current: 3, total: 10 },
+      'people',
+    );
+    expect(info.header).toBe('Finding people');
+    expect(info.subtitle).toContain('Merging the faces');
+    expect(info.detail).toBe('3/10 people among 1200 faces…');
+  });
+});

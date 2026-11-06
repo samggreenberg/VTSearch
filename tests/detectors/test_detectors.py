@@ -1287,6 +1287,22 @@ class TestDetectorStats:
         assert isinstance(data["readers"], list)
         # A detector no label importer created was not imported (#5334).
         assert data["imported"] is None
+        assert data["importer_display_name"] == ""
+        assert data["imported_rows"] == []
+
+    def test_stats_name_the_embedder_by_its_display_name(self, client):
+        """#5617: the window shows the embedder as its pickers name it."""
+        from vtscore.detectors.registry import update_detector
+        from vtscore.media import get_embedder
+
+        detector_id = self._register(client, name="EmbedName")
+        data = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        assert data["embedder_display_name"] == ""  # never trained: no embedder recorded
+
+        update_detector(detector_id, embedder="clap")
+        data = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        assert data["embedder"] == "clap"
+        assert data["embedder_display_name"] == get_embedder("clap").display_name
 
     def test_stats_counts_positives_and_negatives(self, client):
         from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -2892,6 +2908,14 @@ class TestRegisterModelFromLabelset:
 
         stats = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
         assert stats["imported"] == imported
+        # The Import section reads in the import form's words (#5620): the
+        # importer's display name, and its fields under their own labels.
+        assert stats["importer_display_name"] == "Server JSON File"
+        assert [(row["label"], row["value"]) for row in stats["imported_rows"]] == [
+            ("Server path", imported["params"]["filepath"])
+        ]
+        assert stats["imported_rows"][0]["key"] == "filepath"
+        assert stats["imported_rows"][0]["description"]  # the field's own description, for a tooltip
 
     def test_missing_name_returns_422(self, client, tmp_path):
         labels_path = tmp_path / "labels.json"

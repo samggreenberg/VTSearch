@@ -91,16 +91,27 @@
                 &larr; Back to {{ backTarget }}
               </button>
             }
-            <button
-              type="button"
-              class="btn btn--secondary btn--sm browse-reproject"
-              (click)="onReproject()"
-              [title]="subset
-                ? 'Rebuild the map from the items shown'
-                : 'Rebuild the map from all items'">
-              <vt-icon type="shuffle" [size]="14"></vt-icon>
-              Rebuild Map
-            </button>
+            @if (rebuildOffered()) {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-reproject"
+                (click)="onReproject()"
+                title="Lay the remaining items out afresh, closing the gaps the verified ones left">
+                <vt-icon type="shuffle" [size]="14"></vt-icon>
+                Rebuild Map
+              </button>
+            }
+            @if (peopleOffered()) {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-people"
+                (click)="openPeople()"
+                title="The people in this dataset's faces, and who appears with whom in its photos"
+              >
+                <vt-icon type="face" [size]="14"></vt-icon>
+                People
+              </button>
+            }
             @if (mediaType() === 'audio') {
               <div class="browse-now-playing">
                 <!-- A shown docked bin-details panel replaces this small
@@ -268,7 +279,7 @@
                 class="browse-size-btn"
                 [disabled]="atMinHexSize"
                 (click)="bumpHexSize(-1)"
-                title="Smaller thumbnails"
+                [title]="atMinHexSize ? 'Already the smallest thumbnails' : 'Smaller thumbnails'"
                 aria-label="Smaller thumbnails">
                 <vt-icon type="image" [size]="11"></vt-icon>
               </button>
@@ -277,7 +288,7 @@
                 class="browse-size-btn"
                 [disabled]="atMaxHexSize"
                 (click)="bumpHexSize(1)"
-                title="Bigger thumbnails"
+                [title]="atMaxHexSize ? 'Already the biggest thumbnails' : 'Bigger thumbnails'"
                 aria-label="Bigger thumbnails">
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>

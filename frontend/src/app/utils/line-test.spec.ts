@@ -18,9 +18,17 @@ describe('line-test helpers (#4524)', () => {
     });
   });
 
-  it('writes a range as whole percents and F-beta as a point with its range', () => {
-    expect(estimatePercent(estimate(0.75, 0.554, 0.946))).toBe('55–95%');
-    expect(fbetaHeadline(estimate(0.6, 0.45, 0.78))).toBe('0.60 (0.45–0.78)');
+  it('writes a range as its centre ± half-width in whole percents, and F-beta the same in hundredths (#5503)', () => {
+    expect(estimatePercent(estimate(0.75, 0.554, 0.946))).toBe('75 ± 20%');
+    expect(fbetaHeadline(estimate(0.6, 0.45, 0.78))).toBe('0.62 ± 0.17');
+  });
+
+  it('rounds the centre and half-width from the rounded ends, halves up (#5503)', () => {
+    // 91–100% is 95.5 ± 4.5: whole numbers, as the owner asked, even though 96 + 5 passes 100.
+    expect(estimatePercent(estimate(0.97, 0.91, 1))).toBe('96 ± 5%');
+    // Float noise at a half (0.955 * 100 is 95.4999…) cannot tip it: the ends round first.
+    expect(estimatePercent(estimate(0.95, 0.91, 0.9999))).toBe('96 ± 5%');
+    expect(estimatePercent(estimate(0.5, 0.5, 0.5))).toBe('50 ± 0%');
   });
 
   it('reads the phase off the test, and score before one exists', () => {
@@ -51,10 +59,10 @@ describe('line-test helpers (#4524)', () => {
 
     it('reads the result once done, green, with the share right as a number and the found share in words', () => {
       const st = testLineState(wireLineTest(wireDone()), 64)!;
-      expect(st.text).toBe('Tested · likely 55–95% right, about half of them found (checked 65) · 64 kept');
+      expect(st.text).toBe('Tested · likely 75 ± 20% right, about half of them found (checked 65) · 64 kept');
       expect(st.dot).toBe('green');
       expect(st.title).toContain('65 random picks from both sides of the line');
-      expect(st.title).toContain('30–70% of all the matches');
+      expect(st.title).toContain('50 ± 20% of all the matches');
     });
 
     it('says the line moved, and keeps the measured count apart from the kept one', () => {
@@ -80,16 +88,16 @@ describe('line-test helpers (#4524)', () => {
 
   describe('a kept verdict (#4526)', () => {
     it('reads in one line: the dataset, the share right, the share found, the picks and the date', () => {
-      expect(verdictLine(wireVerdict())).toBe('drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+      expect(verdictLine(wireVerdict())).toBe('drawings-new: likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)');
       expect(verdictLine(wireVerdict({ labelled: 1, dataset_name: '' }))).toBe(
-        'a dataset: likely 70–85% right, about half of them found (1 pick, 2026-10-05)',
+        'a dataset: likely 78 ± 8% right, about half of them found (1 pick, 2026-10-05)',
       );
     });
 
     it('says in its title what was measured, and why a stale one no longer describes the detector', () => {
       const fresh = verdictTitle(wireVerdict());
-      expect(fresh).toContain('34 random picks found the top 64 of 200 likely 70–85% right');
-      expect(fresh).toContain('F-beta at its balance, 0.60 (0.50–0.70).');
+      expect(fresh).toContain('34 random picks found the top 64 of 200 likely 78 ± 8% right');
+      expect(fresh).toContain('F-beta at its balance, 0.60 ± 0.10.');
       expect(fresh).not.toContain('Out of date');
       expect(verdictTitle(wireVerdict({ stale: true }))).toContain('Out of date: the detector has been retrained since');
     });

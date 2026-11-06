@@ -26,6 +26,7 @@ import math
 import numpy as np
 import pytest
 
+from tests_shared.face_ball import face_ball_space  # noqa: F401
 from vtscore.training.thresholds import gmm as G
 from vtscore.training.thresholds import text_sort
 from vtscore.training.thresholds import (
@@ -352,9 +353,24 @@ class TestTheOpeningReadsTheAcquisitionCut:
         _results, cuts = text_sort_active(query)
         assert cuts == TextSortCuts(0.123, 0.0456, "tail")
 
-    @pytest.mark.parametrize(("media_type", "rule"), [("image", "count_gap_floor_skip25_b1"), ("face", "face_ball")])
-    def test_an_example_sort_draws_its_media_types_centroid_rule(self, monkeypatch, media_type, rule):
-        """#5325: face crops' example sort is cut by their own centroid rule, and its sort line keeps it."""
+    @pytest.mark.parametrize(
+        ("media_type", "rule", "compat"),
+        [
+            ("image", "count_gap_floor_skip25_b1", None),
+            ("face", "count_gap_floor_skip25_b1_z5.5", None),
+            ("face", "face_ball[oss-arcface-mbf:1]", "oss-arcface-mbf:1"),
+        ],
+    )
+    def test_an_example_sort_draws_its_media_types_centroid_rule(
+        self,
+        monkeypatch,
+        face_ball_space,  # noqa: F811
+        media_type,
+        rule,
+        compat,
+    ):
+        """#5325: face crops' example sort is cut by their own centroid rule, and its sort line keeps it: the
+        ball in their face space where it has one (#5497), else the count from before it."""
         from vtscore.state import get_active_context
         from vtscore.training.query_sort import cosine_sort_cuts
 
@@ -363,6 +379,8 @@ class TestTheOpeningReadsTheAcquisitionCut:
         query = _fill_active_medias()
         for media in get_active_context().medias.values():
             media["media_type"] = media_type
+            if compat:
+                media.setdefault("custom_metadata", {})["Face Compat"] = compat
         _results, cuts = cosine_sort_cuts(query, role="score", beta=1.0)
         assert cuts.branch == rule
         assert cuts.line is not None

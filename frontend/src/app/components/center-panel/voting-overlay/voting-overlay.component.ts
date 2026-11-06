@@ -2,16 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, input, OnDestroy, output,
 import { IconComponent } from '../../icon/icon.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { HintId } from '../../../services/hints.service';
+import { STOP_CAP_VOTES, TYPICAL_DONE_VOTES } from '../../../services/autopilot-state.service';
+import { READ_ONLY_HINT } from '../../../utils/detector-sharing';
 
 /**
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
  * picks one: Train's label view walks `start-voting` and the Autopilot phase
- * hints, and shows `revote` on an item the user picked to change (#4824); the
- * Tune view's stage shows `test-vote`.
+ * hints, Spot Check's included (#5538), and shows `revote` on an item the user
+ * picked to change (#4824); the Tune view's stage shows `test-vote`.
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
+  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
 >;
 
 @Component({
@@ -35,16 +37,35 @@ export class VotingOverlayComponent implements OnDestroy {
    *  so it sets the buttons' native `disabled` attribute: they grey out, stop
    *  taking hover, and drop out of the tab order. */
   readonly unavailable = input(false);
+  /** The detector is a received, read-only copy: like {@link unavailable} the
+   *  buttons are natively disabled, and a line under them says so and offers
+   *  {@link fork}. Toasty's hints step aside, since none of them can be acted on. */
+  readonly readOnly = input(false);
   readonly spinningVote = input<'good' | 'bad' | null>(null);
   /** Which of Toasty's hints stands over the buttons, if any (#4680, #4807).
    *  The host decides when, and swaps or drops it as the user votes. */
   readonly hint = input<VoteHintId | null>(null);
   readonly voted = output<'good' | 'bad'>();
+  /** The read-only line's Fork: make a copy of the user's own to vote on. */
+  readonly fork = output<void>();
+
+  readonly readOnlyHint = READ_ONLY_HINT;
+
+  /** A standing reason the buttons take no votes, or `''`. */
+  readonly blockedTitle = computed(() => {
+    if (this.readOnly()) return `${READ_ONLY_HINT}: this detector's labels are its owner's`;
+    if (this.unavailable()) return 'Nothing left to vote on here';
+    return '';
+  });
 
   /** What `revote` says the item is labeled, and the button that changes it. The host drops
    *  the hint the moment the label moves, so these never name the label a vote just set. */
   readonly revoteLabel = computed(() => (this.isGood() ? 'Good' : 'Bad'));
   readonly revoteOther = computed(() => (this.isGood() ? 'Bad' : 'Good'));
+
+  /** How many votes `keep-voting` says a detector usually takes, and the most Autopilot asks for (#5539). */
+  readonly typicalVotes = TYPICAL_DONE_VOTES;
+  readonly stopCap = STOP_CAP_VOTES;
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */
@@ -55,7 +76,7 @@ export class VotingOverlayComponent implements OnDestroy {
   private badTimer: ReturnType<typeof setTimeout> | null = null;
 
   onVoteGood(event?: Event): void {
-    if (this.disabled() || this.unavailable()) return;
+    if (this.disabled() || this.unavailable() || this.readOnly()) return;
     this.dropFocus(event);
     this.goodFlash.set(true);
     this.voted.emit('good');
@@ -64,7 +85,7 @@ export class VotingOverlayComponent implements OnDestroy {
   }
 
   onVoteBad(event?: Event): void {
-    if (this.disabled() || this.unavailable()) return;
+    if (this.disabled() || this.unavailable() || this.readOnly()) return;
     this.dropFocus(event);
     this.badFlash.set(true);
     this.voted.emit('bad');

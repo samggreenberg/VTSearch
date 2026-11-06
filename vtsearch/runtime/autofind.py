@@ -21,8 +21,10 @@ two kinds of caller:
 The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
-Either way a run ends the same: the results go to the user's AutoFind exporter
-when one is configured and not paused (:func:`run_autofind_export`).  A
+Either way a run ends the same: each detector's result gets the training-domain
+overlap check Tune warns with (:func:`_check_training_domains`, #5501), and the
+results go to the user's AutoFind exporter when one is configured and not
+paused (:func:`run_autofind_export`).  A
 background run's results are also held in memory for the user who started it
 (:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
@@ -32,6 +34,7 @@ kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections import OrderedDict
@@ -433,7 +436,9 @@ def score_detector(
         )
         if mlp is None:
             return None
-        balance = _line_state(name, trained[0] if trained else None)
+        det_ctx = trained[0] if trained else None
+        balance = _line_state(name, det_ctx)
+        beta, lines = _balance_lines(det_ctx, threshold)
 
         from vtscore.detectors.query_head import query_head_embedder  # noqa: PLC0415
 
@@ -470,6 +475,11 @@ def score_detector(
             # The balance's state on that cut: unchecked, headless (#4247,
             # #4272, #4413).
             "balance": balance,
+            # The balance the cut was drawn at, and the cut at each of the
+            # Threshold's presets, so the Find Results dialog can show what
+            # the other notches would have kept without a retrain (#5540).
+            "beta": beta,
+            "lines": lines,
             # Which detector the labels gave: under the quota, the Goods'
             # centroid rather than a trained head (#4643), or a typed-query
             # detector's own query (#4758).
@@ -481,6 +491,34 @@ def score_detector(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+def _balance_lines(det_ctx: Any, threshold: float) -> tuple[float | None, list[dict[str, float]]]:
+    """*det_ctx*'s balance, and its cut at each Threshold preset (#5540): ``(beta, [{beta, threshold}, ...])``.
+
+    Each preset's cut is :func:`~vtscore.state.core.recut_detector_threshold`'s,
+    re-derived from the estimators the train cached, so nothing is retrained or
+    re-scored: the scores the run already holds are split at another line.  The
+    detector's own balance keeps *threshold*, the cut its hits were split at, so
+    its notch reproduces the run exactly.  A cut the estimators cannot re-derive
+    (no context to ask, a head whose line no balance moves, or a cut that is
+    not a number) is *threshold* too: that notch keeps what the run kept.  Presets run from false positives
+    to false negatives (beta 4, 1, 1/4), as the control lays them out.
+    """
+    from vtscore.state import detector_beta  # noqa: PLC0415
+    from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_PRESETS, PRECISION_FLOOR_FALLBACK_INCLUSION  # noqa: PLC0415
+
+    own = detector_beta(det_ctx) if det_ctx is not None else None
+    lines: list[dict[str, float]] = []
+    for preset in sorted(BALANCE_PRESETS, reverse=True):
+        cut = None
+        if det_ctx is not None and preset != own:
+            cut = recut_detector_threshold(det_ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=preset)
+        if cut is None or not math.isfinite(cut):
+            cut = threshold
+        lines.append({"beta": preset, "threshold": round(float(cut), 4)})
+    return own, lines
 
 
 def _line_state(name: str, det_ctx: Any) -> dict | None:
@@ -623,6 +661,8 @@ def score_autofind(
             raise
 
     if results:
+        _check_training_domains(plan, results, check_cancelled)
+
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
         # Each detector scored the medias in its own embedder's stack, so count
@@ -637,7 +677,60 @@ def score_autofind(
     }
 
 
-def run_autofind_export(response: dict) -> dict | None:
+def _check_training_domains(plan: AutoFindPlan, results: dict[str, dict], check_cancelled: Callable[[], None]) -> None:
+    """Give each scored detector's result its training-domain overlap check (#5501).
+
+    The same check Tune's warning runs (:func:`vtsearch.domain_overlap.training_domain_for`),
+    against the dataset the detector was trained on: the loaded one holding most
+    of its labels, or the one recorded on it, read from disk when it is not
+    loaded.  It goes under ``training_domain``, so the Find Results dialog, the
+    run's notice and the exported results can all warn when the dataset looks
+    unlike that one.  The checks share one :class:`~vtsearch.domain_overlap.OverlapCache`,
+    so detectors trained on the same dataset read its vectors once.  Must run
+    where the scored dataset is the active one, as :func:`score_autofind` does.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+    from vtsearch.domain_overlap import OverlapCache, detector_training_domain  # noqa: PLC0415
+
+    active_ctx = get_active_context()
+    cache = OverlapCache()
+    for name, data, _entry in plan.detectors:
+        if name not in results:
+            continue
+        check_cancelled()
+        results[name]["training_domain"] = detector_training_domain(data, active_ctx, cache=cache)
+
+
+def domain_shifts(response: dict) -> list[dict[str, Any]]:
+    """The detectors of an auto-detect *response* whose training-domain check says *likely domain shift*.
+
+    One ``{detector_name, reference_dataset_name, frac_atypical, message}``
+    each, in result order: what a background run's notice names (#5501).
+    ``message`` is the warning's line, worded as Tune words it, so the
+    browser's notice need not carry the wording itself.
+    """
+    from vtscore.coverage.domain_shift import domain_shift_line  # noqa: PLC0415
+
+    shifts: list[dict[str, Any]] = []
+    for name, result in (response.get("results") or {}).items():
+        check = result.get("training_domain") or {}
+        shift = check.get("domain_shift") or {}
+        if not shift.get("shifted"):
+            continue
+        reference = check.get("reference_dataset_name") or check.get("reference_dataset_id", "")
+        frac = float(shift.get("frac_atypical", 0.0))
+        shifts.append(
+            {
+                "detector_name": result.get("detector_name") or name,
+                "reference_dataset_name": reference,
+                "frac_atypical": frac,
+                "message": domain_shift_line(frac, reference, shifted=True),
+            }
+        )
+    return shifts
+
+
+def run_autofind_export(response: dict, *, on_demand: bool = False) -> dict | None:
     """Run the configured AutoFind results exporter on *response*.
 
     Returns ``None`` when no exporter is configured (the common case) or the
@@ -648,6 +741,11 @@ def run_autofind_export(response: dict) -> dict | None:
     Export failures are reported in the status block rather than raised: the
     scored results are valuable on their own, so a misconfigured exporter must
     not sink the whole run.
+
+    *on_demand* is the Find Results dialog's AutoFind tab asking for the export
+    by hand (#5584, :func:`export_run_now`): the pause holds back what finished
+    runs send on their own, not a test the user presses the button for, so it
+    is not consulted.
     """
     from vtsearch.settings import (  # noqa: PLC0415
         get_autofind_export_enabled,
@@ -656,7 +754,7 @@ def run_autofind_export(response: dict) -> dict | None:
     )
 
     exporter_name = get_autofind_exporter()
-    if not exporter_name or not get_autofind_export_enabled():
+    if not exporter_name or (not on_demand and not get_autofind_export_enabled()):
         return None
 
     from vtscore.exporters import get_exporter  # noqa: PLC0415
@@ -804,6 +902,37 @@ def prep_run_browse(run_id: str, user: str) -> dict[str, Any] | None:
         return {"status": "skipped", "reason": str(exc)}
 
 
+#: The keys of a kept run that make up the ``POST /api/auto-detect`` body the
+#: exporter saw when the run finished; the rest of the record (who ran it,
+#: when, on what) is the dialog's, not the exporter's.
+RUN_RESPONSE_KEYS = ("media_type", "detectors_run", "results", "missing_detectors")
+
+
+def export_run_now(run_id: str, user: str) -> dict[str, Any] | None:
+    """Send kept run *run_id*'s results through the AutoFind exporter, as its finish did (#5584).
+
+    The Find Results dialog's AutoFind tab: a way to try the exporter set up
+    on the Settings AutoFind tab without importing another dataset.  The
+    payload is the run's own ``POST /api/auto-detect`` body (every detector's
+    Good at the run's own cut, whatever the dialog lists), so what goes out is
+    what a finished run sends.  The pause (``autofind_export_enabled``) is not
+    consulted: it holds back runs, not a button the user pressed.
+
+    ``None`` for a run *user* cannot see (as :func:`get_autofind_run`).
+    Raises :class:`AutoFindUnavailable` (409) when no exporter is set up, and
+    otherwise returns the same status block a finished run records as its
+    ``auto_export``, failures included.
+    """
+    record = get_autofind_run(run_id, user)
+    if record is None:
+        return None
+    response = {key: record[key] for key in RUN_RESPONSE_KEYS if key in record}
+    status = run_autofind_export(response, on_demand=True)
+    if status is None:
+        raise AutoFindUnavailable("No results exporter is set up for AutoFind (Settings › AutoFind).", status=409)
+    return status
+
+
 def clear_autofind_runs() -> None:
     """Forget every kept run.  For test isolation."""
     with _runs_lock:
@@ -925,6 +1054,8 @@ def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list
                 "total_hits": total_hits,
                 "missing_detectors": response["missing_detectors"],
                 "auto_export": auto_export,
+                # The notice names them: AutoFind opens nothing on its own (#5501).
+                "domain_shifts": domain_shifts(response),
             }
             tracker.update(
                 "idle",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.schemas.common import list_of_strings
+from vtsearch.schemas.common import OriginRowSchema, list_of_strings
 
 #: Upper bound on user-supplied dataset names, mirroring
 #: ``vtsearch.schemas.detectors.MAX_NAME_LENGTH``.  A name past this is already
@@ -343,8 +343,27 @@ class DatasetRegistryStatsResponseSchema(Schema):
     ingest_finished_at = fields.Raw(allow_none=True)
     origin = fields.String(required=True)
     source = fields.Dict(required=True)
+    importer_display_name = fields.String(
+        required=True,
+        metadata={"description": "The display name of ``source``'s importer; empty when the origin names none."},
+    )
+    source_rows = fields.List(
+        fields.Nested(OriginRowSchema),
+        required=True,
+        metadata={
+            "description": (
+                "``source``'s params worded for display, in recorded order. Empty values, a ``media_type`` "
+                "that is the dataset's own, and ``source_specs`` that only include the dataset's own type "
+                "are left out."
+            )
+        },
+    )
     clipper = fields.String(required=True)
     embedder = fields.String(required=True)
+    embedder_display_name = fields.String(
+        required=True,
+        metadata={"description": "The display name of ``embedder``; empty when the dataset records none."},
+    )
     coverage_atlas = fields.Nested(
         DatasetCoverageAtlasStatusSchema,
         required=True,

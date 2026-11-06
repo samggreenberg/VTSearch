@@ -139,14 +139,33 @@
   flex: 1 1 0;
   min-height: 200px;
   overflow-y: auto;
-  overflow-x: hidden;
+  // Never `hidden`: a table wider than the dialog must say so with a
+  // scrollbar. Clipping it silently hid the whole Readiness column off the
+  // right edge, with nothing to show it was there (#5534). The table is
+  // built to fit (Description below absorbs the slack), so this scrollbar
+  // only appears if a column's content genuinely cannot.
+  overflow-x: auto;
 }
 
 // The demo picker table is the shared interactive grid (`.data-table
-// .data-table--grid`, in `_data-table.scss`) with two picker-only deltas:
-// slightly wider body cells and a disabled-row treatment.
+// .data-table--grid`, in `_data-table.scss`) with three picker-only deltas:
+// slightly wider body cells, a Description column that gives way first, and
+// a disabled-row treatment.
 .demo-table {
   td { padding: var(--space-sm) var(--space-lg); }
+
+  // Description is the one column that may truncate, so it takes whatever
+  // width the others leave and ellipsizes inside it (its `title` carries the
+  // full text). Under the grid's `white-space: nowrap`, an auto-layout table
+  // otherwise sizes every column to its longest line, and one long blurb
+  // pushes Readiness out of the dialog (#5534). `max-width: 0` drops the
+  // cell's min-content claim so `width: 100%` can hand it the leftover space
+  // and no more. Once the user drags a divider the table switches to
+  // `table-layout: fixed` and the header widths rule instead.
+  td.col-desc {
+    width: 100%;
+    max-width: 0;
+  }
 
   tbody tr.disabled {
     cursor: not-allowed;
@@ -166,8 +185,10 @@
 .col-desc { color: var(--text-muted); font-size: var(--font-xs); }
 .col-name { font-weight: var(--weight-semibold); color: var(--text-primary); }
 
+// Readiness is the Readiness column's job, in words, so a ready row's name
+// is not also tinted green: that second, unlabelled signal said nothing the
+// column did not, and read as a mystery when the column was off-screen (#5534).
 .demo-row {
-  &.ready .col-name { color: var(--color-good); }
   &.selected {
     background: var(--bg-hover);
     box-shadow: inset 3px 0 0 0 var(--accent);
@@ -182,9 +203,11 @@
   border-radius: var(--radius-sm);
 }
 
-// Dark text on these saturated fills reads far better than white
-// (--btn-filled-text): white-on-#e0a020/#4caf50 measured well under WCAG AA.
-.badge-ready { background: var(--color-good); color: var(--badge-text-dark); }
+// A Good-green badge takes the same ink as a filled Good button, which flips
+// per theme (dark on the dark theme's bright green, white on the light theme's
+// deep one). The amber embedding fill is bright in every theme, so it keeps
+// one dark ink: white on it measured well under WCAG AA.
+.badge-ready { background: var(--color-good); color: var(--btn-filled-text); }
 .badge-embedding { background: var(--badge-embedding); color: var(--badge-text-dark); }
 // Neutral "needs action" pill. Uses --bg-secondary-btn (a step lighter than
 // --border) + --text-secondary so the text holds readable contrast in dark

@@ -143,8 +143,9 @@ Goods' centroid, `trained` for the trained head; `n_good` / `n_bad` are the
 detector's labels, `goods_owed` / `bads_owed` what the first quota still needs,
 and `dry_bad_quota` the Bads that give a single Good the trained head. Past the
 quota, a typed-query detector on a single-vector space keeps its query's set
-until it has `hold_labels` (30) labels; `hold_owed` is then the labels, Good or
-Bad, still owed (and `0` whenever the hold is not why the tier is `query`). Under
+until it has `hold_labels` labels; `hold_owed` is then the labels, Good or
+Bad, still owed (and `0` whenever the hold is not why the tier is `query`). The
+app's `hold_labels` is 0 since #5556 (30 before), so `hold_owed` is 0. Under
 the quota the line is the head's own (its `threshold` is always 0.5 on its own
 scale), drawn at the detector's balance: `balance` counts what it keeps, and a
 balance change redraws it.
@@ -181,7 +182,19 @@ demand, and returns one result column per detector.
 
 → `{media_type, detectors_run, results, missing_detectors}`; `results` is keyed
 by detector name, each with its `detector_name`, `threshold`, `balance`,
-`label_quota`, `total_hits`, `hits` and `negative_hits` (rows carrying `score`).
+`beta`, `lines`, `label_quota`, `total_hits`, `hits` and `negative_hits` (rows
+carrying `score`), and `training_domain`: the
+[training-domain overlap](#training-domain-overlap) report for that detector
+on the scored dataset (#5501), or `null` when the check itself failed.
+
+`beta` is the balance `threshold` was cut at, and `lines` is the cut at each
+of the Threshold's presets, from false positives to false negatives:
+`[{beta: 4, threshold}, {beta: 1, threshold}, {beta: 0.25, threshold}]`
+(#5540). Each is re-derived from what the train cached, as a balance change
+re-cuts the line, so nothing is retrained: the Find Results dialog splits
+`hits` and `negative_hits` at another notch's cut to show what it would have
+kept. The detector's own balance keeps `threshold`, and so does a preset whose
+cut cannot be re-derived (a head no balance moves).
 
 Each detector's `label_quota` is as in [find-label](#find-label-score--label-the-active-dataset): a detector
 under the label quota runs as its typed query's own set (`query`, #4758), or
@@ -247,13 +260,34 @@ run found nothing Good). A layout already built for these ids, or the fit
 already running for them, is reported whatever the server is doing. **404**
 as for [AutoFind results](#autofind-results).
 
+### Export AutoFind results by hand
+
+```
+POST /api/autofind/runs/{run_id}/export
+```
+
+Sends run `run_id`'s results through the AutoFind results exporter, as the
+run's finish did (#5584): the Find Results dialog's **AutoFind** tab, a way to
+try the exporter and field values set up on the Settings **AutoFind** tab
+without importing another dataset. The payload is the run's own
+[`POST /api/auto-detect`](#auto-detect) body
+(`media_type`, `detectors_run`, `results`, `missing_detectors`): every
+detector's Good at the run's own cut, whatever the dialog lists. The pause
+(`autofind_export_enabled`) holds back what finished runs send on their own,
+not this request.
+
+→ the same `{exporter, exporter_display_name, success, message?/error?,
+open_url?}` block a run records as its `auto_export`, the exporter's own
+failure included (`success: false` with its `error`, never an HTTP error).
+**404** as for [AutoFind results](#autofind-results); **409** when no
+exporter is set up for AutoFind.
+
 ### Test the line
 
 ```
 GET  /api/line-test
 POST /api/line-test/start
 POST /api/line-test/votes
-POST /api/line-test/unvote
 POST /api/line-test/cancel
 POST /api/line-test/forget
 ```
@@ -275,7 +309,9 @@ band design valid.
 Every verb returns the same body: `{balance, threshold, line_count, test,
 stale, moved, presets}`. `test` (`null` before a test) holds the `phase` and
 its `report`, the round (`round`, `picks_per_round`, the `band` being dealt
-and its `picks`), the next round dealt ahead (`ahead`, below), every band's
+and its `picks`), the next round dealt ahead (`ahead`, below), every pick
+voted so far with its label in the order first voted (`votes`, the trail the
+app's ↓ walks back along), every band's
 tallies in `bands`, the joint `estimates`
 (precision, recall and F-beta as `{point, lo, hi}` ranges, the plain-language
 `found`, the positives either side of the line, and `at_edges`), the `budgets`
@@ -297,8 +333,17 @@ the phases run to, `kept_at` and `class_model`.
   the labelset like every Find vote, never a training label. The test records
   it against the pick's band and the ranges move; a partial round waits for
   the rest, and a whole round deals the next. The vote that finishes the test
-  keeps its verdict on the detector. **400** for an id that is not one of the
-  round's picks; **409** with no test running.
+  keeps its verdict on the detector.
+
+  A vote on a pick **already voted** corrects it (#5502), from any round and
+  after `done` too: the app's ↓ walks back to it and the user votes again.
+  The rounds already dealt stay dealt (each is still a uniform draw from its
+  band, so the ranges stay valid; `LineTest.relabel`). A correction to a
+  finished test keeps its verdict again; one that reopens it (a dry run
+  undone, say) deals the next round and drops the kept verdict until the test
+  is done again. **400** for an id that is neither one of the round's picks
+  nor a pick already voted; **409** with no test, or for a round's pick once
+  the test is done.
 
   The vote that leaves one pick of a running test deals the next round
   ahead (#5116): `test.ahead` is `{id, good, bad}`, `id` that last pick and
@@ -307,11 +352,8 @@ the phases run to, `kept_at` and `class_model`.
   round to the same band). The vote on `id` installs the one it names,
   exactly the round the test would have drawn after it, and the other is
   discarded. It is for fetching the next round's media during the last
-  pick, not for showing it. `ahead` is `null` otherwise, and an `unvote`
-  that puts a second pick back drops it.
-- **`unvote`** takes `{"id": 412}` and takes one vote of the current round
-  back (the ↓ key): the pick returns to `picks` and its session vote is
-  lifted. **400** for a vote not of this round.
+  pick, not for showing it. `ahead` is `null` otherwise, and a correction
+  deals it again for the labels as they stand.
 - **`cancel`** drops a running test; its votes so far stay session votes. A
   finished test is left as it is. Always **200**.
 - **`forget`** drops the [kept verdict](#the-kept-verdict) for this dataset,
@@ -471,13 +513,40 @@ GET /api/find/training-domain
 
 The [domain-shift report](datasets.md#domain-shift-report) of the active
 dataset against the dataset the active detector was **trained on**, with that
-reference worked out rather than picked: the loaded dataset, among those the
-caller can read, holding the most of the detector's Good / Bad examples
-(matched by origin or MD5, never by file name alone). The active dataset wins a
-tie, so a detector used on the dataset it was trained on has nothing to
-compare. It needs no scored Find run: the SPA calls it whenever a
+reference worked out rather than picked: the dataset, among those the caller
+can read, holding the most of the detector's Good / Bad examples (matched by
+origin or MD5, never by file name alone). The candidates are the loaded
+datasets, counted live, and the training dataset recorded on the detector
+(its `training_dataset`, written when the detector is tuned on that dataset
+or trained there in the Train view, #5501, #5514) at its recorded count. That
+one need not be loaded: its vectors are read from its saved file. Nor need it
+be on this instance at all: the detector records a summary of it beside the
+pointer (its `training_domain_summary`, #5567), 128 of its items named by
+origin plus calibration scores stamped with the embedder, and when the
+dataset is not here, or its saved file is gone, the report is read against
+that summary instead. Its anchor items are read from the active dataset when
+it holds them and otherwise fetched from their origins and embedded, once per
+process. The report has the same shape and the same null (about `alpha` of an
+in-domain dataset reads atypical), with less power than the full comparison.
+An anchor that cannot be fetched, or another embedder, gives `domain_shift:
+null` with the reason. A detector created from an exported labelset gets the
+summary (#5571) and a pointer of its own beside it, naming the summarised
+dataset as holding the labels that came with it (#5572); a summary stored with
+no pointer at all counts as holding every labelled example, while a pointer to
+another dataset still says where the labels were drawn, and the summary is set
+aside. A loaded dataset's count leaves out the labels on media an import
+copied into it (the detector's `labels_ingested`, #5572): importing labels
+with a dataset active pulls their media into it, which says nothing about
+where they were cast, so `labels_in_active` counts only the labels on the
+dataset's own media. The active dataset wins a tie, so a detector used on the
+dataset it was trained on has nothing to compare. The
+[Evidence chip's baseline](#evidence-coverage) is drawn only on the dataset
+this rule picks, so a learned sort or Tune on a dataset holding fewer of the
+labels does not record it as the training dataset. It needs no scored Find run: the SPA calls it whenever a
 (dataset, detector) pair becomes active, and raises a warning when the verdict
-is *likely domain shift*. Pure read.
+is *likely domain shift*. Every Find and AutoFind result carries the same
+report per detector, as `training_domain` (see [auto-detect](#auto-detect)).
+Pure read.
 
 →
 ```json
@@ -495,9 +564,10 @@ is *likely domain shift*. Pure read.
 
 `domain_shift` is `null`, and `reason` says why, rather than a 4xx whenever
 there is nothing to compare: no active detector or dataset, a detector with no
-labelled examples, none of them in a loaded dataset, the examples coming from
+labelled examples, none of them in a dataset to compare with, the examples coming from
 the active dataset itself, or any refusal of the domain-shift report (embedder
-mismatch, a reference under 40 embeddings). The counts are filled in as far as the
+mismatch, a reference under 40 embeddings, an unloaded reference whose saved
+file is gone). The counts are filled in as far as the
 check got, so a caller can say what the reference rests on.
 
 ### Fold corrections into the detector

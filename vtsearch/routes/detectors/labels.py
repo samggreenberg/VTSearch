@@ -64,6 +64,7 @@ from vtsearch.schemas.detectors import (
     DetectorLabelVoteResponseSchema,
     DetectorSaveLabelsResponseSchema,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +112,16 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
 @detectors_labels_bp.alt_response(400, description="X-Dataset-Id / X-Detector-Id header missing.")
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
-@detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@detectors_labels_bp.alt_response(
+    409,
+    description=(
+        "Detector vote state is not aligned with the active dataset, or the detector is a received,"
+        " read-only copy (``error_code: detector_read_only``)."
+    ),
+)
 @require_dataset_header
 @require_detector_header
+@refuse_linked("name")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
@@ -280,16 +288,21 @@ def _apply_new_entries_if_loaded(reg_entry, applied: int, new_entries: list[dict
     return _apply_and_retrain(reg_entry["id"], det_ctx, new_entries, name)
 
 
-def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
+def _merge_labels_into_detector_file(path: Path, label_entries: list[dict], detector_meta: dict | None = None):
     """Merge *label_entries* into the detector JSON at *path* under the sync lock.
 
     The read→merge→write races the loaded-detector label sync (and the other
     detector-JSON writers), so it runs under ``label_sync_write_lock``.  The
     file is re-read inside the lock (the route's earlier read only served its
-    404 check).  Returns ``(existing_ls, applied, skipped, new_entries)``, or
-    ``None`` if the detector file vanished.
+    404 check).  The training-domain summary *detector_meta* carries is kept
+    too, when the detector may take it
+    (:func:`~vtscore.detectors.domain_summary.adopt_domain_summary`, #5571),
+    counted as holding the labels imported with it (#5572).
+    Returns ``(existing_ls, applied, skipped, new_entries)``, or ``None`` if
+    the detector file vanished.
     """
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.domain_summary import adopt_domain_summary, count_imported_labels
     from vtscore.detectors.labelset_ops import label_sync_write_lock
 
     with label_sync_write_lock:
@@ -299,6 +312,7 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
         applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
         data["labelset"] = existing_ls.to_dict()
+        adopt_domain_summary(data, detector_meta, labels_held=count_imported_labels(label_entries))
         _write_detector(path, data)
     return existing_ls, applied, skipped, new_entries
 
@@ -313,6 +327,8 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
 @detectors_labels_bp.alt_response(404, description="Detector not found, or unknown label importer name.")
 @detectors_labels_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 @detectors_labels_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
+@detectors_labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("name")
 def import_labels_into_detector(name: str, importer_name: str):
     """Run a label importer and merge results into this detector's labelset.
 
@@ -339,7 +355,7 @@ def import_labels_into_detector(name: str, importer_name: str):
         return error_response(f"Detector '{name}' not found", 404)
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
+    from vtsearch.routes._plugins import get_plugin_or_404, run_label_importer_or_error, validate_plugin_args
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -348,16 +364,15 @@ def import_labels_into_detector(name: str, importer_name: str):
 
     field_values = validate_plugin_args(importer)
 
-    label_entries, err = run_plugin_or_error(importer, "run", field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
-    if not isinstance(label_entries, list):
-        return error_response("Importer did not return a list of label dicts.", 500)
+    label_entries, detector_meta = imported
 
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
-    merged = _merge_labels_into_detector_file(path, label_entries)
+    merged = _merge_labels_into_detector_file(path, label_entries, detector_meta)
     if merged is None:
         return error_response(f"Detector '{name}' not found", 404)
     existing_ls, applied, skipped, new_entries = merged
@@ -649,6 +664,8 @@ def thumbnail_detector_label(name: str, element_id: str):
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
 @detectors_labels_bp.alt_response(400, description="provenance is malformed.")
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
+@detectors_labels_bp.alt_response(409, description=READ_ONLY_DESCRIPTION)
+@refuse_linked("name")
 def vote_detector_label(body: dict, name: str, element_id: str):
     """Set a saved labelset element's label to an absolute target.
 

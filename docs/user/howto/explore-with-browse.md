@@ -48,9 +48,6 @@ colour says how many; the **legend** on the right reads the colours off, and
 the **minimap** above it shows where you are. Pointing at a tile enlarges its
 picture. The arrow keys move the map too, and `+` and `-` zoom.
 
-**Rebuild Map**, at the top left, lays the pictures out afresh, for when a
-cluster has landed somewhere awkward.
-
 ## Step 3: Look inside a tile
 
 Right-click a tile. Its pictures fill the panel on the left:
@@ -90,7 +87,9 @@ on the map, which makes them quick to clear out:
 
 1. Select the tiles that are wrong, or right.
 2. Click **Verified Bad** (or **Verified Good**). The pictures are marked that
-   way, as if you had checked each one in Tune, and leave the map.
+   way, as if you had checked each one in Tune, and leave the map. The rest
+   stay where they were; **Rebuild Map**, which appears at the top left once
+   you have verified some, lays them out afresh.
 3. Click **← Back to Tune**. Your checks are in the piles on the right.
 
 <picture>

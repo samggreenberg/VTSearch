@@ -367,8 +367,10 @@ See [EXTENDING-plugins.md § Adding a Labelset Source](EXTENDING-plugins.md#addi
 - [ ] Implement `_do_load(self, field_values)`: return a list of label dicts (override the underscored hook, not `load`)
 - [ ] Implement `_do_save(self, labelset, field_values)`: persist a `LabelSet` (override the underscored hook, not `save`)
 - [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
+- [ ] If the source shares detectors: override all nine required `_do_share_*` hooks (and `_do_share_search_recipients` for recipient search), report identities as opaque strings, store and return the manifest (see [The sharing contract](../vtscore/docs/extending/labelset-sources.md#the-sharing-contract)); a sharing-only source skips `_do_load` / `_do_save`
+- [ ] If the source shares detectors: add a driver to `tests_lib/labels/test_sharing_conformance.py` so the contract tests run against it
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
-- [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
+- [ ] Test: start the app and check `GET /api/labelset-sources` includes your source, with the `supports_sync` / `supports_sharing` flags you expect
 
 ### New Settings Importer Checklist
 

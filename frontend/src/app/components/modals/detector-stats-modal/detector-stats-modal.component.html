@@ -47,16 +47,16 @@
         @if (showMediaType) {
           <tr>
             <td class="stat-label" title="The media type this detector operates on">Media type</td>
-            <td class="stat-value">{{ (stats.media_type | titlecase) || '-' }}</td>
+            <td class="stat-value">{{ (stats.media_type | titlecase) || noValue }}</td>
           </tr>
         }
         <tr>
           <td class="stat-label" title="The embedder this detector uses">Embedder</td>
-          <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
+          <td class="stat-value">{{ stats.embedder_display_name || noValue }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="The clip size this detector was trained on">Clipper</td>
-          <td class="stat-value">{{ stats.clipper || '-' }}</td>
+          <td class="stat-value">{{ stats.clipper || noValue }}</td>
         </tr>
         @if (stats.text_query) {
           <tr>
@@ -79,11 +79,11 @@
         <tbody>
           <tr>
             <td class="stat-label" title="The label importer that created this detector">Importer</td>
-            <td class="stat-value">{{ imported.importer }}</td>
+            <td class="stat-value">{{ importerName }}</td>
           </tr>
           @for (p of importParams; track p.key) {
             <tr>
-              <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.label }}</td>
+              <td class="stat-label" [title]="paramTitle(p)">{{ p.label }}</td>
               <td class="stat-value">{{ p.value }}</td>
             </tr>
           }
@@ -104,11 +104,11 @@
         </tr>
         <tr>
           <td class="stat-label" title="When this detector was last trained on your votes">Last trained</td>
-          <td class="stat-value">{{ formatTimestamp(stats.last_trained_at) }}</td>
+          <td class="stat-value">{{ lastTrained }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="The user who created this detector">Created by</td>
-          <td class="stat-value">{{ stats.created_by || '-' }}</td>
+          <td class="stat-value">{{ stats.created_by || noValue }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Whether this detector is on your AutoFind tab: frozen against edits and run automatically on every dataset you import (also drives CLI autodetect)">AutoFind</td>

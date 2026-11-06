@@ -321,4 +321,17 @@ export interface AutoFindTaskInfo {
    *  detectors are for another media type, or need an embedder the dataset
    *  lacks): the reason. Such a row is idle from its first frame. */
   skipped?: string;
+  /** The detectors whose training-domain check says this dataset looks
+   *  unlike the one they were trained on (#5501), for the run's notice. */
+  domain_shifts?: AutoFindDomainShift[];
+}
+
+/** One detector of {@link AutoFindTaskInfo.domain_shifts}. */
+export interface AutoFindDomainShift {
+  detector_name: string;
+  reference_dataset_name: string;
+  /** The share of the scored dataset atypical of the training dataset, 0-1. */
+  frac_atypical: number;
+  /** The warning's line, worded by the server as Tune words it. */
+  message: string;
 }

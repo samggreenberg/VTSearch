@@ -164,6 +164,10 @@ get_browse_details_metadata_width  # noqa: F821
 set_browse_details_metadata_width  # noqa: F821
 get_grid_icon_size_popup  # noqa: F821
 set_grid_icon_size_popup  # noqa: F821
+get_grid_icon_size_picker  # noqa: F821
+set_grid_icon_size_picker  # noqa: F821
+get_grid_icon_size_results  # noqa: F821
+set_grid_icon_size_results  # noqa: F821
 get_popup_metadata_shown  # noqa: F821
 set_popup_metadata_shown  # noqa: F821
 get_popup_preview_size  # noqa: F821
@@ -239,10 +243,14 @@ restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 old_switch_off  # noqa: F821 - installs a CoreConfig with the retired hide_ingest_eta switch off
 scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch directory
+sharing_off  # noqa: F821 - registers a null detector_sharing_source so sharing is off
+stub_summary  # noqa: F821 - monkeypatches a domain summary for datasets too small to calibrate
 tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
 quiet_forever  # noqa: F821 - holds the evidence-baseline draw waiting so only a read lands it
 quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the sort ends
 label_files  # noqa: F821 - writes the labels' origin files and points the resolver at them
+short_run  # noqa: F821 - pins HardDryRun's target to the test's short RUN
+one_item_per_city  # noqa: F821 - trims the toponymy demo to one item per city so the loads stay quick
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -366,12 +374,22 @@ signpost_captioner  # noqa: F821
 signpost_vocab  # noqa: F821
 default_labelset_source  # noqa: F821
 labelset_source_push_interval  # noqa: F821
+detector_sharing_source  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``tests_lib/meta/test_cpu_kernel_pins.py``'s ``x86`` fixture is requested by
 # parameter name, which pytest resolves reflectively.
 # ---------------------------------------------------------------------------
 x86  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests_lib/meta/test_hint_icon_titles.py``'s ``html.parser.HTMLParser``
+# subclass: the base class's ``feed()`` dispatches to these callbacks.
+# ---------------------------------------------------------------------------
+handle_starttag  # noqa: F821
+handle_startendtag  # noqa: F821
+handle_endtag  # noqa: F821
+handle_data  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``tests_lib/meta/test_xdist_plumbing.py`` stand-ins for xdist's scheduler

@@ -85,8 +85,9 @@ Canonical roles:
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
+- **Faces outlined on a photo, by whose they are:** `--photo-outline-primary` (the person in focus), `--photo-outline-secondary` (the person they appear with), `--photo-outline-other` (everyone else, drawn dimmed). `vt-image-viewer`'s `outlineBoxes` draws them. The orange/blue pair is a categorical one, validated per theme for colorblind separation, and never a status color: a face outlined in it is not a vote. Each box also names its role in its hover title and differs in stroke weight, so color is not the only cue.
 - **Chart series:** `--chart-verified` (what the user checked by hand). Validated per theme for 3:1 on `--bg-surface`; a new series gets its own token, validated against it for colorblind separation. Not a status color, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
-- **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). The first three flip per theme; `--badge-text-dark` is one dark ink in all three, because the fills it sits on stay bright in every theme. Never hardcode `#fff` on a fill.
+- **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text` (on any other `--accent`, `--color-good` or `--color-bad` fill, badges included), `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on the amber `--badge-embedding` badge). The first three flip per theme with the fills: dark ink on the dark theme's light fills (they double as text on dark panels, so they can't be darkened), white on the light theme's deep ones, black on highviz. `--badge-text-dark` is one dark ink in all three, because the amber stays bright in every theme. Never hardcode `#fff` on a fill. A hover on a filled button shades toward `--text-primary`, not `--bg-body`: `--text-primary` is the opposite of the fill's ink in every theme, so the hover raises contrast instead of eroding it.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
 
@@ -202,6 +203,8 @@ Text utility classes (use directly on `<p>` / `<span>`):
 
 All four `<p>`-based utilities explicitly zero the UA `<p>` margin so the surrounding layout's flex `gap` owns inter-row spacing (§5, anti-pattern 15).
 
+**`.name-list`** (on a `<ul>`) sets names out one per line, bulleted: the datasets a bulk delete is about to remove, the detectors a run skipped. Use it wherever text would otherwise enumerate things the user named (datasets, detectors) as a comma-joined row, which is hard to scan and splits a name that has a comma in it (#5532). It inherits colour and size from the text it sits under, and drops its bottom margin when it ends its container. A short run of fixed labels ("Image, Document") can stay a comma list. A list inside a confirmation goes through `confirmDestructive()`'s `items` rather than the question string; the dialog host renders it with this class.
+
 **`.empty-state`** is the canonical placeholder shown wherever a list, table, or panel has no content yet. The common case is a bare `<p class="empty-state">No datasets yet.</p>`; the richer form stacks an optional icon, the message, and an optional action:
 
 ```html
@@ -260,7 +263,7 @@ Nor is a muted, link-like text button - a secondary affordance that sits beside 
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
-- **A field label ends in a colon**: `Media type:`, `Threshold:`. The colon follows the text and comes before the required `*` and any hint icon (`Example: *`). A checkbox's caption takes none: the text beside a box names the option, it doesn't head a field below it. Labels rendered from plugin field specs add the colon in the template, so a plugin author's `label` stays bare.
+- **A field label ends in a colon**: `Media type:`, `Threshold:`. The colon follows the text and comes before the required `*` and any hint icon (`Example: *`). A label with a hint icon also carries a short `title` of its own (§3.5). A checkbox's caption takes none: the text beside a box names the option, it doesn't head a field below it. Labels rendered from plugin field specs add the colon in the template, so a plugin author's `label` stays bare.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
 - **Required fields are marked twice: on the question and on the answer.** `.required` puts a `--color-bad` `*` after the label; the control itself carries `required` (`[required]="!!field.required"` on a plugin field), and `.form-input` / `.form-select` then give an unanswered required field a red well (`--color-bad` border over a `--bad-bg` tint) via `:required:invalid`. The well clears the moment the field has a value, yields to the accent border while focused, and never shows on a disabled control. A star without `required` on its control is the regression this rule exists to stop. Mark only what the *user* has to supply: a field the app fills in for them is not required of the user, even when submit needs a value, so it gets neither the star nor `required`. New Detector's **Detector name** is the example: it is derived from the example, and a name left blank falls back to that default on Create, so an empty form must not flag it. Required answers that aren't native controls opt in explicitly: `<vt-file-browser [required]>` forwards it to its path input, and `<vt-drop-zone [missing]>` takes the parent's "nothing picked yet" flag (the zone forgets each pick once emitted, so it can't tell on its own).
 - **`.browse-row` + `.browse-panel`** are the canonical "type a path, or pick one" field. `.browse-row` lays a `.form-input` and its `Browse` `.btn` on one line (the input flexes, the button hugs its label) so the pair reads as a single control rather than two stacked fields; `.browse-panel` frames the `<vt-folder-browser>` that the button reveals below it as a recessed sub-surface. Both `<vt-file-browser>` (pick a file) and the Add Dataset server-folder field (pick a folder) use them - a new "browse the server" field should too, rather than stacking a bare button under an input.
@@ -310,8 +313,8 @@ sets none:
 | Token          | Width | Use |
 |----------------|-------|-----|
 | `--modal-w-sm` | 480px | Single-column forms: label importer, combine detectors, the blank new-detector form. |
-| `--modal-w-md` | 720px | Picker / table / settings dialogs: dataset importer, export, settings, keyboard help. |
-| `--modal-w-lg` | 900px | Wide views that need room for a table + browser side by side: the new-detector / dataset media-picker view. |
+| `--modal-w-md` | 720px | Picker / table / settings dialogs: export, settings, keyboard help. |
+| `--modal-w-lg` | 900px | Wide views that need room for the demo-dataset table or a folder browser: Add Dataset, and the new-detector media-picker view. |
 
 Set the width on `.modal-content` (via `::ng-deep`, since the element belongs to
 `vt-modal`), not on an inner wrapper, so inner content can `width: 100%` and fill
@@ -452,7 +455,9 @@ A connected row of buttons acting as one single-select control (the View/Focus p
 </div>
 ```
 
-Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense and icon-sized with a border-highlight hover instead of a fill (toolbars). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+Variants: `.segmented-toggle--stretch` makes the buttons equal-width and fill the row (labelled toggles); `.segmented-toggle--compact` makes them dense, with a muted resting colour and a border-highlight hover instead of a fill (toolbars, and short labelled rows such as Find Results' Good/Bad/Both). Use this rather than a row of `.btn`s whenever the buttons are mutually exclusive states of one setting.
+
+A variant recolours its resting buttons by setting `--seg-ink`, never `color`. `.segmented-toggle--compact .segmented-toggle__btn` is two classes against `--active`'s one, so a `color` set there wins over `--toggle-active-text` and puts the variant's ink on the accent fill. The compact variant's muted grey did exactly that, at 1.2:1 in every theme (#5500).
 
 ### 2.11 Entity cards and card actions
 
@@ -548,9 +553,47 @@ Don't write per-component focus / disabled CSS. The base classes handle both:
 - `.btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }` (`.btn--primary` swaps to a neutral fill + dimmed text instead, since opacity can't hold contrast over the accent)
 - `.form-input:focus { border-color: var(--accent); }`
 
+A disabled button also has to say *why* it is disabled; see §3.6.
+
 ### 3.4 Theme overrides inside a component
 
 Avoid them. The right answer is almost always "use a theme variable." If a component genuinely needs a per-theme tweak (rare), wrap the override in `[data-theme="light"]` or `[data-theme="highviz"]` and add a comment explaining why a token-based solution didn't work.
+
+### 3.5 Tooltips: the text answers too, not only its (?)
+
+A `<vt-field-hint-icon>` (the (?)) explains the label or heading it follows. **The text it explains carries a `title` of its own as well.** A user points at the words before they point at the (?), so a tooltip only on the (?) means the words show nothing.
+
+```html
+<span class="balance-label" title="Where to draw the line: more matches, or surer ones">Threshold:</span>
+<vt-field-hint-icon hint="Where to draw the line. Toward False Positives returns more, with more wrong ones in it; toward False Negatives returns only the surest, and misses more." />
+```
+
+- **Short on the text, long on the (?).** The text's `title` is a phrase that says what the field or section is for. The (?)'s `hint` is the full explanation: what each choice does, the caveats, the edge cases. Putting the same text on both is the fallback, not the pattern; there is almost always a shorter version to write.
+- **Put the `title` on the element that holds the words**: the `<label>`, the heading, the `<p>`, or the label's own `<span>` when the row also holds other controls (Threshold's `.balance-label`). A native tooltip is inherited, so a `title` on a row would also show over every control in it that has none of its own.
+- **Hovering the (?) shows only the long version.** The icon sets `title=""`, which stops it inheriting the label's `title`, so the two tooltips never show at once. Don't remove it.
+- `tests_lib/meta/test_hint_icon_titles.py` checks every template: each (?) needs a titled holder (its block, or an inline element between) or a titled element just before it.
+
+### 3.6 Disabled buttons say why
+
+A greyed-out button with no explanation leaves the user hunting through the dialog for what they missed. So **every button that can be disabled carries a tooltip, while it is disabled, naming the next step that would enable it** (#5533).
+
+- **Name one step, the first one still owed.** When A, B and C are all required and none is done, say `A is required`, not all three; the tooltip changes as the user works through them. A required form field reads `<Field label> is required` (`Folder to import is required`); anything else is an imperative (`Select a demo dataset from the list`, `Tick at least one column to copy`, `Wait for the current load to finish`). When nothing can enable it right now, say what holds it (`Already the smallest thumbnails`, `No Good items yet`).
+- **Sentence case, no trailing period**, like every tooltip (§4.1).
+- **One getter drives both bindings**, so the state and its reason cannot drift apart: a `…Blocker` getter (or `computed`) returns `''` when the action can run and the reason when it cannot, and the template reads it twice.
+
+  ```html
+  <button class="btn btn--primary" (click)="submit()"
+    [disabled]="submitting() || !!submitBlocker"
+    [title]="submitBlocker || 'Combine the selected detectors into a new one'">
+  ```
+
+  When the button has no tooltip of its own while enabled, bind the blocker alone (`[title]="submitBlocker"`): an empty `title` shows nothing. A `can…` boolean the component already exposes becomes `!this.…Blocker`, so it keeps its callers.
+- **A shared component that is disabled by its host takes the reason from its host.** `vt-clipboard-copy` has a `disabledReason` input beside `disabled`; a host that sets one sets the other.
+- **The one exemption: an in-progress label.** A button whose own label has turned into its progress (`Importing…`, `Loading…`, `Logging in…`) already says why it is disabled, so it needs no tooltip for that state. A *sibling* disabled by the same work does not get the exemption: Cancel beside `Combining…` says `Wait for the combine to finish`.
+
+This covers anything that looks clickable and isn't: a `.disabled` context-menu item (its `title`), a disabled demo row, a locked segmented toggle, a disabled tab.
+
+**Finding the ones that don't.** `.claude/scripts/style-check.py` lists every `<button>` in a template whose `[disabled]` is bound but whose `title` is missing or static (§5 item 18). It cannot tell a reason from a description, so read each hit; the in-progress-label exemption above is the usual false positive.
 
 ---
 
@@ -674,8 +717,10 @@ detector-stats table (standard ML terminology in that context).
 14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
 15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.link-btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 16. **Hand-writing modal markup instead of using `<vt-modal>`.** Copying `.modal-backdrop` / `.modal-content` / `.modal-header` into a component drops the modal `<dialog>` (focus handling, the inert page behind, the top layer), the Escape stack, and backdrop dismissal. See §2.4.
+17. **A (?) beside text with no tooltip of its own.** The label or heading takes a short `title`; the (?) keeps the long version. See §3.5.
+18. **A disabled button that doesn't say why.** Its tooltip, while disabled, names the next step that enables it. See §3.6.
 
-> A static scan for items 1-3, 6-7, 10, 13-15 lives at
+> A static scan for items 1-3, 6-7, 10, 13-15 and 18 lives at
 > `.claude/scripts/style-check.py` (invoked via the `/style-check`
 > skill). It also checks the token-level rules that aren't anti-pattern
 > items: raw `z-index` (§1.8), raw decorative-dim opacity (§1.10),

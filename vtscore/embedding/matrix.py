@@ -47,7 +47,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.embedding.media_vectors import media_embedder_names, media_embedding, primary_embedder_name
+from vtscore.embedding.media_vectors import (
+    ensure_embeddings_dict,
+    media_embedder_names,
+    media_embedding,
+    primary_embedder_name,
+)
 from vtscore.embedding.precomputed import MismatchedVectorError, require_dim
 from vtscore.state.core import _state_lock
 
@@ -374,6 +379,47 @@ def _try_load_matrix_sidecar(pkl_path: str, sorted_ids: list[int], probe_dim: in
         return None
 
 
+def stored_primary_vectors(pkl_path: str) -> np.ndarray | None:
+    """Every media's primary vector in the saved dataset at *pkl_path*, in id order, read without loading it.
+
+    For a dataset that is registered but not loaded (#5501): the overlap check
+    compares against a detector's training dataset wherever it is.  Reads the
+    mmap'd embedding-matrix sidecar when the dataset has one, as a load would
+    (it holds the same rows, written by :func:`get_embedding_matrix`), and the
+    container's medias otherwise, skipping any media with no primary vector as
+    a loaded dataset's own vectors do.  ``None`` when neither can be read or
+    nothing has a vector.  Nothing is cached: the caller holds what it needs.
+    """
+    from vtscore.datasets.container import read_container  # noqa: PLC0415
+
+    ids_path, mat_path = _emb_sidecar_paths(pkl_path)
+    if ids_path.is_file() and mat_path.is_file():
+        try:
+            ids = np.load(ids_path)
+            matrix = np.load(mat_path, mmap_mode="r")
+            if ids.ndim == 1 and matrix.ndim == 2 and ids.shape[0] == matrix.shape[0] > 0:
+                return matrix
+        except Exception:
+            logger.warning("Failed to read the embedding-matrix sidecar for %s", pkl_path, exc_info=True)
+    try:
+        data, _meta = read_container(pkl_path)
+    except Exception:
+        logger.warning("Failed to read the dataset container %s", pkl_path, exc_info=True)
+        return None
+    rows: list[tuple[int, np.ndarray]] = []
+    for cid, media in (data.get("medias") or {}).items():
+        if not isinstance(media, dict):
+            continue
+        ensure_embeddings_dict(media)
+        emb = media_embedding(media)
+        if emb is not None:
+            rows.append((int(cid), np.asarray(emb, dtype=np.float32)))
+    if not rows:
+        return None
+    rows.sort(key=lambda row: row[0])
+    return np.stack([vec for _cid, vec in rows])
+
+
 def _atomic_save_npy(path: Path, arr: np.ndarray) -> None:
     """Write *arr* to *path* as ``.npy`` bytes via write-to-temp + atomic rename.
 
@@ -572,7 +618,9 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
         # Only the matrix family: the lookups and the browse layouts are
         # revision-keyed too and invalidate themselves off the bump below,
         # so dropping them here would throw away work for nothing.
-        ctx.reset_derived_caches(matrices=True, lookups=False, projection=False, subset=False, order=False)
+        ctx.reset_derived_caches(
+            matrices=True, lookups=False, projection=False, subset=False, order=False, people=False
+        )
         # An in-place rewrite can leave the id set (and dimension) unchanged,
         # which the sidecar's validity check alone cannot detect - permanently
         # stop trusting the on-disk mmap sidecar for this context so every

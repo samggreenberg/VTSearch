@@ -63,6 +63,7 @@ through their CLI flag or environment variable.
   "browse_signpost_vocab": {},
   "default_settings_source": null,
   "default_labelset_source": null,
+  "detector_sharing_source": null,
   "labelset_source_push_interval_seconds": 60,
   "enable_metrics": true
 }
@@ -163,6 +164,23 @@ through their CLI flag or environment variable.
   In a multi-user deployment a `server_path` value is confined to the
   detector creator's data directory, like every server path a user supplies.
   `null` (the default) auto-exports nothing.
+- `detector_sharing_source`: the labelset source detectors are shared through
+  ([ARCHITECTURE.md](ARCHITECTURE.md#detector-sharing); what users see is
+  [Share a detector](user/howto/share-a-detector.md)). Same `{"source_name": ..., "field_values":
+  ...}` shape as `default_labelset_source`, with the same fixed-values rule: each
+  **non-empty** value in `field_values` is fixed by the admin - typically the
+  sharing service's connection values - and laid into every detector's sharing
+  binding, never sent to a browser. The source must implement sharing (its
+  `supports_sharing` is true); an unknown name, or a source that cannot share,
+  leaves sharing off and logs a warning once. `null` (the default) is off:
+  sharing is a deployment-level integration with its own service, so it is
+  switched on here and never by installing a source that can share. The
+  built-in `shared_folder` source shares through a directory, for tests and
+  local development:
+  `{"source_name": "shared_folder", "field_values": {"folder": "/srv/vtsearch/shared-detectors"}}`.
+  Its `folder` is a server path, so under a multi-user login provider it is
+  confined to each user's own data directory and cannot be shared between
+  users; use it single-user.
 - `labelset_source_push_interval_seconds`: the shortest gap between two pushes
   of one detector's labels to its labelset source (default 60). Pushes for one
   detector never overlap, and changes made meanwhile ride the next push, so a

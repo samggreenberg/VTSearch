@@ -163,6 +163,27 @@ def _refresh_detector_file_caches(det_ctx: DetectorContext, path: Path) -> None:
     prime_detector_file_mtime(path, det_ctx.cached_labelset_mtime)
 
 
+def _asserts_new_labels(existing: LabelSet, merged: LabelSet) -> bool:
+    """Whether *merged* holds a label *existing* does not: an added item, or one relabelled.
+
+    Items are matched on any identity they share (origin or md5), so an item
+    that only resolved to a different origin on this server is the same item.
+    A label missing from *merged* is not reported: duplicates in a received
+    container make a dropped label ambiguous, and nothing is written anyway.
+    """
+    from vtscore.datasets.labelset import element_identity_keys
+
+    held: dict[Any, set[tuple[str, Any]]] = {}
+    for el in existing.elements:
+        for key in element_identity_keys(el):
+            held.setdefault(key, set()).add((el.label, el.region_box))
+    for el in merged.elements:
+        keys = element_identity_keys(el)
+        if not any((el.label, el.region_box) in held.get(key, ()) for key in keys):
+            return True
+    return False
+
+
 def sync_labels_to_loaded_detector() -> None:
     """Persist the current votes into the loaded detector's labelset (if any).
 
@@ -225,8 +246,23 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     # "owned" by it and get reconciled against the current votes; entries that
     # resolve to nothing are cross-dataset and are preserved verbatim.
     merged = merge_labelsets_across_datasets(existing_ls, current_ls, snap)
-    data["labelset"] = merged.to_dict()
     clock.mark("merge")
+
+    from vtscore.detectors.registry import is_linked
+
+    if is_linked(entry):
+        # A received detector's file is a mirror of its container, so it is
+        # never rewritten from votes: re-composing it could change an origin
+        # (an item matched by md5 on this server) without any label changing.
+        # The vote routes refuse a linked detector before they touch a vote;
+        # if a vote got through anyway, say so rather than persist it.
+        if _asserts_new_labels(existing_ls, merged):
+            from vtscore.detectors.store import DetectorReadOnlyError
+
+            raise DetectorReadOnlyError.for_entry(entry)
+        clock.finish(outcome="linked: nothing to write")
+        return
+    data["labelset"] = merged.to_dict()
 
     # The in-memory caches are the truth from here on; the file follows.
     _refresh_detector_caches(det_ctx, merged, data.get("media_type", "") or "")

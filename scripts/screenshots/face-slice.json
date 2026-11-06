@@ -1,0 +1,412 @@
+{
+ "source": "Celebrity Together (Zhong, Arandjelovic & Zisserman, ACCV 2018), the Celebrities in Context demo",
+ "mirror": "https://huggingface.co/datasets/Juoguessr/celebritytogether",
+ "people": [
+  "Andrew Garfield",
+  "Emma Stone",
+  "Jamie Foxx",
+  "Kerry Washington"
+ ],
+ "photos": [
+  {
+   "person": "Andrew Garfield",
+   "path": "n2604/0031c530e4040e2d5a5ba13047a4b1a0.jpg",
+   "sha256": "fff78949968251178d883173c686d1fca6cb399292ace6fc2b37908f781a68ee"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/00f7cdf5dcb487c4386775bb2a0f3ff2.jpg",
+   "sha256": "6267abc50dfda1c73d9f2e5fb12bdc40aac9f7eb8cc2c931500dc2b60ae6c40e"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/01f3fd05207ea5244efb83dba4a73e62.jpg",
+   "sha256": "a27235ac0c566b45161c51da9841f379d59710d62aad50a7ad356941f1cdf833"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/0254ec7a1b2c73f323e57fed3e18ec35.jpg",
+   "sha256": "e0fa5311320f476487bfe54e7710bc680b462d0c90dbac3e44006a7b3948ff53"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/02c9224ec0a00ba1905cc644d677f9dd.jpg",
+   "sha256": "10163353c78987c2bec363dbb83645d6a987184ad360abb425ec1c118326106f"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/049fbb5aa10800d487244ecad053c313.jpg",
+   "sha256": "f082ba8f58e41f0e3087c61688d458d4eae4fc8c6bf63c1c7e7a5e83c1040159"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/051bc1d7320e6b36a3f1e36b9be7481a.jpg",
+   "sha256": "082dfbfac967e6caf27fcf1ab42ab172a6a424da93336380089cec3b1df13b0c"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/06eb920b6fac86eef2c865e11792291d.jpg",
+   "sha256": "276af028b6d7caf7dde417cf170924df99f44d96cb8b87d70332b5e23289932b"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/07db0c6e643dccf903967499b53fe3d4.jpg",
+   "sha256": "ebd9ffcb0a7b0454862b80838756d5b972d252c290d1523cd841496d7ed7da8c"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/084ab893a5df5181006415cab32fd498.jpg",
+   "sha256": "b25a88d8df5a6b0cdf4da393bd0c29362a3ac113ea5a45d8d2acae93df33cb5d"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/089c0df62f772035232b526934cbd8d9.jpg",
+   "sha256": "8974b15a65fb320b9f5a65944ed4a6f29c41b02134d0425d0749676c3cb05df9"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/0a7b16e9b39a2dbbfbedde69f498b911.jpg",
+   "sha256": "a76b71c2b727f7e9005cba462bbd9844595cdbb896294f9436040d4221dd91c2"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/10f5c0fe4095395d5498190d5cdc1dee.jpg",
+   "sha256": "40cbe96d1abce41d0ae91af5f6b894c764dd59c43865b3a2f1200c8b80aa5974"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n2103/12554010ceb9dd191e76a92630483381.jpg",
+   "sha256": "be27c988c97f377e91a6e7521eb7dc40a36d83dfc4166996b1ab8865cada8951"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n1069/12ccd04a482c10c954088c8efa612dae.jpg",
+   "sha256": "ea188e23af96a553151c07c4a4ac44ae435ade247afa9a5b53681e3d66fe0c2e"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/13c548ef56b0119a45c6329446a8e46d.jpg",
+   "sha256": "db9094d775e84fa25a0af8aa024291a154fb7342f666dea09725390091b2d54d"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n974/157d5cb0241c5cf0a9234cdf8c933d7a.jpg",
+   "sha256": "a7b65589bbd8fcef2d3cd68f12dd46161c77eae763ec7197a51a305b4cc66e15"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n950/16283db7d20cd07139c6aaca93ea992b.jpg",
+   "sha256": "5c6d3f8ef994ede828456d4ead7e803f6324dca90aac76e3e5869920b292ece8"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/1681200572a5db60edc25f966935f908.jpg",
+   "sha256": "111f5012794a1dcfe416b3c026217a25b9181345b03a536072289c74aefc7412"
+  },
+  {
+   "person": "Andrew Garfield",
+   "path": "n116/19edea0d93c9db8f8b550244dad90e5b.jpg",
+   "sha256": "23ff622fe28cf0c06903dbc93e6700f0f57911220477c7dff115b1810b431071"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n116/00e3f340675f911f562b4f14ae582132.jpg",
+   "sha256": "9a0b6882f5c3b1e609ad6809b450774a4403768d4a86e476f8d022e93015a21c"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/01e7edf0fecc0b24ed0388e8eb995836.jpg",
+   "sha256": "c57ed3665be91787e2d217dc07f3e0162f7a5cb8661a35e3c579decc066d8563"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n106/0314537a114c1d02f4a5c77220a157ad.jpg",
+   "sha256": "3a70db2b8da51543137d3840045541ec7f02212d2568055a098a6808926c5fc8"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n116/05b6123f61cc356532021a7527c3a612.jpg",
+   "sha256": "e09b0d1f25b82598bf46a8e9bdd0d33783c51692d25deb6c1cb5fe477f9c3e38"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n411/0606f26f57ad934a2bbc2d0b759325d6.jpg",
+   "sha256": "df4d521950fddadfa8afd788d975888e66d7b615426a5001a233985ac80945fc"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n116/0a334eec2287912bbc7d2eac8b190d99.jpg",
+   "sha256": "fe105f2cacb2b45009a50cc5801f6adf2f4a8b23c65cf8db48c60b6ba8a6ff6d"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/0c0cfd2218870857865760f3e574b1ba.jpg",
+   "sha256": "9a1806d785b55205e25ffd5d709acd0e025d2974eab1bca44350b62842ecedc9"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/0d3705109d76d41e066f1f4016a493ca.jpg",
+   "sha256": "7b32b7146e88091e287a3313082abb6db52458800f757195401a45293125b338"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n2604/0e2bffaef24159477d6388ec1654856b.jpg",
+   "sha256": "66962621621e9426210cb0ace3f774075edd414869e04379ec6c096270a25d3e"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/0fc0955be0c3fdfa1191ceec11784f3e.jpg",
+   "sha256": "70a4921b843eb0254f83d5a2f8b69792da2f489f2423e795cb4fd61003109c71"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n238/1077abe3902edd216f8cf02057c48df6.jpg",
+   "sha256": "7f1fab868b6b4894e67dcd08b5806ad9aa68bd67f496baa3234184970f287dfd"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n2604/108d29b0943baaac573800c508a9fe00.jpg",
+   "sha256": "06d12c07566deca2fb456bc5bc0fca40c09d7d49eb9945c91828e4f7bd6ffb3c"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/13ecd6b156e279d8d8f90a832d7c5e2e.jpg",
+   "sha256": "b97e4ea6dc7aa5463d090613df152882857523361d70797f5c926b0e15692c8c"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/14df54e383cee059d7c315bdd36d66c9.jpg",
+   "sha256": "cdd186fb129f20b168282b175e2065c5e5431c1aedb346c371a71243b3f87cc5"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n238/1500d94f35d0e7d4fa58fc7821b3b22b.jpg",
+   "sha256": "432b9682ef6a44e9b4da7c6f80b0c9530e4fe67a1c61a17d7cfa82b3c5da270f"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/17042bb0d4f92d1254faa8c446ab8c32.jpg",
+   "sha256": "53cee4991f70f44b7f6ff9bb94ae6357f070f3e11665f11e51af9a7c1076407c"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n662/196370d08e2bc97080a8475421bdeb35.jpg",
+   "sha256": "a5cec42903eb1bd6b7225b333b9de50dc0b3c2887e0a8844ad319bc64549d621"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n116/196966b3a0702715d5523ea6e3363c40.jpg",
+   "sha256": "45a1e4dab1cac3d00ac3cc11132ecb42061ab830d903f1bd2362247e3c9ff2df"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n116/19a58c42068db380695180b9bb8ba5c7.jpg",
+   "sha256": "981bd9757a70e8cb3306e3ab4d8de660618510d138822d13222fa7f6e5a0d893"
+  },
+  {
+   "person": "Emma Stone",
+   "path": "n974/1aeb0666aad002acb5d5249b601d3297.jpg",
+   "sha256": "6627dee432eafc8112a177f672f401676214eb37bd354a5bf09575d48eda0913"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/02c55d4e4c78bfb75e1a0466c16bac39.jpg",
+   "sha256": "e716c2dcfc5475bf583c88b231af5e6faa80e18194f4a52e0d50de6571e1c67d"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n706/02e4b46de43d1697c763a65d997da4ab.jpg",
+   "sha256": "a5c830d21a295af8e66697d3fa4033cf8e3b6f91343f328e48f5d818dc3f12aa"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/0560afd9907c88168bc7bc19c95eadcf.jpg",
+   "sha256": "e2f76bfccff47138c19e469a6abc823bab14ba7894c0cf45a89d5fb9df59784c"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/05f886ac35955b57d29f605da6e2fd35.jpg",
+   "sha256": "e173b626e70a288f7cd917cf083bde31840d5f1efd3c20a31d2d79a3fdca8981"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/06cbcde9c61a5b3981d3579dcbe50e45.jpg",
+   "sha256": "e2358500bfeef1482b57bef5c609710ce7e9983ccd89aed6ed3a175b11fc68ff"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/076c89709303825b69808d1cd37a0b2b.jpg",
+   "sha256": "586b92b108548a2103d617d9a9cb27c9f5a56ddcb92cb1fd977e895f81ac0f7d"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/07d68362b6c93fc21c35a58fb54b9fc1.jpg",
+   "sha256": "1db52a7886660d3933e2963e81eac7f8544762d8311d4ed928c56250f2caed3e"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/0df7b0735a0beedd4243ee0c7eee326a.jpg",
+   "sha256": "8cf420c4618838d453d1c580145d96c23a531c40b24bd43171c86ca4848cfab1"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/10e8841c4278e6e6fd14a93894024d1a.jpg",
+   "sha256": "ac5f29b0ee377a8a473e00571df2d39995ca8ebc5d7f8b4016e525676be61e92"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/119c71362108b9d93f7d97bd68df7429.jpg",
+   "sha256": "dd9fdb67dd54f311e1d5941bca8b33e3c4d9c9188c5603f3783595cbfaa7dbb8"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/1245abb369addfa78ba3c709e6415ca0.jpg",
+   "sha256": "0f1a5fe090437d2e657a03eb3350e7082b872679aa8b552df9df12395d5f87bb"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n116/14c3b97180c7211272a8683c05eaac57.jpg",
+   "sha256": "548d1d33dd2e44f3807a4cb9649c536ee73a1da28755e1e66b2b192608493e14"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/155cfdbb641aab7f71cb6edb65ebec2b.jpg",
+   "sha256": "b769cf7190a1dce84118521c020481f80c3e6c400eeae4527197a571fe766b64"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/15fab11dc70a00fd24654a26342bd6ee.jpg",
+   "sha256": "57beaac0437727b35154953e64d36f09b33b94ee16e0add1ab4a7621199e82a7"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n2313/1613a833cfa362aa0555e50ae8e82324.jpg",
+   "sha256": "4328445c3f7bbb513c28d97bf3404c6d5f3da3edcdf219658781c503db1184b8"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/164b10bfb48fc62740a12503781dd149.jpg",
+   "sha256": "03c4a2cde128f52b9a16f54d1b0db603fbd836dfe395a1ae983ec01ac018c4ba"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/18dd45b847f3dfd1b0a732ad172c0348.jpg",
+   "sha256": "a79ebf4a54803e04df62ec802c0106fa9dcc04dc819124ae0e6f8e26638740ac"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n950/1a4a2c604154206c7ae0ef3f550ff839.jpg",
+   "sha256": "1bcaf56d0a76f9ad8bcd69ea2f4d840ecc019d88fded674463a3228ec9289b68"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n1381/1b7c8258a61a01c115af7c4d38a38970.jpg",
+   "sha256": "93738b9e90dcb27b866ef88e37bdd0a6d7e295460bb7646fcce7cda411428004"
+  },
+  {
+   "person": "Jamie Foxx",
+   "path": "n1381/1bf2bbeb3dfcf89d604d2fa82c756c61.jpg",
+   "sha256": "2c59b8be85404f58ab7f67e050f32ac23eb2bbb0eda59de060f145612f3ef027"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n978/00d774914c87273e5236277a1275ff2d.jpg",
+   "sha256": "31fc71e33ac827f477df1a33aeb3d4867643ee34d9a7d53e6b4e9852ddd253e5"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/02a976d051c641e4195dd40d4d7f1773.jpg",
+   "sha256": "254f90b62b0f568e78cd01bd34ff6d91eb4f3e173e5862dbe3637c6bf6acc3c7"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/02f294de3a535d72e7b7df66c0496bc4.jpg",
+   "sha256": "6988450e298a29d727af9ad68b1ed5d0ec1c4949f11a1d7c59982725aefc5310"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1322/033177a3515b531792d99c73e4eeb8df.jpg",
+   "sha256": "81d6bc79e964ab744aa9354f561cba884e9c19ecd61b6f8f6a10b886b3346aaa"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/036ef24ef9f6a637eccdd2bafb729fa1.jpg",
+   "sha256": "bb88937ddda7602c2f983f025ae15a74128944c1512a5d9c7cd10dc8eee140d6"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n435/03719c2bcb37e66e79fb76e5ede3563b.jpg",
+   "sha256": "aaf9b8cc29853e945288a1164fda768632630669652a6b69de42b1afb927e64a"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/040f94815ce912e302a8d6bd3f0f409c.jpg",
+   "sha256": "4240b48083389d1e041acf15329f5614be67fb9e52b04f297b687e69c9843544"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/045ee7130b0939b651449db9bcc8107b.jpg",
+   "sha256": "124b1cb95d7a6ee6cbb5317eb4af62f8fd6fd9703f031a65facaca4cab06010a"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1322/05ce810883d3eb0bf55f368aac4080fc.jpg",
+   "sha256": "80f9e700b52c6c8c205f7a9c5c58117596956b859919d1fa8317b0c70449458b"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1322/0760e0b52cbd213b68dd739ae2fa78dc.jpg",
+   "sha256": "cc9ebb3338611831a15e84a76f46169464a1a09fea23bfbe3cc7cd75d7e47438"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0a73c918ced6b3f543f116d2b5c57ea1.jpg",
+   "sha256": "c231c22729b2c24a3d23b000d2e3e4c05ae6394ea6f690d8b57c39e25819753f"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0b15f7104e25a7901bf78298564c2a83.jpg",
+   "sha256": "afc210a4c2633c47e48e9f2d0a51a6e71b76c2ef497886f02743f309d2a283f1"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0b477b524c32c1fc7883f429cedd5d1e.jpg",
+   "sha256": "6942483864444691f4da8aad1bf92a0d8d59ab8f3aff592d1ab6adac32c4ba9a"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0b99985830fece7143ba0e79e4c23cc7.jpg",
+   "sha256": "f2cd22fc95dccc628ace1d240ef65eba1874a5c4a966da9e9dd9b46c3476f31f"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0cd459b8d2c79de3ac339a1799f463b3.jpg",
+   "sha256": "d02c18a72225afb092ba752ea0d124c240abac2ce957a65922fa16139a5e2bf5"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/0fbd3199a690b10d927428f048a869cd.jpg",
+   "sha256": "8004af71970e9f8984aa4695e8d916cc41a6f66665d4e12dc0dd546371d23479"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n142/106395ea8dc22a6ccf4e2a07bd2071dc.jpg",
+   "sha256": "2fc30bcc71e5a4633326f53224c443fdea9232d5321c3b4fdb47a2185b843204"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/10feeb15d0c04c4dc5a154e8fa4d6a3d.jpg",
+   "sha256": "7b6b4f470b95013dfd896a904e08c3f8d51645478b3d20490c710716e6c92d4d"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1888/111f1c66c6e5570bc6bfa93a4a0e8da1.jpg",
+   "sha256": "65cf9ed5732e1c7a6d324307215c4072fc8965310b41e8663679495b6413e5fc"
+  },
+  {
+   "person": "Kerry Washington",
+   "path": "n1376/116d7aee9d04a6547118b7ce12d0adf0.jpg",
+   "sha256": "2443d6c4118a456d05ae212304959d9e6b090000ed5d128c25dd1f24314a0180"
+  }
+ ]
+}

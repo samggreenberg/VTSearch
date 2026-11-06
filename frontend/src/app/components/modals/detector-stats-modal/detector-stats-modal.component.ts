@@ -7,7 +7,8 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
-import { originParamRows, type OriginParamRow } from '../../../utils/origin-params';
+import { NO_VALUE } from '../../../utils/no-value';
+import type { OriginRow } from '../../../generated/api-client/models/origin-row';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
@@ -33,6 +34,9 @@ export class DetectorStatsModalComponent implements OnInit {
    *  Dashboard; see {@link showMediaType}. */
   readonly soloMediaType = input<string | null>(null);
   readonly closed = output<void>();
+
+  /** What a row with no value shows. */
+  readonly noValue = NO_VALUE;
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
   // schedules CD when the stats land.
@@ -62,9 +66,21 @@ export class DetectorStatsModalComponent implements OnInit {
     return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
-  /** The fields the detector's label importer ran with, one row each. */
-  get importParams(): OriginParamRow[] {
-    return originParamRows(this.stats()?.imported?.params);
+  /** The label importer's display name, as the New Detector › Trained picker names it. */
+  get importerName(): string {
+    const s = this.stats();
+    return s?.importer_display_name || s?.imported?.importer || '';
+  }
+
+  /** The fields the detector's label importer ran with, labelled and worded
+   *  by the server (#5620), the way the dataset Stats window's rows are. */
+  get importParams(): OriginRow[] {
+    return this.stats()?.imported_rows ?? [];
+  }
+
+  /** The row's tooltip: the importer field's description, else its raw key. */
+  paramTitle(row: OriginRow): string {
+    return row.description || `Importer field: ${row.key}`;
   }
 
   close(): void {
@@ -72,14 +88,20 @@ export class DetectorStatsModalComponent implements OnInit {
   }
 
   formatTimestamp(ts: number | null): string {
-    return formatTs(ts);
+    return ts ? formatTs(ts) : NO_VALUE;
+  }
+
+  /** When the detector last trained, or "Never" for one that has not. */
+  get lastTrained(): string {
+    const ts = this.stats()?.last_trained_at;
+    return ts ? formatTs(ts) : 'Never';
   }
 
   /** "N of M (in \"dataset\")" for the resolved-positives row, or a hint
    *  when no dataset is loaded to resolve against. */
   get resolvedSummary(): string {
     const s = this.stats();
-    if (!s) return '-';
+    if (!s) return NO_VALUE;
     if (!s.active_dataset_name) return 'No dataset loaded';
     return `${s.num_positive_resolved} of ${s.num_positive} in "${s.active_dataset_name}"`;
   }

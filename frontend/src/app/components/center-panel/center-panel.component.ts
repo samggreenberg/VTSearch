@@ -110,6 +110,26 @@ export class CenterPanelComponent implements OnDestroy {
    * on a detector with no labels yet, then says what each phase is after.
    */
   readonly voteHint = input<VoteHintId | null>(null);
+  /**
+   * The host owns the votes cast here (#5502): Tune's test of the line, whose
+   * picks are voted through `/api/line-test` rather than the ordinary vote
+   * state, but on this same pane, so they look and feel like every other
+   * vote. A vote is only emitted ({@link mediaVoted}), after the same swipe;
+   * the buttons light from {@link hostVote}; undo and redo, which walk the
+   * ordinary vote history, are off (↓ walks back instead, through the host);
+   * and no region is drawn, since such a vote carries none.
+   */
+  readonly hostVotes = input(false);
+  /**
+   * The active detector is a received, read-only copy (Train only): the
+   * Good / Bad buttons are disabled with a line saying so and a Fork, and the
+   * vote keys, undo and redo do nothing, since each would change its labels.
+   * Navigation still works. The server's 409 `detector_read_only` stays the
+   * backstop (`errorInterceptor`).
+   */
+  readonly readOnly = input(false);
+  /** The host's vote on the item on screen, under {@link hostVotes}. */
+  readonly hostVote = input<'good' | 'bad' | null>(null);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -123,6 +143,9 @@ export class CenterPanelComponent implements OnDestroy {
    * selection the walk moves.
    */
   readonly navigateRequested = output<NavDirection>();
+
+  /** The read-only line's Fork (see {@link readOnly}); the host makes the copy. */
+  readonly forkRequested = output<void>();
 
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
@@ -303,7 +326,7 @@ export class CenterPanelComponent implements OnDestroy {
     this.keyboard.action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((action) => {
       switch (action.type) {
         case 'vote':
-          if (this.media() && action.direction && !this.disabled() && !this.exhausted()) {
+          if (this.media() && action.direction && !this.disabled() && !this.exhausted() && !this.readOnly()) {
             this.castVote(action.direction);
           }
           break;
@@ -339,10 +362,10 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         case 'undo':
-          if (!this.disabled() && !this.isVoting()) this.voteState.undo();
+          if (!this.disabled() && !this.isVoting() && !this.hostVotes() && !this.readOnly()) this.voteState.undo();
           break;
         case 'redo':
-          if (!this.disabled() && !this.isVoting()) this.voteState.redo();
+          if (!this.disabled() && !this.isVoting() && !this.hostVotes() && !this.readOnly()) this.voteState.redo();
           break;
       }
     });
@@ -435,6 +458,7 @@ export class CenterPanelComponent implements OnDestroy {
    *  embeds the whole face, so a box there would only crop its Good-pile tile
    *  and train nothing (#4771). */
   get regionDrawOffered(): boolean {
+    if (this.hostVotes()) return false;
     return this.mediaType === 'image' || this.regionOverlayCapable;
   }
 
@@ -481,12 +505,14 @@ export class CenterPanelComponent implements OnDestroy {
 
   get isGood(): boolean {
     const media = this.media();
-    return media ? this.voteState.effectiveGood(media.id) : false;
+    if (!media) return false;
+    return this.hostVotes() ? this.hostVote() === 'good' : this.voteState.effectiveGood(media.id);
   }
 
   get isBad(): boolean {
     const media = this.media();
-    return media ? this.voteState.effectiveBad(media.id) : false;
+    if (!media) return false;
+    return this.hostVotes() ? this.hostVote() === 'bad' : this.voteState.effectiveBad(media.id);
   }
 
   get customMetadata(): Record<string, unknown> {
@@ -523,7 +549,7 @@ export class CenterPanelComponent implements OnDestroy {
 
   castVote(vote: 'good' | 'bad'): void {
     const media = this.media();
-    if (!media || this.isVoting() || this.exhausted()) return;
+    if (!media || this.isVoting() || this.exhausted() || this.readOnly()) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
     // A no-vote with a box drawn arms a sticky discard-confirm state; the first
@@ -546,35 +572,43 @@ export class CenterPanelComponent implements OnDestroy {
     this.pendingBadConfirm.set(false);
     this.isVoting.set(true);
 
+    // A host-owned vote goes to the host as it is cast; it sends it itself.
+    if (this.hostVotes()) {
+      this.landVote(vote, votedId);
+      return;
+    }
     this.voteState
       .submitToggleVoteAndRecord(media.id, vote, this.mediaDisplayName(media), regionBox)
       .subscribe({
-        next: () => {
-          const animate = this.showAnimations() && !!this.media() && !prefersReducedMotion();
-          if (animate) {
-            this.swipeParked.set(false);
-            this.swipeClass.set(vote === 'good' ? 'swipe-right' : 'swipe-left');
-            this.spinningVote.set(vote);
-            if (this.spinTimer) clearTimeout(this.spinTimer);
-            this.spinTimer = setTimeout(() => this.spinningVote.set(null), 300);
-            setTimeout(() => {
-              this.mediaVoted.emit({ id: votedId, vote });
-              this.isVoting.set(false);
-              // Park rather than clear: the un-pin effect in the constructor
-              // decides when the node comes back. This has to follow the emit,
-              // because the host's handler is what starts (or skips) the
-              // advance that effect waits on.
-              this.swipeParked.set(true);
-            }, 180);
-          } else {
-            this.mediaVoted.emit({ id: votedId, vote });
-            this.isVoting.set(false);
-          }
-        },
+        next: () => this.landVote(vote, votedId),
         error: () => {
           this.isVoting.set(false);
         },
       });
+  }
+
+  /** The vote is in: swipe the item off (when animations are on) and hand the vote to the host. */
+  private landVote(vote: 'good' | 'bad', votedId: number): void {
+    const animate = this.showAnimations() && !!this.media() && !prefersReducedMotion();
+    if (animate) {
+      this.swipeParked.set(false);
+      this.swipeClass.set(vote === 'good' ? 'swipe-right' : 'swipe-left');
+      this.spinningVote.set(vote);
+      if (this.spinTimer) clearTimeout(this.spinTimer);
+      this.spinTimer = setTimeout(() => this.spinningVote.set(null), 300);
+      setTimeout(() => {
+        this.mediaVoted.emit({ id: votedId, vote });
+        this.isVoting.set(false);
+        // Park rather than clear: the un-pin effect in the constructor
+        // decides when the node comes back. This has to follow the emit,
+        // because the host's handler is what starts (or skips) the
+        // advance that effect waits on.
+        this.swipeParked.set(true);
+      }, 180);
+    } else {
+      this.mediaVoted.emit({ id: votedId, vote });
+      this.isVoting.set(false);
+    }
   }
 
   /** True while a Shift-drag (or the sticky Marquee toggle) would draw a region.

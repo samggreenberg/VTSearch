@@ -18,7 +18,8 @@ it on a context is separate, in `vtscore/state/coverage.py`; see
 | Module | Concern |
 |--------|---------|
 | `vtscore/coverage/atlas.py` | `CoverageAtlas`, `auto_max_depth` — the partition, its evidence channels and moments |
-| `vtscore/coverage/domain_shift.py` | `domain_shift_report`, `typicality_pvalues` — split-conformal kNN against a reference dataset's vectors (#3348) |
+| `vtscore/coverage/domain_shift.py` | `domain_shift_report`, `typicality_pvalues` — split-conformal kNN against a reference dataset's vectors (#3348); `domain_shift_line`, the report's one line as the app words it (#5501) |
+| `vtscore/coverage/domain_summary.py` | `summarize_reference`, `summary_pvalues`, `summary_shift_report` — the same report against a summary of the reference that can travel without its vectors: anchor items plus calibration scores (#5567) |
 
 ## What the structure keeps
 
@@ -46,7 +47,11 @@ Three properties matter to callers:
 | `CoverageAtlas(vectors, k=3, max_depth=10, min_node_size=20, on_progress=None)` | The partition itself, built by recursive k-means over `{id: vector}` (`k` must be 2-9). See the method groups below |
 | `auto_max_depth(n, k=3, min_node_size=20)` | Depth to build to for *n* items: `COVERAGE_ATLAS_MAX_DEPTH` unless `n / min_node_size` exceeds the 4 000-leaf budget, then clamped so `k**depth` stays under it. At least 1 |
 | `domain_shift_report(reference, matrix, alpha=0.05)` | Dataset-level shift report: how much of *matrix* looks atypical against the *reference* vectors. Split-conformal kNN (k = 5), so a reference item's p-value is uniform; scores at most 4 000 rows of *matrix*; raises `ReferenceTooSmall` under 40 reference vectors |
+| `domain_shift_line(frac_atypical, reference, *, shifted)` | The report's one line, as the app's warnings and the email exporter word it: `"68% of this dataset looks atypical vs photos: likely domain shift"` (or *largely in-domain*), the share rounded half up |
 | `typicality_pvalues(reference, matrix, k=5)` | The per-row p-values behind the report, every row scored |
+| `summarize_reference(reference, *, n_anchors=128)` | Summarise *reference* as `(anchor_rows, calibration)`: indices of up to *n_anchors* reference rows (each the member nearest a spherical k-means centroid of the fit half; items, never averages, so a caller names them by origin) and the sorted nearest-anchor cosines of up to 1 000 calibration-half rows. Deterministic; raises `ReferenceTooSmall` as the report does |
+| `summary_pvalues(anchors, calibration, matrix)` | Per-row p-values against a summary: each row's nearest-anchor cosine ranked among the calibration scores. The anchors are a function of the fit half alone, so the p-value of a reference item stays uniform |
+| `summary_shift_report(anchors, calibration, matrix, alpha=0.05)` | `domain_shift_report`'s dict, drawn by the same rule from the same sample of *matrix*, against a summary. Less power than the full report, the same null |
 | `COVERAGE_ATLAS_DEFAULT_K` / `COVERAGE_ATLAS_MAX_DEPTH` / `COVERAGE_ATLAS_MIN_NODE_SIZE` | Partition-shape defaults: `3` / `10` / `20` |
 
 `CoverageAtlas` methods:

@@ -411,6 +411,17 @@ class ServerSettings(BaseModel):
     # default) means detectors sync only where a binding was set by hand.
     default_labelset_source: dict[str, Any] | None = None
 
+    # Detector sharing (docs/ARCHITECTURE.md, "Detector sharing"): the labelset source
+    # detectors are shared through, same ``{"source_name": ..., "field_values":
+    # ...}`` shape as ``default_labelset_source``, and the same rule for its
+    # values: each non-empty one is fixed by the admin (the service's connection
+    # values) and laid into every sharing binding. The source must implement
+    # sharing; one that does not, or an unknown name, leaves sharing off with a
+    # warning. ``None`` (the default) is off: sharing is a deployment-level
+    # integration, so installing a source that can share never switches it on.
+    # Resolved in one place, :func:`vtscore.labels.sharing.active_sharing_source`.
+    detector_sharing_source: dict[str, Any] | None = None
+
     # Shortest gap, in seconds, between two pushes of one detector's labels to
     # its labelset source. A push never overlaps the previous one for the same
     # detector; changes made meanwhile ride the next push, so a burst of votes

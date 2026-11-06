@@ -100,8 +100,9 @@ describe('TrainingDomainAlertService (#4961)', () => {
     const opts = toast.warning.mock.calls[0][0];
     // The Tune result's line and verdict, nothing stronger.
     expect(opts.message).toBe('31% of this dataset looks atypical vs Photos: likely domain shift');
-    expect(opts.detail).toContain('Cats learned from Photos (40 of its 52 labelled examples are there)');
-    expect(opts.detail).toContain('Check its calls on Screenshots by hand');
+    // Its next step is the toast's own Tune it button (#5545).
+    expect(opts.detail).toBe('"Cats" learned mostly from "Photos". Tune it to check its calls on "Screenshots".');
+    expect(opts.action.label).toBe('Tune it');
     expect(opts.dedupKey).toBe('training-domain:screens::cats');
 
     opts.action.onClick();
@@ -169,11 +170,13 @@ describe('TrainingDomainAlertService (#4961)', () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
-  it('offers no Tune button when the user is already tuning', () => {
+  it('offers no Tune button when the user is already tuning, and points at where to check instead', () => {
     respond = () => of(report());
     start();
     url = '/tune/screens/cats';
     context.setActivePair('screens', 'cats');
-    expect(toast.warning.mock.calls[0][0].action).toBeUndefined();
+    const opts = toast.warning.mock.calls[0][0];
+    expect(opts.action).toBeUndefined();
+    expect(opts.detail).toBe('"Cats" learned mostly from "Photos". Check its calls on "Screenshots" here, on the Autopilot tab.');
   });
 });

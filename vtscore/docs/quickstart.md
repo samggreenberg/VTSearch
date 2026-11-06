@@ -81,7 +81,8 @@ works anywhere in the library. Two details that bite:
   (`autofind_exporter`, `autofind_exporter_field_values`,
   `autofind_cli_delete_dataset`, `projection_n_neighbors`,
   `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
-  `default_labelset_source`, `labelset_source_push_interval`, `beta`,
+  `default_labelset_source`, `detector_sharing_source`,
+  `labelset_source_push_interval`, `beta`,
   `hide_ingest_eta` and `inclusion` (both deprecated)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 

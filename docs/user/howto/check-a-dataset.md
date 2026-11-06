@@ -16,9 +16,12 @@ On the dashboard, click the **⋯** <picture><source media="(prefers-color-schem
 1. **Media items**: how many pictures it holds. **Duplicate groups** counts
    sets of pictures that are the same file under different names, which
    VTSearch keeps once each.
-2. **Creation**: how it was made, including the **Importer** and its settings
-   (for a folder, its path) and the **Embedder**. A detector only works on
-   datasets made with a compatible embedder.
+2. **Creation**: how it was made, including the **Importer** and its settings,
+   under the names the import form gave them (for a folder, its path and
+   whether it included subfolders), and the **Embedder**. **Include media**
+   says which other kinds of media were converted in, such as *Images → Faces*
+   for a dataset of faces cut from photos. A setting with nothing in it reads
+   **None**. A detector only works on datasets made with a compatible embedder.
 3. **Timeline** and **File Types**: when it was imported and how long that
    took, and the kinds of file it holds.
 
@@ -61,7 +64,7 @@ choose **Stats**. The **Stats: Yellow Smileys** window shows:
 
 Between the counts and **Creation**, **Tested on** lists what a test measured
 the detector to ship, one line per dataset it was tested on: *drawings-new:
-likely 70–85% right, about half of them found (34 picks, 2026-10-05)*. A line
+likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)*. A line
 marked *out of date* is from before the detector was last retrained; *Untested*
 means no test has finished yet (see
 [Decide how far to trust a detector](trust-a-detector.md)).

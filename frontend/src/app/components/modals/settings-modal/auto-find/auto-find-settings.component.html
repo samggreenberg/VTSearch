@@ -10,14 +10,8 @@
 <!-- Hidden entirely when no exporters are available: the section would
      otherwise degrade to a lone "None" tab (a picker with no real choice). -->
 @if (loadingExporters() || exporters().length > 0) {
-<h4 class="subhead">
-  Results Exporter:
-  <span
-    class="help-icon"
-    tabindex="0"
-    title="Choose a results exporter to have AutoFind results emailed, saved, or posted automatically when a run finishes. Pick “None” to keep results in the app.">
-    <vt-icon type="help" [size]="14"></vt-icon>
-  </span>
+<h4 class="subhead" title="Where AutoFind results go when a run finishes">
+  Results Exporter:<vt-field-hint-icon hint="Choose a results exporter to have AutoFind results emailed, saved, or posted automatically when a run finishes. Pick “None” to keep results in the app."></vt-field-hint-icon>
 </h4>
 @if (loadingExporters()) {
   <p class="empty-state">Loading exporters…</p>

@@ -27,6 +27,7 @@
     tabindex="-1"
     aria-label="Show options"
     [disabled]="disabled()"
+    [title]="disabled() ? 'Wait for the options to load' : ''"
     (mousedown)="onToggleMousedown($event)"
   >▾</button>
 </div>
@@ -56,7 +57,9 @@
         (click)="pick(opt)"
         (mouseenter)="activeIndex.set(i)"
       >
-        <span class="plugin-combobox-option-label">{{ opt.label }}</span>
+        <span class="plugin-combobox-option-label">{{ opt.label }}@if (opt.tag) {
+          <span class="plugin-combobox-option-tag">{{ opt.tag }}</span>
+        }</span>
         @if (opt.value !== opt.label) {
           <span class="plugin-combobox-option-value">{{ opt.value }}</span>
         }

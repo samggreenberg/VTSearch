@@ -1690,3 +1690,106 @@ class TestEmailStreaming:
             get_exporter("email_smtp").export_cli_streaming(
                 _STREAM_HEADER, _stream_records(), {"from": "vt@example.com", "to": "not-an-email"}
             )
+
+
+class TestExportForANamedDetector:
+    """``detector_id`` scopes an export to the detector it belongs to (#5494).
+
+    The Dashboard row's Export labels points at a detector in a list, which is
+    neither necessarily loaded nor the one the top bar has active. Its
+    ``{detector_name}`` template must resolve to *that* detector, not to the
+    request's ``X-Detector-Id`` (the last-loaded one) or to nothing at all.
+    """
+
+    _URL_TEMPLATE = "https://example.com/{detector_name}?ids={ids}"
+
+    @staticmethod
+    def _register(client, name):
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "x"},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    @staticmethod
+    def _activate(detector_id, name):
+        from vtscore.state.core import DetectorContext, register_detector_context
+
+        register_detector_context(DetectorContext(detector_id, name=name, media_type="audio"))
+        return {"X-Detector-Id": detector_id}
+
+    def _export(self, client, detector_id="", headers=None):
+        body = {
+            "exporter_name": "open_url",
+            "field_values": {"url_template": self._URL_TEMPLATE},
+            "results": SAMPLE_LABELSET,
+            "payload_kind": "labelset",
+        }
+        if detector_id:
+            body["detector_id"] = detector_id
+        return client.post("/api/exporters/export", json=body, headers=headers or {})
+
+    def test_an_unloaded_detector_with_nothing_active_resolves_to_its_own_name(self, client):
+        row_id = self._register(client, "JustImported")
+
+        res = self._export(client, row_id)
+
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()["open_url"].startswith("https://example.com/JustImported?")
+
+    def test_the_named_detector_wins_over_the_active_one(self, client):
+        active_id = self._register(client, "LastLoaded")
+        row_id = self._register(client, "ClickedRow")
+        headers = self._activate(active_id, "LastLoaded")
+
+        res = self._export(client, row_id, headers)
+
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()["open_url"].startswith("https://example.com/ClickedRow?")
+
+    def test_without_a_detector_id_the_active_detector_still_resolves(self, client):
+        active_id = self._register(client, "LastLoaded")
+        headers = self._activate(active_id, "LastLoaded")
+
+        res = self._export(client, headers=headers)
+
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()["open_url"].startswith("https://example.com/LastLoaded?")
+
+    def test_the_exporter_body_sees_the_named_loaded_detector_as_active(self, client):
+        from vtscore.exporters.open_url import OpenUrlResultsExporter
+        from vtscore.state.core import get_active_detector_context, get_detector_context
+
+        active_id = self._register(client, "LastLoaded")
+        row_id = self._register(client, "ClickedRow")
+        headers = self._activate(active_id, "LastLoaded")
+        self._activate(row_id, "ClickedRow")
+        seen = []
+        real = OpenUrlResultsExporter.export_labelset
+
+        def spy(exporter, labelset, field_values):
+            seen.append(get_active_detector_context())
+            return real(exporter, labelset, field_values)
+
+        with patch.object(OpenUrlResultsExporter, "export_labelset", spy):
+            res = self._export(client, row_id, headers)
+
+        assert res.status_code == 200, res.get_json()
+        assert seen == [get_detector_context(row_id)]
+
+    def test_an_unknown_detector_id_is_a_404(self, client):
+        res = self._export(client, "no-such-detector")
+
+        assert res.status_code == 404
+        assert "no-such-detector" in res.get_json()["message"]
+
+    def test_a_detector_the_user_may_not_read_is_a_403(self, client):
+        from vtscore.detectors.registry import update_detector
+
+        row_id = self._register(client, "SomeoneElses")
+        update_detector(row_id, created_by="alice", readers=[])
+
+        res = self._export(client, row_id)
+
+        assert res.status_code == 403

@@ -31,6 +31,21 @@ class _DemoDatasetEntrySchema(Schema):
     available_converters = fields.List(fields.Nested(ConverterInfoSchema), required=True)
     pkl_embedder = fields.String(required=True)
     pkl_clipper = fields.String(required=True)
+    has_source_folder = fields.Boolean(
+        required=True,
+        metadata={
+            "description": "Whether the demo declares a source folder on disk. Hub-fetched and generated "
+            "demos declare none, so their files can never be browsed, whatever their status."
+        },
+    )
+    browsable = fields.Boolean(
+        required=True,
+        metadata={
+            "description": "Whether ``demo:<name>`` resolves for ``/api/browse-media-files``: the demo "
+            "declares a source folder and it is populated. Independent of ``status``, which a cached "
+            "pickle can make ``ready`` with no folder at all."
+        },
+    )
 
 
 class DemoDatasetListQuerySchema(Schema):

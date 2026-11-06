@@ -61,6 +61,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
+from vtscore.plugins.origin_rows import describe_field_value
 
 __all__ = ["LabelImporter", "PluginField"]
 
@@ -151,6 +152,31 @@ class LabelImporter(PluginBase):
         """
         raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
 
+    def run_labelset(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """Perform the import and return it as a serialised labelset.
+
+        The shape is :meth:`~vtscore.datasets.labelset.LabelSet.to_dict`'s:
+        ``{"labels": [...]}``, plus a ``detector_meta`` block when the source
+        carries one.  The routes and the CLI call this rather than :meth:`run`,
+        so an importer whose source can hold the block (a labelset file this
+        app exported) hands it over, and the importing detector keeps the
+        sending detector's training-domain summary (#5571;
+        :func:`~vtscore.detectors.domain_summary.adopt_domain_summary`).  The
+        default wraps :meth:`run`, so an importer that only returns labels
+        overrides nothing.  ``labels`` must be a list of label dicts, as
+        :meth:`run` returns.
+        """
+        return {"labels": self.run(field_values)}
+
+    def run_labelset_cli(self, field_values: dict[str, Any]) -> dict[str, Any]:
+        """:meth:`run_labelset` from CLI-provided *field_values*.
+
+        The default wraps :meth:`run_cli`, so a CLI override there keeps
+        applying.  An importer that overrides :meth:`run_labelset` overrides
+        this too, the way it pairs :meth:`run` with :meth:`run_cli`.
+        """
+        return {"labels": self.run_cli(field_values)}
+
     def default_detector_name(self, field_values: dict[str, Any]) -> str:
         """Return the default name for a detector created from *field_values*.
 
@@ -180,6 +206,26 @@ class LabelImporter(PluginBase):
             if stem:
                 return stem
         return f"{self.display_name} detector"
+
+    def describe_origin_param(self, key: str, value: str) -> str:
+        """Return the import record's param *key*'s *value* as a person reads it.
+
+        The detector Stats window's Import section lists the fields this
+        importer ran with (the record
+        :func:`~vtscore.detectors.import_record.build_import_record` keeps),
+        one row per param, labelled with this importer's own field labels
+        (:func:`~vtscore.detectors.import_record.import_rows`); this method
+        words each value, the way
+        :meth:`~vtscore.datasets.importers.base.core.ImporterBase.describe_origin_param`
+        does for a dataset's origin.  Return ``""`` to leave the row out.
+
+        The default reads a checkbox as ``Yes`` / ``No`` and returns anything
+        else as recorded.  Override it to name a value your importer records as
+        an id (a saved query, a catalogue entry), and call ``super()`` for the
+        keys you leave alone.
+        """
+        field = next((f for f in self.fields if f.key == key), None)
+        return describe_field_value(field, value)
 
     # ------------------------------------------------------------------
     # CLI support

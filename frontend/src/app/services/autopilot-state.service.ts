@@ -96,11 +96,10 @@ export interface AutopilotState {
    * indicators after that, because it decides what autopilot picks: a vote
    * that knocks Stable off green sends it back to ``hard`` for boundary items.
    * But the user was told the detector is trained, so the panel reads this
-   * instead of the phase, keeping Done checked and showing further votes as
-   * an open-ended last step (Keep Improving) rather than bouncing back to
-   * Boundary. Display
-   * only: it never feeds the phase. Cleared only by falling back into the
-   * opening (votes un-done below its targets) or by a new run.
+   * instead of the phase, keeping Done the active step, checked, rather than
+   * bouncing back to Boundary; no step follows it (#5499). Display only: it
+   * never feeds the phase. Cleared only by falling back into the opening
+   * (votes un-done below its targets) or by a new run.
    */
   doneReached: boolean;
   /**
@@ -144,6 +143,19 @@ export function allLightsGreen(st: AutopilotState): boolean {
  * (`vtscore/eval/autopilot_flow.py`).
  */
 export const STOP_CAP_VOTES = 200;
+
+/**
+ * About how many votes a run that trains a detector takes to reach Done
+ * (#5539): the round figure the panel's vote counter and the `keep-voting`
+ * hint quote beside {@link STOP_CAP_VOTES}, so a user mid-run knows roughly
+ * how far there is to go. Measured with the Diversity step off, the default
+ * since #5473: on faces every session reaches Done at a median of 45 votes
+ * (55 at beta 4; `docs/experiments/2026-11-03-state-of-the-app-face/`), and on
+ * COCO the sessions that met the step stop at a mean of 45-55
+ * (`docs/experiments/2026-10-30-skip-diversity-5473/`). Words for the user,
+ * not a rule: the phase machine never reads it.
+ */
+export const TYPICAL_DONE_VOTES = 50;
 
 /** The phases before the first learned sort: no trained detector yet. */
 const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];

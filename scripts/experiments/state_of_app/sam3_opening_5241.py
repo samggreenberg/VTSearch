@@ -17,9 +17,10 @@ Takeover rules priced on the SAM3 path:
 - ``best``: per session the better of the two at each click (a bound no label-only rule reaches).
 
 F shown is carried forward over clicks with no row. Means are over cells and SEs over classes (a class's bands are
-not independent), as in #4711.
+not independent), as in #4711. A cell is (class@band, path, seed): #5311's run dirs hold seeds 1 and 2. F is F-beta at
+the run's own beta (``--beta``, also the dir's -b suffix), the objective the session is run on.
 
-    python sam3_opening_5241.py --root <state-of-the-app> --out <dir> [--date 2026-10-26] [--tag ""]
+    python sam3_opening_5241.py --root <state-of-the-app> --out <dir> [--date 2026-10-26] [--tag ""] [--beta 1]
 """
 
 from __future__ import annotations
@@ -46,11 +47,17 @@ FIXED = (10, 20, 30, 50, 75, 100)
 AREAS = ((1, 50), (1, 150))
 COLS = ["category", "seed", "embedder", "t", "phase", "gmm_variant", "schedule", "pool_variant", "detector_tier",
         "app_trained", "precision", "recall", "average_precision"]  # fmt: skip
+BETA = {"beta": 1.0}  # the run's balance: set by main(), read by curves()
 COLOR = {"sig": "#8a8985", "hold": "#2a78d6", "quota": "#d65f2a", "head": "#3a9a5b", "best": "#b8b6b0"}
 
 
-def run_dir(root: Path, date: str, tag: str, arm: str) -> Path:
-    return root / f"{date}-sam3open5241{tag}-{arm}-b1" / "results" / "cells"
+def btag(beta: float) -> str:
+    """launch.sh's -b suffix: b025, b1, b4."""
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+def run_dir(root: Path, date: str, tag: str, arm: str, beta: float = 1.0) -> Path:
+    return root / f"{date}-sam3open5241{tag}-{arm}-{btag(beta)}" / "results" / "cells"
 
 
 def read_cell(path: str) -> pd.DataFrame:
@@ -79,15 +86,15 @@ def on_grid(t: np.ndarray, v: np.ndarray) -> np.ndarray:
     return pd.Series(out).ffill().to_numpy()
 
 
-def curves(rows: pd.DataFrame, tag: str) -> dict[tuple[str, str], tuple[np.ndarray, np.ndarray]]:
-    """Per (cell, path): (F, AP) of the rows tagged *tag* ('' is the untagged row), on the click grid."""
+def curves(rows: pd.DataFrame, tag: str) -> dict[tuple[str, str, int], tuple[np.ndarray, np.ndarray]]:
+    """Per (cell, path, seed): (F-beta, AP) of the rows tagged *tag* ('' is the untagged row), on the click grid."""
     out = {}
     sub = rows[rows["gmm_variant"] == tag]
-    for (cat, emb), g in sub.groupby(["category", "embedder"]):
+    for (cat, emb, seed), g in sub.groupby(["category", "embedder", "seed"]):
         g = g.drop_duplicates("t", keep="last").sort_values("t")
         t = g["t"].to_numpy(dtype=int)
-        out[(cat, emb)] = (
-            on_grid(t, fbeta(g["precision"], g["recall"], 1.0)),
+        out[(cat, emb, int(seed))] = (
+            on_grid(t, fbeta(g["precision"], g["recall"], BETA["beta"])),
             on_grid(t, g["average_precision"].to_numpy(dtype=float)),
         )
     return out
@@ -100,7 +107,7 @@ def mean_se(x: np.ndarray, cls: np.ndarray) -> tuple[float, float]:
 
 def analyse(sig: pd.DataFrame, sam3: pd.DataFrame, gmm: pd.DataFrame | None, out: Path) -> dict:
     s_shown, q_shown, q_head = curves(sig, ""), curves(sam3, ""), curves(sam3, HOLD_TAG)
-    g_line = {k[0]: v[0][1] for k, v in curves(gmm, "").items()} if gmm is not None else {}
+    g_line = {(k[0], k[2]): v[0][1] for k, v in curves(gmm, "").items()} if gmm is not None else {}
     summary, per_click, crossings = [], [], []
     info: dict = {}
     for emb, path in PATHS.items():
@@ -112,8 +119,8 @@ def analyse(sig: pd.DataFrame, sam3: pd.DataFrame, gmm: pd.DataFrame | None, out
         q = np.vstack([q_shown[k][0] for k in keys])  # constant in t: SAM3's set at 0.5
         head = np.vstack([q_head[k][0] for k in keys])
         q0 = q[:, 1]
-        gq = np.asarray([g_line.get(c, np.nan) for c in cats])
-        info[path] = {"cells": len(keys), "classes": int(len(set(cls))),
+        gq = np.asarray([g_line.get((k[0], k[2]), np.nan) for k in keys])
+        info[path] = {"cells": len(keys), "classes": int(len(set(cls))), "seeds": sorted({k[2] for k in keys}),
                       "sam3_set_constant": bool(np.allclose(q[:, 1:], q0[:, None], equal_nan=True))}  # fmt: skip
         has = np.isfinite(head)
         first = np.where(has.any(axis=1), has.argmax(axis=1), T + 1)
@@ -157,7 +164,7 @@ def analyse(sig: pd.DataFrame, sam3: pd.DataFrame, gmm: pd.DataFrame | None, out
             info[path][f"head_sam3_minus_sig@{t}"] = mean_se(d, cls)
         for k, c in enumerate(cats):
             ok = np.where(np.isfinite(head[k]) & (head[k] > q0[k]))[0]
-            crossings.append({"path": path, "category": c, "sam3_F": q0[k], "gmm_F": gq[k],
+            crossings.append({"path": path, "category": c, "seed": keys[k][2], "sam3_F": q0[k], "gmm_F": gq[k],
                               "first_click_head_beats": int(ok[0]) if len(ok) else None,
                               "head_F150": head[k, T], "sig_F150": sig_f[k, T]})  # fmt: skip
         for t in GRID_T[1:]:
@@ -184,7 +191,7 @@ def figure(pc: pd.DataFrame, path: Path) -> None:
         ax.set_title(name, loc="left", fontsize=11)
         ax.set_xlabel("votes", color=MUTED)
         _axes_style(ax)
-    axes[0].set_ylabel("F1 shown (mean over cells)", color=MUTED)
+    axes[0].set_ylabel(f"F{BETA['beta']:g} shown (mean over cells)", color=MUTED)
     axes[0].legend(frameon=False, fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
@@ -196,11 +203,13 @@ def main() -> int:
     ap.add_argument("--date", default="2026-10-26")
     ap.add_argument("--tag", default="")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--beta", type=float, default=1.0)
     ap.add_argument("--procs", type=int, default=8)
     a = ap.parse_args()
-    sig = load(run_dir(a.root, a.date, a.tag, "sig"), a.procs)
-    sam3 = load(run_dir(a.root, a.date, a.tag, "sam3"), a.procs)
-    gdir = run_dir(a.root, a.date, a.tag, "sam3gmm")
+    BETA["beta"] = a.beta
+    sig = load(run_dir(a.root, a.date, a.tag, "sig", a.beta), a.procs)
+    sam3 = load(run_dir(a.root, a.date, a.tag, "sam3", a.beta), a.procs)
+    gdir = run_dir(a.root, a.date, a.tag, "sam3gmm", a.beta)
     gmm = load(gdir, a.procs) if glob.glob(f"{gdir}/task_*.csv*") else None
     print(json.dumps(analyse(sig, sam3, gmm, a.out), indent=1))
     return 0

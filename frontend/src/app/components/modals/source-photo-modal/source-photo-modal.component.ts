@@ -18,6 +18,8 @@ type SourcePhotoView =
 
 /**
  * Show in photo (#4750): a face crop's source photo, with the face outlined.
+ * A request that brings boxes outlines several faces instead, each coloured by
+ * whose it is (`OutlineBox`): the People view's photo two people share.
  *
  * The photo is an item of the Image dataset the face's import produced, read
  * with that dataset's id alone while the Face pair stays active (see
@@ -51,6 +53,13 @@ export class SourcePhotoModalComponent {
   private readonly resource = rxResource({
     params: () => this.request().mediaId,
     stream: ({ params }) => this.sourcePhoto.lookup(params).pipe(switchMap((found) => this.withPhoto(found))),
+  });
+
+  /** The request's faces to outline by whose they are, or null when it
+   *  brought none and the lookup's one box is outlined instead. */
+  readonly outlineBoxes = computed(() => {
+    const boxes = this.request().boxes;
+    return boxes?.length ? boxes : null;
   });
 
   /** The lookup's answer, or null while it is still out. */

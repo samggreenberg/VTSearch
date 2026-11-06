@@ -37,6 +37,7 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch.routes._context import MISSING_DETECTOR_HEADER, require_detector_header
 from vtsearch.schemas.sorting import PrecisionCheckResponseSchema, PrecisionCheckVotesRequestSchema
+from vtsearch.routes._read_only import refuse_linked
 
 log = logging.getLogger(__name__)
 
@@ -124,8 +125,14 @@ def start_precision_check():
 @precision_check_bp.arguments(PrecisionCheckVotesRequestSchema)
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 @precision_check_bp.alt_response(400, description="A vote on an item that is not one of this band's picks.")
-@precision_check_bp.alt_response(409, description="No check is running.")
+@precision_check_bp.alt_response(
+    409,
+    description=(
+        "No check is running, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
+    ),
+)
 @precision_check_bp.alt_response(500, description="The votes could not be written to the detector store.")
+@refuse_linked("active", find_mode_ok=True)
 def vote_precision_check(body: dict):
     """Record votes on the running check's picks.
 

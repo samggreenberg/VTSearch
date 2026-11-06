@@ -77,15 +77,18 @@ def get_detector_stats(detector_id: str):
     ``test_verdicts`` is every test verdict the detector keeps, one per tested
     dataset, newest first and marked stale once the detector has been
     retrained since (#4526).  ``imported`` is how a label importer created the
-    detector (#5334), or ``None``.
+    detector (#5334), or ``None``; ``importer_display_name`` and
+    ``imported_rows`` are that record worded for the Import section (#5620).
     """
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.import_record import import_rows, label_importer_display_name
     from vtscore.detectors.line_verdicts import verdict_summaries
     from vtscore.detectors.registry import (
         can_user_access_detector,
         get_detector,
         get_loaded_detector_ids,
     )
+    from vtscore.detectors.embedder_sync import embedder_display_name
     from vtscore.media import get_clipper
     from vtscore.state.core import get_detector_context
     from vtsearch.settings import get_autofind_detectors
@@ -123,6 +126,7 @@ def get_detector_stats(detector_id: str):
         except KeyError:
             clipper_display = raw_clipper
 
+    imported = entry.get("imported") or None
     return {
         "name": name,
         "media_type": entry.get("media_type", "") or "",
@@ -132,6 +136,7 @@ def get_detector_stats(detector_id: str):
         "num_positive_resolved": _resolved_positive_count(positives),
         "active_dataset_name": _active_dataset_name(),
         "embedder": embedder,
+        "embedder_display_name": embedder_display_name(embedder),
         "text_query": data.get("text_query", "") or "",
         "media_example": data.get("media_example", "") or "",
         "clipper": clipper_display,
@@ -142,7 +147,11 @@ def get_detector_stats(detector_id: str):
         "readers": entry.get("readers", []) or [],
         "autofind": name in set(get_autofind_detectors()),
         "test_verdicts": verdict_summaries(data),
-        "imported": entry.get("imported") or None,
+        "imported": imported,
+        # The Import section's rows, worded for a person: the label importer's
+        # display name, and its fields under its own labels (#5620).
+        "importer_display_name": label_importer_display_name(str((imported or {}).get("importer") or "")),
+        "imported_rows": [row.to_dict() for row in import_rows(imported)],
     }
 
 

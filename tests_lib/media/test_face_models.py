@@ -72,6 +72,43 @@ class TestWhereTheConfigComesFrom:
         status = bridge.face_models()
         assert status.available is False and "nope.json" in status.reason
 
+    def test_config_path_is_the_named_config_else_the_default(self, models_folder, tmp_path, monkeypatch):
+        """Whether or not either exists: it says where the app reads, and :func:`face_models` says if it can."""
+        assert bridge.config_path() == models_folder
+        monkeypatch.setenv(bridge.CONFIG_ENV_VAR, str(tmp_path / "elsewhere" / "face.json"))
+        assert bridge.config_path() == tmp_path / "elsewhere" / "face.json"
+        monkeypatch.setenv(bridge.CONFIG_ENV_VAR, "  ")
+        assert bridge.config_path() == models_folder
+
+
+class TestTheFaceBallSitsBesideTheConfig:
+    """The ball's floors are read from ``face_ball.json`` beside the pipeline config in use (#5621).
+
+    A server pointed at a pack elsewhere (``IMAGEKIT_FACE_CONFIG``) reads that pack's entry, not the
+    models folder's: the screenshot harness runs its app on a pack of its own, and People found no one
+    while the floors were read from a fixed place.
+    """
+
+    def test_the_default_is_beside_imagekit_face_json(self, models_folder):
+        from vtscore.media.face import face_ball
+
+        assert face_ball.face_ball_path() == models_folder.parent / face_ball.FACE_BALL_NAME
+        assert face_ball.FACE_BALL_RELPATH == bridge.DEFAULT_CONFIG_RELPATH.parent / face_ball.FACE_BALL_NAME
+
+    def test_a_named_config_brings_its_own_floors(self, models_folder, tmp_path, monkeypatch):
+        from tests_shared.face_ball import COMPAT, face_ball as a_ball
+        from vtscore.media.face import face_ball
+
+        pack = _models(tmp_path / "pack")
+        face_ball.write_entry(a_ball(), pack.parent / face_ball.FACE_BALL_NAME)
+        assert face_ball.face_ball_for(COMPAT) is None  # the models folder's config has no file beside it
+        monkeypatch.setenv(bridge.CONFIG_ENV_VAR, str(pack))
+        face_ball.reset_for_tests()
+        assert face_ball.face_ball_path() == pack.parent / face_ball.FACE_BALL_NAME
+        ball = face_ball.face_ball_for(COMPAT)
+        assert ball is not None and ball.compat == COMPAT and ball.use
+        assert str(pack.parent / face_ball.FACE_BALL_NAME) in face_ball.uncalibrated_detail("other:1")
+
 
 class TestWhatMakesItOff:
     def test_a_missing_model_file_is_named(self, models_folder):

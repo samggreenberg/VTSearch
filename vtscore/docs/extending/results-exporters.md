@@ -81,7 +81,12 @@ server's embedder and head measured (`labelset_for_export`,
 `vtscore/datasets/labelset.py`): each element's `vt:provenance` keeps how the
 item was drawn but not its `rank_at_vote` / `score_at_vote` (#5131). An
 exported labelset is references to labels, so it can rebuild the detector
-under another embedder; your exporter has nothing to drop.
+under another embedder; your exporter has nothing to drop. It may carry a
+`detector_meta` block holding the detector's training-domain summary
+(`training_domain_summary`, #5571), which the receiving instance's overlap
+check reads. Write it beside the labels when your destination holds the whole
+object (the `server_json_file` exporter does, and its label importer reads it
+back); a tabular destination may leave it out.
 
 `supported_payloads` is **derived** from which of these you overrode
 (never declared, so there is nothing to forget), and it is what each
@@ -100,12 +105,15 @@ deliver an empty export.
             "detector_name": "...",
             "threshold": 0.5,
             "balance": {...},  # may be absent or None
+            "beta": 1.0,  # app runs only; may be absent or None
+            "lines": [{"beta": 4.0, "threshold": 0.3}, ...],  # app runs only
             "total_hits": 15,  # len(hits)
             "hits": [
                 {"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "..."},  # + more keys
                 ...,
             ],
             "negative_hits": [...],
+            "training_domain": {...},  # app runs only; may be absent or None
         },
         # ... one entry per detector run
     },
@@ -117,6 +125,22 @@ deliver an empty export.
 Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
+
+`training_domain` is the check behind the app's domain warning: how much of
+the scored dataset looks unlike the dataset the detector was trained on. Its
+`domain_shift` holds `frac_atypical` (the share, 0-1) and `shifted` (the
+verdict), or is `None` when there was nothing to compare, with `reason`
+saying why. A message or report can print the figure, as the email exporter
+does ("68% of this dataset looks atypical vs photos: likely domain shift");
+a tabular exporter can ignore it. The app sets it on every Find and AutoFind
+run; the CLI does not.
+
+`beta` is the balance `threshold` was cut at, and `lines` the cut at each
+of the Threshold's presets (beta 4, 1 and 1/4), so the Find Results dialog
+can list the run at another notch without a retrain. An export from the
+dialog at another notch than the run's sends that notch's cut as
+`threshold` and its preset as `beta`, and no `balance`, which describes
+the run's own cut. Both are informational, and the CLI sends neither.
 
 `selected_columns` is the user's column choice from the Find Results
 dialog, in order. It names a hit's own keys, keys of its
@@ -216,6 +240,13 @@ the detector's real name instead of the raw placeholder - visible and
 editable before the user hits Export. Resolving the active detector
 inside your export method instead gets you an empty box in the UI and
 a value that appears out of nowhere on submit.
+
+**Which detector `{detector_name}` names.** The one the export belongs
+to. From the app's Find and Train views that is the active detector; from
+a Dashboard row's Export labels it is the row's detector, which need not
+be loaded or active. The export route makes that detector the active
+context for the whole run, field validation and your export method alike,
+so even a body that reads `get_active_detector_context()` sees it.
 
 ## Server-path and URL validation
 

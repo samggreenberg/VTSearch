@@ -1284,6 +1284,29 @@
         ],
         "type": "object"
       },
+      "CoPerson": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "The other person's rank in this partition.",
+            "type": "integer"
+          },
+          "representative": {
+            "description": "The other person's representative.",
+            "type": "integer"
+          },
+          "shared": {
+            "description": "How many photos the two share.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "representative",
+          "shared"
+        ],
+        "type": "object"
+      },
       "CollapsedFace": {
         "additionalProperties": false,
         "properties": {
@@ -2121,6 +2144,10 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_display_name": {
+            "description": "The display name of ``embedder``; empty when the dataset records none.",
+            "type": "string"
+          },
           "expires_at": {
             "nullable": true
           },
@@ -2130,6 +2157,10 @@
             },
             "description": "File type \u2192 item count. The type is the item's filename extension, or the format sniffed from its bytes when it has none (a service importer may name items after an opaque content id). Items no signal could type land in a parenthesised \"(unknown)\" bucket.",
             "type": "object"
+          },
+          "importer_display_name": {
+            "description": "The display name of ``source``'s importer; empty when the origin names none.",
+            "type": "string"
           },
           "ingest_finished_at": {
             "nullable": true
@@ -2165,6 +2196,13 @@
           "source": {
             "additionalProperties": {},
             "type": "object"
+          },
+          "source_rows": {
+            "description": "``source``'s params worded for display, in recorded order. Empty values, a ``media_type`` that is the dataset's own, and ``source_specs`` that only include the dataset's own type are left out.",
+            "items": {
+              "$ref": "#/components/schemas/OriginRow"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -2173,7 +2211,9 @@
           "created_by",
           "dropped_groups",
           "embedder",
+          "embedder_display_name",
           "file_type_counts",
+          "importer_display_name",
           "media_type",
           "name",
           "num_dropped",
@@ -2181,7 +2221,8 @@
           "num_items",
           "origin",
           "readers",
-          "source"
+          "source",
+          "source_rows"
         ],
         "type": "object"
       },
@@ -2780,6 +2821,68 @@
         ],
         "type": "object"
       },
+      "DetectorForkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "default": null,
+            "maxLength": 128,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorForkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "remote_sync": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector",
+          "message",
+          "ok"
+        ],
+        "type": "object"
+      },
+      "DetectorForkedFrom": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_id",
+          "name"
+        ],
+        "type": "object"
+      },
       "DetectorImportRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3034,6 +3137,10 @@
             },
             "type": "array"
           },
+          "forked_from": {
+            "$ref": "#/components/schemas/DetectorForkedFrom",
+            "nullable": true
+          },
           "id": {
             "type": "string"
           },
@@ -3068,6 +3175,22 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState",
+            "nullable": true
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
           },
           "test_verdict": {
             "$ref": "#/components/schemas/LineTestVerdict",
@@ -3226,12 +3349,27 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_display_name": {
+            "description": "The display name of ``embedder``; empty when the detector has none.",
+            "type": "string"
+          },
           "embedder_type": {
             "type": "string"
           },
           "imported": {
             "$ref": "#/components/schemas/DetectorImportRecord",
             "nullable": true
+          },
+          "imported_rows": {
+            "description": "``imported.params`` worded for display, in recorded order; empty when no importer created the detector. Empty values are left out.",
+            "items": {
+              "$ref": "#/components/schemas/OriginRow"
+            },
+            "type": "array"
+          },
+          "importer_display_name": {
+            "description": "The display name of ``imported``'s label importer; empty when no importer created the detector.",
+            "type": "string"
           },
           "last_trained_at": {
             "nullable": true
@@ -3279,8 +3417,11 @@
           "clipper",
           "created_by",
           "embedder",
+          "embedder_display_name",
           "embedder_type",
           "imported",
+          "imported_rows",
+          "importer_display_name",
           "media_example",
           "media_type",
           "name",
@@ -3360,6 +3501,486 @@
           "name",
           "num_labels",
           "success"
+        ],
+        "type": "object"
+      },
+      "DetectorShareRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "add": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "public": {
+            "default": null,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "remove": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorShareResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "description": "This call created the container",
+            "type": "boolean"
+          },
+          "detector_id": {
+            "type": "string"
+          },
+          "is_owner": {
+            "description": "The caller owns the container: it is their detector, not a received one",
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "public": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState"
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "created",
+          "detector_id",
+          "is_owner",
+          "message",
+          "ok",
+          "sharing",
+          "sync_mode"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingCapability": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "icon": {
+            "nullable": true,
+            "type": "string"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The active sharing source's registered name",
+            "nullable": true,
+            "type": "string"
+          },
+          "supports_recipient_search": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "missing_fields",
+          "supports_recipient_search"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingIntegrity": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "Foreign records, plus one for a foreign manifest",
+            "type": "integer"
+          },
+          "status": {
+            "description": "``clean`` or ``foreign_modifications``",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "status"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceiveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreign": {
+            "default": "abort",
+            "description": "What to do when someone other than the owner wrote to the container: ``abort`` (the default) reports it and changes nothing, ``import`` takes every record, ``skip`` only the owner's.",
+            "enum": [
+              "abort",
+              "import",
+              "skip"
+            ],
+            "type": "string"
+          },
+          "remote_ref": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote_ref"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceiveResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry",
+            "nullable": true
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity"
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "description": "The container's name",
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "owner": {
+            "description": "The container's owner",
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "integrity",
+          "message",
+          "name",
+          "ok",
+          "owner",
+          "remote_ref"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingReceivedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "received": {
+            "items": {
+              "$ref": "#/components/schemas/DetectorSharingSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "received"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "description": "The identity to pass in ``add``",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "group"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreign": {
+            "default": "abort",
+            "description": "What to do when someone other than the owner wrote to the container: ``abort`` (the default) reports it and changes nothing, ``import`` takes every record, ``skip`` only the owner's.",
+            "enum": [
+              "abort",
+              "import",
+              "skip"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DetectorSharingRefreshResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "type": "integer"
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "integer"
+          },
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "removed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "applied",
+          "changed",
+          "detector",
+          "integrity",
+          "message",
+          "ok",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/DetectorSharingRecipient"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingState": {
+        "additionalProperties": false,
+        "properties": {
+          "integrity": {
+            "$ref": "#/components/schemas/DetectorSharingIntegrity",
+            "nullable": true
+          },
+          "last_synced": {
+            "nullable": true,
+            "type": "number"
+          },
+          "remote_owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "remote_ref": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          },
+          "sync_error": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote_ref",
+          "source_name"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "description": "The caller's detector that already holds this container, or null",
+            "nullable": true,
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "description": "Its owner, as the sharing source names people",
+            "type": "string"
+          },
+          "record_count": {
+            "type": "integer"
+          },
+          "remote_ref": {
+            "description": "The container's opaque reference",
+            "type": "string"
+          },
+          "shared_via": {
+            "description": "How the caller can see it: ``direct``, ``group`` or ``public``",
+            "enum": [
+              "owner",
+              "direct",
+              "group",
+              "public"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "media_type",
+          "name",
+          "owner",
+          "record_count",
+          "remote_ref",
+          "shared_via",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "DetectorSharingView": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_id": {
+            "type": "string"
+          },
+          "is_owner": {
+            "description": "The caller owns the container: it is their detector, not a received one",
+            "type": "boolean"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "public": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "sharing": {
+            "$ref": "#/components/schemas/DetectorSharingState"
+          },
+          "sharing_note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sync_mode": {
+            "enum": [
+              "local",
+              "linked",
+              "forked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_id",
+          "is_owner",
+          "sharing",
+          "sync_mode"
+        ],
+        "type": "object"
+      },
+      "DetectorUnshareResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector": {
+            "$ref": "#/components/schemas/DetectorRegistryEntry"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detector",
+          "message",
+          "ok"
         ],
         "type": "object"
       },
@@ -5119,6 +5740,58 @@
         ],
         "type": "object"
       },
+      "LabelsetSourceEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "supports_recipient_search": {
+            "type": "boolean"
+          },
+          "supports_sharing": {
+            "type": "boolean"
+          },
+          "supports_sync": {
+            "type": "boolean"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "fields",
+          "hidden_from_picker",
+          "icon",
+          "name",
+          "supports_recipient_search",
+          "supports_sharing",
+          "supports_sync",
+          "ui_mode"
+        ],
+        "type": "object"
+      },
       "LabelsetSourceStatus": {
         "additionalProperties": false,
         "properties": {
@@ -5725,6 +6398,12 @@
           },
           "size": {
             "type": "integer"
+          },
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/PrecisionCheckVote"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -5743,19 +6422,8 @@
           "picks_per_round",
           "report",
           "round",
-          "size"
-        ],
-        "type": "object"
-      },
-      "LineTestUnvoteRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id"
+          "size",
+          "votes"
         ],
         "type": "object"
       },
@@ -6490,6 +7158,34 @@
         ],
         "type": "object"
       },
+      "OriginRow": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "The importer field's description; empty when the key names no field.",
+            "type": "string"
+          },
+          "key": {
+            "description": "The raw param key.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The importer field's own label, or the key spelled out when it names no field.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value as the importer words it (its ``describe_origin_param``): Yes/No for a checkbox, a media type's name, the converters an import ran (``Images \u2192 Faces``).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "key",
+          "label",
+          "value"
+        ],
+        "type": "object"
+      },
       "PaginationMetadata": {
         "additionalProperties": false,
         "properties": {
@@ -6522,6 +7218,235 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "PeopleBuildRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Fit the people again even when a partition is stored (Rebuild people).",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PeopleList": {
+        "additionalProperties": false,
+        "properties": {
+          "compat": {
+            "default": null,
+            "description": "The face space (``Face Compat``) the people were cut in, when ``ready``; the space with no cut, when ``not_calibrated`` (null when the faces carry no single one).",
+            "nullable": true,
+            "type": "string"
+          },
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "cutoff": {
+            "default": null,
+            "description": "When ``ready``: the cosine a face cleared to its person's centroid (the face ball's beta 1 floor).",
+            "nullable": true,
+            "type": "number"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "eta_seconds": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "linkage": {
+            "default": null,
+            "description": "When ``ready``: the clustering linkage the fit used.",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "description": "When ``ready``: how the people were fit.",
+            "nullable": true,
+            "type": "string"
+          },
+          "overall": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "overall_step_end": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "partition": {
+            "default": null,
+            "description": "When ``ready``: The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "nullable": true,
+            "type": "string"
+          },
+          "people": {
+            "default": null,
+            "description": "When ``ready``: every person, the most faces first.",
+            "items": {
+              "$ref": "#/components/schemas/PersonSummary"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "status": {
+            "description": "``ready``: the people are listed. ``building``: they are being found; ask ``GET /api/people`` again. ``error``: that fit failed (said once; the next ask starts over). ``not_calibrated``: the dataset's face embedder has no cut to find people at, and ``message`` says so.",
+            "enum": [
+              "ready",
+              "building",
+              "error",
+              "not_calibrated"
+            ],
+            "type": "string"
+          },
+          "step": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total_steps": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "unplaced": {
+            "default": null,
+            "description": "When ``ready``: how many faces are in no person (hard views that matched no one).",
+            "nullable": true,
+            "type": "integer"
+          },
+          "unplaced_ids": {
+            "default": null,
+            "description": "When ``ready``: the faces in no person, ascending.",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "Person": {
+        "additionalProperties": false,
+        "properties": {
+          "appears_with": {
+            "description": "The people who share a photo with this person: most shared first, ties by rank.",
+            "items": {
+              "$ref": "#/components/schemas/CoPerson"
+            },
+            "type": "array"
+          },
+          "face_ids": {
+            "description": "The person's faces: the representative first, then from the closest to them out.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "partition": {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "type": "string"
+          },
+          "photos": {
+            "description": "The photos the person is in, by photo id.",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhoto"
+            },
+            "type": "array"
+          },
+          "representative": {
+            "description": "The person's representative face.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "appears_with",
+          "face_ids",
+          "id",
+          "partition",
+          "photos",
+          "representative"
+        ],
+        "type": "object"
+      },
+      "PersonPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "face_ids": {
+            "description": "The person's faces cut from the photo, in the person's order (usually one).",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "photo": {
+            "description": "The photo's id: a number for the photo while the dataset's faces are unchanged, the same one the shared-photos route gives it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_ids",
+          "photo"
+        ],
+        "type": "object"
+      },
+      "PersonSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "face_count": {
+            "description": "How many faces the person has.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "The person's rank in this partition: 1 for the person with the most faces.",
+            "type": "integer"
+          },
+          "photo_count": {
+            "description": "How many photos the person's faces were cut from.",
+            "type": "integer"
+          },
+          "representative": {
+            "description": "The face that stands for the person: their face with the highest Face Quality.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "face_count",
+          "id",
+          "photo_count",
+          "representative"
+        ],
         "type": "object"
       },
       "PrecisionCheckResponse": {
@@ -6999,6 +7924,11 @@
       "RunExportRequest": {
         "additionalProperties": false,
         "properties": {
+          "detector_id": {
+            "default": "",
+            "description": "Id of the detector this export belongs to, when the caller names one rather than exporting the active pair (the Dashboard row's Export labels). The exporter's ``{detector_name}`` / ``{detector_id}`` template variables then resolve against that detector, loaded or not, instead of the request's ``X-Detector-Id``; an unknown id is a 404 and one the user may not read a 403. Omit it to resolve against the active detector, as before.",
+            "type": "string"
+          },
           "exporter_name": {
             "minLength": 1,
             "type": "string"
@@ -7448,6 +8378,96 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SharedPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "faces": {
+            "description": "Every face cut from the photo, not only the two people's, ascending.",
+            "items": {
+              "$ref": "#/components/schemas/SharedPhotoFace"
+            },
+            "type": "array"
+          },
+          "photo": {
+            "description": "The photo's id, as ``GET /api/people/<id>`` gives it.",
+            "type": "integer"
+          },
+          "source_dataset_id": {
+            "description": "The Image dataset holding the photo, when it could be named; null when no dataset the user can read holds it.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_media_id": {
+            "description": "The photo's media id in ``source_dataset_id``, or null with it.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "faces",
+          "photo",
+          "source_dataset_id",
+          "source_media_id"
+        ],
+        "type": "object"
+      },
+      "SharedPhotoFace": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "description": "Where the face sits in its photo, normalised ``[x0, y0, x1, y1]`` (its ``source_box``), or null when its converter records none.",
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_id": {
+            "description": "The face's media id.",
+            "type": "integer"
+          },
+          "person": {
+            "description": "The face's person (their rank in this partition), or null when it is unplaced.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "box",
+          "media_id",
+          "person"
+        ],
+        "type": "object"
+      },
+      "SharedPhotos": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "other": {
+            "type": "integer"
+          },
+          "partition": {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "type": "string"
+          },
+          "photos": {
+            "description": "The photos both people have a face in, by photo id.",
+            "items": {
+              "$ref": "#/components/schemas/SharedPhoto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "other",
+          "partition",
+          "photos"
+        ],
         "type": "object"
       },
       "SmartPoint": {
@@ -8054,6 +9074,11 @@
             "$ref": "#/components/schemas/BalanceState",
             "nullable": true
           },
+          "beta": {
+            "description": "The balance ``threshold`` was cut at; null for a detector with no balance to ask.",
+            "nullable": true,
+            "type": "number"
+          },
           "detector_name": {
             "type": "string"
           },
@@ -8067,6 +9092,13 @@
             "$ref": "#/components/schemas/LabelQuota",
             "nullable": true
           },
+          "lines": {
+            "description": "The cut at each Threshold preset, from false positives to false negatives (#5540): re-derived without a retrain, so the Find Results dialog can split ``hits`` and ``negative_hits`` at another notch. The detector's own balance keeps ``threshold``; a preset no balance moves does too. Absent from a caller that does not report it (the CLI).",
+            "items": {
+              "$ref": "#/components/schemas/_BalanceLine"
+            },
+            "type": "array"
+          },
           "negative_hits": {
             "items": {
               "$ref": "#/components/schemas/_Hit"
@@ -8078,6 +9110,10 @@
           },
           "total_hits": {
             "type": "integer"
+          },
+          "training_domain": {
+            "$ref": "#/components/schemas/FindTrainingDomainResponse",
+            "nullable": true
           }
         },
         "required": [
@@ -8142,6 +9178,24 @@
         ],
         "type": "object"
       },
+      "_BalanceLine": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "description": "The preset: F-beta's beta (4, 1 or 1/4).",
+            "type": "number"
+          },
+          "threshold": {
+            "description": "The score at or above which an item is Good at this preset.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "beta",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "_DemoDatasetEntry": {
         "additionalProperties": false,
         "properties": {
@@ -8151,11 +9205,19 @@
             },
             "type": "array"
           },
+          "browsable": {
+            "description": "Whether ``demo:<name>`` resolves for ``/api/browse-media-files``: the demo declares a source folder and it is populated. Independent of ``status``, which a cached pickle can make ``ready`` with no folder at all.",
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
           "download_size_mb": {
             "type": "number"
+          },
+          "has_source_folder": {
+            "description": "Whether the demo declares a source folder on disk. Hub-fetched and generated demos declare none, so their files can never be browsed, whatever their status.",
+            "type": "boolean"
           },
           "label": {
             "type": "string"
@@ -8192,8 +9254,10 @@
         },
         "required": [
           "available_converters",
+          "browsable",
           "description",
           "download_size_mb",
+          "has_source_folder",
           "label",
           "media_type",
           "name",
@@ -9073,6 +10137,48 @@
         ]
       }
     },
+    "/api/autofind/runs/{run_id}/export": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Find Results dialog's **AutoFind** tab: a way to try the exporter and\nfield values set up on the Settings AutoFind tab without importing another\ndataset.  The payload is the run's own ``POST /api/auto-detect`` body, so\nwhat goes out is what a finished run sends, whatever the dialog lists; the\npause (``autofind_export_enabled``) holds back runs, not this button.\nThe exporter's own failure is reported in the status block, not as an\nerror, as a run's ``auto_export`` reports it.",
+        "operationId": "export_autofind_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_AutoFindExportStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "409": {
+            "description": "No results exporter is set up for AutoFind."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Send a finished run's results through the AutoFind exporter, as its finish did (#5584).",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
     "/api/balance": {
       "get": {
         "operationId": "get_balance_route",
@@ -9772,7 +10878,7 @@
     },
     "/api/dataset/demo-list": {
       "get": {
-        "description": "Each dataset has a ``status`` field with one of three values:\n\n* ``\"ready\"`` \u2013 embeddings are cached and source data is present.\n* ``\"needs_embedding\"`` \u2013 source data is downloaded but not yet embedded.\n* ``\"needs_download\"`` \u2013 source data must be downloaded (and then embedded).",
+        "description": "Each dataset has a ``status`` field with one of three values:\n\n* ``\"ready\"`` \u2013 embeddings are cached and source data is present.\n* ``\"needs_embedding\"`` \u2013 nothing is left to download (the source data is on\n  disk, or the demo generates its media locally), but it is not yet embedded.\n* ``\"needs_download\"`` \u2013 source data must be downloaded (and then embedded).\n\n``browsable`` says whether the demo's files can be browsed through\n``/api/browse-media-files`` (``source=demo:<name>``), which needs a declared\n``required_folder`` with content.  It is independent of ``status``.",
         "operationId": "demo_dataset_list",
         "parameters": [
           {
@@ -11346,7 +12452,7 @@
     },
     "/api/detectors/registry": {
       "get": {
-        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoFind detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoFind tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.",
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoFind detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoFind tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.\nEvery entry carries its sharing state: ``sync_mode`` (``local``,\n``linked`` for a received read-only copy, ``forked``), ``sharing`` (the\ncontainer it mirrors or owns, without the binding's field values),\n``sharing_note`` (why that container is not in use here, when it is not)\nand ``forked_from``.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -11675,6 +12781,64 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/fork": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Works on any detector the caller can see, and is how a received one is\nmade editable: its local copy is what is forked.  The fork is ``forked``,\nwith ``forked_from`` provenance.  When sharing is on, a container is made\nfor it too, so it is shared from the start (with nobody yet); when that is\nnot possible - sharing is off, or creating the container failed -\n``remote_sync`` says why and the fork is local only.  Works while sharing\nis off.",
+        "operationId": "fork_registered_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorForkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorForkResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "403": {
+            "description": "The caller cannot access this detector."
+          },
+          "404": {
+            "description": "The detector does not exist, or has no labelset file."
+          },
+          "409": {
+            "description": "A detector with that name already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Copy a detector into a new, editable one owned by the caller.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/readers": {
       "parameters": [
         {
@@ -11730,6 +12894,70 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/refresh": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The local labels are replaced by the container's, under the ``foreign``\npolicy; ``abort`` (the default) changes nothing when someone other than the\nowner wrote to it, and says so (``applied: false``), recording the\nintegrity on the detector so the listing can warn.",
+        "operationId": "refresh_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingRefreshResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can refresh it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist. The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector is not a received copy (``error_code: detector_not_linked``). The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Bring a received detector level with its container (\"Check for updates\").",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/rename": {
       "parameters": [
         {
@@ -11776,7 +13004,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "A detector with the new name already exists."
+            "description": "A detector with the new name already exists, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -11791,9 +13019,162 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/share": {
+      "delete": {
+        "description": "The detector keeps its labels and becomes a plain local one; recipients'\ncopies stop receiving updates.  A container the service no longer has is\nunbound all the same.",
+        "operationId": "unshare_detector",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorUnshareResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can stop sharing it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist, or shares nothing (``error_code: detector_not_shared``)."
+          },
+          "409": {
+            "description": "The detector is a received copy (``error_code: detector_read_only``): delete it instead, which removes only the local copy. The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stop sharing a detector: archive its container and unbind it.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The first call creates its container from the detector's labels and binds\nthe detector to it; a plain auto-export binding (its own, or the\ndeployment default it inherited) is replaced, and the message says so.\nFrom then on every change to its labels is pushed to the container.  Then\n``remove``, ``add`` and ``public`` are applied, in that order.  The\nresponse is the container as ``GET .../sharing`` shows it, read afterwards.",
+        "operationId": "share_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorShareResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector's creator can share it. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist. The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to share it. The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Share a detector of the caller's, and change who it is shared with.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/sharing": {
+      "get": {
+        "description": "``recipients`` and ``public`` are read from the container now.  When the\ndetector's sharing source is not the active one, ``sharing_note`` says why\nand they are null: the container is not read.",
+        "operationId": "get_detector_sharing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The caller cannot access this detector. The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). Or the detector does not exist, or shares nothing (``error_code: detector_not_shared``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "A shared or received detector's container: its state, who it is shared with, and whether publicly.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
+    },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``.",
+        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``; ``importer_display_name`` and\n``imported_rows`` are that record worded for the Import section (#5620).",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {
@@ -11874,6 +13255,187 @@
         ]
       }
     },
+    "/api/detectors/sharing": {
+      "get": {
+        "description": "Always 200: ``enabled`` is false while the ``detector_sharing_source``\nsetting is null (or names a source that is not installed or cannot\nshare), and the dashboard hides its sharing surfaces.",
+        "operationId": "get_sharing_capability",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingCapability"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Whether detector sharing is on here, and through which source.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/receive": {
+      "post": {
+        "description": "Its labels are the container's records, under the ``foreign`` policy; its\nname is the container's, suffixed when another detector holds it.  A\nreceived detector changes only by refresh, and can be forked.",
+        "operationId": "receive_shared_detector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingReceiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceiveResponse"
+                }
+              }
+            },
+            "description": "The ``abort`` policy met records someone other than the owner wrote: ``applied: false``, nothing was created, and ``integrity`` says how many, so the client can ask whether to import or skip them."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceiveResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The caller already holds this container (``error_code: already_received``; ``detector_id`` names their copy). The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Make a container shared with the caller a local, read-only (``linked``) detector of theirs.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/received": {
+      "get": {
+        "description": "Each carries ``detector_id``: the caller's detector that already holds it,\nor null when they have not received it yet.",
+        "operationId": "list_received_detectors",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingReceivedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "501": {
+            "description": "The sharing source does not implement this operation (``error_code: sharing_unsupported``)."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The containers shared with the caller (directly, through a group, or publicly) that they do not own.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
+    "/api/detectors/sharing/search-recipients": {
+      "post": {
+        "description": "An empty query returns no suggestions without asking the source.",
+        "operationId": "search_sharing_recipients",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorSharingSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorSharingSearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "The sharing service refused the caller (``error_code: remote_permission_denied``)."
+          },
+          "404": {
+            "description": "Detector sharing is off on this server (``error_code: sharing_disabled``). The sharing service has no such container for the caller (``error_code: remote_not_found``)."
+          },
+          "409": {
+            "description": "The detector's sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "501": {
+            "description": "The active sharing source has no recipient search (``error_code: sharing_unsupported``): ``supports_recipient_search`` is false on ``GET /api/detectors/sharing``."
+          },
+          "502": {
+            "description": "The sharing service failed (``error_code: sharing_failed``)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "People and groups matching ``query``, for a share dialog's recipient picker.",
+        "tags": [
+          "detectors_sharing"
+        ]
+      }
+    },
     "/api/detectors/{detector_id}/portable-bundle": {
       "parameters": [
         {
@@ -11951,7 +13513,7 @@
         }
       ],
       "put": {
-        "description": "A body of ``{}`` (or an empty ``source_name``) clears the detector's own\nbinding, so it follows the deployment default again, if any.\n``source_name: \"none\"`` opts it out even when a default exists.\nOtherwise the detector syncs with the named source using ``field_values``\n(any values the default fixes for that source are dropped: they always\ncome from the server).  Setting a source pulls what it already holds into\nthe detector, then pushes the detector's labels back to it.",
+        "description": "A body of ``{}`` (or an empty ``source_name``) clears the detector's own\nbinding, so it follows the deployment default again, if any.\n``source_name: \"none\"`` opts it out even when a default exists.\nOtherwise the detector syncs with the named source using ``field_values``\n(any values the default fixes for that source are dropped: they always\ncome from the server).  Setting a source pulls what it already holds into\nthe detector, then pushes the detector's labels back to it.\n\nA binding that names a shared container is never replaced here, by any\nbody: dropping its ``remote_ref`` would leave the container's recipients\nwith a copy that never updates again, and nothing would say so.  Its\nowner unshares first, which archives the container.  A sharing binding\nwhose source is not the active one is refused too: it is never pointed at\na different source, so it can resume once that source is back.",
         "operationId": "set_detector_labelset_source",
         "requestBody": {
           "content": {
@@ -11983,6 +13545,9 @@
           "404": {
             "description": "Unknown detector or labelset source."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it. Also when the detector's binding names a shared container, whatever the body: it owns that container (``error_code: detector_shared``; stop sharing it first, with ``DELETE /api/detectors/registry/<id>/share``, which archives the container), or the container's source is not this server's active sharing source (``error_code: sharing_unavailable``, the message saying why; a fork is a plain copy that can sync anywhere)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12009,7 +13574,7 @@
         }
       ],
       "post": {
-        "description": "Labels the source holds and the detector lacks are added, and where the\ntwo disagree the source's label wins; nothing is removed.  The merged\nlabels are then pushed back to the source.",
+        "description": "Labels the source holds and the detector lacks are added, and where the\ntwo disagree the source's label wins; nothing is removed.  The merged\nlabels are then pushed back to the source.  Only a plain binding pulls: a\nshared detector's owner has nothing to pull (its file is what the\ncontainer is rewritten from), and a received one changes only by refresh.",
         "operationId": "sync_detector_labelset_from_source",
         "responses": {
           "200": {
@@ -12027,6 +13592,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it. Also when the detector shares its labels through a container it owns (``error_code: detector_shared``: they are pushed there, never pulled back), or its sharing source is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12140,6 +13708,9 @@
           "404": {
             "description": "Detector not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12183,6 +13754,9 @@
           },
           "404": {
             "description": "Detector not found, or unknown label importer name."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "description": "A required field is missing, or a field value is invalid."
@@ -12233,7 +13807,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "Detector vote state is not aligned with the active dataset."
+            "description": "Detector vote state is not aligned with the active dataset, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12414,6 +13988,9 @@
           "404": {
             "description": "Detector or label element not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12469,7 +14046,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "A detector with the new name already exists."
+            "description": "A detector with the new name already exists, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -12896,8 +14473,11 @@
           "400": {
             "description": "Missing plugin field or invalid filepath."
           },
+          "403": {
+            "description": "detector_id names a detector the user may not read."
+          },
           "404": {
-            "description": "Unknown exporter name."
+            "description": "Unknown exporter name, or detector_id names no detector."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13219,7 +14799,7 @@
             "description": "No active detector to update."
           },
           "409": {
-            "description": "Detector vote state is not aligned with the active dataset."
+            "description": "Detector vote state is not aligned with the active dataset, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13261,7 +14841,7 @@
     },
     "/api/find/evidence-coverage": {
       "get": {
-        "description": "The cross-user complement to the domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector; run\nanywhere else, it first lands one a learned sort there left waiting\n(:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md\n\u00a76.1 (phase v0).",
+        "description": "The cross-user complement to the domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector; run\nanywhere else, it first lands one a learned sort there left waiting\n(:func:`defer_learned_sort_baseline`).  The write carries the training\ndataset's pointer and its summary (#5501, #5567).  See\ndocs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
         "operationId": "find_evidence_coverage",
         "responses": {
           "200": {
@@ -13596,6 +15176,9 @@
           "404": {
             "description": "Unknown label importer name."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "description": "A required field is missing, or a field value is invalid."
           },
@@ -13638,6 +15221,9 @@
           },
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13892,6 +15478,9 @@
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -13935,6 +15524,9 @@
           "400": {
             "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -13950,6 +15542,7 @@
     },
     "/api/labelset-sources": {
       "get": {
+        "description": "Each entry carries the source's derived capability flags:\n``supports_sync`` (it can be a plain sync target), ``supports_sharing``\nand ``supports_recipient_search``.",
         "operationId": "list_labelset_sources_route",
         "responses": {
           "200": {
@@ -13957,7 +15550,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/SyncSourceEntry"
+                    "$ref": "#/components/schemas/LabelsetSourceEntry"
                   },
                   "type": "array"
                 }
@@ -14240,52 +15833,9 @@
         ]
       }
     },
-    "/api/line-test/unvote": {
-      "post": {
-        "operationId": "unvote_line_test",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LineTestUnvoteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LineTestResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Not a vote of the current round."
-          },
-          "409": {
-            "description": "No test is running."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Take back one vote of the current round (the \u2193 key): the pick goes back to pending, and its session vote is lifted.",
-        "tags": [
-          "line_test"
-        ]
-      }
-    },
     "/api/line-test/votes": {
       "post": {
-        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.",
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.\n\nA vote on a pick already voted corrects it (#5502), from any round, the\ntest running or done: \u2193 walks back to it and the user votes again, as on\nevery other vote in the app, so a slip on the last pick of a round is not\nsealed by the round it finished.  The rounds already dealt stay dealt\n(``LineTest.relabel``).  A correction to a finished test keeps its verdict\nagain, or, when it reopens the test, deals the next round and forgets the\nverdict until the test is done again.",
         "operationId": "vote_line_test",
         "requestBody": {
           "content": {
@@ -14309,10 +15859,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "A vote on an item that is not one of this round's picks."
+            "description": "A vote on an item that is neither one of this round's picks nor a pick already voted."
           },
           "409": {
-            "description": "No test is running."
+            "description": "No test, or a vote on a fresh pick when the test is done."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14321,7 +15871,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Record votes on the running test's picks.",
+        "summary": "Record votes on the test's picks: this round's, or corrections to picks already voted.",
         "tags": [
           "line_test"
         ]
@@ -14378,6 +15928,9 @@
           },
           "400": {
             "description": "Missing or malformed multipart body (no file / empty file / invalid label), no dataset loaded, or no embedder available."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -14619,6 +16172,9 @@
           },
           "400": {
             "description": "No ids supplied, or provenance is malformed."
+          },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -15100,6 +16656,9 @@
           "404": {
             "description": "Media not found."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -15153,6 +16712,208 @@
           "metrics"
         ]
       }
+    },
+    "/api/people": {
+      "get": {
+        "description": "A Face dataset's people are its face crops merged at the face ball's cut\n(:mod:`vtscore.datasets.people`), fit when the dataset was built, or on the\nfirst ask for one built before that.  That ask answers ``building`` with\nthe fit's progress, and the client asks again until it is ``ready``.  A\nface space the ball has no cut for answers ``not_calibrated`` and is never\nfit.  ``partition`` names this partition; pass it back to name a person.",
+        "operationId": "list_people",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``): it is not a Face dataset, or its faces have no vectors."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List the dataset's people: each one's rank, face and photo counts, and representative (#5589).",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/build": {
+      "post": {
+        "description": "Answers as ``GET /api/people`` does.  Without ``force`` it is that ask; with\nit, a stored partition is fit again and the answer is ``building`` (the\nrunning fit's, when one already is).  Poll ``GET /api/people``.",
+        "operationId": "build_people",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeopleBuildRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``): it is not a Face dataset, or its faces have no vectors."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Find the dataset's people, again with ``force`` (Rebuild people).",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}": {
+      "get": {
+        "description": "``appears_with`` lists every other person with a face in one of this\nperson's photos, with how many photos the two share, most first.  Needs no\nImage sibling: which faces share a photo is read off the faces.",
+        "operationId": "get_person",
+        "parameters": [
+          {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "404": {
+            "description": "No person has this id in the partition."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``); its people are not found yet (``people_not_ready``: ask ``GET /api/people``); or the people were found again since ``partition`` was read (``people_changed``: list them again)."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "One person: their faces, the photos they are in, and the people who appear with them.",
+        "tags": [
+          "people"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "person_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/people/{person_id}/with/{other_id}": {
+      "get": {
+        "description": "Each face carries its box in the photo and its person (null when it is\nunplaced), so a photo can be drawn with everyone in it outlined.  The photo\nitself is named as an item of the Image dataset the same import made\n(``source_dataset_id`` / ``source_media_id``), found as\n``GET /api/medias/<id>/source`` finds a face's.  That dataset must be\nloaded; when it is not, the 409 names it.  One the user cannot read leaves\nboth null.",
+        "operationId": "shared_photos",
+        "parameters": [
+          {
+            "description": "The identity of the partition the people were read from.  A person's ``id`` holds only under it: pass it back as ``?partition=`` to name a person.",
+            "in": "query",
+            "name": "partition",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedPhotos"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "404": {
+            "description": "No person has this id in the partition."
+          },
+          "409": {
+            "description": "The dataset has no people to find (``error_code: no_people``); its people are not found yet (``people_not_ready``: ask ``GET /api/people``); or the people were found again since ``partition`` was read (``people_changed``: list them again). Or the photos' Image dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The photos two people share, each with every face cut from it.",
+        "tags": [
+          "people"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "person_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "other_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
     },
     "/api/precision-check": {
       "get": {
@@ -15265,7 +17026,7 @@
             "description": "A vote on an item that is not one of this band's picks."
           },
           "409": {
-            "description": "No check is running."
+            "description": "No check is running, or the detector is a received, read-only copy (``error_code: detector_read_only``)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -16677,6 +18438,9 @@
           "400": {
             "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
+          "409": {
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16991,6 +18755,10 @@
       "name": "detectors_registry"
     },
     {
+      "description": "Share detectors through the active sharing source: share, receive, refresh and fork.",
+      "name": "detectors_sharing"
+    },
+    {
       "description": "Run a detector against the active dataset (find-label) or run every AutoFind detector at once (auto-detect).",
       "name": "detector_scoring"
     },
@@ -17009,6 +18777,10 @@
     {
       "description": "VTSBrowse projection: UMAP layout + hex/square tile pyramid.",
       "name": "projection"
+    },
+    {
+      "description": "A Face dataset's people, and the people who appear with each in the same photos.",
+      "name": "people"
     }
   ]
 }

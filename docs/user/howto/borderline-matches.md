@@ -35,7 +35,7 @@ the **Autopilot** tab found on it:
 - **Untested · top 32 kept** - nothing has measured the line on this
   collection yet. A Threshold that keeps a different count moves the line
   straight away.
-- **Tested · likely 88–100% right, about three quarters of them found
+- **Tested · likely 94 ± 6% right, about three quarters of them found
   (checked 41) · 32 kept** - the Tune autopilot has measured it with random
   picks from either side of the line, and the note says how much of what it keeps is
   likely right and how much of what the collection holds it likely found;

@@ -2,6 +2,7 @@
   @if (collapsed()) {
     <div class="collapsed-steps">
       <button class="collapse-toggle" (click)="toggleCollapse.emit()" title="Show autopilot panel" aria-label="Show autopilot panel">&#9654;</button>
+      <span class="collapsed-vote-count" [title]="voteCountTitle">{{ voteCountLabel }}</span>
       @if (exhausted) {
         <span class="collapsed-step exhausted" title="Nothing left to label — autopilot has labeled every item in this dataset." aria-label="Nothing left to label">
           <vt-icon type="check" [size]="14"></vt-icon>
@@ -44,6 +45,7 @@
   } @else {
     <div class="autopilot-active">
       <div class="autopilot-header">
+        <span class="ap-vote-count" [title]="voteCountTitle">{{ voteCountLabel }}</span>
         <button class="collapse-toggle" (click)="toggleCollapse.emit()" title="Hide autopilot panel" aria-label="Hide autopilot panel">&#9664;</button>
       </div>
       @if (exhausted) {

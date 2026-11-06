@@ -65,6 +65,7 @@ from vtscore.datasets.stages.finalize import (
     _follow_source_merges_stage,
 )
 from vtscore.datasets.stages.projection import (
+    _build_people_stage,
     _build_projection_stage,
     _build_similarity_order_stage,
     _maybe_signpost_texts_stage,
@@ -203,6 +204,13 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     fin.begin("similarity_order")
     try:
         _build_similarity_order_stage(ctx, fin)
+    except Exception:
+        traceback.print_exc()
+    # A Face dataset's people, its crops merged into people for the People
+    # view (#5586).  Best-effort for the same reason as the projection.
+    fin.begin("people")
+    try:
+        _build_people_stage(ctx, fin)
     except Exception:
         traceback.print_exc()
     # Embedder warm-up is fire-and-forget so the dashboard row goes

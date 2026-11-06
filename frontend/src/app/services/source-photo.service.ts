@@ -2,7 +2,7 @@ import { HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of } from 'rxjs';
 
-import type { RegionBox } from '../components/center-panel/image-viewer/image-viewer.component';
+import type { OutlineBox, RegionBox } from '../components/center-panel/image-viewer/image-viewer.component';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { importSiblingsOfType } from '../utils/import-siblings';
 import { ActiveDatasetService } from './active-dataset.service';
@@ -32,6 +32,14 @@ export interface SourcePhotoRequest {
   mediaId: number;
   /** The active dataset's name when it was asked for: where Back returns to. */
   fromName: string;
+  /**
+   * Several faces to outline on the photo, each by whose it is, in place of
+   * the one box the lookup returns for *mediaId*: a photo two people share,
+   * from the People view. Boxes are normalised to that photo. Absent or
+   * empty, the overlay outlines *mediaId*'s own face, as Show in photo
+   * always has.
+   */
+  boxes?: readonly OutlineBox[];
 }
 
 /**
@@ -77,9 +85,18 @@ export class SourcePhotoService {
   /** The open overlay, or null. */
   readonly request = this._request.asReadonly();
 
-  /** Open the overlay for *mediaId*, an item of the active dataset. */
-  open(mediaId: number): void {
-    this._request.set({ mediaId, fromName: this.activeDataset.datasetName() });
+  /**
+   * Open the overlay for *mediaId*, an item of the active dataset. *boxes*
+   * outline several faces by whose they are, in place of *mediaId*'s own
+   * ({@link SourcePhotoRequest.boxes}); *fromName* names where Back returns
+   * to, the active dataset by default.
+   */
+  open(mediaId: number, options: { boxes?: readonly OutlineBox[]; fromName?: string } = {}): void {
+    this._request.set({
+      mediaId,
+      fromName: options.fromName || this.activeDataset.datasetName(),
+      ...(options.boxes?.length ? { boxes: options.boxes } : {}),
+    });
   }
 
   close(): void {

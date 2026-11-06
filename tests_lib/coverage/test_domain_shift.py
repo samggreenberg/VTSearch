@@ -7,6 +7,7 @@ from vtscore.coverage import domain_shift_report as exported
 from vtscore.coverage.domain_shift import (
     DOMAIN_SHIFT_MAX_QUERY,
     ReferenceTooSmall,
+    domain_shift_line,
     domain_shift_report,
     typicality_pvalues,
 )
@@ -121,3 +122,17 @@ class TestDomainShiftReport:
         report = domain_shift_report(_two_block_vectors(100), np.zeros((0, 32), dtype=np.float32))
         assert report["n_items"] == 0
         assert not report["shifted"]
+
+
+class TestDomainShiftLine:
+    """#5501: the report's one line, worded once for every surface that warns with it."""
+
+    def test_a_likely_shift(self):
+        assert domain_shift_line(0.685, "photos", shifted=True) == (
+            "69% of this dataset looks atypical vs photos: likely domain shift"
+        )
+
+    def test_in_domain(self):
+        assert domain_shift_line(0.031, "photos", shifted=False) == (
+            "3% of this dataset looks atypical vs photos: largely in-domain"
+        )

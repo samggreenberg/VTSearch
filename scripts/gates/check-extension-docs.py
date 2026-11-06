@@ -82,6 +82,11 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ("vtscore/docs/extending/embedders.md", "Capability flags", ("MediaEmbedder",)),
     ("vtscore/docs/extending/label-importers.md", "The contract", ("LabelImporter",)),
     ("vtscore/docs/extending/labelset-sources.md", "The contract", ("LabelsetSource",)),
+    # The optional sharing capability of the same ABC. Its tables also name the
+    # value types and errors of ``vtscore.labels.sharing`` (classes and
+    # module-level helpers, which satisfy the check on their own), so the class
+    # list is the ABC alone.
+    ("vtscore/docs/extending/labelset-sources.md", "The sharing contract", ("LabelsetSource",)),
     ("vtscore/docs/extending/media-types.md", "The `MediaType` contract", ("MediaType",)),
     ("vtscore/docs/extending/media-sources.md", "The contract", ("MediaSource",)),
     ("vtscore/docs/extending/results-exporters.md", "The contract", ("ResultsExporter",)),

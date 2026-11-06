@@ -9,6 +9,7 @@ import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
 import { ToastService } from './toast.service';
+import { domainShiftWarning } from '../utils/training-domain';
 
 /** The active pair a check was run for. */
 interface Pair {
@@ -70,25 +71,22 @@ export class TrainingDomainAlertService {
     if (!shift) return;
     const key = pairKey(pair);
     this.answered.add(key);
-    if (!shift.shifted) return;
 
-    const reference = report.reference_dataset_name || report.reference_dataset_id;
-    const detector = this.datasetState.detectorById().get(pair.modelId)?.name ?? 'This detector';
-    const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name ?? 'this dataset';
-    const pct = Math.round(shift.frac_atypical * 100);
+    const detector = this.datasetState.detectorById().get(pair.modelId)?.name;
+    const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name;
     const onTune = this.router.url.split('?')[0].startsWith('/tune/');
+    // The Tune result's own line, word for word, as Find Results and a run's
+    // notice word it too (#5501); its next step points at the Tune it button,
+    // or on Tune at where the calls get checked (#5545).
+    const warning = domainShiftWarning(report, detector, dataset, onTune ? 'tune' : 'toast');
+    if (!warning) return;
     this.toast.warning({
-      // The Tune result's own line, word for word: the verdict and nothing stronger.
-      message: `${pct}% of this dataset looks atypical vs ${reference}: likely domain shift`,
-      detail:
-        `${detector} learned from ${reference} (${report.labels_in_reference} of its ` +
-        `${report.labels_total} labelled examples are there). Check its calls on ${dataset} ` +
-        `by hand before relying on them.`,
+      ...warning,
       action: onTune
         ? undefined
         : {
             label: 'Tune it',
-            title: `Tune ${detector} on ${dataset}`,
+            title: `Tune ${detector ?? 'this detector'} on ${dataset ?? 'this dataset'}`,
             onClick: () => void this.router.navigate(['/tune', pair.datasetId, pair.modelId]),
           },
       dedupKey: `training-domain:${key}`,

@@ -20,41 +20,236 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
-### Added
+### Changed
 
-- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
-  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
-  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
-  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
-  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
-  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
-  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+- **The detector Stats window's Import section reads as words too** (issue #5620). A detector made from imported
+  labels (**New Detector › Trained**) listed its importer and fields as recorded: `Importer: server_json_file`,
+  `Filepath: /data/labels/cats.json`. It now uses the import form's own names and labels, as the dataset window does
+  (#5617): `Importer: Server JSON File`, `Server path: /data/labels/cats.json`, and a checkbox as `Yes` / `No`.
+  Hovering a row shows the field's description.
 
-- **An import alert can say what the import left out** (issue #5449). The event a server's
-  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
-  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
-  reason), so an alert email can tell you which files to look into. The
-  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+- **The face ball's floors are read beside the face pipeline config in use** (issue #5621). `face_ball.json`
+  used to be read from the models folder's `imagekit` directory whatever config `IMAGEKIT_FACE_CONFIG` named, so
+  a server pointed at a pack elsewhere had no calibrated face search line and no people. It is now read beside
+  that config (the same file in the models folder's `imagekit` directory when the variable is unset), and
+  `scripts/data/fit_face_ball.py` writes there by default: a pack directory carries its floors with it. A
+  deployment that names a config outside its `imagekit` directory moves (or links) its `face_ball.json` beside
+  that config. The user-docs screenshot harness, which runs its app on a pinned buffalo_s pack of its own, now
+  writes the shipped buffalo_s entry beside that pack, so its face shots show the deployed cut.
 
-- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
-  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
-  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
-  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
-  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
-  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
-  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
-  on request; a Face dataset built before this gets its thumbnails on its next save.
+- **Rebuild Map only when there is something to rebuild** (issue #5615). The Browse map's top-left **Rebuild Map**
+  button used to be there on every map, including one freshly built from exactly the items it shows, where a
+  rebuild could only reshuffle it. It now appears once items have been verified away on a map opened from Tune,
+  which takes them off the map but leaves the rest in the slots they had among them, and goes away again when the
+  rebuilt map lands. A whole dataset's map never shows it: its layout is re-fit on its own whenever the dataset's
+  items change.
 
-- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
-  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
-  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
-  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
-  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
-  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
-  `max_results:`. It cannot be combined with `--resume`. See
-  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+## 2026-11-06
 
 ### Changed
+
+- **The face search line is calibrated per face embedder** (issue #5497). The face crops' line from two photos
+  at a balance of 1 or more (the cosine floor around a person's photos) used one embedder's numbers whatever
+  embedder made the faces. Each face embedder now has its own, fitted from a labelled face set by
+  `scripts/data/fit_face_ball.py` and kept in `face_ball.json` beside the face models. A Face dataset from an
+  embedder without them keeps the line from before the floor, and a warning says the face search line is not
+  calibrated for that embedder. Nothing changes on the GRID's default face models (buffalo_s), whose numbers
+  are the ones that shipped.
+
+- **Find Results lists its hits in a grid like the Dashboard's** (issue #5584). Click a column heading to sort by it
+  (Score, highest first, to start), click it again to turn the order round, drag a heading onto another to reorder
+  the columns, and drag the line between two to resize them; the order is kept across sessions. The **Columns**
+  checkboxes still decide which columns there are, and the export follows the order on screen, so a run can be sent
+  sorted by name, score, filename or any metadata column. **Sort by** is gone: **Similarity** is now a column, each
+  item's place in the dataset's one-dimensional map, ticked on when wanted and sorted like any other. The thumbnail
+  size buttons sit at the end of the Columns row. The summary names the detectors that ran rather than counting them
+  (past three, the count, with every name on hover), its labels read as the form labels do (`Media type:`,
+  `Detectors:`), and the note under a moved Threshold says plainly what the list shows.
+
+- **The domain-shift warning is shorter and says what to click** (issue #5545). Under its line, the warning used
+  to read `Mammal detector learned from Caltech-256 (S) (45 of its 45 labelled examples are there). Check its calls
+  on Caltech-101 (M) by hand before relying on them.` It now quotes every name, gives the count as one word (none
+  when every example is there, else `mostly` or `partly`), and points at a button you can see: `"Mammal detector"
+  learned from "Caltech-256 (S)". Tune it to check its calls on "Caltech-101 (M)".` On Tune it points at the
+  Autopilot tab, and in Find Results at **Browse** or Tune.
+
+- **Toasty has a hint at every Autopilot step, and speaks as Autopilot** (issue #5538). The Spot Check step used
+  to show no hint, so a user following Toasty through a training run lost him just before Done. It now has one:
+  "I'm double-checking your detector now. Keep clicking." Every Autopilot hint is in the first person too, "I'm
+  looking for Goods now" rather than "Autopilot is looking for Goods now", and "I picked this for you" rather
+  than "Autopilot picked this for you".
+
+- **A disabled button says on hover what would enable it** (issue #5533). Add Dataset's Import button used to
+  sit greyed out with no hint of what was missing, which was hard to spot with Advanced open. Hovering it now
+  names the first step still owed: `Select a demo dataset from the list`, `Folder to import is required`, `Tick at
+  least one kind of media to import`. The same holds across the app: Combine, Copy, Export, Search, the thumbnail
+  size buttons, the Dashboard's toolbar while a dataset or detector loads, and the rest. A button whose own label
+  already reads `Importing…` or `Loading…` keeps saying that.
+
+- **The Save as Default offer says what would change** (issue #5535). The notification that follows an import used to
+  say only which kinds of setting it would save ("your embedder and clipper picks"). It now lists each setting that
+  differs from the default saved now, with its new value: `Embedder: DINOv3, Merge near-duplicates: on`. Settings that
+  match are left out, and a list longer than four ends in "…" with a count of the rest. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
+- **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
+  to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
+  `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
+  `Include archives' contents: No`, `Importer: Folder`, and the embedder by its picker name (`SigLIP 2 (general
+  images)`, not `Siglip2`). A Media type row that repeated the Type row is gone, and so is an Include media row
+  for a dataset of its own type alone. In both Stats windows, dataset and detector, a stat with no value says `None`
+  instead of `-` (an untrained detector's Last trained says `Never`), and the detector's embedder is named the same
+  way.
+
+### Added
+
+- **People: a Face dataset's people, and who appears with whom** (issue #5590). A new view, opened from a Face
+  dataset's **⋯** menu (**People**) or its Browse toolbar, shows the dataset's faces merged into people at the cut Find
+  uses. The left pane lists everyone, the most faces first, with a minimum-face filter and an **Unplaced** row for the
+  faces that matched no one; the middle shows a person's faces, one large with its details; the right lists who shares
+  a photo with them and, for the one picked, the photos the two share, every face outlined by whose it is (the person,
+  the one they appear with, anyone else). A photo opens large in Show in photo with the same outlines. The first
+  opening finds the people with progress on the dataset's row; **Rebuild people** finds them again. The photos need
+  the Image dataset the import made, which the view offers to load; a face embedder with no calibrated cut shows a
+  message instead of people.
+
+- **Detector sharing, behind the `detector_sharing_source` setting** (issue #5577). A server whose admin names a
+  sharing source in `detector_sharing_source` can share detectors through it: share one of yours with people or
+  groups, or publicly, and every change to its labels reaches them; receive a detector shared with you as a
+  read-only copy, and check it for updates; fork any detector you can see into an editable copy of your own. A
+  received detector warns, and changes nothing, when someone other than its owner has written to it, until you
+  choose to take those changes or skip them. This release adds the API (`GET /api/detectors/sharing`,
+  `/api/detectors/sharing/received`, `/receive`, `/search-recipients`, and `/share`, `/refresh`, `/fork` and
+  `/sharing` under `/api/detectors/registry/{detector_id}`; see `docs/api/detectors.md`, "Detector sharing"); the
+  Dashboard's sharing controls follow. With the setting at its default, `null`, nothing changes.
+
+- **The Dashboard and Train show detector sharing** (issue #5578). A received detector carries a **Received** badge
+  in its tab (who it came from, when it was last checked, and whether anyone but its owner has written to it), and
+  is read-only: no rename, no Import Labels, and in Train its Good and Bad buttons are off with **Read-only: fork
+  to edit** and a **Fork** beside them. Its ⋯ menu offers **Check for updates**, which asks before taking votes
+  someone other than the owner wrote (**Import anyway**, **Skip foreign records** or **Cancel**), and **Fork**, which
+  makes an editable copy in Drafts. A detector you share carries a **Shared** badge, and a **Remote sync failed**
+  link when its last save did not reach the shared copy. With sharing on, every detector of yours offers **Share…**
+  and **Fork**. A detector whose sharing source is no longer in use here says so, and its sharing actions are off.
+
+- **Share a detector, and add the ones shared with you** (issue #5579). **Share…** on a detector of yours opens a
+  dialog of who it is shared with: add a person or group (picked from the sharing service's suggestions as you type,
+  where the service can search, or typed as the service names them), remove one, or make it **Public**. Each change
+  lands at once, and the first one shares the detector, replacing any auto-export it had (the dialog says so first).
+  **Stop Sharing** archives the shared copy; your detector keeps its labels. With sharing on, the Detectors card's
+  header has a **Received…** button listing the detectors other people share with you (owner, type, labels, last
+  update, and whether it came to you directly, by group or publicly); **Add** makes one a read-only detector of
+  yours, selected in Drafts, after asking first if anyone but its owner has written to it.
+
+- **A how-to for detector sharing** (issue #5580). [Share a detector, receive one, fork
+  one](docs/user/howto/share-a-detector.md) walks through sharing a detector and managing who has it, adding one
+  shared with you, what the warning about changes not made by the owner means and what each of its choices does,
+  forking, a failed save to the shared copy, and the note a detector carries when its sharing service is no longer in
+  use here.
+
+- **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
+  run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
+  setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what
+  settings, and how many results it sends; a paused auto-export (**Export results when AutoFind finishes** off) still
+  sends from here. `POST /api/autofind/runs/{run_id}/export` is the call behind it.
+
+- **The training-domain warning holds on the dataset an imported detector's labels were pulled into** (issue
+  #5572). Creating a detector from a shared labels file while a dataset is open copies the labelled items into
+  that dataset, and the warning used to take that dataset for the one the detector was trained on and stay quiet.
+  It now compares that dataset against the summary that came with the labels, until your own votes there outnumber
+  the imported ones. Training or tuning on a dataset that holds only a few of a detector's labels also no longer
+  makes it the detector's training dataset, which silenced the warning everywhere afterwards.
+
+- **A detector shared as a labels file keeps its training-domain warning** (issue #5571). Exporting a detector's
+  labels to a Server JSON File now writes the summary of the dataset it was trained on beside them, and a detector
+  created from that file (New detector › Trained), or a detector the labels are imported into, keeps it. So the
+  receiving VTSearch warns when its data looks unlike the training data, as a handed-over detector file already
+  did. Only on the same embedder: on another, the warning is skipped and says why. A detector that already learned
+  from a dataset of its own keeps its own summary.
+
+- **The training-domain warning travels with a shared detector** (issue #5567). A detector now carries a summary of
+  the dataset it was trained on: 128 of that dataset's items, named by where they came from, plus scores to compare
+  against. Given to someone whose VTSearch never had that dataset, it can still warn when their data looks unlike
+  what it was trained on, in Tune, in Find Results and in AutoFind runs. The summary is recorded the next time the
+  detector is trained or tuned on its own dataset. The first check on the new machine fetches the 128 items, and
+  skips the warning, saying why, if any of them cannot be fetched.
+
+- **Autopilot counts your votes** (issue #5539). The top of the Autopilot panel, folded or open, now reads how many
+  votes you have cast on this dataset. No step can say how many are left, since nobody knows how many a detector
+  will need, so the count's tooltip, and Toasty while Autopilot sharpens the detector, say how many it tends to
+  take: most detectors are trained within 50 votes, and Autopilot never asks for more than 200.
+
+- **Find Results shows what the other notches of the Threshold would have returned** (issue #5540). The dialog's
+  controls now run left to right in the order each acts on the list: the **Threshold**, then **Good** / **Bad** /
+  **Both**, then **Sort by**. The Threshold's three radios start on the notch the run was cut at; pick another and
+  the list, its Good and Bad counts, **Browse** and **Export** all split the run's scores where that notch draws the
+  line. Nothing is retrained, and no detector's own Threshold changes. An export from another notch sends that
+  notch's cut as the detector's `threshold`. The radios are frozen when no notch would list anything different,
+  for example a detector with too few labels for its line to move.
+
+### Fixed
+
+- **A malformed manifest imports what it can and says what it couldn't** (issue #5561). In a **Manifest** text file
+  (one path per line), a single line too long to be a filename, or a single byte that isn't UTF-8, used to fail the
+  whole import, while a stray CSV header row or the tail of a quoted value that held a line break was dropped without
+  a word. Now every line is judged on its own: the import goes ahead on the lines that name media, and a warning toast
+  lists each skipped line with its number and reason. A CSV row is read for its path column (the one a header row
+  names `path`, `filepath`, `image`, …, else the first); its other columns are ignored, and the toast says so. When no
+  line names a file, the error lists the first lines that were skipped. A listed folder that holds symlinks back up its
+  own tree is now walked once, where two such links used to hang the import.
+- **The Synthetic World Map demos no longer read "Needs Download"** (issue #5546). Both demos make their media on
+  your machine and download nothing, yet Add Dataset › Demo's Readiness column called them **Needs Download** until
+  they had been loaded once, beside a description saying "no download". They now read **Needs setup**, which is all
+  that is left. The Ready and Needs setup hover text no longer says "already downloaded", which was never true of
+  these two.
+- **A failed AutoFind export is reported once per run** (issue #5543). Coming back from Browse to the Find
+  Results dialog showed the run's failed export again ("Sending the results via Webhook (HTTP POST) failed: Webhook
+  URL is required."), as if the export had been tried again. It hadn't: the line repeats what happened when the run
+  finished, and reopening the dialog sends nothing. The dialog now shows the failure the first time it opens a run
+  and leaves it out after that. Each new run still reports its own failure. A successful export still shows every
+  time, with its **Open** button.
+- **The demo catalogue's Readiness column is no longer hidden off the right edge** (issue #5534). In Add Dataset ›
+  Demo, one long description could widen the table past the dialog, which clipped the whole Readiness column
+  with no scrollbar to show it was there. All that was left on screen was a green tint on ready demos' names,
+  which nothing explained. Description now takes the room the other columns leave and ends in "…" (hover for
+  the full text), so Readiness always shows. Each badge also explains itself on hover. The green tint is
+  gone, and the dialog is wider (900px, the width already used for the same table in New Detector). The first
+  drag of a column divider in any resizable table also no longer clips the longest cell of a column sized
+  exactly to its content.
+- **The words beside a (?) have a tooltip of their own** (issue #5536). Threshold, five Settings headings
+  (Results Exporter, Import Defaults, Browse Map, HuggingFace, Server) and Add Dataset's list-file line showed an explanation only on their (?):
+  pointing at the word itself showed nothing. Each now shows a short tooltip on the word, with the long version
+  still on the (?). Hovering a (?) inside a label that already had a tooltip no longer shows both at once.
+- **The Synthetic World Map demos load all 1,296 items, not 108** (issue #5515). Each demo makes 12 items per city,
+  but every item in a city got the same tile or tone, byte for byte, so the import merged them as duplicates and
+  kept one item per city. That left nothing for the finest signpost tier, the cities, to cluster. Each item's tile
+  or tone now differs from its neighbours by one level in a few pixels or samples, which no one can see or hear,
+  so every item survives the import. A copy of either demo cached before this fix still holds the old media and
+  still loads 108 items; delete `data/embeddings/synthetic_world_image.pkl` or `synthetic_world_audio.pkl` to
+  rebuild it.
+- **A Toasty hint dragged off the Dashboard's centre column stays in view** (issue #5531). The Dashboard is a
+  centred column with blank space on either side, and the column cut off anything that crossed its edge, so a
+  hint dragged into that space was clipped and then vanished. The hint now shows wherever you drag it in the
+  window.
+
+## 2026-11-03
+
+### Changed
+
+- **Tune's verdict reads as a form, and every likely range as centre ± spread** (issue #5503). At Done the verdict
+  put its numbers inside a sentence ("the line keeps the top 76: likely 91–100% of them are right, with nearly all
+  of them found (82–94% of all the matches)"), which was hard to read. It now lays them out one to a row:
+  **Line Keeps** 76, **Fraction Correct** 96 ± 5%, **Fraction Found** 88 ± 6%. Every likely range in the app (the
+  Tune result pane, the balance control's check line, the Dashboard's kept verdicts, and F-beta) now reads the same
+  way, as its centre ± how far it reaches either way, in whole percents, rather than as its two ends.
+
+- **Autopilot's last step is Done** (issue #5499). Labeling on after **Done!** used to move the panel to a seventh
+  step, **Keep Improving.**, whose light showed the lowest of the Smart, Stable and Span lights. After a Done that the
+  expected F-beta or the 200-vote cap said, with a light short of green, it could stay red for the rest of the
+  session, as if something were still owed. Now **Done!** stays the current step, with its green check, however long
+  you label on; when a later vote moves a light off green, its line reads **Detector trained**. Toasty's hand-off no
+  longer says to "keep clicking to sharpen it", which never said when to stop: it says you can keep voting, but you
+  don't need to.
 
 - **Autopilot can say Done for a target with fewer than 5 Goods** (issue #5477). The Smart and Stable lights
   stayed red until a detector held 5 Goods, so a target with only 3 or 4 to find, as most single people on a Face
@@ -102,7 +297,87 @@ what is on `dev` but not yet on `main`; each release dates that section
   a badge with its kind of media after its name, so a face dataset read "Photos – Face", then **Face**, then
   **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
 
+### Added
+
+- **The domain warning reaches Find and AutoFind** (issue #5501). Tune's warning that a dataset looks unlike the one a
+  detector was trained on ("68% of this dataset looks atypical vs photos: likely domain shift") now runs for every
+  detector of a Find or AutoFind: the Find Results dialog shows it under its summary, an AutoFind's finished notice
+  turns to a warning naming the detector, and the exported results carry the figure, which the email exporter prints
+  under each detector and flags in its subject. The training dataset no longer has to be loaded: a detector remembers
+  the dataset it was trained or tuned on, and the check reads that dataset from disk, so a run after a restart or an
+  AutoFind on a fresh import still warns. See [Trust a detector](docs/user/howto/trust-a-detector.md).
+
+- **Tune's test looks like every other Autopilot, and a slip can be put right** (issue #5502). The test's picks
+  come one at a time in the ordinary centre panel, as in Train: the line saying which band the picks are drawn
+  from, the round's dots and the arrow-key line are gone, and the image tools and the Metadata tray are there. The
+  phase lights on the left still say how far the test has got. `↓` now walks back through every pick voted, from
+  any round and from the verdict at Done, with its vote lit, and voting it again corrects it; before, a round's
+  last vote sealed the round, so a slip on it could not be undone. The verdict follows the correction.
+
+- **Usage metrics** (issue #5475). The app now records which features people use, so whoever runs a server can see
+  whether anyone opens Browse, which exporters and importers they pick, and which display options and settings they ever
+  change. Each event (a view opened, a dataset imported, results exported, a setting changed, a tagged control clicked)
+  becomes one line in `data/metrics/events-YYYY-MM.jsonl`, under the user who did it; nothing leaves the server. Set
+  `"enable_metrics": false` in `data/settings.json` to stop recording. A deployment that builds its own frontend can
+  send the events elsewhere by supplying its own `METRICS_PROVIDER`. The line format and every event are listed in
+  [DEPLOYMENT.md](docs/DEPLOYMENT.md#usage-metrics).
+
+- **An import alert can say what the import left out** (issue #5449). The event a server's
+  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
+  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
+  reason), so an alert email can tell you which files to look into. The
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+
+- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
+  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
+  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
+  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
+  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
+  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
+  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
+  on request; a Face dataset built before this gets its thumbnails on its next save.
+
+- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
+  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
+  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
+  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
+  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
+  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
+  `max_results:`. It cannot be combined with `--resume`. See
+  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
 ### Fixed
+
+- **The Synthetic World Map demos import under any embedder** (issue #5508). Both demos (image and audio) ship
+  synthetic vectors at a fixed width: 768 for image, SigLIP's, and 512 for audio, CLAP's. Picking any embedder of
+  another width, such as `sift_vlad` or `clip` for image or `ast` for audio, made the import fail once it was
+  running, with a "vector is 768-dimensional but 8192 was expected" error. The vectors are now made at the picked
+  embedder's width. They are still synthetic, so a text query against them means nothing, whichever embedder is picked.
+
+- **Importing a demo dataset shows that it started, and works from the Label view** (issue #5498). Add Dataset's
+  Demo picker used to close at the click and leave the import request to the Dashboard. Nothing appeared until the
+  server answered, so a slow answer looked like an import that had not started and invited a second, duplicate one.
+  Opened from the top bar on the Label view, where the Dashboard isn't open, the import was lost outright. Like
+  every other picker, the Demo picker now sends the request itself: Import reads "Importing…" and is disabled until
+  the server accepts it, a refusal is shown in the dialog, and the dialog closes once the import's row is on its way.
+
+- **Find Results' selected buttons are readable** (issue #5500). The selected Good / Bad / Both and Sort
+  by buttons drew grey text on their blue (or, in High Visibility, yellow) fill, too faint to read in any theme; the
+  selected click / hover focus button in the view toolbar had the same grey icon. They now use the same dark or light
+  text as every other selected toggle.
+
+- **Export labels from a Dashboard row fills in that row's detector** (issue #5494). An exporter field that uses
+  `{detector_name}` or `{detector_id}` (a file path, a URL, an email subject) took the detector the top bar had
+  active, not the row whose ⋯ menu you opened: it came out blank for a detector you had just imported and not yet
+  loaded, and with several detectors loaded it named whichever was loaded last. It now names the row's detector,
+  loaded or not.
+
+- **An import's progress counts its items, not out of 1000** (issue #5492). While an import ran more than one
+  embedder (Step 3 of 4, Analyzing files), and through the whole of Step 4, the count beside the progress bar was out
+  of a fixed 1000 that meant nothing: twenty images into a 50-image dataset it read `133/1000 SigLIP...`. It now
+  counts what that pass is working through, the images embedded so far out of the images being embedded
+  (`20/50 SigLIP...`), starting again for each embedder, and in Step 4 whatever each step there counts. The bar still
+  fills once across the whole import.
 
 - **Find Results lists its hits on a laptop screen again.** The dialog's list took whatever height the rest of the
   dialog left over, and on a laptop screen a crowded dialog (a note about the run, an auto-export line, an exporter
@@ -243,7 +518,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   unknown clipper or parameter, or a clipper for another media type than a detector scores, stops the run with a
   message naming the problem. A pipeline file sets it as `override_clipper:`. See
   [`docs/CLI.md`](docs/CLI.md#how-the-run-scores).
-
 
 - **`--stream-results --as-labelset` streams a headless run's hits as a labelset** (issue #5285). A run over a
   source larger than RAM can now write its predictions as label entries rather than hits: each carries the item's

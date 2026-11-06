@@ -152,6 +152,16 @@ When the detector context **is** loaded, the new labels are also resolved
 against the loaded dataset's medias, applied to the detector's votes, and
 a fresh head is trained with a cross-validated threshold.
 
+A labelset whose `detector_meta` carries a training-domain summary (one this
+app exported, #5571) gives it to the detector when the detector has no
+training dataset of its own, or its own is the same dataset; a detector
+trained elsewhere keeps its own summary. With it comes a training-dataset
+pointer counting the imported labels, when the detector has none (#5572). The
+same holds for `POST /api/label-importers/import/{importer_name}`, into the
+active detector, which also records under `labels_ingested` the labels whose
+media it pulls into the active dataset, so that dataset is not taken for the
+one the detector was trained on.
+
 → `{"applied": 12, "skipped": 3, "resolved": 12, "trained": true, "num_labels": 62, "message": "..."}`
 
 `resolved` counts labels resolved into the loaded detector context (0 when no
@@ -293,7 +303,12 @@ entries, or `null` when it was never tested. Drafts leave it out.
 `{"source_name", "display_name", "inherited", "missing_fields"}`, or `null`
 when they sync nowhere (see [Labelset Sources](settings.md#labelset-sources-sync));
 a non-empty `missing_fields` means the detector is not synced until those
-values are filled in. The binding's field values are never listed.
+values are filled in (for a shared or received detector, those the
+`detector_sharing_source` setting leaves empty). The binding's field values
+are never listed.
+`sync_mode`, `sharing`, `sharing_note` and `forked_from` are the detector's
+sharing state: whether it is shared, received or forked, and its container
+(see [Detector sharing](#detector-sharing)).
 
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
@@ -392,7 +407,14 @@ The media type is inferred from the labels' origins; labels spanning more than
 one media type, or none whose origin names one, are rejected (400). A missing
 `name` is a 422; a taken one a 409. The new registry entry keeps how it was
 imported as `imported` (the importer, its fields, the time), which
-[the detector's stats](#detector-statistics) return.
+[the detector's stats](#detector-statistics) return. When the labelset's
+`detector_meta` carries the sending detector's training-domain summary (a
+file the `server_json_file` exporter wrote, #5571), the new detector keeps it,
+so its [training-domain check](find.md#training-domain-overlap) runs without
+the training dataset, weighed at the labels that came with it (#5572). The
+labels whose media the route pulls into the active dataset are recorded on the
+new detector (`labels_ingested`), so that dataset holding them does not read
+as the one the detector was trained on.
 
 → (201)
 ```json
@@ -552,7 +574,8 @@ section reads it.
 
 → The positive / negative / total label counts, `num_positive_resolved` and
 `active_dataset_name`, the detector's `embedder` (the loaded context's live
-one, else the one it last trained in), `embedder_type`, query and example,
+one, else the one it last trained in) and its `embedder_display_name` (`""`
+when there is none), `embedder_type`, query and example,
 `clipper`, creation and training times, ownership, its `autofind` flag, and
 `test_verdicts`. Each verdict carries the tested dataset, `tested_at`, the
 `beta` it was tested at, `line_count` (the line kept the top `line_count` of
@@ -566,7 +589,18 @@ the `size` items scored), `labelled` (the picks the ranges rest on),
 "params": {"filepath": "/data/labels/cats.json"}, "imported_at": 1761580800.0}`.
 `params` holds the fields the importer ran with, minus `file` and `password`
 fields, the policy a dataset origin follows. It is `null` for a detector made
-any other way. The Stats dialog's *Import* section reads it.
+any other way.
+
+`importer_display_name` is that importer's display name (`"Server JSON File"`),
+and `imported_rows` is `imported.params` worded for display, in recorded order:
+`[{"key", "label", "value", "description"}]`, labelled with the importer's own
+field labels (`Server path`, not `filepath`) and worded by its
+`describe_origin_param()` (`Yes` / `No` for a checkbox), the way a dataset's
+[`source_rows`](datasets.md#dataset-statistics) are. Empty values are left
+out. For a detector made any other way the name is `""` and the list empty;
+for an importer no longer registered, the name is `imported.importer` and the
+rows read as recorded. `imported` itself is the raw record, unchanged. The
+Stats dialog's *Import* section reads the three together.
 
 403 if the caller cannot access the detector; 404 if it does not exist.
 
@@ -598,3 +632,224 @@ Idempotent.
 
 → `{"ok": true, "released": true}` (`released` is `false` when there was
 nothing to free).
+
+---
+
+## Detector sharing
+
+A detector can be shared with other people through an external collaboration
+service, by keeping a copy of its labels in a *container* there that the
+service lets others read. Which service is a deployment decision: the
+`detector_sharing_source` server setting names the labelset source to share
+through (see [SETTINGS.md](../SETTINGS.md)), and while it is `null` — the
+default — sharing is off. The source is an ordinary
+[labelset source](settings.md#labelset-sources-sync) that implements sharing;
+how one does is "The sharing contract" in
+[`vtscore/docs/extending/labelset-sources.md`](../../vtscore/docs/extending/labelset-sources.md).
+
+Three kinds of detector come out of it, told apart by `sync_mode` in the
+[registry listing](#list-registered-detectors):
+
+- A **shared** detector is one of yours with a container (`sync_mode`
+  `local`, `sharing` set). Every change to its labels is pushed to the
+  container, which is rewritten to hold exactly them; nothing is pulled back.
+  `sharing.sync_error` is the last push's failure, or `null`.
+- A **received** detector (`linked`) is your read-only copy of someone else's
+  container. Every route that would change its labels or its name answers 409
+  `error_code: detector_read_only`; it changes only by
+  [refresh](#refresh-a-received-detector). It can still be loaded, used to
+  find and run as AutoFind, and deleting it removes only your copy.
+- A **forked** detector (`forked`) is an editable copy of either kind, with
+  `forked_from` saying where it came from.
+
+`sharing` in the listing is the container's state: `source_name`,
+`remote_ref` (the container's opaque reference), `remote_owner` (a received
+detector's owner, named as the sharing service names people), `last_synced`,
+`integrity` (set by the last refresh) and `sync_error`. When the container
+belongs to a source that is not the active one (the deployment changed
+source, or the source is gone), `sharing_note` says so and the detector is
+local only: nothing is pushed or refreshed, and the sharing routes answer 409
+`sharing_unavailable` with that note. It is never pointed at another source.
+
+**While sharing is off** every route below answers 404
+`error_code: sharing_disabled`, except two: the capability route, and
+[fork](#fork-a-detector), which needs only your copy.
+
+**Errors from the sharing service** are answered the same way on every route
+that reaches it: 404 `remote_not_found` (no such container for you: never
+created, archived, or deleted), 403 `remote_permission_denied` (the service
+refused you), 409 `sharing_unavailable` (above), 501 `sharing_unsupported`
+(the source does not implement the operation) and 502 `sharing_failed` (the
+service is unreachable or answered nonsense). The other errors are listed per
+route.
+
+### Sharing capability
+
+```
+GET /api/detectors/sharing
+```
+
+→ `{"enabled", "name", "display_name", "icon", "supports_recipient_search",
+"missing_fields"}`. Always 200. `enabled` is `false` while sharing is off,
+with the other fields `null`, `false` or empty; the dashboard hides its
+sharing surfaces then. `missing_fields` lists required fields of the source
+that the setting leaves without a value.
+
+### Detectors shared with you
+
+```
+GET /api/detectors/sharing/received
+```
+
+→ `{"received": [...]}`: the containers shared with you, directly, through a
+group or publicly, that you do not own. Each has `remote_ref`, `name`,
+`owner`, `media_type`, `record_count`, `updated_at`, `shared_via` (`direct`,
+`group` or `public`) and `detector_id`: your detector that already holds it,
+or `null` when you have not [received](#receive-a-detector) it.
+
+### Receive a detector
+
+```
+POST /api/detectors/sharing/receive
+```
+
+**Body:** `{"remote_ref": "...", "foreign": "abort"}` (`foreign` is optional;
+see below).
+
+Makes the container a received detector of yours, its labels the container's
+records. It is named after the container, suffixed (`Dog barks (2)`) when
+another detector has that name.
+
+→ 201 `{"ok", "applied": true, "message", "integrity", "remote_ref", "name",
+"owner", "detector"}`, `detector` being the new entry as the listing shows it.
+
+**Changes not made by the owner.** The services sharing targets let anyone a
+container is shared with write to it. Every record keeps who created and last
+changed it, and every owner save writes a manifest (record count and digest)
+that keeps who wrote it, so a receive or refresh can tell when anyone else has
+written to it, deleted records included. `foreign` decides what then happens:
+`abort` (the default) changes nothing and reports it, `import` takes every
+record, and `skip` only those the owner both created and last changed. An
+`abort` that finds such changes answers **200** with `applied: false`,
+`detector: null` and `integrity: {"status": "foreign_modifications", "count"}`,
+so the client can ask the user and send the receive again with `import` or
+`skip`. `integrity.status` is `clean` otherwise.
+
+409 `already_received` when you already hold this container (`detector_id`
+names your copy).
+
+### Search for recipients
+
+```
+POST /api/detectors/sharing/search-recipients
+```
+
+**Body:** `{"query": "ali"}`
+
+→ `{"suggestions": [{"id", "display_name", "kind"}]}`: people (`kind: user`)
+and groups (`group`) the sharing service knows that match, for a share
+dialog's picker; pass an `id` in [share](#share-a-detector)'s `add`. An empty
+query returns none. 501 `sharing_unsupported` when the source has no search
+(`supports_recipient_search` is `false` on the capability route).
+
+### A detector's container
+
+```
+GET /api/detectors/registry/{detector_id}/sharing
+```
+
+→ `{"detector_id", "sync_mode", "is_owner", "sharing", "sharing_note",
+"owner", "recipients", "public"}` for a shared or received detector.
+`sharing` is as in the listing; `owner`, `recipients` (people and groups, as
+the service names them) and `public` are read from the container now.
+`is_owner` is whether the container is yours (the detector is yours and not
+a received copy). When the container's source is not the active one,
+`sharing_note` says why and the three are `null`: the container is not read.
+
+403 if you cannot access the detector; 404 if it does not exist, or
+`detector_not_shared` if it shares nothing.
+
+### Share a detector
+
+```
+POST /api/detectors/registry/{detector_id}/share
+```
+
+**Body:** `{"add": ["bob"], "remove": ["carol"], "public": true}` (each
+optional; `{}` only shares it).
+
+The first call creates the detector's container from its labels and binds the
+detector to it, and from then on its label changes are pushed there. A plain
+auto-export binding ([Labelset Sources](settings.md#labelset-sources-sync)),
+its own or the deployment default it inherited, is replaced, and the
+`message` says so. Then `remove`, `add` and `public` (share it with everyone,
+or stop) are applied, in that order.
+
+→ 200: the [container](#a-detectors-container) as it is afterwards, plus
+`ok`, `created` (this call created the container) and `message`.
+
+403 if you did not create the detector; 404 if it does not exist; 409
+`detector_read_only` for a received detector (fork it to share it).
+
+### Stop sharing a detector
+
+```
+DELETE /api/detectors/registry/{detector_id}/share
+```
+
+Archives the container and unbinds the detector, which keeps its labels and
+becomes a plain local one. Received copies stop getting updates, and the
+container leaves recipients' [listings](#detectors-shared-with-you). A
+container the service no longer has is unbound all the same.
+
+→ `{"ok", "message", "detector"}`.
+
+403 if you did not create the detector; 404 if it does not exist, or
+`detector_not_shared` if it shares nothing; 409 `detector_read_only` for a
+received detector (delete it instead, which removes only your copy).
+
+### Refresh a received detector
+
+```
+POST /api/detectors/registry/{detector_id}/refresh
+```
+
+**Body:** `{"foreign": "abort"}` (optional; as on
+[receive](#receive-a-detector)).
+
+Brings a received detector level with its container: its labels are
+**replaced** by the container's, under the `foreign` policy. An `abort` that
+finds changes not made by the owner changes nothing and answers
+`applied: false`, recording the integrity on the detector so the listing can
+warn.
+
+→ `{"ok", "applied", "message", "integrity", "added", "changed", "removed",
+"detector"}`; the three counts are the labels the copy gained, changed and
+lost.
+
+403 if you did not create (receive) the detector; 404 if it does not exist;
+409 `detector_not_linked` if it is not a received detector.
+
+### Fork a detector
+
+```
+POST /api/detectors/registry/{detector_id}/fork
+```
+
+**Body:** `{"name": "My dog barks"}` (optional; omitted or blank, the fork is
+`<name> (fork)`, suffixed until free).
+
+Copies any detector you can access into a new, editable one of yours, with
+`sync_mode: forked` and `forked_from` (`detector_id`, `name`, `owner`, plus
+`source_name` and `remote_ref` when the original was shared or received). A
+received detector's fork copies your local copy, which after a refresh that
+skipped foreign changes is the trustworthy one. When sharing is on, the fork
+is shared too, from the start (with nobody yet). Fork works while sharing is
+off.
+
+→ 201 `{"ok", "message", "detector", "remote_sync"}`. `remote_sync` is `null`
+when the fork was shared, and otherwise says why it is local only: sharing is
+off, or creating its container failed.
+
+403 if you cannot access the detector; 404 if it does not exist or has no
+labels file; 409 if the name is taken.

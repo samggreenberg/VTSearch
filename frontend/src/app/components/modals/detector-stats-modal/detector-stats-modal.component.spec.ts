@@ -20,6 +20,7 @@ describe('DetectorStatsModalComponent', () => {
     active_dataset_name: 'My Dataset',
     media_type: 'audio',
     embedder: 'clap',
+    embedder_display_name: 'CLAP (general, faster)',
     clipper: 'whole',
     text_query: '',
     media_example: '',
@@ -30,6 +31,8 @@ describe('DetectorStatsModalComponent', () => {
     readers: [],
     test_verdicts: [] as ReturnType<typeof wireVerdict>[],
     imported: null as { importer: string; params: Record<string, string>; imported_at: number } | null,
+    importer_display_name: '',
+    imported_rows: [] as { key: string; label: string; value: string; description: string }[],
   };
 
   beforeEach(async () => {
@@ -91,7 +94,7 @@ describe('DetectorStatsModalComponent', () => {
 
     const rows = Array.from(fixture.nativeElement.querySelectorAll('.verdict')) as HTMLElement[];
     expect(rows.length).toBe(2);
-    expect(rows[0].textContent).toContain('drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+    expect(rows[0].textContent).toContain('drawings-new: likely 78 ± 8% right, about half of them found (34 picks, 2026-10-05)');
     expect(rows[0].querySelector('.stale-mark')).toBeFalsy();
     expect(rows[1].classList).toContain('verdict--stale');
     expect(rows[1].textContent).toContain('(1 pick, 2026-10-05)');
@@ -111,26 +114,91 @@ describe('DetectorStatsModalComponent', () => {
       return Array.from(el.querySelectorAll('.section-title')).map((h) => h.textContent?.trim());
     }
 
-    it('names the importer, the fields it ran with and when, for an imported detector', async () => {
-      const el = await load({
-        ...mockStats,
-        imported: { importer: 'server_json_file', params: { filepath: '/data/labels/cats.json' }, imported_at: 1700000000 },
-      });
+    const imported = { importer: 'server_json_file', params: { filepath: '/data/labels/cats.json' }, imported_at: 1700000000 };
 
-      expect(sectionTitles(el)).toContain('Import');
-      const rows = Array.from(el.querySelectorAll('tr')).map((tr) =>
+    function rowTexts(el: HTMLElement): string[] {
+      return Array.from(el.querySelectorAll('tr')).map((tr) =>
         Array.from(tr.querySelectorAll('td'))
           .map((td) => td.textContent?.trim())
           .join(' '),
       );
-      expect(rows).toContain('Importer server_json_file');
-      expect(rows).toContain('Filepath /data/labels/cats.json');
-      expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported -')).toBe(true);
+    }
+
+    // Issue #5620: the rows read in the import form's words, as the server
+    // words them, not as the record spells its keys.
+    it('names the importer and its fields the way the import form does, and when', async () => {
+      const el = await load({
+        ...mockStats,
+        imported,
+        importer_display_name: 'Server JSON File',
+        imported_rows: [
+          { key: 'filepath', label: 'Server path', value: '/data/labels/cats.json', description: 'A labels file on the server.' },
+        ],
+      });
+
+      expect(sectionTitles(el)).toContain('Import');
+      const rows = rowTexts(el);
+      expect(rows).toContain('Importer Server JSON File');
+      expect(rows).toContain('Server path /data/labels/cats.json');
+      expect(rows).not.toContain('Importer server_json_file');
+      expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported None')).toBe(true);
+      const label = Array.from(el.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).find(
+        (td) => td.textContent?.trim() === 'Server path',
+      )!;
+      expect(label.title).toBe('A labels file on the server.');
+    });
+
+    it('falls back to the recorded name and key for an importer that is no longer registered', async () => {
+      const el = await load({
+        ...mockStats,
+        imported: { ...imported, importer: 'gone' },
+        importer_display_name: '',
+        imported_rows: [{ key: 'filepath', label: 'Filepath', value: '/data/labels/cats.json', description: '' }],
+      });
+
+      expect(rowTexts(el)).toContain('Importer gone');
+      const label = Array.from(el.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).find(
+        (td) => td.textContent?.trim() === 'Filepath',
+      )!;
+      expect(label.title).toBe('Importer field: filepath');
     });
 
     it('is absent for a detector no importer created', async () => {
       const el = await load(mockStats);
       expect(sectionTitles(el)).not.toContain('Import');
+    });
+  });
+
+  // Issue #5617: a stat with no value says so in a word, not a dash.
+  describe('empty values', () => {
+    async function rowsOf(overrides: Partial<typeof mockStats>): Promise<string[]> {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/detectors/registry/det1/stats').flush({ ...mockStats, ...overrides });
+      await settleZoneless(fixture);
+      return Array.from(fixture.nativeElement.querySelectorAll('tr') as NodeListOf<HTMLElement>).map((tr) =>
+        Array.from(tr.querySelectorAll('td'))
+          .map((td) => td.textContent?.trim())
+          .join(' '),
+      );
+    }
+
+    it('names the embedder by its display name', async () => {
+      expect(await rowsOf({})).toContain('Embedder CLAP (general, faster)');
+    });
+
+    it('says None for an unset clipper, embedder or creator, and Never for an untrained detector', async () => {
+      const rows = await rowsOf({
+        clipper: '',
+        embedder: '',
+        embedder_display_name: '',
+        created_by: '',
+        last_trained_at: null as unknown as number,
+      });
+      expect(rows).toContain('Clipper None');
+      expect(rows).toContain('Embedder None');
+      expect(rows).toContain('Created by None');
+      expect(rows).toContain('Last trained Never');
+      expect(rows.some((r) => r.endsWith(' -'))).toBe(false);
     });
   });
 

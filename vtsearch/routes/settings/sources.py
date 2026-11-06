@@ -26,12 +26,15 @@ envelope.  Sending ``{}`` (empty body) clears the active source.
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 from flask import jsonify
 from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.settings_io import (
     DefaultLabelsetSourceSchema,
     DetectorLabelsetSourceSchema,
+    LabelsetSourceEntrySchema,
     OkMessageSchema,
     SetSyncSourceRequestSchema,
     SyncFromLabelsetSourceResponseSchema,
@@ -39,6 +42,7 @@ from vtsearch.schemas.settings_io import (
     SyncSourceConfigSchema,
     SyncSourceEntrySchema,
 )
+from vtsearch.routes._read_only import READ_ONLY_DESCRIPTION, refuse_linked
 
 sync_sources_bp = Blueprint(
     "sync_sources",
@@ -153,9 +157,14 @@ def sync_settings_from_source():
 
 
 @sync_sources_bp.route("/api/labelset-sources", methods=["GET"])
-@sync_sources_bp.response(200, SyncSourceEntrySchema(many=True))
+@sync_sources_bp.response(200, LabelsetSourceEntrySchema(many=True))
 def list_labelset_sources_route():
-    """Return a list of all registered labelset source plugins."""
+    """Return a list of all registered labelset source plugins.
+
+    Each entry carries the source's derived capability flags:
+    ``supports_sync`` (it can be a plain sync target), ``supports_sharing``
+    and ``supports_recipient_search``.
+    """
     from vtscore.labels.sources import list_labelset_sources
     from vtsearch.settings import filter_visible_plugins
 
@@ -269,12 +278,40 @@ def _validated_binding(entry: dict, source, field_values: dict) -> dict:
     return own
 
 
+def _abort_sharing_unavailable(entry: dict, advice: str = "") -> NoReturn:
+    """Answer 409 ``sharing_unavailable`` for *entry*, whose sharing binding is not in use here.
+
+    The message is the entry's ``sharing_note``, then *advice* (if any).
+    """
+    from vtscore.labels.binding import sharing_note
+    from vtsearch.errors import SHARING_UNAVAILABLE
+
+    note = sharing_note(entry) or "This detector's sharing source is not available on this server."
+    abort(
+        409,
+        message=f"{note} {advice}".strip(),
+        error_code=SHARING_UNAVAILABLE,
+        detector_id=entry["id"],
+    )
+
+
 @sync_sources_bp.route("/api/detectors/<detector_ref>/labelset-source", methods=["PUT"])
 @sync_sources_bp.arguments(SetSyncSourceRequestSchema)
 @sync_sources_bp.response(200, OkMessageSchema)
 @sync_sources_bp.alt_response(400, description="A field value is missing or not allowed.")
 @sync_sources_bp.alt_response(403, description="Only the detector's creator can change where it syncs.")
 @sync_sources_bp.alt_response(404, description="Unknown detector or labelset source.")
+@sync_sources_bp.alt_response(
+    409,
+    description=(
+        f"{READ_ONLY_DESCRIPTION} Also when the detector's binding names a shared container, whatever the body: "
+        "it owns that container (``error_code: detector_shared``; stop sharing it first, with "
+        "``DELETE /api/detectors/registry/<id>/share``, which archives the container), or the container's "
+        "source is not this server's active sharing source (``error_code: sharing_unavailable``, the message "
+        "saying why; a fork is a plain copy that can sync anywhere)."
+    ),
+)
+@refuse_linked("detector_ref")
 def set_detector_labelset_source(body: dict, detector_ref: str):
     """Set, clear, or opt a detector out of its labelset source.
 
@@ -285,16 +322,38 @@ def set_detector_labelset_source(body: dict, detector_ref: str):
     (any values the default fixes for that source are dropped: they always
     come from the server).  Setting a source pulls what it already holds into
     the detector, then pushes the detector's labels back to it.
+
+    A binding that names a shared container is never replaced here, by any
+    body: dropping its ``remote_ref`` would leave the container's recipients
+    with a copy that never updates again, and nothing would say so.  Its
+    owner unshares first, which archives the container.  A sharing binding
+    whose source is not the active one is refused too: it is never pointed at
+    a different source, so it can resume once that source is back.
     """
     from vtscore.detectors.registry import is_detector_owner, update_detector
     from vtscore.labels.binding import OPT_OUT
     from vtscore.labels.sources import get_labelset_source
-    from vtscore.labels.sync import reconcile_labelset_source
+    from vtscore.labels.sync import SYNC_ROLE_OWNER, SYNC_ROLE_UNAVAILABLE, reconcile_labelset_source, sync_role
     from vtsearch.auth import get_current_user
+    from vtsearch.errors import DETECTOR_SHARED
 
     entry = _registered_detector(detector_ref)
     if not is_detector_owner(entry["id"], get_current_user()):
         abort(403, message="Only the detector's creator can change where it syncs")
+
+    role = sync_role(entry)
+    if role == SYNC_ROLE_OWNER:
+        abort(
+            409,
+            message=(
+                f"Detector '{entry['name']}' is shared from here: its labels sync to its shared copy, and changing "
+                "where it syncs would leave that copy without updates. Stop sharing it first."
+            ),
+            error_code=DETECTOR_SHARED,
+            detector_id=entry["id"],
+        )
+    if role == SYNC_ROLE_UNAVAILABLE:
+        _abort_sharing_unavailable(entry, "To sync its labels somewhere else, fork it.")
 
     source_name = (body.get("source_name") or "").strip()
     if not source_name:
@@ -323,20 +382,46 @@ def set_detector_labelset_source(body: dict, detector_ref: str):
 @sync_sources_bp.response(200, SyncFromLabelsetSourceResponseSchema)
 @sync_sources_bp.alt_response(403, description="Access denied for the current user.")
 @sync_sources_bp.alt_response(404, description="Detector not found.")
+@sync_sources_bp.alt_response(
+    409,
+    description=(
+        f"{READ_ONLY_DESCRIPTION} Also when the detector shares its labels through a container it owns "
+        "(``error_code: detector_shared``: they are pushed there, never pulled back), or its sharing source "
+        "is not this server's active one (``error_code: sharing_unavailable``, the message saying why)."
+    ),
+)
+@refuse_linked("detector_ref")
 def sync_detector_labelset_from_source(detector_ref: str):
     """Pull the labels at the detector's labelset source into it now.
 
     Labels the source holds and the detector lacks are added, and where the
     two disagree the source's label wins; nothing is removed.  The merged
-    labels are then pushed back to the source.
+    labels are then pushed back to the source.  Only a plain binding pulls: a
+    shared detector's owner has nothing to pull (its file is what the
+    container is rewritten from), and a received one changes only by refresh.
     """
     from vtscore.detectors.registry import can_user_access_detector
-    from vtscore.labels.sync import sync_from_labelset_source
+    from vtscore.labels.sync import SYNC_ROLE_OWNER, SYNC_ROLE_UNAVAILABLE, sync_from_labelset_source, sync_role
     from vtsearch.auth import get_current_user
+    from vtsearch.errors import DETECTOR_SHARED
 
     entry = _registered_detector(detector_ref)
     if not can_user_access_detector(entry["id"], get_current_user()):
         abort(403, message="You do not have access to this detector")
+
+    role = sync_role(entry)
+    if role == SYNC_ROLE_OWNER:
+        abort(
+            409,
+            message=(
+                f"Detector '{entry['name']}' is shared from here: its labels are pushed to its shared copy "
+                "as they change, and nothing is pulled back into it."
+            ),
+            error_code=DETECTOR_SHARED,
+            detector_id=entry["id"],
+        )
+    if role == SYNC_ROLE_UNAVAILABLE:
+        _abort_sharing_unavailable(entry)
 
     from vtscore.detectors.store import _detector_path, _read_detector
 

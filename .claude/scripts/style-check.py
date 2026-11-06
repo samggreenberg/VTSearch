@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Static SCSS audit for the VTSearch frontend.
+"""Static SCSS (and template) audit for the VTSearch frontend.
 
-Scans `frontend/src/**/*.scss` for violations of the rules in
-`docs/style-guide.md`.  Designed to be invoked by the `/style-check`
+Scans `frontend/src/**/*.scss` - and, for the one template rule (§3.6, a
+disabled button says why), `frontend/src/**/*.html` - for violations of the
+rules in `docs/style-guide.md`.  Designed to be invoked by the `/style-check`
 skill: prints findings grouped by rule, with file:line and a one-line
 explanation per hit.  Exits 0 even when violations are found - this is
 a report tool, not one of the `run-tests.sh` gates; it runs only when
@@ -603,6 +604,42 @@ def check_deleted_alias(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
+# §5.18 / §3.6 A disabled button that doesn't say why (templates)
+# ---------------------------------------------------------------------------
+BUTTON_TAG = re.compile(r"<button\b([^>]*)>", re.S)
+DISABLED_BINDING = re.compile(r'\[disabled\]="([^"]*)"')
+BOUND_TITLE = re.compile(r"\[(?:attr\.)?title\]=")
+# A button disabled only while its own work is in flight has a label that says
+# so (`Importing…`), the one exemption §3.6 allows.
+BUSY_NAME = re.compile(r"(?i)submitting|loading|busy|saving|exporting|retrying|adding")
+
+
+def check_disabled_without_reason(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="§5.18 Disabled button with no reason on hover (templates)",
+        description=(
+            "A <button> whose [disabled] is bound must say why while disabled: "
+            "a bound [title] naming the next step that enables it (§3.6). Hits "
+            "have a static or missing title. A button disabled only while its "
+            "own label reads `Importing…` is exempt and is skipped when its "
+            "[disabled] names nothing but in-flight flags."
+        ),
+    )
+    for path in files:
+        text = path.read_text()
+        for m in BUTTON_TAG.finditer(text):
+            attrs = m.group(1)
+            disabled = DISABLED_BINDING.search(attrs)
+            if not disabled or BOUND_TITLE.search(attrs):
+                continue
+            operands = [o for o in disabled.group(1).split("||") if o.strip()]
+            if operands and all(BUSY_NAME.search(o) for o in operands):
+                continue
+            f.hits.append((path, _line_of(text, m.start()), disabled.group(0)))
+    return f
+
+
+# ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
 def print_report(findings: list[Finding]) -> int:
@@ -651,6 +688,7 @@ def main() -> int:
         check_font_inherit_trap(files),
         check_flex_column_no_gap(files),
         check_redeclared_utility(files),
+        check_disabled_without_reason(sorted(SCSS_DIR.rglob("*.html"))),
     ]
     return print_report(findings)
 

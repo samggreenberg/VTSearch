@@ -807,6 +807,8 @@ def _coverage_atlas_status(dataset_id: str) -> dict | None:
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def get_dataset_stats(dataset_id: str):
     """Return ingest statistics for a registered dataset."""
+    from vtscore.datasets.importers.origin_rows import importer_display_name, origin_rows
+    from vtscore.detectors.embedder_sync import embedder_display_name
     from vtscore.media import get_clipper
 
     entry = _reg_get(dataset_id)
@@ -822,6 +824,8 @@ def get_dataset_stats(dataset_id: str):
         except KeyError:
             clipper_display = raw_clipper
 
+    source = entry.get("source") or {}
+    embedder = entry.get("embedder", "") or ""
     return {
         # The Dashboard grid's own columns, so the Stats window can show
         # everything the grid does (it covers the grid up while open).
@@ -841,9 +845,14 @@ def get_dataset_stats(dataset_id: str):
         "ingest_started_at": entry.get("ingest_started_at"),
         "ingest_finished_at": entry.get("ingest_finished_at"),
         "origin": entry.get("origin", ""),
-        "source": entry.get("source") or {},
+        "source": source,
+        # The Creation section's rows, worded for a person: the importer's
+        # display name, and its params under its own field labels (#5617).
+        "importer_display_name": importer_display_name(str(source.get("importer") or "")),
+        "source_rows": [row.to_dict() for row in origin_rows(source, media_type=entry.get("media_type", "") or "")],
         "clipper": clipper_display,
-        "embedder": entry.get("embedder", ""),
+        "embedder": embedder,
+        "embedder_display_name": embedder_display_name(embedder),
         "coverage_atlas": _coverage_atlas_status(dataset_id),
     }
 

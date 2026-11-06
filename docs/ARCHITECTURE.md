@@ -22,8 +22,9 @@ component conventions.
 8. [State management](#state-management) (includes [Multi-dataset support](#multi-dataset-support))
 9. [Embedder binding and routing](#embedder-binding-and-routing)
 10. [Authentication and multi-user support](#authentication-and-multi-user-support)
-11. [The settings sync engine](#the-settings-sync-engine)
-12. [Element-level origin tracking](#element-level-origin-tracking)
+11. [Detector sharing](#detector-sharing)
+12. [The settings sync engine](#the-settings-sync-engine)
+13. [Element-level origin tracking](#element-level-origin-tracking)
 
 ---
 
@@ -173,7 +174,8 @@ VTSearch/
 │   ├── state/              DatasetContext / DetectorContext and their registries (core.py),
 │   │                       votes and click times, current user, coverage wiring
 │   ├── timing/             Per-step weights that pace each progress bar
-│   ├── plugins/            PluginBase, PluginField, PluginRegistry; inventory.py (--list-plugins)
+│   ├── plugins/            PluginBase, PluginField, PluginRegistry; inventory.py (--list-plugins);
+│   │                       origin_rows.py (a recorded form as a Stats window's rows)
 │   ├── security/           Path / URL / archive / pickle safety, the LoginProvider ABC
 │   ├── sync.py             SyncSource generic base
 │   ├── utils/              Shared helpers
@@ -573,7 +575,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | Results exporters (`exporters`) | library | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | entry-point group `vtscore.exporters` | 7 |
 | Label importers (`label_importers`) | library | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | entry-point group `vtscore.label_importers` | 2 |
 | Seed importers (`seed_importers`) | library | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | entry-point group `vtscore.seed_importers` | 0 |
-| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 1 |
+| Labelset sources (`labelset_sources`) | library | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | entry-point group `vtscore.labelset_sources` | 2 |
 | Media converters (`converters`) | library | `vtscore.converters` | `CONVERTER` | `MediaConverter` | entry-point group `vtscore.converters` | 8 |
 | Media sources (`media_sources`) | library | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | entry-point group `vtscore.media_sources` | 6 |
 | Media types (`media_types`) | library | `vtscore.media` | `MEDIA_TYPE` | `MediaType` | call `vtscore.media.register()` | 6 |
@@ -811,7 +813,7 @@ summary; the field-by-field tables are in
 
 | Context | Key state |
 |---------|-----------|
-| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins, and the 1-D similarity order that lists of its items sort look-alikes together by (fit with the full-dataset layout, or on its own for Face) |
+| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins, the 1-D similarity order that lists of its items sort look-alikes together by (fit with the full-dataset layout, or on its own for Face), and a Face dataset's people (its faces merged into people at the face ball's floor, `vtscore.datasets.people`) |
 | `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `label_history_base`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
@@ -1106,6 +1108,95 @@ reads through to, above — see [Settings files](SETTINGS.md)).
 
 ---
 
+## Detector sharing
+
+Detectors are shared between users through an external collaboration service
+that this repository never talks to directly: a `LabelsetSource` written
+elsewhere does, and the repo holds the contract, the registry state, the
+routes, the Dashboard's surfaces and a filesystem-backed test source,
+`shared_folder`. The service model it fits: one *container* per shared
+detector, holding one record per vote plus a little metadata; a single owner;
+recipients (users, groups, and a well-known public group); server-maintained
+`created_by` / `last_modified_by` identities on every record that clients
+cannot forge; **no server-side read-only for recipients**; owner saves that
+rewrite the container in place.
+
+Where the mechanics are documented: the contract a source implements is "The
+sharing contract" in
+[`vtscore/docs/extending/labelset-sources.md`](../vtscore/docs/extending/labelset-sources.md#the-sharing-contract);
+the registry entry's sharing state and the read-only guarantee are in
+[`vtscore/docs/packages/detectors.md`](../vtscore/docs/packages/detectors.md#sharing-state);
+the sync roles and receive / refresh / fork are in
+[`vtscore/docs/packages/labels.md`](../vtscore/docs/packages/labels.md#sharing);
+the routes are "Detector sharing" in [`api/detectors.md`](api/detectors.md#detector-sharing);
+the setting is `detector_sharing_source` in [SETTINGS.md](SETTINGS.md); the
+Dashboard's surfaces are in [FRONTEND.md](FRONTEND.md); and what a user sees is
+[Share a detector, receive one, fork one](user/howto/share-a-detector.md).
+
+**Decisions (owner, 2026-11-05), and why:**
+
+- **Sharing is an optional capability of `LabelsetSource`, not a plugin kind
+  of its own.** The labelset sync engine already pushes a detector's whole
+  labelset to a bound source, paced, deduplicated and run as the detector's
+  creator, on every detector-file write. An owner's paced push is exactly how
+  updates reach recipients, and a received detector must never push, so one
+  engine made *role-aware* (`vtscore.labels.sync.sync_role`) gives both. A
+  second plugin kind would have meant a second engine with the same pacing,
+  dedup and as-the-creator rules to keep in step.
+- **Activation is an explicit server setting, off by default.** Exporters and
+  importers are per-action menus, where offering everything installed is
+  right. Sharing is ambient: it changes the Detectors card, adds push
+  behaviour, and implies a backing service with its own auth and data
+  residency, so it is configuration, never an inference from what happens to
+  be importable. (`shared_folder` is discovered like any built-in, so "the only
+  installed source is active" would have switched sharing on everywhere.)
+- **Received detectors are badged inside the existing tabs.** No new tab: a
+  received detector shows in Drafts or AutoFind with a Received badge and the
+  frozen treatment AutoFind rows already get, and the containers shared with a
+  user live in their own small list (**Received…**), not on the card.
+- **The binding records which source a container belongs to.** An entry's
+  `labelset_source` names the source its `remote_ref` is for, and the setting
+  governs only the ambient surfaces and *new* shares. An entry whose source is
+  not the active one (the deployment moved) is local only, with a note: no
+  push, no refresh, the sharing actions disabled with the reason. It is never
+  pointed at a different source by guesswork.
+
+**Consequences of the service model:**
+
+- **Fork is create, with provenance, not a service call.** The copy a user
+  forks must be the *local* one: after a refresh that skipped foreign records,
+  the local file is the trusted labelset and the container the tampered one. So
+  the core writes a new container from the local labelset and records
+  `forked_from` itself; a source has no fork hook.
+- **A received detector still trains; its labelset is what is frozen.** Its
+  head is trained in RAM from its labelset, or it could not sort, find or run
+  as AutoFind. Refused: any change to its labels or identity (votes, label
+  edits and imports, rename, a backup-source pull that would write the file).
+  Derived numbers (threshold, balance, test verdict, the AutoFind flag) stay
+  writable, because they are the user's, not the owner's.
+- **Receiving is a step of its own.** Listing what is shared with a user names
+  containers; `receive_container` turns one into a local linked detector.
+- **Identity is the source's.** VTSearch usernames and the service's
+  identities are different namespaces, so a source resolves the caller through
+  `get_current_user()` (the push engine runs as the detector's creator under
+  `thread_user`), owns the credential mapping, and reports identities as opaque
+  strings the core stores and displays verbatim.
+- **Deletions are a tamper vector too.** A recipient who deletes a record
+  leaves no `last_modified_by` to inspect, so every owner save writes a
+  manifest (record count and digest) into the container's metadata, and a
+  manifest the owner did not write, or one whose count disagrees with the
+  records, counts as a foreign modification.
+- **The in-app `readers` list is a separate thing.** It is same-server
+  visibility and is untouched by sharing; a received detector can be given
+  readers like any other entry, who see a read-only row.
+
+**Left out on purpose:** unifying `readers` with remote recipients; sharing
+datasets; dual bindings (a shared detector that also pushes to a plain backup
+location: one binding per detector is what the engine and the Dashboard reason
+about); a settings-modal editor for the server setting.
+
+---
+
 ## The settings sync engine
 
 The engine that drives a settings source (see
@@ -1392,6 +1483,25 @@ detector and its labels are face crops, so the photo is presentation only.
 `/api/find-label` registers its ranking for a token too, though it sends it
 whole.
 
+**People** (Co-face Browse, #5582) reads a Face dataset as the people in it.
+Two ids-only structures sit under it, both pure functions of the dataset's own
+vectors and origins. The **partition** (`vtscore.datasets.people`) merges the
+faces into people at the face ball's beta 1 floor, so a face is one of a
+person's when it passes the test Find applies; it is fit at build for a Face
+dataset, stored in the container as ids and stamps (never a vector), cached
+on `DatasetContext`, and checked against the live faces on every read. A
+face space with no calibrated floor gets no partition, only a message. The
+**photo index** (`vtscore.datasets.co_occurrence`) groups the faces by the
+photo each was cut from, read off the face's own refs, so *who appears with
+whom* needs no Image dataset loaded. `vtsearch/routes/people.py` serves both
+([API](api/people.md)). A person's id is a rank, good only under the
+partition it was read from, so every answer carries the partition's identity
+and an id read under another one is a 409, never someone else. The People
+view (`/people/:datasetId`, [FRONTEND.md](FRONTEND.md#people-view-componentspeople-view))
+lists the people, a person's faces and who they appear with; only the photos
+two people share are read out of the Image sibling. Like a collapsed photo, a
+person is presentation over faces: no votes, labels or counts move to it.
+
 ### Reference (no-copy) imports and lazy clips
 
 Server-side importers (e.g. `server_folder`, `server_files`) can import in
@@ -1526,7 +1636,18 @@ the part that survives a change of embedder: `rank_at_vote` and
 head, so `labelset_for_export` (`vtscore/datasets/labelset.py`) drops them,
 with `detector_meta`'s `threshold`, from every labelset that leaves, whether
 through an exporter or a labelset-source push. The categorical fields travel:
-they say how the item was drawn, which holds under any embedder.
+they say how the item was drawn, which holds under any embedder. So does
+`detector_meta`'s `training_domain_summary`, the summary of the dataset the
+detector was trained on (#5571): it names the embedder that drew it, the
+overlap check refuses it under any other, and nothing trains on it. The Export
+route reads it from the exported detector's file, since the SPA posts labels
+alone; the importing detector keeps it when it has no training dataset of its
+own (`adopt_domain_summary`), with a pointer of its own counting the labels
+that came with it (#5572). An import with a dataset active also pulls the
+labels' media into that dataset, and records which (`labels_ingested`): those
+media are not the dataset's own, so the overlap check, and the Evidence
+baseline that is drawn only where the check says the detector was trained,
+do not count them as evidence of where the labels were cast.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  It answers two different questions, and the caller picks which:

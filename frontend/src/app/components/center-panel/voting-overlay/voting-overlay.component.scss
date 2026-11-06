@@ -16,7 +16,7 @@
   flex-shrink: 0;
 }
 
-button {
+.vote-buttons > button {
   min-width: 120px;
   padding: var(--space-md) var(--space-2xl);
   border: 2px solid;
@@ -37,7 +37,8 @@ button {
     outline: none;
   }
 
-  // Nothing left to vote on (`unavailable`). Stays legible rather than being
+  // Nothing left to vote on (`unavailable`), or a received detector
+  // (`readOnly`). Stays legible rather than being
   // hidden: the pair is the anchor the user reads the "nothing left" message
   // against, so it has to still look like the vote row, just inert.
   &:disabled {
@@ -72,9 +73,12 @@ vt-icon.icon-spinning {
     color: var(--btn-filled-text);
   }
 
+  // Shade toward --text-primary, the opposite of the --btn-filled-text ink in
+  // every theme, so hover raises the label's contrast rather than lowering it
+  // (shading toward --bg-body fell to 3.95:1 on highviz Bad).
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-good) 85%, var(--text-primary));
   }
 }
 
@@ -92,8 +96,21 @@ vt-icon.icon-spinning {
     color: var(--btn-filled-text);
   }
 
+  // Same direction as .btn-good's hover above.
   &.voted:hover,
   &.vote-flash:hover {
-    background: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
+    background: color-mix(in srgb, var(--color-bad) 85%, var(--text-primary));
   }
+}
+
+// A received detector (`readOnly`): the line under the greyed pair that says
+// why, with the way out.
+.read-only-hint {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
 }

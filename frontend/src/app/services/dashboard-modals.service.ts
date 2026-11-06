@@ -13,6 +13,9 @@ export interface CombineDetectorsState {
 
 export interface ExportState {
   open: boolean;
+  /** The row's detector, which the export is scoped to server-side so its
+   *  `{detector_*}` templates name *it*, not the active detector (#5494). */
+  detectorId: string;
   detectorName: string;
 }
 
@@ -32,6 +35,18 @@ export interface AutoExportState {
   open: boolean;
   detectorId: string;
   detectorName: string;
+}
+
+/** The detector-sharing dialog (Share…): who a detector is shared with. */
+export interface ShareState {
+  open: boolean;
+  detectorId: string;
+  detectorName: string;
+}
+
+/** The list of detectors shared with the user (Received…). */
+export interface ReceivedState {
+  open: boolean;
 }
 
 export interface DetectorStatsState {
@@ -62,6 +77,7 @@ export class DashboardModalsService {
   });
   private readonly exportSubject = new BehaviorSubject<ExportState>({
     open: false,
+    detectorId: '',
     detectorName: '',
   });
   private readonly addLabelsSubject = new BehaviorSubject<AddLabelsState>({
@@ -85,6 +101,14 @@ export class DashboardModalsService {
     detectorName: '',
   });
 
+  private readonly shareSubject = new BehaviorSubject<ShareState>({
+    open: false,
+    detectorId: '',
+    detectorName: '',
+  });
+
+  private readonly receivedSubject = new BehaviorSubject<ReceivedState>({ open: false });
+
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
   readonly export$ = this.exportSubject.asObservable();
@@ -92,6 +116,8 @@ export class DashboardModalsService {
   readonly stats$ = this.statsSubject.asObservable();
   readonly detectorStats$ = this.detectorStatsSubject.asObservable();
   readonly autoExport$ = this.autoExportSubject.asObservable();
+  readonly share$ = this.shareSubject.asObservable();
+  readonly received$ = this.receivedSubject.asObservable();
 
   get combineDatasets(): CombineDatasetsState {
     return this.combineDatasetsSubject.value;
@@ -121,6 +147,14 @@ export class DashboardModalsService {
     return this.autoExportSubject.value;
   }
 
+  get share(): ShareState {
+    return this.shareSubject.value;
+  }
+
+  get received(): ReceivedState {
+    return this.receivedSubject.value;
+  }
+
   openCombineDatasets(datasets: DatasetRegistryEntry[]): void {
     this.combineDatasetsSubject.next({ open: true, datasets });
   }
@@ -137,12 +171,12 @@ export class DashboardModalsService {
     this.combineDetectorsSubject.next({ open: false });
   }
 
-  openExport(detectorName: string): void {
-    this.exportSubject.next({ open: true, detectorName });
+  openExport(detectorId: string, detectorName: string): void {
+    this.exportSubject.next({ open: true, detectorId, detectorName });
   }
 
   closeExport(): void {
-    this.exportSubject.next({ open: false, detectorName: '' });
+    this.exportSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 
   openAddLabels(detectorId: string, detectorName: string): void {
@@ -175,5 +209,25 @@ export class DashboardModalsService {
 
   closeAutoExport(): void {
     this.autoExportSubject.next({ open: false, detectorId: '', detectorName: '' });
+  }
+
+  /** Open Share… for a detector. The card's "Share…" verb and its
+   *  "Remote sync failed" link both land here. */
+  openShare(detectorId: string, detectorName: string): void {
+    this.shareSubject.next({ open: true, detectorId, detectorName });
+  }
+
+  closeShare(): void {
+    this.shareSubject.next({ open: false, detectorId: '', detectorName: '' });
+  }
+
+  /** Open the list of detectors shared with the user (the Detectors card's
+   *  Received… button, shown while sharing is on). */
+  openReceived(): void {
+    this.receivedSubject.next({ open: true });
+  }
+
+  closeReceived(): void {
+    this.receivedSubject.next({ open: false });
   }
 }

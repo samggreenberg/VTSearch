@@ -747,3 +747,90 @@ class TestBrowsePrepRoute:
         url = self._keep(entry["id"], [1, 2], owner="someone-else")
         assert client.post(url).status_code == 404
         assert client.post("/api/autofind/runs/_autofind_nope/browse-prep").status_code == 404
+
+
+class TestExportRoute:
+    """``POST /api/autofind/runs/<run_id>/export`` (#5584): the Find Results
+    dialog's AutoFind tab sends a kept run through the AutoFind exporter by hand."""
+
+    RUN_ID = f"{TASK_PREFIX}export"
+
+    def _keep(self, owner: str = "default") -> str:
+        autofind_mod._keep_run(
+            self.RUN_ID,
+            {
+                "run_id": self.RUN_ID,
+                "owner": owner,
+                "dataset_id": "ds-export",
+                "dataset_name": "Exported",
+                "trigger": "manual",
+                "created_at": 1.0,
+                "media_type": "audio",
+                "detectors_run": 1,
+                "results": {
+                    "det": {
+                        "detector_name": "Det",
+                        "total_hits": 2,
+                        "hits": [{"id": 1, "md5": "m1"}, {"id": 2, "md5": "m2"}],
+                        "negative_hits": [{"id": 3, "md5": "m3"}],
+                    }
+                },
+                "missing_detectors": [],
+                "auto_export": {"exporter": "x", "exporter_display_name": "X", "success": False, "error": "old"},
+            },
+        )
+        return f"/api/autofind/runs/{self.RUN_ID}/export"
+
+    def _json_file_exporter(self, tmp_path):
+        out = tmp_path / "again.json"
+        settings.set_autofind_exporter("server_json_file")
+        settings.set_autofind_exporter_field_values({"server_json_file": {"filepath": str(out)}})
+        return out
+
+    def test_sends_the_runs_own_body_through_the_configured_exporter(self, client, tmp_path):
+        import json
+
+        out = self._json_file_exporter(tmp_path)
+        url = self._keep()
+
+        resp = client.post(url)
+        assert resp.status_code == 200, resp.get_json()
+        status = resp.get_json()
+        assert status["success"] is True
+        assert status["exporter"] == "server_json_file"
+        assert status["exporter_display_name"] == "Server JSON File"
+        assert status["filepath"] == str(out.resolve())
+        # What a finished run sends: the auto-detect body, not the dialog's record.
+        written = json.loads(out.read_text())
+        assert set(written) == {"media_type", "detectors_run", "results", "missing_detectors"}
+        assert [h["id"] for h in written["results"]["det"]["hits"]] == [1, 2]
+
+    def test_exports_while_the_auto_export_is_paused(self, client, tmp_path):
+        """The pause holds back runs, not a button the user presses (#5170 vs #5584)."""
+        out = self._json_file_exporter(tmp_path)
+        settings.set_autofind_export_enabled(False)
+        url = self._keep()
+        assert client.post(url).get_json()["success"] is True
+        assert out.exists()
+
+    def test_reports_the_exporters_failure_in_the_status(self, client):
+        settings.set_autofind_exporter("no_such_exporter")
+        url = self._keep()
+        resp = client.post(url)
+        assert resp.status_code == 200
+        status = resp.get_json()
+        assert status["success"] is False
+        assert "no_such_exporter" in status["error"]
+
+    def test_no_exporter_set_up_is_409(self, client):
+        settings.set_autofind_exporter("")
+        url = self._keep()
+        resp = client.post(url)
+        assert resp.status_code == 409
+        assert "Settings" in resp.get_json()["message"]
+
+    def test_another_users_run_or_an_unknown_one_is_404(self, client, tmp_path):
+        self._json_file_exporter(tmp_path)
+        url = self._keep(owner="someone-else")
+        assert client.post(url).status_code == 404
+        assert client.post("/api/autofind/runs/_autofind_nope/export").status_code == 404

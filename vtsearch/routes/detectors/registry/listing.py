@@ -85,6 +85,18 @@ def _fill_type_and_examples(entry: dict) -> None:
         logger.warning("Failed to persist %s for detector %s: %s", sorted(learned), entry["id"], exc)
 
 
+#: The sharing binding's keys a listing may show: everything about the
+#: container, none of the binding's field values.
+_SHARING_STATE_KEYS = ("source_name", "remote_ref", "remote_owner", "last_synced", "integrity", "sync_error")
+
+
+def _sharing_state(binding: dict | None) -> dict | None:
+    """The listing's view of a sharing binding, or ``None`` for a detector that shares nothing."""
+    if binding is None:
+        return None
+    return {key: binding.get(key) for key in _SHARING_STATE_KEYS}
+
+
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
@@ -97,6 +109,11 @@ def list_registered_detectors():
     An AutoFind detector also carries ``test_verdict``, the newest test
     verdict it keeps (#4526), for the AutoFind tab to show beside it; drafts
     leave it out, so the listing reads no detector file it does not need.
+    Every entry carries its sharing state: ``sync_mode`` (``local``,
+    ``linked`` for a received read-only copy, ``forked``), ``sharing`` (the
+    container it mirrors or owns, without the binding's field values),
+    ``sharing_note`` (why that container is not in use here, when it is not)
+    and ``forked_from``.
     """
     from vtscore.detectors.line_verdicts import verdict_summaries
     from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors_for_user
@@ -104,7 +121,13 @@ def list_registered_detectors():
 
     from vtscore.state.core import get_detector_context
 
-    from vtscore.labels.binding import deployment_default_labelset_source, labelset_source_status
+    from vtscore.detectors.registry import sync_mode_of
+    from vtscore.labels.binding import (
+        deployment_default_labelset_source,
+        labelset_source_status,
+        sharing_binding,
+        sharing_note,
+    )
 
     current_user = get_current_user()
     entries = list_detectors_for_user(current_user)
@@ -115,6 +138,13 @@ def list_registered_detectors():
         # Where the detector's labels sync to (#4913) - status only, never the
         # binding's field values, which the entry's ``labelset_source`` holds.
         entry["labelset_source_status"] = labelset_source_status(entry, default=default_source)
+        # Detector sharing: the mode, the container's state (never the
+        # binding's field values) and, when the container's source is not the
+        # active one, the note saying why the detector is local-only.
+        entry["sync_mode"] = sync_mode_of(entry)
+        entry["sharing"] = _sharing_state(sharing_binding(entry))
+        entry["sharing_note"] = sharing_note(entry)
+        entry["forked_from"] = entry.get("forked_from") or None
         did = entry["id"]
         entry["loaded"] = did in loaded_ids
         entry["autofind"] = entry.get("name", "") in autofind_names
@@ -238,8 +268,34 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 
 
-def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str:
-    """Start the background pull of an imported labelset's media into the active dataset.
+def _labels_to_ingest(label_dicts: list[dict]) -> tuple[str, list[dict]]:
+    """The active dataset's id and the entries of *label_dicts* whose media it lacks.
+
+    What :func:`_start_imported_labelset_ingest` pulls in, worked out before
+    the detector is written so the detector can record it (#5572).
+    ``("", [])`` when there is no dataset to ingest into or nothing is missing.
+    """
+    from vtscore.state.core import get_active_context, is_request_missing_dataset_context
+
+    try:
+        ds_ctx = get_active_context()
+        if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
+            # No dataset to ingest into; the labels stay origin-only until a
+            # dataset is loaded and the detector is (re)loaded against it.
+            return "", []
+
+        from vtsearch.state import cached_media_lookups, find_missing_entries
+
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
+        missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
+        return (ds_ctx.dataset_id, missing) if missing else ("", [])
+    except Exception:
+        logger.exception("Resolving imported labelset media failed")
+        return "", []
+
+
+def _start_imported_labelset_ingest(missing: list[dict], entry: dict) -> str:
+    """Start the background pull of an imported labelset's *missing* media into the active dataset.
 
     A labelset is origin-keyed and dataset-agnostic, but everything
     downstream of it - vote state, the labeling grid, and above all
@@ -261,26 +317,17 @@ def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str
 
     The fetch+embed itself is far too slow to run inline (issue #2703), so it
     goes onto the detector task tracker and reports through the SSE feed.
-    Returns the task id, or ``""`` when there is nothing to ingest (no active
-    dataset, or every label already resolves).
+    *missing* is :func:`_labels_to_ingest`'s answer.  Returns the task id, or
+    ``""`` when there is nothing to ingest (no active dataset, or every label
+    already resolves).
     """
-    from vtscore.state.core import get_active_context, is_request_missing_dataset_context
-
+    if not missing:
+        return ""
     try:
-        ds_ctx = get_active_context()
-        if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
-            # No dataset to ingest into; the labels stay origin-only until a
-            # dataset is loaded and the detector is (re)loaded against it.
-            return ""
-
         from vtscore.datasets.ingest_task import start_ingest_task
-        from vtsearch.state import cached_media_lookups, find_missing_entries, medias
+        from vtsearch.state import medias
         from vtsearch.runtime.context_threads import spawn
 
-        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
-        missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
-        if not missing:
-            return ""
         detector_id = entry.get("id", "")
         return start_ingest_task(
             missing,
@@ -325,9 +372,11 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtscore.datasets.ingest import _media_type_from_origin
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.labels.importers import get_label_importer, list_label_importers
+    from vtscore.detectors.domain_summary import adopt_domain_summary
     from vtscore.detectors.import_record import build_import_record
+    from vtscore.detectors.training_domain import record_ingested_labels
     from vtscore.detectors.registry import register_detector, update_detector
-    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
+    from vtsearch.routes._plugins import get_plugin_or_404, run_label_importer_or_error, validate_plugin_args
     from vtsearch.routes._policy import abort_if_semantic_only_type
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
@@ -357,11 +406,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     _abort_if_name_taken(name)
     det_path = _detector_path(name)
 
-    label_entries, err = run_plugin_or_error(importer, "run", field_values)
-    if err:
+    imported, err = run_label_importer_or_error(importer, field_values)
+    if imported is None:
         return err
-    if not isinstance(label_entries, list):
-        return error_response("Importer did not return a list of label dicts.", 500)
+    label_entries, detector_meta = imported
 
     elements: list[LabeledElement] = []
     detected_types: set[str] = set()
@@ -409,6 +457,15 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         "labelset": labelset.to_dict(),
     }
     _keep_creation_beta(detector_data, beta)
+    # A labelset this app exported carries the sending detector's
+    # training-domain summary, so the overlap check runs here without its
+    # training dataset (#5571), weighed at the labels that came with it (#5572).
+    adopt_domain_summary(detector_data, detector_meta, labels_held=len(labelset))
+    # The media this import copies into the active dataset are not that
+    # dataset's own, so holding them says nothing about where the detector
+    # was trained (#5572).
+    ingest_dataset_id, missing = _labels_to_ingest([el.to_dict() for el in elements])
+    record_ingested_labels(detector_data, ingest_dataset_id, missing)
     _write_detector(det_path, detector_data)
 
     entry = register_detector(
@@ -430,7 +487,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     # background (issue #2703): the caller polls ``ingest_task_id`` on the
     # detector-task SSE channel and must wait for it before loading the
     # detector, since label restore resolves against the ingested medias.
-    ingest_task_id = _start_imported_labelset_ingest([el.to_dict() for el in elements], entry)
+    ingest_task_id = _start_imported_labelset_ingest(missing, entry)
 
     return jsonify(
         {

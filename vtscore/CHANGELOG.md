@@ -10,7 +10,36 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Added
+
+- **`LabelImporter.describe_origin_param(key, value)`, `vtscore.plugins.origin_rows`, and
+  `vtscore.detectors.import_record.import_rows`** (issue #5620). The row builder behind the dataset Stats window
+  (#5617) now serves the detector Stats window's Import section too, so a detector made from imported labels lists
+  the fields its label importer ran with under the importer's own field labels (`Server path`, not `filepath`), a
+  checkbox as `Yes` / `No`. `vtscore.plugins.origin_rows` holds the half both families share: `OriginRow` (which
+  `vtscore.datasets.importers.origin_rows` still exports), `describe_field_value` (the checkbox wording every hook's
+  default starts from), `format_param_key`, and `param_rows(fields, params, describe=..., label_for=...)`, which
+  builds the rows from a plugin's fields and a `describe(key, value)` callable. `origin_rows` wraps it with the dataset
+  rules (`media_type`, `source_specs`, the importer hook); `import_rows(imported)` wraps it with a label importer's,
+  and `label_importer_display_name(name)` reads the importer's display name, falling back to the name.
+  `LabelImporter.describe_origin_param` is the hook `ImporterBase` has, with the same default minus the dataset keys.
+  Additive: an importer that does not override the hook gets the default, and nothing changes what a record stores.
+
 ### Changed
+
+- **`vtscore.media.face.face_ball.face_ball_path()` resolves beside the face pipeline config in use** (issue
+  #5621): `FACE_BALL_NAME` (`face_ball.json`) in the directory of the new
+  `vtscore.media.face.imagekit_bridge.config_path()`, which is the file `IMAGEKIT_FACE_CONFIG` names, else
+  `default_config_path()`. With the variable unset nothing moves (`FACE_BALL_RELPATH`, `face_ball.json` in the
+  `imagekit` directory under the models folder, is still the default place); with it set, the entries are read
+  beside the named config instead of the models folder's `imagekit` directory. `write_entry`'s default target
+  and `uncalibrated_detail`'s wording follow.
+
+- **A typed-query detector hands over to the trained head at the label quota** (issue #5556).
+  `vtscore.detectors.label_quota.QUERY_HOLD_LABELS` is `0` (was `30`, #4736), so `query_holds` is false at the
+  app's count and `served_quota`'s `hold_owed` is `0`. `query_holds`' `hold` keyword now defaults to `None`, which
+  reads `QUERY_HOLD_LABELS` at call time. `simulate_voting_iterations`' `query_hold` default follows (`0`);
+  `query_hold=30` is the arm before.
 
 - **Smart and Stable can read fewer than 5 Goods after a dry run** (issue #5477). New in
   `vtscore.detectors.stability`: `HARD_DRY_RUN` (16), `HardDryRun` (the run of votes past the opening with no
@@ -1643,6 +1672,138 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.people`: a Face dataset's faces merged into people** (issue #5586). `fit_people` merges
+  the face vectors at the face ball's beta 1 floor (`people_cutoff(compat)`; `None`, and so no partition, outside the
+  space the floors were fitted in): a 20-nearest-neighbour graph, centroid linkage on the unit sphere within each
+  component, and hard views (`HARD_VIEW_QUALITY`) attached last or left unplaced. Deterministic. A frozen
+  `PeoplePartition` holds the people (largest first, each led by its best-quality face), the unplaced ids, and the
+  `method` / `linkage` / `cutoff` / `compat` it was cut under. It is stored in the container as `people.json`
+  (`append_people` / `read_people`, ids only) and cached on `DatasetContext._people` (reset group `people`);
+  `people_for` serves it, the load pipeline's people stage fits it for a Face build, and `request_people` answers
+  `ready` / `building` / `error` / `not_calibrated`, raising `NothingToPartition` for a dataset with no people to
+  find. `vtscore.detectors.centroid_head` gains `FACE_BALL_COMPAT` (the space its floors were fitted in) and
+  `face_uncalibrated_message(feature, compat)`, the one wording for a face feature in an uncalibrated space.
+  `DatasetContext.reset_derived_caches` takes a `people` keyword. Additive.
+
+- **`vtscore.datasets.co_occurrence`: which faces share a photo, and which people appear together** (issue #5587).
+  `PhotoIndex(medias)` keys every converter output by the photo it was cut from, read off its own converter refs
+  (`photo_keys`: `source_path`, else `source_file`), with the keys of a `dupe_set` face unioned so collapsed copies
+  of one photo count once; no sibling dataset is needed. Photos are numbered in order of their lowest face id.
+  `faces_by_photo` / `photo_of` / `faces_in` read the index; over people given as plain face-id lists,
+  `photos_of(face_ids)`, `appears_with(groups, person) -> list[CoAppearance]` (the other groups sharing a photo,
+  most shared first, ties in group order) and `shared_photos(group_a, group_b) -> list[SharedPhoto]` (each with
+  every face cut from it). Every face of one photo resolves to one item of the Image sibling through
+  `SourceResolver`. Additive; nothing is persisted.
+
+- **The label-sync engine is role-aware: owners push to their container, received detectors never sync** (issue
+  #5576). `vtscore.labels.sync` keeps one slot and one pace per detector, and now decides what a push and a pull do
+  by the entry's role, read with the new `sync_role(entry, *, detector_id="")` (constants `SYNC_ROLE_NONE`,
+  `SYNC_ROLE_PLAIN`, `SYNC_ROLE_OWNER`, `SYNC_ROLE_LINKED`, `SYNC_ROLE_UNAVAILABLE`, `SYNC_ROLES`). The owner of a
+  shared container (a `local` or `forked` entry whose binding has a `remote_ref` at the active sharing source) pushes
+  through `share_save`: the whole labelset with its manifest, as its creator, rewriting the container with no
+  pull-first merge. Each push records `sync_error` (cleared on success) and `last_synced` (moved on success only)
+  on the binding, through the new `vtscore.detectors.registry.update_sharing_binding(detector_id, remote_ref,
+  **changes)`, which merges into the binding as it is on disk and only while it still names that container. A
+  `linked` entry is never pushed or pulled, and a write inside `allow_linked_write()` schedules nothing; a sharing
+  binding whose source is not the active one does nothing, logged once per detector. `reconcile_labelset_source`
+  and `sync_from_labelset_source` return early (`0` / `None`) for every role but a plain binding. A plain binding
+  behaves exactly as before. See `vtscore/docs/packages/labels.md` (Roles).
+
+- **Received detectors are read-only, and can be received, refreshed and forked** (issue #5575). A registry entry
+  now carries a `sync_mode` - `"local"` (the default, and an entry with no key), `"linked"` (a received, read-only
+  mirror of someone else's container) or `"forked"` - read with `vtscore.detectors.registry.sync_mode_of` /
+  `is_linked`; `register_detector` takes `sync_mode`, `labelset_source` and `forked_from`. The container's state
+  lives in the entry's `labelset_source` binding (`remote_ref`, `remote_owner`, `last_synced`, `integrity`,
+  `sync_error`), read with `vtscore.labels.binding.sharing_binding`; `binding_matches_active_source` and
+  `sharing_note` say whether it belongs to the active sharing source and, when not, why. The store refuses a write
+  that would change a linked detector's name or labelset with the new `vtscore.detectors.store.DetectorReadOnlyError`,
+  except inside `allow_linked_write()`. `vtscore.labels.sharing` gains `receive_container`,
+  `refresh_linked_detector` (returning a `RefreshResult`), `fork_detector`, `compute_integrity`, the `foreign`
+  policies (`FOREIGN_ABORT`, `FOREIGN_IMPORT`, `FOREIGN_SKIP`) and two errors, `SharingUnavailable` and
+  `ForeignModifications`. Also new: `registry.detector_name_taken` (the name-collision rule the app's create and
+  rename routes use) and `registry.free_detector_name`. `labelset_source_status` reads a sharing binding as the
+  push engine does, through the `detector_sharing_source` setting's fixed values, so a shared or received detector
+  lists no missing field the setting fills (#5579). Additive: an entry without the new keys behaves as before.
+  See `vtscore/docs/packages/labels.md` (Receive, refresh, fork).
+
+- **Detector sharing, as an optional capability of `LabelsetSource`** (issue #5574). A source can now keep a
+  detector's labels in a container on an external collaboration service, with an owner and recipients, by
+  overriding the new `_do_share_*` hooks: `_do_share_create`, `_do_share_save`, `_do_share_refresh`,
+  `_do_share_list_mine`, `_do_share_list_received`, `_do_share_add_recipients`, `_do_share_remove_recipients`,
+  `_do_share_set_public`, `_do_share_archive`, and the optional `_do_share_search_recipients`, called through the
+  framework wrappers `share_create` ... `share_search_recipients`. Every hook defaults to raising
+  `SharingUnsupported`. Three flags derived from the overrides ride on `to_dict()` (and so on
+  `GET /api/labelset-sources`): `supports_sync` (`_do_save` and a load hook: a plain sync target),
+  `supports_sharing` and `supports_recipient_search`, so a sharing-only source is legal. New module
+  `vtscore.labels.sharing` holds the value types (`ShareMeta`, `SharedRecord`, `SharedContainer`,
+  `SharedContainerSummary`, `RecipientSuggestion`, `Manifest`), the errors (`SharingError`, `SharingUnsupported`,
+  `RemoteNotFound`, `RemotePermissionDenied`), `build_manifest` / `labelset_digest`, `share_payload`, and
+  `active_sharing_source()`, which reads the new `CoreConfig.detector_sharing_source` (default `None`: sharing
+  off). A new built-in, `shared_folder`, implements the contract over a directory of JSON files for tests and local
+  development. Additive: an existing source overrides none of the new hooks and keeps working unchanged, now
+  reporting `supports_sync` true. The labelset digest the sync engine deduplicates pushes by no longer depends on
+  label order. See "The sharing contract" in `vtscore/docs/extending/labelset-sources.md`.
+
+- **The domain-shift report can run against a summary of the reference instead of its vectors** (issue #5567).
+  `vtscore.coverage.summarize_reference(reference)` returns `(anchor_rows, calibration)`: up to 128 rows of the
+  reference to anchor on (each a cluster's member nearest its centroid, so a caller can name it by origin) and the
+  sorted calibration scores of the other half. `summary_shift_report(anchors, calibration, matrix)` returns the same
+  dict as `domain_shift_report`, with the same null and less power; `summary_pvalues` is its per-row half. See
+  `vtscore/docs/packages/coverage.md`. `vtscore.detectors.domain_summary` records one on a detector beside its
+  training-dataset pointer, under `training_domain_summary`, and resolves its anchors where it is read.
+
+- **The media a label import copies into a dataset no longer count as where its labels were cast** (issue #5572).
+  `vtscore.detectors.training_domain` gains `INGESTED_LABELS_KEY` (`"labels_ingested"`), `record_ingested_labels`,
+  `record_ingested_labels_on_file`, `recorded_ingests` and `ingested_label_entry`: per dataset, the entries whose
+  media an import pulled in, named by origin and MD5. `count_labels_held` and `labels_held_by_dataset` take an
+  `ingested` keyword and leave a label naming only those media uncounted. `adopt_domain_summary`,
+  `adopt_domain_summary_on_file` and `apply_detector_meta` take a `labels_held` keyword: the imported Good / Bad
+  labels (`count_imported_labels`), recorded beside the summary as the detector's training-dataset pointer when it
+  has none, so the summary is weighed at the labels that came with it. Additive: every keyword defaults to the
+  old behaviour.
+
+- **An exported labelset carries the detector's training-domain summary** (issue #5571).
+  `build_detector_meta` adds the detector's `training_domain_summary` to the `detector_meta` block, and
+  `labelset_for_export` lets it through: it names the embedder that drew it and is refused under any other, and
+  nothing trains on it. The training-dataset pointer stays behind. On the receiving side,
+  `vtscore.detectors.domain_summary.adopt_domain_summary(detector_data, detector_meta)` (and
+  `adopt_domain_summary_on_file`) stores it when the detector has no training dataset of its own, or its own is the
+  same dataset, and never merges two; `apply_detector_meta` calls it, so a `LabelsetSource` pull keeps it. New
+  `LabelImporter.run_labelset(field_values)` / `run_labelset_cli(field_values)` return the import as a serialised
+  labelset, with `detector_meta` when the source carries one. Additive: the defaults wrap `run` / `run_cli`, so an
+  importer that returns labels alone overrides nothing. The `server_json_file` importer reads `detector_meta`, and
+  the `server_json_file` exporter writes it. See `vtscore/docs/extending/label-importers.md`.
+
+- **A `find_results` payload from the app carries each detector's cut at every Threshold preset** (issue #5540).
+  Beside `threshold` and `balance`, an app run's detector result has `beta` (the balance `threshold` was cut at) and
+  `lines` (`[{"beta", "threshold"}]` at beta 4, 1 and 1/4). Both are informational. An export from the Find Results
+  dialog at another notch than the run's sends that notch's cut as `threshold` and its preset as `beta`, and no
+  `balance`. The CLI sends neither. See `vtscore/docs/extending/results-exporters.md`.
+
+- **`DemoDataset.requires_download`** (issue #5546). A demo that generates its media locally at load time and
+  fetches nothing sets it `False` (the two Synthetic World Map demos do); `all_demo_datasets()` carries it as
+  `"requires_download"`. The app's demo list then reads such a demo as `needs_embedding` rather than
+  `needs_download` before its first load. It defaults to `True`, so an existing `DemoDataset` is unchanged. See
+  `packages/media.md`.
+
+- **A scored run can say how unlike its training dataset the scored dataset is** (issue #5501). Each detector
+  result of a `find_results` payload may now carry `training_domain`: the overlap check's report (the reference
+  dataset, the label counts it rests on, and `domain_shift`, `vtscore.coverage.domain_shift_report`'s dict or
+  `None`). The email exporter prints its figure and verdict under each detector and adds "(domain warning)" to its
+  default subject on a likely shift, worded by the new `vtscore.coverage.domain_shift_line`. Additive: an exporter
+  that ignores the key keeps working. See `extending/results-exporters.md`. To let the check run when that dataset is not loaded, a detector now records
+  it: `vtscore.detectors.training_domain` gains `TRAINING_DATASET_KEY`, `training_dataset_record` and
+  `recorded_training_dataset`, and `vtscore.detectors.evidence_baseline.record_baseline` takes a
+  `training_dataset` keyword that writes it with the baseline (`PendingDraw` gains `labels_held`). A pointer and a
+  count, never a vector. `vtscore.embedding.matrix.stored_primary_vectors(pkl_path)` reads a saved dataset's
+  primary vectors without loading it: the embedding-matrix sidecar when there is one, else the container.
+
+- **`LineTest.relabel(id, match)` corrects a pick already recorded** (issue #5502), from any round, the test
+  running or done: every round stays dealt, the ranges re-read on the corrected labels and the phase is
+  re-derived, so a correction can end a running test or reopen a finished one. It returns whether the label
+  changed. `LineTest.as_dict()` also carries `votes`, every label in the order first recorded. See
+  `packages/training.md`.
+
 - **A scored run can carry the user's column choice** (issue #5464). The Find Results dialog's
   `find_results` payload now has an optional `selected_columns` list, as a `labelset` already did: a
   hit's own keys, keys of its `custom_metadata`, and the detector result's `detector` / `threshold`.
@@ -2802,6 +2963,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   truncating to `max_items`, and refusing a URL past the ~2000-character
   practical limit.
 
+- **`ImporterBase.describe_origin_param(key, value)`, and `vtscore.datasets.importers.origin_rows`** (issue #5617). The
+  dataset Stats window now lists a dataset's origin params worded for a person, not as the re-import recipe they are
+  stored as. `origin_rows(origin, media_type=...)` returns one frozen `OriginRow(key, label, value, description)` per
+  param, in recorded order: labelled with the importer's own field `label` (`"Include subfolders"`, not `recursive`),
+  `INCLUDE_MEDIA_LABEL` for `source_specs`, and the key spelled out for one that names no field. Each value is worded
+  by the importer's new `describe_origin_param` hook, whose default (`describe_origin_value`) reads a checkbox as
+  `Yes` / `No`, `media_type` as the type's name and `source_specs` as the converters it ran (`describe_source_specs`:
+  `"Images → Faces"`, with any parameter moved off its default). A hook returning `""` leaves the row out, as do an
+  empty value, a `media_type` that is the dataset's own and `source_specs` that only include the dataset's own type.
+  The demo importer overrides it to name its demo and converter. `importer_display_name(name)` reads an importer's
+  display name, falling back to the name. Additive: an importer that does not override the hook gets the default, and
+  nothing changes what an origin stores or how a reload reads it.
+
 ### Deprecated
 
 - **`vtscore.utils.hits`, `vtscore.utils.scores`, `vtscore.utils.import_metadata` and
@@ -3095,6 +3269,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   orderings (plus `threshold_from_folds` for the cross-calibration cut).
 
 ### Fixed
+
+- **The `server_files` importer judges each text-manifest line on its own** (issue #5561). A line that names no
+  existing file or folder is skipped instead of failing the import: before, a line too long to be a filename raised
+  `OSError` and a non-UTF-8 byte raised `UnicodeDecodeError` out of `run` / `run_chunked`. Skipped lines go out in
+  one warning notification (`PluginBase.notify`, source `"Manifest"`), one item per line with its number and reason,
+  and when no line names a file the `ValueError` lists the first ones. A CSV row is read for its path column (a
+  header row's `path` / `filepath` / `image` …, else the first). Directory entries are walked with each real
+  folder entered once, so a symlink cycle no longer makes the walk exponential. `.npz` manifests read as before.
+
+- **Rank frames on the Goods' centroid's clicks** (issue #5527). `simulate_voting_iterations` records a `step`
+  rank frame on a listed click whose Test is the Goods' centroid, as it does on the trained head's; before, such a
+  click left none, so a face-ball session (#5478, on the centroid for the whole session from beta 1 up) had only
+  its `last` and ceiling frames. A pure read: the rows are unchanged.
 
 - **A chain-clipped dataset matches the detector trained at its granularity** (issue #5282).
   `vtscore.detectors.input_spec.extract_input_spec_from_medias` read every `clipper_<key>` origin param as a clipper

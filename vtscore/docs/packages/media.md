@@ -256,7 +256,7 @@ clipper chooser; registration order is run order.
 | Name | Defined in | Description |
 |------|------------|-------------|
 | `MediaResponse(data, mimetype, download_name="")` | `base.py` | Dataclass: bytes (or a dict) of a MIME type, with a download name. Framework-agnostic return of `MediaType.media_response`. |
-| `DemoDataset` | `base.py` | Dataclass describing one downloadable demo dataset: `id`, `label`, `description`, `categories`, `source`, `required_folder`, slicing bounds (`slice_start` / `slice_end` / `slice_frac_*`), `items_per_category`, `download_size_mb`. |
+| `DemoDataset` | `base.py` | Dataclass describing one downloadable demo dataset: `id`, `label`, `description`, `categories`, `source`, `required_folder`, slicing bounds (`slice_start` / `slice_end` / `slice_frac_*`), `items_per_category`, `download_size_mb`, and `requires_download` (`False` only for a demo that generates its media locally and fetches nothing). |
 | `ProgressCallback` | `vtscore/concurrency/progress.py` (re-exported) | `Callable[[str, str, int, int], None]` - `(status, message, current, total)`; `0, 0` means indeterminate. See [concurrency.md](concurrency.md). |
 | `crop_file_bytes(file_path, media_type, params)` | `cropping.py` | Crop one file without a clipper pipeline. `"audio"`: `{"start", "end"}` seconds; `"image"`: `{"box": [x1, y1, x2, y2]}` in original-image pixels as displayed (after EXIF orientation). `ValueError` for other types. |
 

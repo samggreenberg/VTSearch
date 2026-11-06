@@ -23,9 +23,15 @@ POST /api/exporters/export
     falls back to inferring from the dict shape, for API clients written
     before the kinds were named. The third kind, ``detector_bundles``, is
     CLI-only: this route never sees a trained detector, so the schema refuses
-    it. ``field_values`` is permissive at the schema layer because its inner
-    keys depend on the named exporter; the handler validates it against the
-    selected plugin's :attr:`fields`.
+    it. ``detector_id`` names the detector the export belongs to when the
+    caller is not exporting the active pair (the Dashboard row action), so
+    the exporter's ``{detector_*}`` templates resolve against that detector
+    rather than the request's ``X-Detector-Id``. A ``labelset`` payload goes
+    out with that detector's training-domain summary in its
+    ``detector_meta`` when the detector records one (#5571). ``field_values`` is
+    permissive at the schema layer because its inner keys depend on the
+    named exporter; the handler validates it against the selected plugin's
+    :attr:`fields`.
     Schema-level failures (missing ``exporter_name``, an unknown or
     CLI-only ``payload_kind``) surface as 422; handler-level rejects (unknown
     exporter, an exporter that doesn't implement the requested kind,
@@ -39,6 +45,7 @@ POST /api/exporters/export
 from __future__ import annotations
 
 import logging
+from contextlib import AbstractContextManager, nullcontext
 
 from flask_smorest import Blueprint, abort
 
@@ -46,6 +53,7 @@ from vtscore.datasets.labelset import labelset_for_export
 from vtscore.exporters import get_exporter, list_exporters
 from vtscore.exporters.base import ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
+from vtsearch.auth import get_current_user
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_exporter_field_values
 from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
@@ -79,15 +87,74 @@ def _infer_payload_kind(payload: dict) -> str:
     return "labelset" if "labels" in payload else "find_results"
 
 
+def _detector_scope(detector_id: str) -> AbstractContextManager[None]:
+    """Make the detector *detector_id* the active one for the export's duration.
+
+    The Dashboard's row action exports a detector it points at in a list, and
+    that detector need not be the one the top-bar has active - it may not be
+    loaded at all, which is the state a just-imported detector is in.  Without
+    this, a field's ``{detector_name}`` / ``{detector_id}`` resolved against
+    the request's ``X-Detector-Id``: blank when nothing was active, else the
+    last-loaded detector's, whichever row was clicked (#5494).  It is the same
+    scoping labelset sync uses for the same reason (see
+    :func:`vtscore.labels.sync._template_context`): the loaded context when
+    there is one, else a throwaway carrying only the detector's identity.
+
+    An empty id is the active-pair export (Find, Train), which keeps
+    resolving against the request.
+    """
+    if not detector_id:
+        return nullcontext()
+
+    from vtscore.detectors.registry import can_user_access_detector, get_detector  # noqa: PLC0415
+    from vtscore.labels.sync import _template_context  # noqa: PLC0415
+    from vtscore.state.core import override_detector_context  # noqa: PLC0415
+
+    entry = get_detector(detector_id)
+    if entry is None:
+        abort(404, message=f"Detector '{detector_id}' not found")
+    if not can_user_access_detector(detector_id, get_current_user()):
+        abort(403, message="You do not have access to this detector")
+    return override_detector_context(_template_context(entry.get("name", "") or "", detector_id))
+
+
+def _with_domain_summary(payload: dict) -> dict:
+    """*payload* with the exported detector's training-domain summary in its ``detector_meta`` (#5571).
+
+    The Export modal sends the labels alone, so the summary is read here, from
+    the file of the detector the export is scoped to: the one ``detector_id``
+    names, else the request's active detector.  A detector shared as a
+    labelset then arrives with what the receiver's overlap check compares
+    against.  A payload that already carries a summary (an API client's own),
+    or one exported with no detector, or from a detector that records none,
+    goes out as it came.
+    """
+    from vtscore.detectors.domain_summary import DOMAIN_SUMMARY_KEY, stored_domain_summary  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
+
+    meta = payload.get("detector_meta")
+    if isinstance(meta, dict) and DOMAIN_SUMMARY_KEY in meta:
+        return payload
+    detector_id = getattr(get_active_detector_context(), "detector_id", "") or ""
+    name = (get_detector(detector_id) or {}).get("name") if detector_id else None
+    summary = stored_domain_summary(_read_detector(_detector_path(name))) if name else None
+    if summary is None:
+        return payload
+    return {**payload, "detector_meta": {**(meta if isinstance(meta, dict) else {}), DOMAIN_SUMMARY_KEY: summary}}
+
+
 def _run(exporter: ResultsExporter, payload_kind: str, payload: dict, field_values: dict) -> dict:
     """Dispatch to the exporter method for *payload_kind*.
 
     A labelset goes out as every labelset export does, without the numbers
     measured by this server's embedder and head (#5131), so no exporter has to
-    remember to drop them.
+    remember to drop them, and with the detector's training-domain summary
+    (:func:`_with_domain_summary`, #5571).
     """
     if payload_kind == "labelset":
-        return exporter.export_labelset(labelset_for_export(payload), field_values)
+        return exporter.export_labelset(labelset_for_export(_with_domain_summary(payload)), field_values)
     return exporter.export_find_results(payload, field_values)
 
 
@@ -129,7 +196,8 @@ def exporter_field_options(body: dict, exporter_name: str):
 @exporters_bp.arguments(RunExportRequestSchema)
 @exporters_bp.response(200, RunExportResponseSchema)
 @exporters_bp.alt_response(400, description="Missing plugin field or invalid filepath.")
-@exporters_bp.alt_response(404, description="Unknown exporter name.")
+@exporters_bp.alt_response(403, description="detector_id names a detector the user may not read.")
+@exporters_bp.alt_response(404, description="Unknown exporter name, or detector_id names no detector.")
 @exporters_bp.alt_response(500, description="Exporter raised an unexpected error.")
 def run_export(body: dict):
     """Run the named exporter on the supplied auto-detect results."""
@@ -142,26 +210,31 @@ def run_export(body: dict):
         known = [p.name for p in list_exporters()]
         abort(404, message=f"Unknown exporter '{exporter_name}'. Available: {known}")
 
-    field_values = validate_exporter_field_values(exporter, dict(body.get("field_values") or {}))
-    results: dict = dict(body.get("results") or {})
-    payload_kind = body.get("payload_kind") or _infer_payload_kind(results)
+    # Everything from field validation to the exporter body runs inside the
+    # scope: a field's ``{detector_name}`` is resolved during validation, and
+    # a plugin that (against the guide's advice) reads the active detector
+    # itself should see the same one.
+    with _detector_scope(body.get("detector_id") or ""):
+        field_values = validate_exporter_field_values(exporter, dict(body.get("field_values") or {}))
+        results: dict = dict(body.get("results") or {})
+        payload_kind = body.get("payload_kind") or _infer_payload_kind(results)
 
-    if payload_kind not in exporter.supported_payloads:
-        supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
-        abort(
-            400,
-            message=(
-                f"Exporter '{exporter_name}' does not export a {payload_kind} payload (it supports: {supported})."
-            ),
-        )
+        if payload_kind not in exporter.supported_payloads:
+            supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
+            abort(
+                400,
+                message=(
+                    f"Exporter '{exporter_name}' does not export a {payload_kind} payload (it supports: {supported})."
+                ),
+            )
 
-    try:
-        outcome = dict(_run(exporter, payload_kind, results, field_values) or {})
-    except ValueError as exc:
-        abort(400, message=str(exc))
-    except Exception as exc:
-        logger.exception("%s export of a %s payload failed: %s", type(exporter).__name__, payload_kind, exc)
-        abort(500, message=str(exc))
+        try:
+            outcome = dict(_run(exporter, payload_kind, results, field_values) or {})
+        except ValueError as exc:
+            abort(400, message=str(exc))
+        except Exception as exc:
+            logger.exception("%s export of a %s payload failed: %s", type(exporter).__name__, payload_kind, exc)
+            abort(500, message=str(exc))
 
     if outcome.get("open_url") is not None:
         # The frontend hands this straight to ``window.open``, so re-validate

@@ -133,6 +133,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             source=_TOPONYMY_SOURCE_ID,
             items_per_category=0,
             download_size_mb=0,
+            requires_download=False,
         ),
         DemoDataset(
             id="caltech101_s",
@@ -1296,28 +1297,41 @@ def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
             embedder.load_models()
 
 
-def _synthetic_tile_png(item) -> bytes:
+_SYNTH_TILE_PX = 96
+
+
+def _synthetic_tile_png(item, serial: int) -> bytes:
     """Render a synthetic place as a small solid-colour PNG tile.
 
     Hue is a continent family (four quadrants of the wheel), lightness/saturation
     drift with the leaf-city index, so sibling cities read as shades of one
     regional colour while continents stay clearly distinct on the map.
+
+    *serial* (the item's position in the demo) is written into the blue channel
+    of the bottom row's first pixels, one level per set bit of its
+    :func:`~vtscore.media._toponymy_demo.serial_mark`, so every tile in a city
+    keeps the city's colour but has bytes of its own (#5515).
     """
     import colorsys  # noqa: PLC0415
     import io  # noqa: PLC0415
 
+    import numpy as np  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
 
-    from vtscore.media._toponymy_demo import total_cities  # noqa: PLC0415
+    from vtscore.media._toponymy_demo import serial_mark, total_cities  # noqa: PLC0415
 
     n_cities = total_cities()
     hue = (item.continent_index / 4.0 + (item.city_index / max(1, n_cities)) * 0.08) % 1.0
     sat = 0.45 + 0.4 * ((item.city_index % 9) / 8.0)
     val = 0.55 + 0.35 * ((item.city_index % 5) / 4.0)
     r, g, b = (int(round(c * 255)) for c in colorsys.hsv_to_rgb(hue, sat, val))
-    img = Image.new("RGB", (96, 96), (r, g, b))
+    pixels = np.empty((_SYNTH_TILE_PX, _SYNTH_TILE_PX, 3), dtype=np.uint8)
+    pixels[:, :] = (r, g, b)
+    mark = serial_mark(serial)
+    # ``val`` tops out at 0.9, so no channel exceeds 230 and the +1 cannot wrap.
+    pixels[-1, : len(mark), 2] = b + mark
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    Image.fromarray(pixels).save(buf, format="PNG")
     return buf.getvalue()
 
 
@@ -1330,19 +1344,20 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
     layer straight from those paths.  See :mod:`vtscore.media._toponymy_demo`.
     """
 
-    from vtscore.media._toponymy_demo import generate_items  # noqa: PLC0415
+    from vtscore.media._toponymy_demo import baked_dim, generate_items  # noqa: PLC0415
     from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
-    # SigLIP's image/text space is 768-D; match it so the baked vectors slot into
-    # the primary embedder's slot and text queries don't dimension-clash.
-    items = generate_items(dim=768)
+    # Bake at the load's embedder's declared width, so the vectors fit the slot
+    # they are filed under whichever embedder was picked (#5508).  768 is
+    # SigLIP's width, for an embedder that declares none.
+    emb_name = embedder.name if embedder is not None else "siglip"
+    items = generate_items(dim=baked_dim(emb_name, fallback=768))
     total = len(items)
     on_progress("loading", f"Generating {total} synthetic tiles…", 0, total)
 
-    emb_name = embedder.name if embedder is not None else "siglip"
     clip_id = 1
     for i, item in enumerate(items):
-        png_bytes = _synthetic_tile_png(item)
+        png_bytes = _synthetic_tile_png(item, serial=i)
         thumb = make_image_thumbnail(png_bytes)
         filename = f"{item.category}/tile{i:04d}.png"
         clips[clip_id] = _emit_image_clip(
@@ -1352,8 +1367,8 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
             image_bytes=png_bytes,
             filename=filename,
             category=item.category,
-            width=96,
-            height=96,
+            width=_SYNTH_TILE_PX,
+            height=_SYNTH_TILE_PX,
             demo_origin=demo_origin,
             thumbnail_bytes=thumb[0] if thumb is not None else None,
         )

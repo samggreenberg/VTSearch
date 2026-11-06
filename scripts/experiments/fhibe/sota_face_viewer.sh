@@ -8,7 +8,8 @@
 #
 #   sota_face_viewer.sh OUT.html
 #
-# Env: SOTA_FACE_DATE (default today), SOTA_RUNS_BUDGET_MB (default 1; 0 drops the per-seed lines).
+# Env: SOTA_FACE_DATE (default today), SOTA_FACE_TAG and SOTA_FACE_ARM (as sota_face.sh: the run dirs
+# are <date>-<tag>-<arm>-k<K>-b<beta>), SOTA_RUNS_BUDGET_MB (default 1; 0 drops the per-seed lines).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
@@ -17,7 +18,9 @@ FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
 OUT="${1:?usage: sota_face_viewer.sh OUT.html}"
-BASE="$RUNS/$D-sota-baseline"
+ARM="${SOTA_FACE_ARM-ik}"
+SET="$D-${SOTA_FACE_TAG:-sota}${ARM:+-$ARM}"  # sota_face.sh's run dirs' common prefix
+BASE="$RUNS/$SET-baseline"
 STRATA="$BASE/person_strata.csv"
 for f in "$BASE/example_baseline_k1.csv" "$BASE/example_baseline_k4.csv" "$STRATA"; do
   [[ -s "$f" ]] || { echo "sota_face_viewer: no $f" >&2; exit 3; }
@@ -48,13 +51,13 @@ args=()
 for k in 1 4; do
   for b in 0.25 1 4; do
     case "$b" in 0.25) t=025 ;; *) t="$b" ;; esac
-    args+=(--beta-run "$b=$RUNS/$D-sota-k$k-b$t::{ds}, $(label "$k")")
+    args+=(--beta-run "$b=$RUNS/$SET-k$k-b$t::{ds}, $(label "$k")")
   done
 done
 cd "$CALIB"
 python viewer.py "${args[@]}" --baseline "$MERGED" --category-map "$CMAP" --out "$OUT" \
   --runs-budget-mb "${SOTA_RUNS_BUDGET_MB:-1}" \
   --title "State of the App: Face — $D, at each balance" \
-  --subtitle "FHIBE face crops (FaceNet), the #4699 baseline's 562 people, from 1 and from 4 starting photos; one set of sessions per preset beta (#4636); people shown as strata (age, pronoun, skin tone), shipped defaults (#4762)" \
-  --embedder-label "face=FaceNet face crop" --hide-metrics cost
+  --subtitle "FHIBE face crops (the face provider's, buffalo_s), the #4699 baseline's 562 people, from 1 and from 4 starting photos; one set of sessions per preset beta (#4636); people shown as strata (age, pronoun, skin tone), shipped defaults (#4762)" \
+  --embedder-label "face=buffalo_s face crop" --hide-metrics cost
 echo "done: $OUT"

@@ -1,15 +1,32 @@
 // Dialog host uses global modal styles. Component-specific overrides only.
+// The margin is the one the UA gave this row when it was a <p>.
 .dialog-message {
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  margin: 1em 0;
 }
 
-// Callers break a message into lines with `\n` (question / list / detail;
-// see VtDialogService). `pre-line` honours those breaks while still
-// collapsing the runs of spaces a multi-line template literal carries.
+// The question, its bulleted names and the detail, stacked; the icon stays
+// a separate flex item beside the stack.
+.dialog-message__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+// A message may break itself into lines with `\n` (see VtDialogService).
+// `pre-line` honours those breaks while still collapsing the runs of spaces
+// a multi-line template literal carries.
 .dialog-message__text {
   white-space: pre-line;
+}
+
+// A bulk delete can name dozens of datasets: past this the list scrolls, so
+// the question above it and the detail below stay in view together.
+.dialog-message__items {
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 // `.form-input` is global; `width: 100%` is already set there.

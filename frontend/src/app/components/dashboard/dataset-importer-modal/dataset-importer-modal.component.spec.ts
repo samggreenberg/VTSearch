@@ -105,6 +105,8 @@ describe('DatasetImporterModalComponent', () => {
       num_categories: 10,
       pkl_embedder: '',
       pkl_clipper: '',
+      has_source_folder: false,
+      browsable: false,
       available_converters: [],
     },
     {
@@ -119,6 +121,8 @@ describe('DatasetImporterModalComponent', () => {
       num_categories: 102,
       pkl_embedder: 'clip',
       pkl_clipper: '',
+      has_source_folder: true,
+      browsable: true,
       available_converters: [],
     },
   ];
@@ -670,12 +674,15 @@ describe('DatasetImporterModalComponent', () => {
           (b.textContent || '').includes('Import'),
         )!;
       expect(importButton().disabled).toBe(true);
+      // A disabled button says why on hover (#5533).
+      expect(importButton().title).toMatch(/ is required$/);
 
       const path = input('field-path');
       path.value = '/data/sounds';
       path.dispatchEvent(new Event('input'));
       await settleZoneless(fixture);
       expect(importButton().disabled).toBe(false);
+      expect(importButton().title).toBe('');
     });
 
     it("paints a clicked demo row's name into the demo form", async () => {
@@ -687,6 +694,25 @@ describe('DatasetImporterModalComponent', () => {
       (el().querySelector('.demo-row') as HTMLElement).click();
       await settleZoneless(fixture);
       expect(input('demo-dataset-name').value).toBe('GTZAN');
+    });
+
+    // #5533: with no demo picked the Import button is disabled, and its
+    // tooltip names the step that enables it.
+    it("tells the user to pick a demo on the disabled Import button's tooltip", async () => {
+      flushImporters();
+      openAndFlushDemoPicker();
+      await settleZoneless(fixture);
+      const importButton = () =>
+        (Array.from(el().querySelectorAll('.form-actions .btn--primary')) as HTMLButtonElement[]).find((b) =>
+          (b.textContent || '').includes('Import'),
+        )!;
+      expect(importButton().disabled).toBe(true);
+      expect(importButton().title).toBe('Select a demo dataset from the list');
+
+      (el().querySelector('.demo-row') as HTMLElement).click();
+      await settleZoneless(fixture);
+      expect(importButton().disabled).toBe(false);
+      expect(importButton().title).toBe('');
     });
 
     it("paints a dropped folder's name into the local-folder form", async () => {
@@ -904,7 +930,10 @@ describe('DatasetImporterModalComponent', () => {
       demo.onOutputDraftsChange(demo.outputDrafts().map((d) => (d.category === 'face' ? { ...d, checked: false } : d)));
       demo.selectDemo(mockDemos[1] as any);
       demo.submit();
-      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
+      // Offered once the import has started, as every picker does.
+      expect(offer).not.toHaveBeenCalled();
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
+      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything(), expect.anything());
     });
 
     it('offers a one-dataset demo import as the default too, and starts from a saved embedder', async () => {
@@ -927,7 +956,8 @@ describe('DatasetImporterModalComponent', () => {
       const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
       demo.selectDemo(mockDemos[1] as any);
       demo.submit();
-      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
+      httpMock.expectOne('/api/dataset/load-demo').flush({ task_id: '_loading_1' });
+      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything(), expect.anything());
     });
 
     it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', async () => {
@@ -1074,7 +1104,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should record the demo selection without submitting on row click', () => {
     flushImporters();
-    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
     vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
@@ -1083,22 +1113,36 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.demoPicker().selectedDemo()).toBe(mockDemos[0] as any);
     // Auto-populates the Dataset Name from the chosen demo's label.
     expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
-    // No emit/close until the Import footer button is clicked.
-    expect(component.demoSelected.emit).not.toHaveBeenCalled();
+    // No request, emit or close until the Import footer button is clicked.
+    httpMock.expectNone('/api/dataset/load-demo');
+    expect(component.importStarted.emit).not.toHaveBeenCalled();
     expect(component.closed.emit).not.toHaveBeenCalled();
   });
 
-  it('should emit demoSelected and close when the demo picker submits', () => {
+  // #5498: the modal stays up, its Import button reading "Importing…", until
+  // the server has accepted the demo import; only then does it announce the
+  // start (on which the app closes it), as every other picker does.
+  it('should start the demo import itself and announce it only once the server answers', async () => {
     flushImporters();
-    vi.spyOn(component.demoSelected, 'emit');
-    vi.spyOn(component.closed, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     openAndFlushDemoPicker();
-
     component.demoPicker().selectDemo(mockDemos[0] as any);
-    component.demoPicker().submit();
-    expect(component.demoSelected.emit).toHaveBeenCalled();
-    expect(component.closed.emit).toHaveBeenCalled();
+    await settleZoneless(fixture);
+    const importBtn = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.form-actions .btn--primary')].at(-1)!;
+    expect(importBtn().textContent?.trim()).toBe('Import');
+
+    importBtn().click();
+    const req = httpMock.expectOne('/api/dataset/load-demo');
+    expect(req.request.body.name).toBe(mockDemos[0].name);
+    await settleZoneless(fixture);
+    expect(importBtn().textContent?.trim()).toBe('Importing…');
+    expect(importBtn().disabled).toBe(true);
+    expect(component.importStarted.emit).not.toHaveBeenCalled();
+
+    req.flush({ task_id: '_loading_1', task_ids: ['_loading_1'] });
+    expect(component.importStarted.emit).toHaveBeenCalledTimes(1);
   });
 
   it('should hide the demo tab bar in favor of a dropdown above the grid', async () => {
@@ -1192,6 +1236,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1224,6 +1270,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1254,6 +1302,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 5,
         pkl_embedder: '',  // unknown
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1285,6 +1335,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 10,
         pkl_embedder: 'clap',
         pkl_clipper: '',
+        has_source_folder: false,
+        browsable: false,
         available_converters: [],
       },
       {
@@ -1299,6 +1351,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 102,
         pkl_embedder: 'clip',
         pkl_clipper: '',
+        has_source_folder: true,
+        browsable: true,
         available_converters: [],
       },
     ];
@@ -1331,6 +1385,8 @@ describe('DatasetImporterModalComponent', () => {
         num_categories: 10,
         pkl_embedder: '',
         pkl_clipper: '',
+        has_source_folder: false,
+        browsable: false,
         available_converters: [],
       },
     ];

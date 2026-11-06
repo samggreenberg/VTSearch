@@ -16,6 +16,12 @@ import { fieldHintPlacement } from '../field-hint-icon/field-hint-icon.component
 
 let nextId = 0;
 
+/** One row of the list: a plugin field's option, plus an optional *tag* shown
+ *  small beside its label (a recipient's kind in the share dialog, #5579). */
+export interface ComboboxOption extends FieldOptions {
+  tag?: string;
+}
+
 /**
  * The value a typed *text* stands for: the text itself when it is already an
  * option's value (or matches nothing), else the value of the one option whose
@@ -30,7 +36,7 @@ export function comboboxValueFor(text: string, options: readonly FieldOptions[])
 
 /** The options to offer while the user has typed *text*: those whose label
  *  or value contains it, ignoring case, or every option for blank text. */
-export function comboboxMatches(text: string, options: readonly FieldOptions[]): FieldOptions[] {
+export function comboboxMatches<T extends FieldOptions>(text: string, options: readonly T[]): T[] {
   const needle = text.trim().toLowerCase();
   if (!needle) return [...options];
   return options.filter(
@@ -59,6 +65,11 @@ export function comboboxMatches(text: string, options: readonly FieldOptions[]):
  *
  * Every plugin-field form renders it in place of an open-coded input, and
  * ``tests_lib/meta/test_plugin_field_combobox.py`` holds them to that.
+ *
+ * A host whose options come from a search as the user types (the share
+ * dialog's recipients, #5579) turns {@link filterOptions} off, reads the text
+ * from {@link textChange}, acts on {@link picked}, and empties the box with
+ * {@link reset} once it has used what was typed.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -72,7 +83,10 @@ export class PluginComboboxComponent {
   /** The field's current form value. */
   readonly value = input<unknown>('');
   /** The field's options, as ``DynamicFieldOptions.optionsFor`` returns them. */
-  readonly options = input<FieldOptions[]>([]);
+  readonly options = input<readonly ComboboxOption[]>([]);
+  /** Narrow the list to the options matching what is typed. Off for a host
+   *  whose options already answer the text, such as a server-side search. */
+  readonly filterOptions = input(true);
   /** DOM id of the text box, so the field's `<label for="…">` points at it. */
   readonly inputId = input('');
   readonly placeholder = input('');
@@ -80,10 +94,18 @@ export class PluginComboboxComponent {
   /** Accessible name, for a form that names the field without a `<label>`. */
   readonly ariaLabel = input('');
   readonly required = input(false);
+  /** Every host disables the field only while its option list loads, which
+   *  is what the toggle's tooltip says while it is disabled (#5533). */
   readonly disabled = input(false);
 
   /** Emits the value the form should store: an option's value, or typed text. */
   readonly valueChange = output<string>();
+  /** Emits the box's text as typed, on every keystroke, before any option's
+   *  value stands in for it. */
+  readonly textChange = output<string>();
+  /** Emits the option the user picked from the list (a click, or Enter on a
+   *  highlighted row), after {@link valueChange}. */
+  readonly picked = output<ComboboxOption>();
 
   private readonly autoId = `vt-plugin-combobox-${++nextId}`;
   readonly id = computed(() => this.inputId() || this.autoId);
@@ -112,8 +134,11 @@ export class PluginComboboxComponent {
   readonly open = signal(false);
   /** Keyboard-highlighted row (the ``aria-activedescendant`` target), or -1. */
   readonly activeIndex = signal(-1);
-  /** The rows on offer: every option until the user types, then the matches. */
-  readonly shown = computed(() => comboboxMatches(this.draft() ?? '', this.options()));
+  /** The rows on offer: every option until the user types, then the matches
+   *  (or every option still, with {@link filterOptions} off). */
+  readonly shown = computed<readonly ComboboxOption[]>(() =>
+    this.filterOptions() ? comboboxMatches(this.draft() ?? '', this.options()) : this.options(),
+  );
   readonly expanded = computed(() => this.open() && this.shown().length > 0);
   readonly activeDescendant = computed(() =>
     this.expanded() && this.activeIndex() >= 0 ? this.optionId(this.activeIndex()) : null,
@@ -160,13 +185,22 @@ export class PluginComboboxComponent {
     this.draft.set(text);
     this.open.set(true);
     this.activeIndex.set(-1);
+    this.textChange.emit(text);
     this.commit(comboboxValueFor(text, this.options()));
   }
 
-  pick(option: FieldOptions): void {
+  pick(option: ComboboxOption): void {
     this.draft.set(null);
     this.close();
     this.commit(option.value);
+    this.picked.emit(option);
+  }
+
+  /** Drop what was typed and close the list, so the box shows the value
+   *  again: for a host that has used the text and wants an empty box. */
+  reset(): void {
+    this.draft.set(null);
+    this.close();
   }
 
   /** Open the list. From the keyboard, highlight the current pick (or the

@@ -21,14 +21,21 @@
  * The corpora are drawn by `smiley_fixture.py` with the Synthetic Media
  * generator: a few seconds, nothing downloaded beyond the embedding models.
  *
+ * Then the sharing example (`sharing-example.mjs`): the detectors other people
+ * share with the harness's user, written into the app's shared folder.
+ *
  * The dashboard shows every dataset and detector in the app, so a run also
  * removes the fixtures this harness used to build (the synthetic `syn-imgs` /
- * `syn-patch` / `doc-demo`) and the slide deck's Book example (`photos-train`,
- * … , `Book detector`), which its own shooter rebuilds every run. It never touches a
- * dataset or detector it does not know by name.
+ * `syn-patch` / `doc-demo`), the slide deck's Book example (`photos-train`,
+ * … , `Book detector`), which its own shooter rebuilds every run, and the face
+ * example (`face-example.mjs`), which capture.ts builds only around the face
+ * shots, and any received copy of a sharing-example detector a run left
+ * behind. It never touches a dataset or detector it does not know by name.
  *
  * Usage:  node ensure-fixtures.mjs   (APP env overrides the URL)
  */
+import { FACE_FIXTURES } from './face-example.mjs';
+import { ensureSharedFolder, SHARING_FIXTURES, unshare } from './sharing-example.mjs';
 import {
   appClient,
   BOOK_FIXTURES,
@@ -47,8 +54,10 @@ const APP = process.env.APP || 'http://localhost:5000';
 const log = (...a) => console.log('[fixtures]', ...a);
 const app = appClient(APP, log);
 
-await app.dropDetectors('doc-demo', ...BOOK_FIXTURES.detectors);
-await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets);
+// The face example too, should a run have stopped before it removed it:
+// capture.ts builds it only for the face shots, which run last.
+await app.dropDetectors('doc-demo', ...BOOK_FIXTURES.detectors, ...FACE_FIXTURES.detectors, ...SHARING_FIXTURES.detectors);
+await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets, ...FACE_FIXTURES.datasets);
 
 const train = await app.ensureCorpus(TRAIN_DATASET, 'siglip');
 await app.ensureProjection(train);
@@ -60,6 +69,8 @@ const byCategory = (pictures, cats) =>
   Object.entries(cats).flatMap(([cat, n]) => framesOf(pictures, cat, n));
 
 const detector = await app.ensureDetector(DETECTOR, train);
+// Plain local before its votes are reset, so the reset is not pushed anywhere.
+await unshare(app, DETECTOR);
 {
   const { pictures } = corpus(TRAIN_DATASET);
   await app.setVotes(train, detector, {
@@ -76,5 +87,7 @@ const regionDetector = await app.ensureDetector(REGION_DETECTOR, regions, undefi
     bad: byCategory(pictures, REGION_VOTES.bad),
   });
 }
+
+ensureSharedFolder(log);
 
 log('fixtures ready');

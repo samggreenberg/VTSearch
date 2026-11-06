@@ -674,6 +674,102 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
   });
 
+  describe('the People button (#5590)', () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    async function openMapOf(mediaType: string): Promise<HTMLElement> {
+      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
+        of({ display_name: 'Photos', media_type: mediaType }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it("sits in a Face dataset's toolbar, and opens that dataset's People", async () => {
+      const el = await openMapOf('face');
+      const button = el.querySelector<HTMLButtonElement>('.browse-people');
+      expect(button?.textContent?.trim()).toBe('People');
+      button!.click();
+      expect(navigate).toHaveBeenCalledWith(['/people', 'ds1']);
+    });
+
+    it('is not offered on any other dataset', async () => {
+      const el = await openMapOf('image');
+      expect(el.querySelector('.browse-people')).toBeNull();
+    });
+
+    it('is not offered on a subset map, which People is not about', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
+      await openMapOf('face');
+      expect(fixture.componentInstance.peopleOffered()).toBe(false);
+    });
+  });
+
+  describe('Rebuild Map (#5615)', () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    /** Open the map on its freshly fit layout. */
+    async function openMap(): Promise<HTMLElement> {
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.status()).toBe('ready');
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it("is never offered on a whole dataset's map, whose layout the server keeps fresh itself", async () => {
+      const el = await openMap();
+      expect(el.querySelector('.browse-reproject')).toBeNull();
+    });
+
+    it('comes once items have been verified away, and goes when the rebuilt map lands', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2, 3, 4] };
+      const reprojectSubset = vi.fn(() => of({ status: 'building', job_id: 'j1' }));
+      TestBed.inject(ProjectionApiService).reprojectSubset =
+        reprojectSubset as unknown as ProjectionApiService['reprojectSubset'];
+      const el = await openMap();
+      // A fresh fit over exactly the items shown: nothing to rebuild.
+      expect(el.querySelector('.browse-reproject')).toBeNull();
+
+      // Verifying two away culls them in place; the survivors keep their slots.
+      fixture.debugElement.injector.get(BrowseSelectionService).addAll([1, 2]);
+      fixture.componentInstance.onVerify('bad');
+      await settleZoneless(fixture);
+      const button = el.querySelector<HTMLButtonElement>('.browse-reproject');
+      expect(button?.textContent?.trim()).toBe('Rebuild Map');
+
+      // The rebuild re-fits the survivors, and lands as a new layout with
+      // nothing left to rebuild.
+      button!.click();
+      await settleZoneless(fixture);
+      expect(reprojectSubset).toHaveBeenCalledWith([3, 4]);
+      expect(fixture.componentInstance.status()).toBe('building');
+      metaSubject.next({ ...ready, projection_id: 'p2' } as ProjectionMeta);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.status()).toBe('ready');
+      expect(el.querySelector('.browse-reproject')).toBeNull();
+    });
+  });
+
   describe("Toasty's hint ladder (#5360)", () => {
     const ready = {
       projection_id: 'p1',

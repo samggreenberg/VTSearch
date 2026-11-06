@@ -36,17 +36,25 @@ _SYNTH_TONE_LO_HZ = 180.0
 _SYNTH_TONE_HI_HZ = 1400.0
 
 
-def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
+def _synthetic_tone_wav(city_index: int, n_cities: int, serial: int) -> bytes:
     """Render a leaf city as a short 16-bit-PCM sine-tone WAV (no files, no ffmpeg).
 
     The pitch rises log-linearly with *city_index* across the taxonomy so each
     city gets a recognisably different tone (and waveform thumbnail); a faint
     second harmonic keeps the render from looking perfectly flat.
+
+    *serial* (the item's position in the demo) is added to the opening samples,
+    one least-significant bit per set bit of its
+    :func:`~vtscore.media._toponymy_demo.serial_mark`, so every tone in a city
+    keeps the city's pitch but has bytes of its own (#5515).  The tone peaks
+    at 0.75 of full scale, so the extra bit can never overflow.
     """
     import struct  # noqa: PLC0415
     import wave  # noqa: PLC0415
 
     import numpy as np  # noqa: PLC0415
+
+    from vtscore.media._toponymy_demo import serial_mark  # noqa: PLC0415
 
     frac = city_index / max(1, n_cities - 1)
     freq = _SYNTH_TONE_LO_HZ * (_SYNTH_TONE_HI_HZ / _SYNTH_TONE_LO_HZ) ** frac
@@ -54,6 +62,8 @@ def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
     wave_f = 0.6 * np.sin(2 * np.pi * freq * t) + 0.15 * np.sin(2 * np.pi * 2 * freq * t)
     samples = np.clip(wave_f, -1.0, 1.0)
     pcm = (samples * 32767).astype("<i2")
+    mark = serial_mark(serial)
+    pcm[: len(mark)] += mark
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
@@ -640,6 +650,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             source=_TOPONYMY_SOURCE_ID,
             items_per_category=0,
             download_size_mb=0,
+            requires_download=False,
         ),
     ]
 
@@ -654,21 +665,21 @@ def _load_synthetic_toponymy(clips, embedder, on_progress):
     the VTSBrowse sign display.  See :mod:`vtscore.media._toponymy_demo`.
     """
 
-    from vtscore.media._toponymy_demo import generate_items, total_cities  # noqa: PLC0415
-
-    # CLAP's audio/text space is 512-D; match it so the baked vectors slot
-    # into the primary embedder's slot and text queries don't dimension-clash.
+    from vtscore.media._toponymy_demo import baked_dim, generate_items, total_cities  # noqa: PLC0415
     from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
-    items = generate_items(dim=512)
+    # Bake at the load's embedder's declared width, so the vectors fit the slot
+    # they are filed under whichever embedder was picked (#5508).  512 is
+    # CLAP's width, for an embedder that declares none.
+    emb_name = embedder.name if embedder is not None else "clap"
+    items = generate_items(dim=baked_dim(emb_name, fallback=512))
     n_cities = total_cities()
     total = len(items)
     on_progress("loading", f"Generating {total} synthetic clips…", 0, total)
 
-    emb_name = embedder.name if embedder is not None else "clap"
     clip_id = 1
     for i, item in enumerate(items):
-        wav_bytes = _synthetic_tone_wav(item.city_index, n_cities)
+        wav_bytes = _synthetic_tone_wav(item.city_index, n_cities, serial=i)
         thumb = generate_waveform_thumbnail(wav_bytes)
         filename = f"{item.category}/clip{i:04d}.wav"
         clips[clip_id] = {

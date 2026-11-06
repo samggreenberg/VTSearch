@@ -404,8 +404,11 @@ The face path is the face provider's `image2face` crops and vectors (FaceNet's o
   `fhibe_faces_ik_1024` and `fhibe_faces_ik_640`**, the default arm of `sota_face.sh` and
   `sota_face_analyze.sh` (`SOTA_FACE_ARM=ik`; run dirs `<date>-sota-ik-k<K>-b<beta>`; `sota_face.sh
   prepare` first, since the arm has its own prepared grids). Building those cells needs the face
-  models on the GRID (`IMAGEKIT_FACE_CONFIG`). #5321's sessions (`2026-10-26-5321-ik-*`) are the
-  last review's numbers for the shipped path. The MTCNN + FaceNet arms are retired but still run on
+  models on the GRID (`IMAGEKIT_FACE_CONFIG`). The latest review on the shipped path is
+  2026-11-03's (#5526, `docs/experiments/2026-11-03-state-of-the-app-face/`): buffalo_s from the
+  prepared grids `SOTA_FACE_BASE=2026-10-27-prep-ik-bs`, run dirs tagged `SOTA_FACE_TAG=sota5527`.
+  `sota_face_tables.py --tag/--arm` and `sota_face_viewer.sh` (same env as `sota_face.sh`) read a
+  tagged arm's dirs. The MTCNN + FaceNet arms are retired but still run on
   their cells: `SOTA_FACE_ARM=roll` (the app from #4777 to #5320) and `SOTA_FACE_ARM=` (before
   #4777, #4762's review).
 - **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs

@@ -23,8 +23,9 @@ quotable in a bug report.
 
 The module also holds the ``@app.errorhandler`` functions: JSON 404/405 for
 ``/api/`` paths, the dataset/detector
-not-loaded -> 409 mappings, the request-missing-context -> 400 mapping, and
-the catch-all uncaught-exception -> 500.
+not-loaded -> 409 mappings, the received-detector read-only -> 409 mapping
+(``error_code: "detector_read_only"``), the request-missing-context -> 400
+mapping, and the catch-all uncaught-exception -> 500.
 
 ``app.py`` calls :func:`register_error_handlers` to wire them onto its
 module-level ``app``. Registration is explicit (rather than via
@@ -44,11 +45,59 @@ from flask_smorest.error_handler import ErrorSchema as _SmorestErrorSchema
 from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound
 from werkzeug.http import HTTP_STATUS_CODES
 
+from vtscore.detectors.store import DetectorReadOnlyError
 from vtscore.state.core import (
     DatasetNotLoadedError,
     DetectorNotLoadedError,
     RequestMissingContextError,
 )
+
+#: ``error_code`` of the 409 a write to a received, read-only detector gets.
+#: The frontend keys its "fork it instead" prompt on it.
+DETECTOR_READ_ONLY = "detector_read_only"
+
+#: ``error_code`` of the 409 a manual pull into a shared detector's owner
+#: gets: its labels are pushed to its container, never pulled back.
+DETECTOR_SHARED = "detector_shared"
+
+#: ``error_code`` of the 409 an operation on a detector whose sharing binding
+#: names a source other than the active one (or one not installed) gets; the
+#: message is the detector's ``sharing_note``.
+SHARING_UNAVAILABLE = "sharing_unavailable"
+
+# The detector-sharing routes (``vtsearch/routes/detectors/sharing.py``).
+
+#: ``error_code`` of the 404 every sharing route but the capability one (and
+#: fork, which needs only the local copy) answers while the
+#: ``detector_sharing_source`` setting is null.
+SHARING_DISABLED = "sharing_disabled"
+
+#: ``error_code`` of the 501 an optional sharing operation the active source
+#: does not implement (recipient search) gets.
+SHARING_UNSUPPORTED = "sharing_unsupported"
+
+#: ``error_code`` of the 502 a sharing operation gets when the sharing service
+#: itself failed (unreachable, a malformed reply); the message says how.
+SHARING_FAILED = "sharing_failed"
+
+#: ``error_code`` of the 404 for a ``remote_ref`` that names no container the
+#: caller can reach (never created, archived, or deleted at the service).
+REMOTE_NOT_FOUND = "remote_not_found"
+
+#: ``error_code`` of the 403 for a container the caller may not do this to.
+REMOTE_PERMISSION_DENIED = "remote_permission_denied"
+
+#: ``error_code`` of the 409 a receive gets when the caller already holds that
+#: container; ``detector_id`` names their copy.
+ALREADY_RECEIVED = "already_received"
+
+#: ``error_code`` of the 404 for a sharing view or unshare of a detector that
+#: shares nothing.
+DETECTOR_NOT_SHARED = "detector_not_shared"
+
+#: ``error_code`` of the 409 a refresh of a detector that is not a received
+#: copy gets.
+DETECTOR_NOT_LINKED = "detector_not_linked"
 
 #: ``abort()`` kwargs the framework consumes itself: the first four are read by
 #: flask-smorest's handler, and ``schema`` / ``exc`` are webargs internals it
@@ -263,6 +312,22 @@ def _handle_detector_not_loaded(exc):
     )
 
 
+def _handle_detector_read_only(exc: DetectorReadOnlyError):
+    """409 for a write the store refused: the detector is a received, read-only copy.
+
+    The route-layer guard (``vtsearch.routes._read_only``) answers the same
+    409 before any side effect; this handler is the backstop for a write that
+    reached the store without passing one.
+    """
+    return error_response(
+        str(exc),
+        409,
+        detector_id=exc.detector_id,
+        remote_owner=exc.owner,
+        error_code=DETECTOR_READ_ONLY,
+    )
+
+
 def _is_registered(kind: str, item_id: str) -> bool:
     """Whether *item_id* still has a ``kind`` ("dataset"/"detector") registry entry.
 
@@ -334,5 +399,6 @@ def register_error_handlers(app) -> None:
     app.errorhandler(MethodNotAllowed)(_handle_405)
     app.errorhandler(DatasetNotLoadedError)(_handle_dataset_not_loaded)
     app.errorhandler(DetectorNotLoadedError)(_handle_detector_not_loaded)
+    app.errorhandler(DetectorReadOnlyError)(_handle_detector_read_only)
     app.errorhandler(RequestMissingContextError)(_handle_request_missing_context)
     app.errorhandler(Exception)(_handle_uncaught_exception)
