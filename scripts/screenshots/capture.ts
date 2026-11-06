@@ -24,7 +24,7 @@ import { type Browser, type BrowserContext, type Page, type Request } from 'play
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
-import { LAYER_ID, drawCallouts, resolveBox } from './callouts.mjs';
+import { LAYER_ID, drawCallouts, nameCellRe, resolveBox } from './callouts.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
@@ -539,7 +539,7 @@ function makeHelpers(page: Page, timing?: Timing): Helpers {
     async overflowMenu(name) {
       const row = page
         .locator('tr[vt-dataset-card], tr[vt-detector-card]')
-        .filter({ has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${name}\\s*$`) }) })
+        .filter({ has: page.locator('.name-cell', { hasText: nameCellRe(name) }) })
         .first();
       await row.locator('.overflow-btn').first().click();
       await page.waitForSelector('.context-menu', { timeout: 10000 });

@@ -23,7 +23,9 @@ when something goes wrong, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
    `VTSEARCH_DATASET_MAX_AGE_DAYS`, …; see [Application](#application)) or in
    the [server settings file](SETTINGS.md#server-tier--datasettingsjson), which is also
    where `default_labelset_source` backs every detector's labels up off the
-   server.
+   server, and where `detector_sharing_source` switches on detector sharing
+   through a collaboration service (off by default; what users then see is
+   [Share a detector, receive one, fork one](user/howto/share-a-detector.md)).
 5. Size the disk for the model cache (~4.1 GB) and the demos your users will
    pull ([Network dependencies](#network-dependencies)); air-gapped hosts
    follow [Offline deployment](#offline-deployment).

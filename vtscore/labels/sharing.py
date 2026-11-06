@@ -42,9 +42,9 @@ an owner's save also writes a :class:`Manifest` (record count and digest), and
 a refresh reports who last wrote it: a manifest the owner did not write, or one
 that disagrees with the records, is a foreign modification.
 
-The design narrative is ``docs/plans/detector-sharing.md``; the contract a
-source author follows is ``vtscore/docs/extending/labelset-sources.md``
-("The sharing contract").
+Why it is shaped this way is "Detector sharing" in ``docs/ARCHITECTURE.md``;
+the contract a source author follows is
+``vtscore/docs/extending/labelset-sources.md`` ("The sharing contract").
 """
 
 from __future__ import annotations

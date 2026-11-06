@@ -11,7 +11,7 @@ keys its "fork it instead" prompt on that code.
 
 Not every write to a detector is refused: thresholds, the balance, test
 verdicts, the AutoFind flag, readers, loading, Find and deleting the local
-copy all stay open (``docs/plans/detector-sharing.md``).  A received detector
+copy all stay open (``docs/ARCHITECTURE.md``, "Detector sharing").  A received detector
 may be a combine *source*; combine only ever creates a new detector, so it
 can never be a target.
 """

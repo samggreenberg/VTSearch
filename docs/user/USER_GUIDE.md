@@ -346,6 +346,9 @@ picks up where it leaves off.
 
 - [Move a detector to another VTSearch](howto/move-a-detector.md): export its
   answers and rebuild it elsewhere.
+- [Share a detector, receive one, fork one](howto/share-a-detector.md): on a
+  VTSearch that shares, give a detector to other people, add the ones they
+  share with you, and fork one to change it.
 - [Add labels you already have](howto/import-labels.md): import answers from a
   CSV file.
 - [Run your detectors on new pictures from the command line](howto/autofind-from-the-command-line.md):

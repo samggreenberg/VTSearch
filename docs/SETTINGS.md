@@ -165,7 +165,8 @@ through their CLI flag or environment variable.
   detector creator's data directory, like every server path a user supplies.
   `null` (the default) auto-exports nothing.
 - `detector_sharing_source`: the labelset source detectors are shared through
-  (`docs/plans/detector-sharing.md`). Same `{"source_name": ..., "field_values":
+  ([ARCHITECTURE.md](ARCHITECTURE.md#detector-sharing); what users see is
+  [Share a detector](user/howto/share-a-detector.md)). Same `{"source_name": ..., "field_values":
   ...}` shape as `default_labelset_source`, with the same fixed-values rule: each
   **non-empty** value in `field_values` is fixed by the admin - typically the
   sharing service's connection values - and laid into every detector's sharing

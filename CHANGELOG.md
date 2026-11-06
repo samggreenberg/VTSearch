@@ -60,6 +60,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   update, and whether it came to you directly, by group or publicly); **Add** makes one a read-only detector of
   yours, selected in Drafts, after asking first if anyone but its owner has written to it.
 
+- **A how-to for detector sharing** (issue #5580). [Share a detector, receive one, fork
+  one](docs/user/howto/share-a-detector.md) walks through sharing a detector and managing who has it, adding one
+  shared with you, what the warning about changes not made by the owner means and what each of its choices does,
+  forking, a failed save to the shared copy, and the note a detector carries when its sharing service is no longer in
+  use here.
+
 - **Find Results has an AutoFind tab** (issue #5584). Beside the Clipboard and exporter tabs, **AutoFind** sends the
   run through the results exporter set up on the Settings **AutoFind** tab, exactly as a finished run does, so that
   setup can be tried without importing another dataset. The tab shows, read-only, which exporter will run, with what

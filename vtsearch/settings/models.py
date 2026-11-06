@@ -411,7 +411,7 @@ class ServerSettings(BaseModel):
     # default) means detectors sync only where a binding was set by hand.
     default_labelset_source: dict[str, Any] | None = None
 
-    # Detector sharing (docs/plans/detector-sharing.md): the labelset source
+    # Detector sharing (docs/ARCHITECTURE.md, "Detector sharing"): the labelset source
     # detectors are shared through, same ``{"source_name": ..., "field_values":
     # ...}`` shape as ``default_labelset_source``, and the same rule for its
     # values: each non-empty one is fixed by the admin (the service's connection

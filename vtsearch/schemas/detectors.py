@@ -365,7 +365,7 @@ class DetectorRegistryEntrySchema(Schema):
     # nowhere.  The raw binding on the registry entry (``labelset_source``,
     # with its field values) is deliberately not dumped.
     labelset_source_status = fields.Nested(LabelsetSourceStatusSchema, allow_none=True)
-    # Detector sharing (docs/plans/detector-sharing.md): ``local`` (also an
+    # Detector sharing (docs/ARCHITECTURE.md, "Detector sharing"): ``local`` (also an
     # entry with no ``sync_mode``), ``linked`` for a received, read-only copy,
     # or ``forked``.  ``sharing`` is the container it mirrors or owns,
     # ``sharing_note`` why that container is not in use on this server (its
