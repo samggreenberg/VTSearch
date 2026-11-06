@@ -118,8 +118,10 @@ scores, so it has no cosine here: its precision and recall stand beside it. FHIB
   cannot.
 - `69b20e79`: 4 Goods, spread 0.78, floor 0.48. Ball F 0.67 (keeps 6); Find's line F 1.00.
   `0.81* 0.80* 0.78* 0.61 0.60 0.56 | 0.37 0.34 ...`. Three faces labelled as other people sit at 0.56 to 0.61, far
-  above everyone else and between this person's photos and the bulk. **Worth checking as a label error** (the same
-  person under two ids). If they are, the ball is right and the label is wrong.
+  above everyone else and between this person's photos and the bulk. Checked in #5485 (2026-11-06): the owner compared
+  them, and the next seven closest faces of the same two ids (`ec066137`, `3bf0cc73`), against all eight of this
+  person's photos at full resolution, and ruled all ten a **different person**. The labels stand and the ids stay
+  separate. The ball's loss here is real: buffalo_s puts look-alikes this close.
 - `49b8483a`: 4 Goods, spread 0.45, floor 0.40. Ball F 0.00 (keeps none); Find's line F 0.33.
   `| 0.38 0.35 0.35 0.34 ...` with no own photo in the top 12. Nothing separates this person; the ball and the head
   both fail.
