@@ -97,7 +97,7 @@ FACE_CONFIG = {
 #: The face space `w600k_mbf.onnx` embeds into (the `compatibility` in `arcface_mbf.json`).
 FACE_COMPAT = "oss-arcface-mbf:1"
 #: buffalo_s's face ball, as `face_ball.json` stores an entry: the floors #5497 fitted on FHIBE
-#: (`docs/experiments/2026-11-06-face-ball-per-embedder-5497/REPORT.md`, "The fit reproduces what
+#: (`docs/experiments/2026-11-06-face-ball-per-embedder-5497`, its report's "The fit reproduces what
 #: shipped"), which are the numbers #5478 shipped. `check` carries the report's go/no-go readings;
 #: `provenance` says where this copy came from. Pinned like the models: the real file is a
 #: calculated asset on the GRID, and the harness must give the same cut on every machine.
@@ -110,7 +110,7 @@ FACE_BALL_ENTRY = {
         "corpus": "FHIBE faces",
         "commit": "c534adabf",
         "tool": "scripts/data/fit_face_ball.py, pinned by scripts/screenshots/face_fixture.py",
-        "report": "docs/experiments/2026-11-06-face-ball-per-embedder-5497/REPORT.md",
+        "report": "docs/experiments/2026-11-06-face-ball-per-embedder-5497",
     },
 }
 
