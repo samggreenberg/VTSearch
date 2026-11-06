@@ -20,15 +20,21 @@ from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.datasets import people as pp
 from vtscore.datasets.container import append_people, read_people
 from vtscore.datasets.people import NothingToPartition, PeoplePartition, fit_people
-from vtscore.detectors.centroid_head import FACE_BALL_COMPAT, FACE_BALL_FLOORS
+from tests_shared.face_ball import COMPAT, FLOORS, face_ball, face_ball_space  # noqa: F401
 from vtscore.media.face.imagekit_bridge import COMPAT_METADATA_KEY, HARD_VIEW_QUALITY, QUALITY_METADATA_KEY
 from vtscore.state.core import DatasetContext, register_context
 
-CUT = FACE_BALL_FLOORS[1.0]
-SPACE = FACE_BALL_COMPAT
+CUT = FLOORS[1.0]
+SPACE = COMPAT
 #: A Face Quality under and over the calibrated space's hard-view cut.
 HARD_Q = HARD_VIEW_QUALITY[SPACE] - 5.0
 GOOD_Q = HARD_VIEW_QUALITY[SPACE] + 10.0
+
+
+@pytest.fixture(autouse=True)
+def _space_with_a_ball(face_ball_space):  # noqa: F811
+    """buffalo_s's entry in ``face_ball.json``: the space People cuts in (#5497)."""
+    return face_ball_space
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
@@ -58,7 +64,13 @@ def _as_sets(partition: PeoplePartition) -> set[frozenset[int]]:
 
 class TestCut:
     def test_the_calibrated_space_cuts_at_the_ball_floor(self):
-        assert pp.people_cutoff(SPACE) == pytest.approx(FACE_BALL_FLOORS[1.0])
+        assert pp.people_cutoff(SPACE) == FLOORS[1.0]
+
+    def test_a_space_whose_ball_is_not_used_has_no_cut(self):
+        from vtscore.media.face.face_ball import write_entry
+
+        write_entry(face_ball("facenet:practice", use=False))
+        assert pp.people_cutoff("facenet:practice") is None and pp.people_cutoff(SPACE) == FLOORS[1.0]
 
     @pytest.mark.parametrize("compat", ["oss-facenet:1", "", None])
     def test_any_other_space_has_no_cut(self, compat):

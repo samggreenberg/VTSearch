@@ -183,10 +183,34 @@ CENTROID_GATED = {
         for z in CENTROID_BAR_ZS
     },
 }
-#: #5478's face line (:func:`face_ball_cut`): the ball from beta 1 up once there are two Goods, else
-#: :data:`FACE_BALL_BELOW`.
+#: #5478's face line: the ball from beta 1 up once there are two Goods, else :data:`FACE_BALL_BELOW`.  The ball's
+#: floors are cosines in one face space, so the rule a line is drawn by names it, ``face_ball[<compat>]``
+#: (:func:`face_ball_rule`), and its floors come from that space's entry in ``face_ball.json``
+#: (:mod:`vtscore.media.face.face_ball`, #5497).  This bare name is the family: the face crops' entry in
+#: :data:`CENTROID_LINE_RULE_BY_MEDIA_TYPE`, and the eval harness's knob for "the corpus's own space".
 FACE_BALL_RULE = "face_ball"
-CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED, FACE_BALL_RULE)
+CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED)
+_FACE_BALL = re.compile(r"face_ball\[(?P<compat>[^\[\]~@,]+)\]")
+
+
+def face_ball_rule(compat: str) -> str:
+    """The face ball's rule in *compat*'s space: ``face_ball[<compat>]``."""
+    rule = f"{FACE_BALL_RULE}[{compat}]"
+    if _FACE_BALL.fullmatch(rule) is None:
+        raise ValueError(f"a face space tag for a line rule cannot hold '[', ']', '~', '@' or ','; got {compat!r}")
+    return rule
+
+
+def face_ball_compat(rule: str | None) -> str | None:
+    """The face space a ``face_ball[<compat>]`` rule names, or ``None`` for any other rule."""
+    m = _FACE_BALL.fullmatch(rule or "")
+    return m["compat"] if m else None
+
+
+def is_face_ball_rule(rule: str | None) -> bool:
+    """Whether *rule* is the face ball in a named space (:func:`face_ball_rule`)."""
+    return face_ball_compat(rule) is not None
+
 
 #: #5478's ball, a measurement rule written with its numbers rather than listed: ``ball<floor>`` keeps
 #: every cosine at or above ``<floor>`` whatever the corpus, and ``ball<floor>_s<slope>_c<centre>`` moves
@@ -207,8 +231,9 @@ def ball_rule(rule: str) -> tuple[float, float, float] | None:
 
 
 def is_centroid_line_rule(rule: str) -> bool:
-    """Whether *rule* draws a centroid line: one of :data:`CENTROID_LINE_RULES`, or a ball (:func:`ball_rule`)."""
-    return rule in CENTROID_LINE_RULES or ball_rule(rule) is not None
+    """Whether *rule* draws a centroid line: one of :data:`CENTROID_LINE_RULES`, a ball (:func:`ball_rule`), or the
+    face ball in a named space (:func:`face_ball_rule`)."""
+    return rule in CENTROID_LINE_RULES or ball_rule(rule) is not None or is_face_ball_rule(rule)
 
 
 def goods_spread(vectors: Sequence[np.ndarray]) -> float | None:
@@ -223,30 +248,24 @@ def goods_spread(vectors: Sequence[np.ndarray]) -> float | None:
 
 
 #: The face crops' ball (#5478): the Goods' centroid keeps every face whose cosine to it is at least a floor,
-#: moved by :data:`FACE_BALL_SLOPE` times how far the Goods' spread (:func:`goods_spread`) sits from
-#: :data:`FACE_BALL_CENTRE`: a person whose own photos are spread out gets a lower floor.  The floors are per
-#: balance (beta 1 and 4; between them, and past 4, read off a line in log beta, held at beta 1 below it), fitted
-#: on FHIBE's buffalo_s faces (#5474's ``adaptive`` rule over both crop sizes and two to every Good).  Replayed on
-#: the shipped sessions (6,743, the review's 562 people), Find's set from beta 1 up with two Goods or more
-#: gained +0.010 to +0.012 F-beta over votes 1-150 at beta 1 from four photos and +0.016 to +0.019 at beta 4,
-#: less for she/her people than for he/him at beta 1 (+0.005 against +0.015).  At beta 1/4 the ball lost 0.007 to
+#: moved by a slope times how far the Goods' spread (:func:`goods_spread`) sits from a centre: a person whose
+#: own photos are spread out gets a lower floor.  The floors are per balance (beta 1 and 4; between them, and
+#: past 4, read off a line in log beta, held at beta 1 below it).  On FHIBE's buffalo_s faces, replayed on the
+#: shipped sessions (6,743, the review's 562 people), Find's set from beta 1 up with two Goods or more gained
+#: +0.010 to +0.012 F-beta over votes 1-150 at beta 1 from four photos and +0.016 to +0.019 at beta 4, less for
+#: she/her people than for he/him at beta 1 (+0.005 against +0.015).  At beta 1/4 the ball lost 0.007 to
 #: 0.012, and from one photo it is a poor centre, so both keep :data:`FACE_BALL_BELOW`
-#: (``docs/experiments/2026-10-30-face-ball-line-5478``).  The floors are cosines in buffalo_s's space: another
-#: face pack needs its own.
-FACE_BALL_FLOORS: dict[float, float] = {1.0: 0.4425, 4.0: 0.385}
-FACE_BALL_SLOPE = 0.25
-FACE_BALL_CENTRE = 0.6371
-#: The face space (``custom_metadata["Face Compat"]``) the ball's floors were fitted in: buffalo_s.  A
-#: feature that needs a calibrated floor (People, :func:`vtscore.datasets.people.people_cutoff`) has none
-#: in any other space; #5497 moves the floors into a file per space.
-FACE_BALL_COMPAT = "oss-arcface-mbf:1"
+#: (``docs/experiments/2026-10-30-face-ball-line-5478``).  The floors are cosines in one face space, and another
+#: space's do not transfer (buffalo_s's lose 0.65 to 0.76 on FaceNet, #5486), so each space's are fitted from
+#: its own faces and read from its entry (:func:`vtscore.media.face.face_ball.face_ball_for`, #5497).
 
 
 def face_uncalibrated_message(feature: str, compat: str | None) -> str:
     """What *feature* says in a face space (*compat*) its face ball has no floor for.
 
-    One wording for every face feature that reads the ball's floors (People today; the ball's own
-    warning from #5497), so the user meets the same sentence wherever the gap shows.
+    One wording for every face feature that reads the ball's floors (People, and the face crops' line
+    itself, :func:`vtscore.media.face.face_ball.warn_uncalibrated`), so the user meets the same
+    sentence wherever the gap shows.
     """
     space = f" ({compat})" if compat else ""
     return f"{feature} is not calibrated for this face embedder{space}."
@@ -261,17 +280,17 @@ def face_ball_holds(beta: float | None, n_goods: int) -> bool:
     return beta is not None and beta >= 1.0 and n_goods >= 2
 
 
-def face_ball_floor(beta: float, spread: float) -> float:
-    """The ball's cosine floor at *beta* for Goods of *spread* (:data:`FACE_BALL_FLOORS`, moved by the spread)."""
-    lo, hi = min(FACE_BALL_FLOORS), max(FACE_BALL_FLOORS)
-    x = (np.log(max(beta, lo)) - np.log(lo)) / (np.log(hi) - np.log(lo))
-    floor = FACE_BALL_FLOORS[lo] + x * (FACE_BALL_FLOORS[hi] - FACE_BALL_FLOORS[lo])
-    return float(floor + FACE_BALL_SLOPE * (spread - FACE_BALL_CENTRE))
+def face_ball_floor(beta: float, spread: float, compat: str | None) -> float | None:
+    """The ball's cosine floor at *beta* for Goods of *spread* in *compat*'s space, or ``None`` where it has no ball."""
+    from vtscore.media.face.face_ball import face_ball_for  # noqa: PLC0415
+
+    ball = face_ball_for(compat)
+    return None if ball is None else ball.floor(beta, spread)
 
 
 def needs_spread(rule: str | None) -> bool:
-    """Whether *rule*'s line reads the Goods' spread: a ball, or the face crops' line."""
-    return rule is not None and (rule == FACE_BALL_RULE or ball_rule(rule) is not None)
+    """Whether *rule*'s line reads the Goods' spread: a ball, or the face ball in a named space."""
+    return rule is not None and (is_face_ball_rule(rule) or ball_rule(rule) is not None)
 
 
 #: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759),
@@ -284,15 +303,29 @@ CENTROID_LINE_RULE = "count_gap_floor_skip25_b1"
 #: COCO Better's click 0 by 0.06-0.15, so it is the face crops' alone
 #: (``docs/experiments/2026-10-27-face-lines-5325/REPORT.md``).
 #: From #5478 the face crops' line is the ball from beta 1 up once there are two Goods (:data:`FACE_BALL_RULE`),
-#: and that count below it.
+#: and that count below it; in a face space with no ball (#5497) it is that count throughout.
 CENTROID_LINE_RULE_BY_MEDIA_TYPE: dict[str, str] = {"face": FACE_BALL_RULE}
 
 
-def centroid_line_rule(media_type: str | None) -> str:
+def centroid_line_rule(media_type: str | None, compat: str | None = None) -> str:
     """The rule the app draws *media_type*'s centroid line by: its own (:data:`CENTROID_LINE_RULE_BY_MEDIA_TYPE`),
     else :data:`CENTROID_LINE_RULE`, including for an unknown type.  The app's example sort and centroid head and
-    the eval harness's default centroid line all read it, so the default arm stays the app."""
-    return CENTROID_LINE_RULE_BY_MEDIA_TYPE.get(media_type or "", CENTROID_LINE_RULE)
+    the eval harness's default centroid line all read it, so the default arm stays the app.
+
+    The face crops' ball is drawn in the corpus's face space, *compat* (its ``Face Compat`` tag,
+    :func:`vtscore.media.face.face_ball.face_compat_of`): ``face_ball[<compat>]`` where that space has a ball
+    (:func:`vtscore.media.face.face_ball.face_ball_for`), else :data:`FACE_BALL_BELOW`, with a warning
+    that the face line is not calibrated there (#5497).
+    """
+    rule = CENTROID_LINE_RULE_BY_MEDIA_TYPE.get(media_type or "", CENTROID_LINE_RULE)
+    if rule != FACE_BALL_RULE:
+        return rule
+    from vtscore.media.face.face_ball import face_ball_for, warn_uncalibrated  # noqa: PLC0415
+
+    if compat and face_ball_for(compat) is not None:
+        return face_ball_rule(compat)
+    warn_uncalibrated(compat)
+    return FACE_BALL_BELOW
 
 
 #: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
@@ -347,12 +380,14 @@ def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
 
 
 def _ball_cut(rule: str, beta: float | None, spread: float | None) -> float | None:
-    """A ball's floor (#5478): :func:`ball_rule`'s, or the face crops' where it holds; ``None`` for a line drawn
-    over the cosines (every other rule, and the face crops' below beta 1 or with one Good)."""
-    if rule == FACE_BALL_RULE:
+    """A ball's floor (#5478): :func:`ball_rule`'s, or the face ball's where it holds; ``None`` for a line drawn
+    over the cosines (every other rule, and the face ball below beta 1, with one Good, or in a space whose
+    entry has gone)."""
+    compat = face_ball_compat(rule)
+    if compat is not None:
         if beta is None or spread is None or not face_ball_holds(beta, 2):
             return None
-        return face_ball_floor(beta, spread)
+        return face_ball_floor(beta, spread, compat)
     ball = ball_rule(rule)
     if ball is None:
         return None
@@ -373,8 +408,9 @@ def centroid_cut(
     ignore it, and ``text`` and the counts keep the guarded line without one.
     A ball (:func:`ball_rule`) is its floor, moved by *spread* (:func:`goods_spread`)
     when the rule has a slope; without a spread (one Good) it is the floor.  The face
-    crops' line (:data:`FACE_BALL_RULE`) is the ball (:func:`face_ball_floor`) from beta 1
-    up with a spread, else :data:`FACE_BALL_BELOW` over the cosines.
+    ball in a named space (:func:`face_ball_rule`) is that space's floor (:func:`face_ball_floor`)
+    from beta 1 up with a spread, else :data:`FACE_BALL_BELOW` over the cosines.  The bare
+    :data:`FACE_BALL_RULE` names no space and is refused.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
         _count_keep_line,
@@ -387,7 +423,7 @@ def centroid_cut(
     ball = _ball_cut(chosen, beta, spread)
     if ball is not None:
         return ball
-    if chosen == FACE_BALL_RULE:
+    if is_face_ball_rule(chosen):
         chosen = FACE_BALL_BELOW
     if chosen not in CENTROID_LINE_RULES:
         raise ValueError(f"unknown centroid line rule {chosen!r}; expected one of {CENTROID_LINE_RULES}")

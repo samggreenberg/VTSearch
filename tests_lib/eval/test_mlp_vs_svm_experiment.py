@@ -23,6 +23,7 @@ from vtscore.eval.voting_iterations import (
 )
 from vtscore.training.svm import train_svm
 
+from tests_shared.face_ball import face_ball_space  # noqa: F401
 from tests_shared.rows import assert_same_rows, drop_timing
 
 
@@ -374,14 +375,15 @@ class TestRankFrames:
         tp = round(row["recall"] * n_pos)
         return round(tp / row["precision"]) if row["precision"] > 0 else 0
 
-    def test_centroid_steps_record_their_frames(self):
+    def test_centroid_steps_record_their_frames(self, face_ball_space):  # noqa: F811
         """#5527: a click whose Test is the Goods' centroid leaves its frame, cut where Test cuts it."""
-        from vtscore.detectors.centroid_head import FACE_BALL_RULE
+        from tests_shared.face_ball import COMPAT
+        from vtscore.detectors.centroid_head import face_ball_rule
 
         steps = tuple(range(1, 21))
         sink: list = []
         # From beta 1 up with two Goods the face ball holds (#5478): every click past that is the centroid's.
-        rows = self._run(steps, sink, label_quota=True, centroid_line=FACE_BALL_RULE, beta=1.0)
+        rows = self._run(steps, sink, label_quota=True, centroid_line=face_ball_rule(COMPAT), beta=1.0)
         # Before the first Bad there is no calibration pass to read, on either tier.
         by_t = {
             r["t"]: r
@@ -397,10 +399,11 @@ class TestRankFrames:
                 f"click {t}: the frame keeps the row's set"
             )
 
-    def test_recording_centroid_frames_does_not_change_the_run(self):
-        from vtscore.detectors.centroid_head import FACE_BALL_RULE
+    def test_recording_centroid_frames_does_not_change_the_run(self, face_ball_space):  # noqa: F811
+        from tests_shared.face_ball import COMPAT
+        from vtscore.detectors.centroid_head import face_ball_rule
 
-        knobs = {"label_quota": True, "centroid_line": FACE_BALL_RULE, "beta": 1.0}
+        knobs = {"label_quota": True, "centroid_line": face_ball_rule(COMPAT), "beta": 1.0}
         plain = self._run(None, None, **knobs)
         recorded = self._run(tuple(range(1, 21)), [], **knobs)
         assert_same_rows(drop_timing(plain), drop_timing(recorded))

@@ -94,6 +94,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The face search line is calibrated per face embedder** (issue #5497). The face crops' line from two photos
+  at a balance of 1 or more (the cosine floor around a person's photos) used one embedder's numbers whatever
+  embedder made the faces. Each face embedder now has its own, fitted from a labelled face set by
+  `scripts/data/fit_face_ball.py` and kept in `face_ball.json` beside the face models. A Face dataset from an
+  embedder without them keeps the line from before the floor, and a warning says the face search line is not
+  calibrated for that embedder. Nothing changes on the GRID's default face models (buffalo_s), whose numbers
+  are the ones that shipped.
+
 - **Find Results lists its hits in a grid like the Dashboard's** (issue #5584). Click a column heading to sort by it
   (Score, highest first, to start), click it again to turn the order round, drag a heading onto another to reorder
   the columns, and drag the line between two to resize them; the order is kept across sessions. The **Columns**

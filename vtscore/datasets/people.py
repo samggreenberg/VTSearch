@@ -131,16 +131,15 @@ class NothingToPartition(ValueError):
 def people_cutoff(compat: str | None) -> float | None:
     """The cosine a face must clear to a person's centroid in *compat*'s space, or ``None``.
 
-    The face ball's beta 1 floor for the space (:data:`~vtscore.detectors.centroid_head.FACE_BALL_FLOORS`,
-    fitted in :data:`~vtscore.detectors.centroid_head.FACE_BALL_COMPAT`), unmoved by a spread.
-    ``None`` for a space the ball has no floor for, which gets no partition.  The one place the cut is
-    read, so #5497's per-compat floors change this body and nothing else.
+    The face ball's beta 1 floor in the space's own entry
+    (:func:`~vtscore.media.face.face_ball.face_ball_for`, #5497), unmoved by a spread.
+    ``None`` for a space the ball has no floor for, or does not use (a no-go entry), which gets no
+    partition.  The one place the cut is read.
     """
-    from vtscore.detectors.centroid_head import FACE_BALL_COMPAT, FACE_BALL_FLOORS  # noqa: PLC0415
+    from vtscore.media.face.face_ball import face_ball_for  # noqa: PLC0415
 
-    if not compat or compat != FACE_BALL_COMPAT:
-        return None
-    return float(FACE_BALL_FLOORS[1.0])
+    ball = face_ball_for(compat)
+    return None if ball is None else ball.floor(1.0, ball.centre)
 
 
 def not_calibrated_message(compat: str | None) -> str:
@@ -532,14 +531,9 @@ def dataset_compat(ctx: DatasetContext) -> str | None:
     face embedder refuses to mix spaces in a dataset, so a mixed one has no
     space a cut could be in.
     """
-    from vtscore.media.face.imagekit_bridge import COMPAT_METADATA_KEY  # noqa: PLC0415
+    from vtscore.media.face.face_ball import face_compat_of  # noqa: PLC0415
 
-    tags = {
-        str(tag)
-        for media in list(ctx.medias.values())
-        if (tag := (media.get("custom_metadata") or {}).get(COMPAT_METADATA_KEY))
-    }
-    return next(iter(tags)) if len(tags) == 1 else None
+    return face_compat_of(list(ctx.medias.values()))
 
 
 def _face_matrix(ctx: DatasetContext) -> tuple[list[int], np.ndarray]:
