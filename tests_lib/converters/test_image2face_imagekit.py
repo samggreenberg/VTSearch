@@ -186,3 +186,77 @@ class TestRunnerCarryThrough:
         for mid, media in medias.items():
             np.testing.assert_array_equal(media["embeddings"]["face"], before[mid])
             assert media["embedder"] == "face"
+
+
+def _record(box, quality, compat="oss-arcface-mbf:1", landmarks=None, conf=0.9):
+    vec = np.zeros(512, np.float32)
+    vec[0] = quality
+    return FaceRecord.from_detection(FaceDetection(box, landmarks, conf), vec, compat, "p.png", 0)
+
+
+class TurningPipeline:
+    """A sideways face: weak in the photo as given, strong once the photo is turned a quarter.
+
+    The photo is 200 wide and 100 high; the face sits at (50, 20)-(90, 80).
+    Turned a quarter anticlockwise (``np.rot90``) that box is (20, 110)-(80, 150).
+    """
+
+    def __init__(self, upright_quality=12.0, turned_quality=24.0, compat="oss-arcface-mbf:1", turned_box=None):
+        self.shapes: list[tuple] = []
+        self.upright_quality, self.turned_quality, self.compat = upright_quality, turned_quality, compat
+        self.turned_box = turned_box or (20, 110, 80, 150)
+
+    def process(self, image, *, confidence_threshold=None, media_id=""):
+        self.shapes.append(image.shape)
+        turn = len(self.shapes) - 1
+        if turn == 0:
+            return [_record((50, 20, 90, 80), self.upright_quality, self.compat, LM)]
+        if turn == 1:
+            return [_record(self.turned_box, self.turned_quality, self.compat, LM, conf=0.95)]
+        return [_record((10, 10, 40, 40), 30.0, self.compat)]  # some other face, elsewhere
+
+    def compatibility(self):
+        return self.compat
+
+
+class TestUprightRetry:
+    """A low-quality face is looked for again in the photo turned (#5373)."""
+
+    IMAGE = np.zeros((100, 200, 3), np.uint8)
+
+    def test_the_best_turn_replaces_a_low_face_in_the_upright_frame(self):
+        pipe = TurningPipeline()
+        (rec,) = bridge.process_upright(pipe, self.IMAGE, media_id="p.png")
+        assert pipe.shapes == [(100, 200, 3), (200, 100, 3), (100, 200, 3), (200, 100, 3)]
+        assert rec.quality == pytest.approx(24.0) and rec.confidence == pytest.approx(0.95)
+        assert rec.bbox == pytest.approx((50.0, 20.0, 90.0, 80.0))
+        # The landmarks come back to the upright photo too: the first one, (60, 60) turned, is (140, 60).
+        assert rec.landmarks[0] == pytest.approx([140.0, 60.0])
+
+    def test_a_face_above_the_cut_costs_one_call(self):
+        pipe = TurningPipeline(upright_quality=bridge.UPRIGHT_RETRY_QUALITY["oss-arcface-mbf:1"] + 0.1)
+        (rec,) = bridge.process_upright(pipe, self.IMAGE)
+        assert len(pipe.shapes) == 1 and rec.bbox == (50.0, 20.0, 90.0, 80.0)
+
+    def test_a_space_with_no_cut_is_never_retried(self):
+        pipe = TurningPipeline(compat="fake:1")
+        (rec,) = bridge.process_upright(pipe, self.IMAGE)
+        assert len(pipe.shapes) == 1 and rec.quality == pytest.approx(12.0)
+
+    def test_a_turned_face_elsewhere_or_not_clearly_better_is_not_taken(self):
+        elsewhere = TurningPipeline(turned_box=(0, 0, 30, 30))
+        assert bridge.process_upright(elsewhere, self.IMAGE)[0].quality == pytest.approx(12.0)
+        weaker = TurningPipeline(turned_quality=11.0)
+        assert bridge.process_upright(weaker, self.IMAGE)[0].quality == pytest.approx(12.0)
+        # A gain under the space's minimum is noise: half the time it matches the person worse.
+        slight = TurningPipeline(turned_quality=12.0 + bridge.UPRIGHT_MIN_GAIN["oss-arcface-mbf:1"] - 0.1)
+        assert bridge.process_upright(slight, self.IMAGE)[0].quality == pytest.approx(12.0)
+
+    def test_the_converter_crops_the_turned_face_upright(self, monkeypatch):
+        pipe = TurningPipeline()
+        monkeypatch.setattr(bridge, "_pipeline", pipe)
+        monkeypatch.setattr(bridge, "_compat", "oss-arcface-mbf:1")
+        conv = Image2FaceMediaConverter()
+        (out,) = conv.convert_normalized({"filename": "p.png", "media_bytes": _png(200, 100)}, _params())
+        assert out["custom_metadata"]["Face Quality"] == pytest.approx(24.0)
+        assert out[SOURCE_BOX_FIELD] == pytest.approx([0.25, 0.2, 0.45, 0.8])

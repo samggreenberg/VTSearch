@@ -129,7 +129,7 @@ class ImagekitFaceEmbedder(MediaEmbedder):
         except Exception:
             logger.exception("Error decoding face crop")
             return None
-        records = self._model.process(image, media_id=str(media.get("id", "")))
+        records = bridge.process_upright(self._model, image, media_id=str(media.get("id", "")))
         if not records:
             logger.warning(
                 "imagekit face provider found no face in crop %r", media.get("origin_name") or media.get("id")
