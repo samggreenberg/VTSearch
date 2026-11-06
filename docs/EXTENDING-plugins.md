@@ -637,6 +637,7 @@ to the framework.
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
 | `origin_display()` | `(origin: dict) -> str` | Human-readable string for an origin dict |
+| `describe_origin_param()` | `(key: str, value: str) -> str` | Word one origin param's value for the dataset Stats window, which labels each row with your field's own `label`. Default: `Yes` / `No` for a checkbox, a media type's name, `source_specs` as the converters run (`"Images → Faces"`), anything else as recorded. Override to name a value you record as an id (the demo importer names its demo); return `""` to leave the row out, and call `super()` for the keys you leave alone |
 | `can_reload_from_origin()` | `(origin: dict) -> bool` | Whether data can be re-loaded from an origin. Default: `True` |
 | `reload_from_origin()` | `(origin: dict) -> dict | None` | Extract field_values from an origin for re-import |
 | `resolve_file()` | `(origin, origin_name, filename) -> Path | None` | Resolve a media file from origin info. Default: `None` |

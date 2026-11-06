@@ -141,6 +141,20 @@ class DemoDatasetImporter(ImporterBase):
             clipper_params=clipper_params,
         )
 
+    def describe_origin_param(self, key: str, value: str) -> str:
+        """Name the demo by its catalogue label and the converter by its display name."""
+        if key == "name":
+            from vtscore.datasets.config import DEMO_DATASETS
+
+            entry = DEMO_DATASETS.get(value) or {}
+            return str(entry.get("label") or value)
+        if key == "converter":
+            from vtscore.converters import get_converter
+
+            converter = get_converter(value)
+            return (converter.display_name if converter is not None else "") or value
+        return super().describe_origin_param(key, value)
+
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
         return f"demo:{params.get('name', '')}"

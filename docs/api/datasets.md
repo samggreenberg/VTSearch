@@ -785,6 +785,17 @@ does while it covers the grid up.
 
 `expires_at` is `null` when the dataset never ages off. `clipper` is the
 clipper's display name, `""` for a media type's default clipper.
+`embedder_display_name` is `embedder`'s display name (`""` when none is
+recorded), and `importer_display_name` the display name of `source`'s importer.
+
+`source_rows` is `source.params` worded for display, in recorded order:
+`[{"key", "label", "value", "description"}]`, labelled with the importer's own
+field labels and worded by its `describe_origin_param()` (`Yes` / `No` for a
+checkbox, a media type's name, and `source_specs` as the converters the import
+ran: `"Images → Faces"`, labelled `Include media`). Empty values are left out,
+as are a `media_type` that is the dataset's own and `source_specs` that only
+include the dataset's own type. `source` itself is the raw re-import recipe,
+unchanged.
 
 `file_type_counts` keys are file types, not necessarily filename extensions:
 each item is typed by its filename extension when it has one, and otherwise by

@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`ImporterBase.describe_origin_param(key, value)`, and `vtscore.datasets.importers.origin_rows`** (issue #5617). The
+  dataset Stats window now lists a dataset's origin params worded for a person, not as the re-import recipe they are
+  stored as. `origin_rows(origin, media_type=...)` returns one frozen `OriginRow(key, label, value, description)` per
+  param, in recorded order: labelled with the importer's own field `label` (`"Include subfolders"`, not `recursive`),
+  `INCLUDE_MEDIA_LABEL` for `source_specs`, and the key spelled out for one that names no field. Each value is worded
+  by the importer's new `describe_origin_param` hook, whose default (`describe_origin_value`) reads a checkbox as
+  `Yes` / `No`, `media_type` as the type's name and `source_specs` as the converters it ran (`describe_source_specs`:
+  `"Images → Faces"`, with any parameter moved off its default). A hook returning `""` leaves the row out, as do an
+  empty value, a `media_type` that is the dataset's own and `source_specs` that only include the dataset's own type.
+  The demo importer overrides it to name its demo and converter. `importer_display_name(name)` reads an importer's
+  display name, falling back to the name. Additive: an importer that does not override the hook gets the default, and
+  nothing changes what an origin stores or how a reload reads it.
+
 - **`vtscore.datasets.people`: a Face dataset's faces merged into people** (issue #5586). `fit_people` merges
   the face vectors at the face ball's beta 1 floor (`people_cutoff(compat)`; `None`, and so no partition, outside the
   space the floors were fitted in): a 20-nearest-neighbour graph, centroid linkage on the unit sphere within each

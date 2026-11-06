@@ -2341,6 +2341,41 @@ class TestDatasetRegistryStats:
         assert data["ingest_started_at"] == 1700000000.0
         assert data["embedder"] == "clap"
 
+    def test_creation_rows_are_worded_for_display(self, client):
+        """#5617: the importer and its params read as words, not as the recipe."""
+        from vtscore.datasets.importers import get_importer
+
+        source = get_importer("server_folder").build_origin(
+            {
+                "path": "/data/photos",
+                "media_type": "face",
+                "source_specs": [{"source_type": "image", "converter": "image2face", "params": {}}],
+            }
+        )
+        entry = self._register(media_type="face", source=source)
+        data = client.get(f"/api/datasets/registry/{entry['id']}/stats").get_json()
+
+        assert data["source"] == source  # the raw recipe is still served as stored
+        assert data["importer_display_name"] == get_importer("server_folder").display_name
+        rows = {row["key"]: (row["label"], row["value"]) for row in data["source_rows"]}
+        assert rows["path"] == ("Folder or archive", "/data/photos")
+        assert rows["recursive"] == ("Include subfolders", "Yes")
+        assert rows["source_specs"] == ("Include media", "Images → Faces")
+        assert "media_type" not in rows  # the Type row already says Face
+
+    def test_embedder_is_named_by_its_display_name(self, client):
+        from vtscore.media import get_embedder
+
+        data = client.get(f"/api/datasets/registry/{self._register()['id']}/stats").get_json()
+        assert data["embedder"] == "clap"
+        assert data["embedder_display_name"] == get_embedder("clap").display_name
+
+    def test_a_dataset_without_a_source_has_no_creation_rows(self, client):
+        data = client.get(f"/api/datasets/registry/{self._register(embedder='')['id']}/stats").get_json()
+        assert data["importer_display_name"] == ""
+        assert data["source_rows"] == []
+        assert data["embedder_display_name"] == ""
+
     def test_never_expiring_dataset_reports_null_expiry(self, client):
         entry = self._register()
         resp = client.get(f"/api/datasets/registry/{entry['id']}/stats")
