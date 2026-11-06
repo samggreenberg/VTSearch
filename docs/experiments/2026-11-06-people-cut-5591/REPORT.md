@@ -26,7 +26,8 @@ Measured on buffalo_s (`fhibe_faces_ik_{1024,640}__face`), every arm fitted by
 `vtscore.datasets.people.fit_people` itself. The average-linkage arm swaps the module's
 `_centroid_linkage` for scipy's average linkage for the length of the fit. Everything else (the neighbour
 graph, the reassignment, the hard-view attachment, the ordering) is the shipped code. Scripts:
-`scripts/experiments/people_cut_5591/`. Every arm's numbers: `arms.csv`.
+`scripts/experiments/people_cut_5591/`. Every arm's numbers are in `arms.csv`, archived to the
+`experiments-data` release (`python scripts/experiments/study_data.py fetch 2026-11-06-people-cut-5591`).
 
 ## The measures
 
