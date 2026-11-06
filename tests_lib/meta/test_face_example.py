@@ -101,8 +101,8 @@ class TestTheModels:
         assert fixture.EMBEDDER_CONFIG.is_file()
 
     def test_the_space_is_the_calibrated_one(self):
-        """The People cut exists only in buffalo_s's space, so the shots need these models."""
-        from vtscore.detectors.centroid_head import FACE_BALL_COMPAT
+        """The People cut is fitted in buffalo_s's space (#5497's practice entry), so the shots need these models."""
+        from tests_shared.face_ball import COMPAT
 
         compat = json.loads(_fixture().EMBEDDER_CONFIG.read_text(encoding="utf-8"))["model"]["compatibility"]
-        assert compat == FACE_BALL_COMPAT
+        assert compat == COMPAT

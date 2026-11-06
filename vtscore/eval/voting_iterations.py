@@ -90,8 +90,10 @@ from vtscore.detectors.centroid_head import (
     CENTROID_LINE_RULES,
     CENTROID_THRESHOLD,
     FACE_BALL_RULE,
+    centroid_line_rule,
     face_ball_holds,
     is_centroid_line_rule,
+    is_face_ball_rule,
 )
 from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
@@ -3100,13 +3102,16 @@ def production_centroid_line(clips_dict: dict[int, dict[str, Any]]) -> str:
 
     :func:`~vtscore.detectors.centroid_head.centroid_line_rule` of the first
     media's ``media_type``, as :func:`production_spot_check` reads it: face
-    crops' own rule, else the app's
+    crops' own rule, in the medias' face space (#5497: the ball where that
+    space has one, else the count from before it), else the app's
     (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
     """
     from vtscore.detectors.centroid_head import centroid_line_rule  # noqa: PLC0415
+    from vtscore.media.face.face_ball import face_compat_of  # noqa: PLC0415
 
     first = next(iter(clips_dict.values()), None) if clips_dict else None
-    return centroid_line_rule(first.get("media_type") if isinstance(first, dict) else None)
+    media_type = first.get("media_type") if isinstance(first, dict) else None
+    return centroid_line_rule(media_type, face_compat_of(clips_dict) if media_type == "face" else None)
 
 
 def _fits_from_typed_query(fn: Any) -> Any:
@@ -3431,9 +3436,12 @@ def simulate_voting_iterations(  # noqa: C901
         centroid_line: The rule the Goods' centroid's line is drawn by under
             the quota (#4732), one of
             :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, at
-            the run's *beta*.  ``None`` - the default - is the app's for
-            these medias (:func:`production_centroid_line`: face crops' own
-            rule, else :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
+            the run's *beta*, or the face ball: ``"face_ball[<compat>]"`` in a
+            named space, or ``"face_ball"`` in the medias' own (#5497), which
+            is the count from before the ball where that space has none.
+            ``None`` - the default - is the app's for these medias
+            (:func:`production_centroid_line`: face crops' own rule, else
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
             Inert without the quota.
         centroid_line_variants: Extra centroid rows to price other lines on
             the same session (#4732): each ``"<rule>@<beta>"`` adds, at every
@@ -4088,8 +4096,13 @@ def simulate_voting_iterations(  # noqa: C901
     flow_good_dry_run = _resolve_dry_knob("good_dry_run", good_dry_run, MORE_DRY_RUN)
     dry_bad_quota = _resolve_dry_knob("quota_dry_bads", quota_dry_bads, DRY_BAD_QUOTA)
     line_variants = parse_centroid_line_variants(centroid_line_variants)
-    if centroid_line is not None and centroid_line not in CENTROID_LINE_RULES:
-        raise ValueError(f"centroid_line must be one of {CENTROID_LINE_RULES} or None; got {centroid_line!r}")
+    if centroid_line is not None and not (
+        centroid_line in CENTROID_LINE_RULES or centroid_line == FACE_BALL_RULE or is_face_ball_rule(centroid_line)
+    ):
+        raise ValueError(
+            f"centroid_line must be one of {CENTROID_LINE_RULES}, {FACE_BALL_RULE!r} or "
+            f"'{FACE_BALL_RULE}[<compat>]', or None; got {centroid_line!r}"
+        )
     if good_dry_run is not None and startup_schedule is not None:
         raise ValueError("good_dry_run sets the app's own Good phase; a startup schedule owns the opening")
     knobs = _resolve_run_knobs(
@@ -4639,6 +4652,11 @@ def simulate_voting_iterations(  # noqa: C901
         spot_check = production_spot_check(clips_dict)
     if centroid_line is None:
         centroid_line = production_centroid_line(clips_dict)
+    elif centroid_line == FACE_BALL_RULE:
+        # The face ball in the medias' own face space, or the count from before it where that space has none (#5497).
+        from vtscore.media.face.face_ball import face_compat_of  # noqa: PLC0415
+
+        centroid_line = centroid_line_rule("face", face_compat_of(clips_dict))
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     if weak_phase not in ("any", "learned"):
@@ -5341,7 +5359,7 @@ def simulate_voting_iterations(  # noqa: C901
         # Past the quota too where the face crops' ball holds (#5478, the app's face_ball_tier):
         # from beta 1 up with two Goods, Test gives the Goods' centroid cut by the ball.
         centroid = quota_centroid or (
-            quota_on and centroid_line == FACE_BALL_RULE and face_ball_holds(beta, len(good_votes))
+            quota_on and is_face_ball_rule(centroid_line) and face_ball_holds(beta, len(good_votes))
         )
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
         # the quota too while the query holds on a single-vector space (#4736), but the

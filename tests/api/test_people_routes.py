@@ -23,11 +23,11 @@ import pytest
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.datasets import people as pp
 from vtscore.datasets.registry import register_dataset
-from vtscore.detectors.centroid_head import FACE_BALL_COMPAT, FACE_BALL_FLOORS
+from tests_shared.face_ball import COMPAT, FLOORS, face_ball_space  # noqa: F401
 from vtscore.media.face.imagekit_bridge import COMPAT_METADATA_KEY, HARD_VIEW_QUALITY, QUALITY_METADATA_KEY
 from vtscore.state.core import DatasetContext, register_context, unregister_context
 
-SPACE = FACE_BALL_COMPAT
+SPACE = COMPAT
 GOOD_Q = HARD_VIEW_QUALITY[SPACE] + 10.0
 HARD_Q = HARD_VIEW_QUALITY[SPACE] - 5.0
 D = 32
@@ -171,6 +171,12 @@ def _fit_seeing(face_id: int, axis: int):
     return fit
 
 
+@pytest.fixture(autouse=True)
+def _space_with_a_ball(face_ball_space):  # noqa: F811
+    """buffalo_s's entry in ``face_ball.json``: the space People cuts in (#5497)."""
+    return face_ball_space
+
+
 @pytest.fixture
 def faces(tmp_path) -> _Faces:
     return _Faces(tmp_path)
@@ -186,7 +192,7 @@ class TestList:
             {"id": 3, "face_count": 1, "photo_count": 1, "representative": 7},
         ]
         assert (body["unplaced"], body["unplaced_ids"]) == (1, [8])
-        assert body["cutoff"] == pytest.approx(FACE_BALL_FLOORS[1.0])
+        assert body["cutoff"] == pytest.approx(FLOORS[1.0])
         assert (body["compat"], body["method"], body["linkage"]) == (SPACE, pp.PEOPLE_METHOD, pp.PEOPLE_LINKAGE)
         assert isinstance(body["partition"], str) and body["partition"]
 
