@@ -120,6 +120,14 @@ export class CenterPanelComponent implements OnDestroy {
    * and no region is drawn, since such a vote carries none.
    */
   readonly hostVotes = input(false);
+  /**
+   * The active detector is a received, read-only copy (Train only): the
+   * Good / Bad buttons are disabled with a line saying so and a Fork, and the
+   * vote keys, undo and redo do nothing, since each would change its labels.
+   * Navigation still works. The server's 409 `detector_read_only` stays the
+   * backstop (`errorInterceptor`).
+   */
+  readonly readOnly = input(false);
   /** The host's vote on the item on screen, under {@link hostVotes}. */
   readonly hostVote = input<'good' | 'bad' | null>(null);
   readonly mediaVoted = output<{
@@ -135,6 +143,9 @@ export class CenterPanelComponent implements OnDestroy {
    * selection the walk moves.
    */
   readonly navigateRequested = output<NavDirection>();
+
+  /** The read-only line's Fork (see {@link readOnly}); the host makes the copy. */
+  readonly forkRequested = output<void>();
 
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
@@ -315,7 +326,7 @@ export class CenterPanelComponent implements OnDestroy {
     this.keyboard.action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((action) => {
       switch (action.type) {
         case 'vote':
-          if (this.media() && action.direction && !this.disabled() && !this.exhausted()) {
+          if (this.media() && action.direction && !this.disabled() && !this.exhausted() && !this.readOnly()) {
             this.castVote(action.direction);
           }
           break;
@@ -351,10 +362,10 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         case 'undo':
-          if (!this.disabled() && !this.isVoting() && !this.hostVotes()) this.voteState.undo();
+          if (!this.disabled() && !this.isVoting() && !this.hostVotes() && !this.readOnly()) this.voteState.undo();
           break;
         case 'redo':
-          if (!this.disabled() && !this.isVoting() && !this.hostVotes()) this.voteState.redo();
+          if (!this.disabled() && !this.isVoting() && !this.hostVotes() && !this.readOnly()) this.voteState.redo();
           break;
       }
     });
@@ -538,7 +549,7 @@ export class CenterPanelComponent implements OnDestroy {
 
   castVote(vote: 'good' | 'bad'): void {
     const media = this.media();
-    if (!media || this.isVoting() || this.exhausted()) return;
+    if (!media || this.isVoting() || this.exhausted() || this.readOnly()) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
     // A no-vote with a box drawn arms a sticky discard-confirm state; the first

@@ -1,6 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
+import { isLinked } from '../utils/detector-sharing';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 
@@ -55,4 +56,13 @@ export class ActiveDetectorService {
   /** Display name of the selected detector; `''` when unknown (nothing
    *  selected, or the registry hasn't resolved the id yet). */
   readonly detectorName = computed(() => this.detector()?.name ?? '');
+
+  /**
+   * True while the selected detector is a received, read-only copy
+   * (`sync_mode: linked`): its labels change only when its owner's do, so the
+   * Train view disables voting up front and offers a fork. `false` while the
+   * registry is still resolving; the server's 409 `detector_read_only` is the
+   * backstop for that window (`errorInterceptor`).
+   */
+  readonly readOnly = computed(() => isLinked(this.detector()));
 }

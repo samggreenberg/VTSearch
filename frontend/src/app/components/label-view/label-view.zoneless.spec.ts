@@ -18,6 +18,10 @@ import { EmbedderCapabilityService } from '../../services/embedder-capability.se
 import type { EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ContextSwitchService } from '../../services/context-switch.service';
+import { DatasetStateService } from '../../services/dataset-state.service';
+import { DetectorSharingFlowsService } from '../../services/detector-sharing-flows.service';
+import { ToastService } from '../../services/toast.service';
 import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { KeyboardService } from '../../services/keyboard.service';
@@ -1781,6 +1785,67 @@ describe('LabelViewComponent', () => {
       const put = httpMock.expectOne('/api/detectors/my-det/examples');
       expect(put.request.body).toEqual({ examples: [{ type: 'media', value: 'x.png', labeled: false }] });
       put.flush({ success: true, name: 'my-det', examples: put.request.body.examples });
+    });
+  });
+
+  describe('a received, read-only detector (#5578)', () => {
+    const linked = {
+      id: 'det1',
+      name: 'Cats',
+      sync_mode: 'linked',
+      sharing: { remote_ref: 'c-1', source_name: 'team', remote_owner: 'ana' },
+    };
+    const fork = { id: 'det2', name: 'Cats (fork)', sync_mode: 'forked', sharing: null };
+
+    /** Answer every registry read in flight with *detectors*. */
+    function answerRegistry(detectors: unknown[]): void {
+      httpMock.match('/api/datasets/registry').forEach((req) => req.flush({ datasets: [] }));
+      httpMock.match('/api/detectors/registry').forEach((req) => req.flush({ detectors }));
+    }
+
+    it('disables voting up front, refuses a grid vote with a Fork, and opens voting again in the fork', async () => {
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+      flushInitialRequests();
+      TestBed.inject(DatasetStateService).refresh();
+      answerRegistry([linked]);
+      await settleResource();
+
+      const center = fixture.debugElement.query(By.directive(CenterPanelComponent))
+        .componentInstance as CenterPanelComponent;
+      expect(center.readOnly()).toBe(true);
+      // Autopilot only asks for votes: its tab is off, and says why.
+      const autopilotTab = (Array.from(fixture.nativeElement.querySelectorAll('.left-tab')) as HTMLElement[]).find(
+        (b) => b.textContent?.includes('Autopilot'),
+      ) as HTMLButtonElement;
+      expect(autopilotTab.disabled).toBe(true);
+      expect(autopilotTab.title).toContain('Read-only: fork to edit');
+
+      // A vote from a grid card or the Labels panel: refused before any request.
+      const toast = TestBed.inject(ToastService);
+      component.onHoverVote({ id: 1, vote: 'good' });
+      expect(httpMock.match((req) => req.method === 'POST' && req.url.includes('vote'))).toEqual([]);
+      expect(toast.toasts.at(-1)?.message).toContain('Read-only: fork to edit');
+      expect(toast.toasts.at(-1)?.action?.label).toBe('Fork');
+
+      // The fork lands, from wherever it was started: Train follows the copy
+      // once the registry lists it.
+      const switchTo = vi.spyOn(TestBed.inject(ContextSwitchService), 'switchTo').mockImplementation(() => undefined);
+      const forked = TestBed.inject(DetectorSharingFlowsService).fork({ id: 'det1', name: 'Cats' });
+      httpMock
+        .expectOne('/api/detectors/registry/det1/fork')
+        .flush({ ok: true, message: "Forked 'Cats' as 'Cats (fork)'.", detector: fork, remote_sync: null });
+      await forked;
+      expect(switchTo).not.toHaveBeenCalled();
+      answerRegistry([linked, fork]);
+      // `detectors$` is the registry signal through `toObservable`: an effect.
+      await settleResource();
+      expect(switchTo).toHaveBeenCalledWith('ds1', 'det2');
+
+      // The switch promotes the copy; its voting is open.
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'det2');
+      await settleResource();
+      expect(center.readOnly()).toBe(false);
+      expect(autopilotTab.title).not.toContain('Read-only');
     });
   });
 

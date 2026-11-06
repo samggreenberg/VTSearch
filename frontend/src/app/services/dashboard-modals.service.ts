@@ -37,6 +37,13 @@ export interface AutoExportState {
   detectorName: string;
 }
 
+/** The detector-sharing dialog (Share…): who a detector is shared with. */
+export interface ShareState {
+  open: boolean;
+  detectorId: string;
+  detectorName: string;
+}
+
 export interface DetectorStatsState {
   open: boolean;
   detectorId: string;
@@ -89,6 +96,12 @@ export class DashboardModalsService {
     detectorName: '',
   });
 
+  private readonly shareSubject = new BehaviorSubject<ShareState>({
+    open: false,
+    detectorId: '',
+    detectorName: '',
+  });
+
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
   readonly export$ = this.exportSubject.asObservable();
@@ -96,6 +109,7 @@ export class DashboardModalsService {
   readonly stats$ = this.statsSubject.asObservable();
   readonly detectorStats$ = this.detectorStatsSubject.asObservable();
   readonly autoExport$ = this.autoExportSubject.asObservable();
+  readonly share$ = this.shareSubject.asObservable();
 
   get combineDatasets(): CombineDatasetsState {
     return this.combineDatasetsSubject.value;
@@ -123,6 +137,10 @@ export class DashboardModalsService {
 
   get autoExport(): AutoExportState {
     return this.autoExportSubject.value;
+  }
+
+  get share(): ShareState {
+    return this.shareSubject.value;
   }
 
   openCombineDatasets(datasets: DatasetRegistryEntry[]): void {
@@ -179,5 +197,16 @@ export class DashboardModalsService {
 
   closeAutoExport(): void {
     this.autoExportSubject.next({ open: false, detectorId: '', detectorName: '' });
+  }
+
+  /** Open Share… for a detector. The card's "Share…" verb and its
+   *  "Remote sync failed" link both land here; the dialog itself reads
+   *  {@link share} (the share dialog, #5579). */
+  openShare(detectorId: string, detectorName: string): void {
+    this.shareSubject.next({ open: true, detectorId, detectorName });
+  }
+
+  closeShare(): void {
+    this.shareSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 }

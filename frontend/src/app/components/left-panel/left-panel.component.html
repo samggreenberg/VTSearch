@@ -210,7 +210,9 @@
           [attr.aria-selected]="activeTab() === 'autopilot'"
           [disabled]="autopilotDisabled()"
           (click)="setTab('autopilot')"
-          [title]="autopilotDisabled()
+          [title]="readOnly()
+            ? 'Read-only: fork to edit. Autopilot asks for votes, and this received detector\'s labels are its owner\'s.'
+            : autopilotDisabled()
             ? 'Autopilot needs a way to start its first sort. This dataset\'s embedder can\'t search by text, so label a few good and bad examples in Manual mode to enable it.'
             : 'Autopilot guides you through labeling in phases: good examples, bad examples, refining the good/bad cutoff, and covering a broad mix of items.'"
         ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
@@ -330,7 +332,13 @@
       </div>
     } @else {
       <div class="tab-panel-autopilot" [class.collapsed]="folded()" role="tabpanel" aria-label="Autopilot mode">
-        @if (autopilotOnly() && autopilotDisabled() && !folded()) {
+        @if (autopilotOnly() && readOnly() && !folded()) {
+          <p class="info-text autopilot-blocked-note" role="note">
+            Read-only: fork to edit. Autopilot asks for votes, and this detector is a
+            received copy whose labels are its owner's. Fork it from the Dashboard, or
+            with the Fork under the Good and Bad buttons.
+          </p>
+        } @else if (autopilotOnly() && autopilotDisabled() && !folded()) {
           <!-- No Manual to fall back to (#4666): say why nothing is running.
                Collapsed, the panel keeps its strip and the toggle that opens it. -->
           <p class="info-text autopilot-blocked-note" role="note">

@@ -4,12 +4,17 @@ import {
   HttpEventType,
   HttpInterceptorFn,
 } from '@angular/common/http';
-import { inject } from '@angular/core';
+import { Injector, inject } from '@angular/core';
 import { catchError, tap, throwError } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
+import { DatasetStateService } from '../services/dataset-state.service';
+import { DetectorSharingFlowsService } from '../services/detector-sharing-flows.service';
 import { PairRecoveryService } from '../services/pair-recovery.service';
 import { ErrorContext, ToastService } from '../services/toast.service';
+
+/** The `error_code` of the 409 a received, read-only detector answers a change with. */
+const DETECTOR_READ_ONLY = 'detector_read_only';
 
 /**
  * Opt out of the global error toast for a single request.
@@ -55,12 +60,19 @@ export const SKIP_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
  * one that opted out of the toast, since any request can be the first to find
  * that the backend has lost the active pair. A 409 that service answers by
  * loading the pair again (#5155) raises no toast.
+ *
+ * A 409 `detector_read_only` (a change to a received detector that the UI's
+ * own read-only gating did not stop) gets a toast of its own, with a Fork
+ * action, instead of the generic error: the way out is a copy of one's own.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const ctx = inject(ActiveContextService);
   const connection = inject(ConnectionStateService);
   const pairRecovery = inject(PairRecoveryService);
+  // Resolved only when a Fork is clicked: the flows service reaches the
+  // network through `HttpClient`, which this interceptor is part of.
+  const injector = inject(Injector);
 
   // Circuit breaker: while offline, suppress every request except the
   // recovery probe. Returns a synthetic status-0 error so callers'
@@ -103,6 +115,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => err);
       }
       const parsed = parseErrorBody(err);
+      if (err.status === 409 && parsed.extra?.['error_code'] === DETECTOR_READ_ONLY) {
+        toastReadOnly(toast, injector, parsed);
+        return throwError(() => err);
+      }
       const requestId =
         parsed.requestId || err.headers?.get('X-Request-Id') || undefined;
       const datasetId = req.headers.get('X-Dataset-Id') || ctx.datasetId || undefined;
@@ -135,6 +151,30 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
     }),
   );
 };
+
+/**
+ * The read-only refusal's toast: the server's sentence, and a Fork of the
+ * detector it names (`detector_id` in the body). One toast however many
+ * refused requests were in flight.
+ */
+function toastReadOnly(toast: ToastService, injector: Injector, parsed: ParsedBody): void {
+  const detectorId = parsed.extra?.['detector_id'];
+  const id = typeof detectorId === 'string' ? detectorId : '';
+  toast.warning({
+    message: parsed.message || 'This detector is a received, read-only copy; fork it to change it.',
+    action: id
+      ? {
+          label: 'Fork',
+          title: 'Make a copy of your own that you can edit',
+          onClick: () => {
+            const name = injector.get(DatasetStateService).detectorById().get(id)?.name;
+            void injector.get(DetectorSharingFlowsService).fork({ id, name }, { askName: true });
+          },
+        }
+      : undefined,
+    dedupKey: `http:409:${DETECTOR_READ_ONLY}:${id}`,
+  });
+}
 
 interface ParsedBody {
   message?: string;

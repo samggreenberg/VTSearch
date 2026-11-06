@@ -129,10 +129,16 @@ export class VtDialogService {
    * A question with its own set of answers, for a dialog that offers more
    * than yes or no. Resolves the clicked button's value. Escape and backdrop
    * dismissal resolve the first non-primary button's, so list the
-   * "not now" answer first.
+   * "not now" answer first. `detail` is the line under the question that
+   * explains the choice, as in {@link confirmDestructive}.
    */
-  choose<T>(message: string, buttons: readonly DialogButton<T>[], type: DialogType = 'info'): Promise<T> {
-    return this.show({ message, type, showInput: false, buttons: [...buttons] }) as Promise<T>;
+  choose<T>(
+    message: string,
+    buttons: readonly DialogButton<T>[],
+    type: DialogType = 'info',
+    detail = '',
+  ): Promise<T> {
+    return this.show({ message, detail, type, showInput: false, buttons: [...buttons] }) as Promise<T>;
   }
 
   prompt(message: string, defaultValue = '', type: DialogType = 'info'): Promise<string | null> {

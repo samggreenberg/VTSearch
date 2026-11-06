@@ -121,9 +121,11 @@
       [isGood]="isGood"
       [isBad]="isBad"
       [disabled]="isVoting() || disabled()"
+      [readOnly]="readOnly()"
       [spinningVote]="spinningVote()"
       [hint]="voteHint()"
       (voted)="castVote($event)"
+      (fork)="forkRequested.emit()"
     ></vt-voting-overlay>
 
     <div class="metadata-tray" [class.collapsed]="!showMetadata()">
