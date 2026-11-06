@@ -1,4 +1,5 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
+import { PEOPLE_MEDIA_TYPE } from '../../utils/people';
 import { isLinked, sharingNote, type SharingEntry } from '../../utils/detector-sharing';
 
 /**
@@ -7,7 +8,8 @@ import { isLinked, sharingNote, type SharingEntry } from '../../utils/detector-s
  * point. The Actions column renders only the two universal verbs inline (Load
  * when unloaded, Delete); the ⋯ overflow button reuses this same list but drops
  * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
- * Rename, Stats, dataset-only Run AutoFind, and detector-only Import Labels /
+ * Rename, Stats, dataset-only Run AutoFind and (on a Face dataset) People, and
+ * detector-only Import Labels /
  * Export labels, plus Edit-access in multi-user mode — rather than repeating
  * icons already visible in the row, plus Auto-export… on a detector whose
  * labels sync to a labelset source, and the detector-sharing verbs (Share…,
@@ -65,6 +67,11 @@ const ICON = {
   autoExport: svg(
     '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 8a4 4 0 0 1 0 8"/>' +
       '<polyline points="9 15 12 12 15 15"/><line x1="12" y1="12" x2="12" y2="21"/>',
+  ),
+  // Two heads, the nearer one in front: a Face dataset's people (#5590).
+  people: svg(
+    '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>' +
+      '<path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
   ),
   // Three linked nodes: the detector handed to other people.
   share: svg(
@@ -137,7 +144,10 @@ function securityItem(access: CardMenuAccess): ContextMenuItem {
  * Dataset menu. ``autofindDetectorCount`` is how many of the user's AutoFind
  * detectors are for this dataset's media type: "Run AutoFind" runs them now
  * (loading the dataset first if it isn't), and is disabled - with the reason
- * as its tooltip - when there are none to run.
+ * as its tooltip - when there are none to run. A Face dataset also gets
+ * "People" beside "Browse dataset": its faces merged into people, and who
+ * appears with whom (#5590). No other media type has people, so no other
+ * dataset is offered it.
  */
 export function buildDatasetCardMenuItems(
   dataset: { loaded?: boolean; media_type?: string } | undefined,
@@ -149,6 +159,14 @@ export function buildDatasetCardMenuItems(
     items.push({ id: 'load', label: 'Load dataset', title: 'Load dataset', iconSvg: ICON.load });
   }
   items.push({ id: 'browse', label: 'Browse dataset', title: 'Browse dataset', iconSvg: ICON.browse });
+  if (dataset?.media_type === PEOPLE_MEDIA_TYPE) {
+    items.push({
+      id: 'people',
+      label: 'People',
+      title: "The people in this dataset's faces, and who appears with whom in its photos",
+      iconSvg: ICON.people,
+    });
+  }
   items.push({
     id: 'autofind',
     label: 'Run AutoFind',

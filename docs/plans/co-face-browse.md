@@ -120,10 +120,10 @@ chose the message (2026-11-05), so nothing plausible-but-wrong is shown.
 
 ### Where the view lives
 
-A **new dataset-only view**, `/people/:datasetId`, beside Browse in the route
-table, entered from the dataset card's menu (a **People** item, offered on a
-Face dataset only) and from Browse's toolbar on a Face dataset. Not a layer on
-the Browse canvas, and not a modal (the owner's call, 2026-11-05):
+The view shipped in #5590 as `/people/:datasetId`, beside Browse
+([FRONTEND.md](../FRONTEND.md#people-view-componentspeople-view)). It is a
+separate view, not a layer on the Browse canvas and not a modal (the owner's
+call, 2026-11-05):
 
 - The Browse map already lays faces out in identity space, so a person is
   already a blob there; what the map cannot show is a relation between blobs.
@@ -134,35 +134,8 @@ the Browse canvas, and not a modal (the owner's call, 2026-11-05):
   photo and back, and wants the ranking-sized panel the Train view gives a
   list.
 
-The view is three panes, in the Browse view's layout idiom:
-
-- **People list** (left, virtual-scrolled, as `vt-browse-selection-panel`
-  scrolls): one row per person, the representative's thumbnail, `N faces ·
-  M photos`; sorted by faces, with a filter for a minimum count so the long
-  tail of one-face people folds away. An **Unplaced** row at the end holds
-  the faces in no person.
-- **Person** (centre): the person's faces as a thumbnail grid,
-  `vt-browse-bin-member-grid` reused as the bin details panel reuses it, the
-  representative first; clicking a face shows it large with its metadata,
-  as the bin details pane does.
-- **Appears with** (right): the people who share a photo with this person,
-  each with the shared count and their representative, most shared first;
-  and under the selected co-person, the shared photos. A photo renders as
-  `vt-photo-grid` renders a collapsed row — the photo with every face in it
-  outlined — with the outlines coloured per person (this person, the
-  co-person, anyone else), and opens in `vt-source-photo-modal`, extended
-  from one outline to several.
-
-An unloaded Image sibling is handled as Collapse to photos handles it: the
-photo strip offers to load it through `SiblingLoadService`, and the people
-list and faces grid need no sibling at all. Hover previews, `OnPush`,
-signals and `rxResource` follow `docs/FRONTEND.md`'s rules; the view gets a
-component-provided state service as Browse does.
-
-**Rebuild people** sits in the toolbar as **Rebuild Map** does in Browse,
-for a partition fit before a cut change. There is no strictness slider in
-the first version: the cut is the app's own, and a slider would invite a
-partition that disagrees with Find.
+There is no strictness slider: the cut is the app's own, and a slider would
+invite a partition that disagrees with Find.
 
 ### What the view does not do
 

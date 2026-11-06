@@ -91,8 +91,9 @@ active context in the URL:
 | `/label/:datasetId/:detectorId` | `activeContextGuard` | Labeling / training |
 | `/tune/:datasetId/:detectorId` | `activeContextGuard` | Tune (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
+| `/people/:datasetId` | `peopleContextGuard` | A Face dataset's people and who appears with whom |
 
-Bare `/label`, `/tune`, `/browse` (and anything unmatched) redirect to
+Bare `/label`, `/tune`, `/browse`, `/people` (and anything unmatched) redirect to
 `/dashboard`: a half-specified pair is not a representable state, so there is
 nothing to render. The legacy `/find/…` and `/test/…` pair paths redirect to
 `/tune/…`.
@@ -146,7 +147,7 @@ Two rules keep this navigable:
 
 ## 3. Feature areas and their boundaries
 
-Four routed views, plus the shared chrome. Their boundaries are worth knowing
+Five routed views, plus the shared chrome. Their boundaries are worth knowing
 because they determine which service a new piece of state belongs to.
 
 ### Dashboard (`components/dashboard/`)
@@ -328,6 +329,40 @@ as bins split and merge across zoom levels) — both provided on `browse-view`,
 not root — plus the root `TileCacheService`,
 `BrowsePrepService` (load + project before navigating), and
 `ProjectionApiService`.
+
+### People view (`components/people-view/`)
+
+A Face dataset's people (#5590): its faces merged into persons, each one's
+faces, and who they appear with in the photos the faces were cut from. The
+data model and routes are in [ARCHITECTURE.md](ARCHITECTURE.md#derived-media-converter-and-clipper-provenance)
+beside Collapse to photos; the design is `docs/plans/co-face-browse.md`.
+Three panes, as Browse lays its out: the people list (left, virtual-scrolled,
+with a minimum-face filter and an **Unplaced** row last), the person (centre:
+the face shown large over `vt-browse-bin-member-grid` with `selectable` off,
+so a click shows a face rather than selecting it), and **Appears with**
+(right: the co-people, and the photos the two share with every face outlined
+by its `OutlineRole`, which open in `vt-source-photo-modal` with the same
+boxes).
+
+- **Entry.** The Dashboard card's **People** item goes through the root
+  `PeoplePrepService`, which loads the dataset and waits for the partition
+  with progress on the card's row, as `BrowsePrepService` waits for the map.
+  Browse's **People** button goes straight to the route: its dataset is
+  loaded, and the view polls a fit still running. Both are offered on a Face
+  dataset only, and `peopleContextGuard` bounces any other.
+- **State** is the component-provided `PeopleViewStateService`. The list is
+  imperative (`GET /api/people`, polled with `pollUntil` while `building`;
+  Rebuild people is a POST answering the same way); the person and the shared
+  photos are `rxResource`s keyed by the pick **and the partition**, so a new
+  list re-reads both.
+- **A person id is a rank in one partition.** A per-person read answering 409
+  `people_changed` reads the list again and picks the same person anew by
+  their representative face, or no one. An id is never carried into a
+  partition it was not read from.
+- **The photos are the Image sibling's**, read with `mediaUrlIn` while the
+  Face dataset stays active; an unloaded sibling is offered through
+  `SiblingLoadService`, as Collapse to photos offers it. Nothing else in the
+  view needs the sibling.
 
 ### Shared chrome
 
@@ -677,7 +712,9 @@ otherwise holds activation on `ContextSwitchService.applyActivePair(...)`. An
 *incompatible* pair (mismatched media types) is allowed through — the
 `vt-incompatible-pair-explainer` overlay is a legitimate UI state.
 
-`browseContextGuard` is the dataset-only variant, with one carve-out:
+`browseContextGuard` is the dataset-only variant (built by
+`datasetContextGuard`, which `peopleContextGuard` shares, refusing any dataset
+but a Face one), with one carve-out:
 ephemeral detector-positive contexts (`__detpos__<id>`) are built server-side,
 are deliberately absent from the registry, and skip the checks. The guard
 still makes the map the active dataset, so a reload names it as the
@@ -1076,8 +1113,9 @@ per-instance state or a component-bound lifetime is the point.  The complete
 list today: `LabelViewPanelStateService` and `SortRunnerService`
 (`label-view`), `PairScopeService` (`label-view`, `find-view`),
 `LineTestSessionService` (`find-view`), `BrowseViewportService` /
-`BrowseSelectionService` (`browse-view`), and `SiblingLoadService`
-(`photo-grid`, `source-photo-modal`).
+`BrowseSelectionService` (`browse-view`), `PeopleViewStateService`
+(`people-view`), and `SiblingLoadService` (`photo-grid`,
+`source-photo-modal`, `people-view`).
 
 ---
 

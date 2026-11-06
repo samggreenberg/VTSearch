@@ -22,6 +22,16 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **People: a Face dataset's people, and who appears with whom** (issue #5590). A new view, opened from a Face
+  dataset's **⋯** menu (**People**) or its Browse toolbar, shows the dataset's faces merged into people at the cut Find
+  uses. The left pane lists everyone, the most faces first, with a minimum-face filter and an **Unplaced** row for the
+  faces that matched no one; the middle shows a person's faces, one large with its details; the right lists who shares
+  a photo with them and, for the one picked, the photos the two share, every face outlined by whose it is (the person,
+  the one they appear with, anyone else). A photo opens large in Show in photo with the same outlines. The first
+  opening finds the people with progress on the dataset's row; **Rebuild people** finds them again. The photos need
+  the Image dataset the import made, which the view offers to load; a face embedder with no calibrated cut shows a
+  message instead of people.
+
 - **Detector sharing, behind the `detector_sharing_source` setting** (issue #5577). A server whose admin names a
   sharing source in `detector_sharing_source` can share detectors through it: share one of yours with people or
   groups, or publicly, and every change to its labels reaches them; receive a detector shared with you as a

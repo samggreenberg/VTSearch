@@ -233,6 +233,49 @@ describe('DatasetCardComponent', () => {
     expect(component.browse.emit).toHaveBeenCalled();
   });
 
+  it('offers People beside Browse on a Face dataset only, and emits it (#5590)', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    const labels = () => Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+
+    // The audio dataset above has no people.
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    expect(labels()).not.toContain('People');
+    component.dismissContextMenu();
+
+    vi.spyOn(component.people, 'emit');
+    fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: 'face' });
+    await settleZoneless(fixture);
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    expect(labels()).toEqual(['Browse dataset', 'People', 'Run AutoFind', 'Rename', 'Stats']);
+    Array.from(el.querySelectorAll<HTMLElement>('.menu-item'))
+      .find((b) => b.textContent?.trim() === 'People')!
+      .click();
+    expect(component.people.emit).toHaveBeenCalled();
+  });
+
+  it("keeps the actions column beside a people fit's bar, with the face waggling there", async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: 'face' });
+    fixture.componentRef.setInput('taskKind', 'people');
+    fixture.componentRef.setInput('loadingTask', {
+      status: 'building',
+      message: 'Finding people among 40 faces…',
+      current: 3,
+      total: 10,
+      task_id: '__peopleprep__d1',
+      name: '',
+      created_at: 0,
+      dataset_id: 'd1',
+      error: '',
+    });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Finding people');
+    const waggle = el.querySelector('.actions-col .card-icon-btn');
+    expect(waggle?.getAttribute('title')).toBe('Finding people…');
+  });
+
   it('should format dates', () => {
     expect(component.formatDate(1700000000)).toMatch(/\d/);
     expect(component.formatDate(null)).toBe('-');

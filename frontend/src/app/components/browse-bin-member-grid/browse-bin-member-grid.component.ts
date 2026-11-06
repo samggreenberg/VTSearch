@@ -60,7 +60,9 @@ const FALLBACK_VIEWPORT_PX = 400;
 })
 export class BrowseBinMemberGridComponent implements OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly selection = inject(BrowseSelectionService);
+  /** Absent outside Browse: the People view shows faces, it does not select
+   *  them (see {@link selectable}). */
+  private readonly selection = inject(BrowseSelectionService, { optional: true });
   private readonly metadataCache = inject(MediaMetadataCacheService);
   private readonly activeContext = inject(ActiveContextService);
   private readonly mediaTypeCaps = inject(MediaTypeCapabilityService);
@@ -86,6 +88,13 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
   readonly emptyHintHidden = input(false);
   /** The viewed item — shown in the shell's detail pane and ringed here. */
   readonly focusedId = input<number | null>(null);
+  /** Whether a click selects (Browse's bin details) or only shows the item
+   *  large (the People view's faces, #5590). Off, the select-all control and
+   *  the selected state are not drawn; ``entryClick`` still fires, and the
+   *  host decides what it means. */
+  readonly selectable = input(true);
+  /** What the count names (``item``/``items`` in a bin, ``face`` in People). */
+  readonly countNoun = input('item');
 
   /** An entry was activated (click, or Enter/Space on the focused entry). The
    *  shell owns the selection toggle, since its detail pane shares it. */
@@ -145,6 +154,7 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
    *  view repaints when the selection changes anywhere (here, the canvas, the
    *  selection panel) — see the reactivity note on the class. */
   isSelected(id: number): boolean {
+    if (!this.selectable() || !this.selection) return false;
     this.selection.version();
     return this.selection.has(id);
   }
@@ -159,6 +169,7 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
   /** Tri-state of the select-all control: how many members are selected, as
    *  none / some / all — mirroring the dashboard's master-checkbox states. */
   get selectionState(): 'none' | 'some' | 'all' {
+    if (!this.selectable() || !this.selection) return 'none';
     this.selection.version();
     const total = this.ids().length;
     if (total === 0) return 'none';
@@ -171,6 +182,7 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
   /** Select every member, or — when all are already selected — clear them.
    *  Matches the dashboard's toggle-all semantics. */
   toggleAll(): void {
+    if (!this.selection) return;
     if (this.selectionState === 'all') {
       this.selection.removeAll(this.ids());
     } else {
@@ -197,6 +209,12 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
   name(id: number): string {
     this.metadataCache.version();
     return this.metadataCache.get(id)?.filename || `Clip #${id}`;
+  }
+
+  /** An entry's accessible name: what it is, and what a click on it does. */
+  entryLabel(id: number): string {
+    if (!this.selectable()) return `${this.name(id)} (click to show it large)`;
+    return this.name(id) + (this.isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)');
   }
 
   hasThumbnailUrl(id: number): boolean {

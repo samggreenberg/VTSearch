@@ -189,6 +189,20 @@ describe('PairRecoveryService', () => {
       expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
     });
 
+    // #5590: People is the other view of a dataset alone.
+    it('loads the pair again on the People view of its dataset, naming the dataset alone', () => {
+      router.url = '/people/ds1';
+      expect(service.absorb(notLoaded('dataset', 'ds1'), 0)).toBe(true);
+      expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+      landReload();
+      expect(toast.success.mock.calls[0][0].message).toBe('o365_better is loaded again');
+    });
+
+    it("leaves a 409 to the ordinary toast on another dataset's People", () => {
+      router.url = '/people/other-ds';
+      expect(service.absorb(notLoaded('dataset', 'ds1'), 0)).toBe(false);
+    });
+
     it('sends the tab to the Dashboard when the reload fails', () => {
       router.url = '/browse/ds1';
       service.absorb(notLoaded('dataset', 'ds1'), 0);

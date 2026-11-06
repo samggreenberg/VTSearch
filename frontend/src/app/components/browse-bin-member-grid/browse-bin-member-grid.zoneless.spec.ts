@@ -1,7 +1,12 @@
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TestBed } from '@angular/core/testing';
+
 import { BrowseBinMemberGridComponent } from './browse-bin-member-grid.component';
+import { configureZoneless } from '../../testing/zoneless-testbed';
+import { settleResource } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Contracts the member grid took over from ``BrowseBinPopupComponent`` when it
@@ -162,5 +167,34 @@ describe('BrowseBinMemberGridComponent (keyboard focus sync)', () => {
     // acts on the viewed item) can't also fire and cancel this toggle.
     expect(event.stopPropagation).toHaveBeenCalled();
     expect(emitted).toEqual([42]);
+  });
+});
+
+/**
+ * The People view (#5590) reuses the grid for a person's faces, where a click
+ * shows a face large rather than selecting it, and there is no Browse
+ * selection to select into.
+ */
+describe('BrowseBinMemberGridComponent (not selectable)', () => {
+  it('draws no select-all, needs no selection service, and says what a click does', async () => {
+    configureZoneless({ imports: [BrowseBinMemberGridComponent], providers: [...provideHttpTesting()] });
+    const fixture = TestBed.createComponent(BrowseBinMemberGridComponent);
+    fixture.componentRef.setInput('ids', [1, 2, 3]);
+    fixture.componentRef.setInput('rows', [[1, 2, 3]]);
+    fixture.componentRef.setInput('columns', 3);
+    fixture.componentRef.setInput('selectable', false);
+    fixture.componentRef.setInput('countNoun', 'face');
+    // The grid asks for its entries' metadata, which keeps the app unstable
+    // while it is out; drain a macrotask rather than wait for stability.
+    await settleResource();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.bin-popup-select-all')).toBeNull();
+    expect(el.querySelector('.bin-popup-count')?.textContent?.trim()).toBe('3 faces');
+    const grid = fixture.componentInstance;
+    expect(grid.isSelected(1)).toBe(false);
+    expect(grid.selectionState).toBe('none');
+    expect(grid.entryLabel(1)).toBe('Clip #1 (click to show it large)');
+    fixture.destroy();
   });
 });
