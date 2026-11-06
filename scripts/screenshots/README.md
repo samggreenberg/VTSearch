@@ -78,9 +78,10 @@ after the last, so no Smiley shot's Dashboard lists it. It is:
   default `data/models/`). It checks the zip and both models against their
   pinned SHA-256 and writes a `face.json` beside them. `refresh.sh` runs it
   before it starts its app, and starts the app with `IMAGEKIT_FACE_CONFIG`
-  naming that file, so every shot is taken with Face on and the same models.
-  That covers the Smiley shots too: Add Dataset offers Face only on a server
-  with face models.
+  naming that file, so every shot is taken with Face on and the same models,
+  and none depends on whether the machine has face models (Add Dataset's
+  Multi-Dataset rows offer Face only on a server with them; no Smiley shot
+  showed a change when Face came on).
 - **Imported as the guide imports it**: one Folder import with Multi-Dataset's
   Image (SigLIP) and Face rows, giving `Celebrities in Context – Image` (80
   photos) and `Celebrities in Context – Face` (253 faces, 129 people). A face

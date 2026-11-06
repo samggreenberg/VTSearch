@@ -36,10 +36,11 @@
 # the app is pointed at them with IMAGEKIT_FACE_CONFIG (and this package's own
 # provider, IMAGEKIT_FACE_PROVIDER=oss), so every shot is taken with Face on and
 # the same models on every machine, whatever face.json the models folder holds.
-# The face shots need them, and the Smiley shots of Add Dataset offer Face only
-# when the server has them. A failed fetch stops the run, saying what is
-# missing (the weights are non-commercial research only, so they are fetched,
-# never committed).
+# The face shots need them, and with Face on for every shot none depends on
+# whether the machine has face models (Add Dataset's Multi-Dataset rows offer
+# Face only on a server with them). A failed fetch stops the run, saying what
+# is missing (the weights are non-commercial research only, so they are
+# fetched, never committed).
 #
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's

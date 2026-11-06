@@ -136,7 +136,7 @@ def _fetch_pack(folder: Path) -> None:
         download_file_atomic(BUFFALO_S_URL, archive, 0, lambda *_args: None)
     except Exception as exc:
         raise FixtureError(
-            f"could not download the buffalo_s face models from {BUFFALO_S_URL}: {exc}. "
+            f"could not download the buffalo_s face models from {BUFFALO_S_URL}: {str(exc).rstrip('.')}. "
             f"Fetch the zip by hand, check its SHA-256 is {BUFFALO_S_SHA256}, and put "
             f"{', '.join(MODEL_SHA256)} in {folder}."
         ) from exc
@@ -198,7 +198,7 @@ def ensure_photos() -> Path:
     try:
         images = download_celebrity_together([p["path"] for p in photos])
     except Exception as exc:
-        raise FixtureError(f"could not download the Celebrities in Context photos: {exc}") from exc
+        raise FixtureError(f"could not download the Celebrities in Context photos: {str(exc).rstrip('.')}.") from exc
     if PHOTOS.exists():
         shutil.rmtree(PHOTOS)
     for photo in photos:
