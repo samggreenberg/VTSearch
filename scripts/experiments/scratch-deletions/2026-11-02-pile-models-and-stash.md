@@ -9,7 +9,8 @@ cache entry, so it downloads again the first time anything asks for it. No job w
   `embedder_siglip2.py`). **Rebuild:** `scripts/experiments/pile/prefetch_models.py`, or let the embedder download them.
 - **`models/hub/models--IDEA-Research--grounding-dino-tiny`**, **`…--mm_grounding_dino_large_o365v2_oiv6_goldg`**,
   **`…--mm_grounding_dino_tiny_o365v1_goldg_v3det`** (2.6 GB): #5395's GroundingDINO zero-shot study, which ships
-  nothing. No code on `dev` names these models. **Rebuild:** the study branch downloads them on first use.
+  nothing. The only code on `dev` that names them is the study's launcher,
+  `scripts/experiments/state_of_app/gdino_5395.sh`. **Rebuild:** that launcher downloads them on first use.
 - **`datadir/models/models--google--siglip-base-patch16-224`** (782 MB): a second copy of the shipped SigLIP. It was
   downloaded into the datadir by a run that set `VTSEARCH_DATA_DIR` without `VTSEARCH_MODELS_DIR`. The pile's own
   copy in `models/` stays.
