@@ -87,7 +87,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
+from vtsearch.schemas.common import OriginRowSchema, PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.datasets.registry import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
@@ -577,6 +577,24 @@ class DetectorRegistryStatsResponseSchema(Schema):
     # The label importer that created the detector, its fields and when
     # (#5334); ``None`` for a detector made any other way.
     imported = fields.Nested(DetectorImportRecordSchema, required=True, allow_none=True)
+    # The Import section's rows, worded for a person (#5620): the label
+    # importer's display name, and the fields it ran with under its own labels.
+    importer_display_name = fields.String(
+        required=True,
+        metadata={
+            "description": "The display name of ``imported``'s label importer; empty when no importer created the detector."
+        },
+    )
+    imported_rows = fields.List(
+        fields.Nested(OriginRowSchema),
+        required=True,
+        metadata={
+            "description": (
+                "``imported.params`` worded for display, in recorded order; empty when no importer created the "
+                "detector. Empty values are left out."
+            )
+        },
+    )
 
 
 class DetectorBrowsePositivesResponseSchema(Schema):

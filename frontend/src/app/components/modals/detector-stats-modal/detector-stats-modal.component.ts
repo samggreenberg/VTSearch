@@ -7,8 +7,8 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
-import { originParamRows, type OriginParamRow } from '../../../utils/origin-params';
 import { NO_VALUE } from '../../../utils/no-value';
+import type { OriginRow } from '../../../generated/api-client/models/origin-row';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
@@ -66,9 +66,21 @@ export class DetectorStatsModalComponent implements OnInit {
     return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
-  /** The fields the detector's label importer ran with, one row each. */
-  get importParams(): OriginParamRow[] {
-    return originParamRows(this.stats()?.imported?.params);
+  /** The label importer's display name, as the New Detector › Trained picker names it. */
+  get importerName(): string {
+    const s = this.stats();
+    return s?.importer_display_name || s?.imported?.importer || '';
+  }
+
+  /** The fields the detector's label importer ran with, labelled and worded
+   *  by the server (#5620), the way the dataset Stats window's rows are. */
+  get importParams(): OriginRow[] {
+    return this.stats()?.imported_rows ?? [];
+  }
+
+  /** The row's tooltip: the importer field's description, else its raw key. */
+  paramTitle(row: OriginRow): string {
+    return row.description || `Importer field: ${row.key}`;
   }
 
   close(): void {

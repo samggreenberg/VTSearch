@@ -20,6 +20,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **The detector Stats window's Import section reads as words too** (issue #5620). A detector made from imported
+  labels (**New Detector › Trained**) listed its importer and fields as recorded: `Importer: server_json_file`,
+  `Filepath: /data/labels/cats.json`. It now uses the import form's own names and labels, as the dataset window does
+  (#5617): `Importer: Server JSON File`, `Server path: /data/labels/cats.json`, and a checkbox as `Yes` / `No`.
+  Hovering a row shows the field's description.
+
 ## 2026-11-06
 
 ### Changed

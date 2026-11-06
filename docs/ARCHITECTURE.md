@@ -174,7 +174,8 @@ VTSearch/
 │   ├── state/              DatasetContext / DetectorContext and their registries (core.py),
 │   │                       votes and click times, current user, coverage wiring
 │   ├── timing/             Per-step weights that pace each progress bar
-│   ├── plugins/            PluginBase, PluginField, PluginRegistry; inventory.py (--list-plugins)
+│   ├── plugins/            PluginBase, PluginField, PluginRegistry; inventory.py (--list-plugins);
+│   │                       origin_rows.py (a recorded form as a Stats window's rows)
 │   ├── security/           Path / URL / archive / pickle safety, the LoginProvider ABC
 │   ├── sync.py             SyncSource generic base
 │   ├── utils/              Shared helpers
