@@ -536,7 +536,8 @@ images), or mount it anywhere and set `IMAGEKIT_FACE_CONFIG`.
 **The face search line is calibrated per face space.** From two starting photos at a balance of 1 or more,
 Find and Test keep every face whose cosine to the Goods' centroid clears a floor (the *face ball*), and the
 floors are cosines in one embedder's space. They live beside the pack, in `face_ball.json` in the same
-`imagekit` directory, one entry per compat tag, and are not in the repo. A face space with no entry (or an
+directory as the pipeline config in use (the `imagekit` directory above, or beside the file
+`IMAGEKIT_FACE_CONFIG` names), one entry per compat tag, and are not in the repo. A face space with no entry (or an
 entry whose fit found the ball no better than the line before it) keeps that line, and the app shows a
 warning that the face search line is not calibrated for that embedder. People needs the same entry. Fit one
 from a labelled face set your provider embedded, with each face's person in its `categories`:
@@ -545,9 +546,10 @@ from a labelled face set your provider embedded, with each face's person in its 
 python scripts/data/fit_face_ball.py --medias <set>.pkl [<set2>.pkl ...] --people <people.txt> --corpus "<name>"
 ```
 
-The script writes to `$VTSEARCH_MODELS_DIR/imagekit/face_ball.json` (`--out` elsewhere, `--dry-run` to only
-print), keeping the other spaces' entries; the entry records its go/no-go check and how it was fitted. A
-pack moved to another server takes its `face_ball.json` with it.
+The script writes beside the pipeline config in use, `$VTSEARCH_MODELS_DIR/imagekit/face_ball.json` by default
+(`--out` elsewhere, `--dry-run` to only print), keeping the other spaces' entries; the entry records its go/no-go
+check and how it was fitted. A pack moved to another server takes its `face_ball.json` with it, and a config
+named elsewhere is read with the `face_ball.json` beside *it*, not the models folder's.
 
 The face models run on the device `VTSEARCH_DEVICE` resolves to, which needs `onnxruntime-gpu` for
 CUDA. `docker/Dockerfile.gpu` and a CUDA `scripts/install.sh` install it in place of the CPU

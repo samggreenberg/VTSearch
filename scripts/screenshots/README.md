@@ -76,7 +76,13 @@ after the last, so no Smiley shot's Dashboard lists it. It is:
   space People shows no one. `face_fixture.py models` downloads the zip once
   (about 128 MB) into `<models>/imagekit-buffalo_s/` (`VTSEARCH_MODELS_DIR`,
   default `data/models/`). It checks the zip and both models against their
-  pinned SHA-256 and writes a `face.json` beside them. `refresh.sh` runs it
+  pinned SHA-256 and writes a `face.json` beside them, and a `face_ball.json`
+  holding buffalo_s's face ball: the app reads the face search line's floors,
+  and the People cut, beside the pipeline config in use, and a space with no
+  entry has no people (#5621). The entry is #5497's shipped buffalo_s fit,
+  pinned in `face_fixture.py` (`FACE_BALL_ENTRY`) the way the models are, since
+  the real file is a calculated asset on the GRID; the test suite pins the same
+  floors. `refresh.sh` runs it
   before it starts its app, and starts the app with `IMAGEKIT_FACE_CONFIG`
   naming that file, so every shot is taken with Face on and the same models,
   and none depends on whether the machine has face models (Add Dataset's

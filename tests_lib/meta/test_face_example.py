@@ -14,6 +14,8 @@ refresh, when it fails a shot:
 - Every face the JavaScript names (the votes, the face the Train shot serves)
   and the shared photo the People shot opens is cut from a photo in the slice.
 - The pipeline config names exactly the models whose hashes are pinned.
+- The pack carries the face ball the app reads beside its config (#5621): the
+  shipped buffalo_s entry, the same floors the test suite pins.
 
 So they are checked here, without a browser, an app or a download.
 """
@@ -104,5 +106,26 @@ class TestTheModels:
         """The People cut is fitted in buffalo_s's space (#5497's practice entry), so the shots need these models."""
         from tests_shared.face_ball import COMPAT
 
-        compat = json.loads(_fixture().EMBEDDER_CONFIG.read_text(encoding="utf-8"))["model"]["compatibility"]
-        assert compat == COMPAT
+        fixture = _fixture()
+        compat = json.loads(fixture.EMBEDDER_CONFIG.read_text(encoding="utf-8"))["model"]["compatibility"]
+        assert compat == COMPAT == fixture.FACE_COMPAT
+
+    def test_the_pack_carries_the_shipped_ball(self, tmp_path, monkeypatch):
+        """An app pointed at the pack finds buffalo_s's ball beside its config, so People has people (#5621).
+
+        The floors are the ones the suite pins (`tests_shared.face_ball`), #5497's shipped entry, so
+        the shots show the deployed cut and neither copy can drift without the other.
+        """
+        from tests_shared.face_ball import CENTRE, COMPAT, FLOORS, SLOPE
+        from vtscore.media.face import face_ball
+        from vtscore.media.face.imagekit_bridge import CONFIG_ENV_VAR
+
+        config = _fixture().write_pack_configs(tmp_path / "imagekit-buffalo_s")
+        assert config.is_file() and (config.parent / "arcface_mbf.json").is_file()
+        monkeypatch.setenv(CONFIG_ENV_VAR, str(config))
+        face_ball.reset_for_tests()
+        assert face_ball.face_ball_path() == config.parent / face_ball.FACE_BALL_NAME
+        ball = face_ball.face_ball_for(COMPAT)
+        assert ball is not None and ball.use
+        assert ball.betas == {beta: (floor, SLOPE) for beta, floor in FLOORS.items()}
+        assert ball.centre == CENTRE
