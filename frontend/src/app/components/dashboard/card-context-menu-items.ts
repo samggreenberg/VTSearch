@@ -1,5 +1,6 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
 import { isLinked, sharingNote, type SharingEntry } from '../../utils/detector-sharing';
+import { PEOPLE_MEDIA_TYPE } from '../../utils/people-media-type';
 
 /**
  * Builds the action menu for the dashboard's dataset and detector rows. The
@@ -119,10 +120,6 @@ const INLINE_CARD_ACTION_IDS: ReadonlySet<string> = new Set(['load', 'delete']);
 export function overflowMenuItems(items: ContextMenuItem[]): ContextMenuItem[] {
   return items.filter((item) => !INLINE_CARD_ACTION_IDS.has(item.id));
 }
-
-/** The one media type whose datasets have people (``PEOPLE_MEDIA_TYPES`` in
- *  ``vtscore/datasets/people.py``): a Face dataset's crops. */
-export const PEOPLE_MEDIA_TYPE = 'face';
 
 export interface CardMenuAccess {
   /** True when running without real auth; access-control actions are hidden. */

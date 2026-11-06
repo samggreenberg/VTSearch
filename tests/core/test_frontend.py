@@ -311,6 +311,19 @@ class TestEagerBundleComposition:
             "budget in frontend/angular.json rather than deleting this."
         )
 
+    def test_card_menu_is_not_eager(self):
+        # The detector card's Browse label is written only in
+        # `card-context-menu-items.ts`, which the lazy Dashboard imports.
+        assert "Browse this detector's positives" not in self._eager_bundle_text(), (
+            "The dashboard card menu (card-context-menu-items.ts) is in the EAGER bundle.\n"
+            "Something on the eager path imports from it -- most likely a route guard,\n"
+            "which app.routes.ts loads eagerly. The People guard once took\n"
+            "PEOPLE_MEDIA_TYPE from it and put the bundle over budget; a constant a\n"
+            "guard needs belongs in a module of its own (utils/people-media-type.ts).\n"
+            "If the eager import is genuinely required, re-audit the budget in\n"
+            "frontend/angular.json rather than deleting this."
+        )
+
 
 class TestVersionEndpoint:
     """GET /api/version should return the app version string."""

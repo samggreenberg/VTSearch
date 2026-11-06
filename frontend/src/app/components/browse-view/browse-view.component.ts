@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, Eleme
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { PEOPLE_MEDIA_TYPE } from '../dashboard/card-context-menu-items';
+import { PEOPLE_MEDIA_TYPE } from '../../utils/people-media-type';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
