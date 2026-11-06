@@ -250,7 +250,16 @@ To clear the detector's own binding (it then follows the default again):
 → `{"ok": true, "message": "..."}` (the message counts any labels it restored)
 
 400 if a value is missing or not allowed, 403 unless the caller created the
-detector, 404 if the detector or `source_name` is unknown.
+detector, 404 if the detector or `source_name` is unknown. 409, whatever the
+body, when the binding is not this route's to change: `error_code:
+"detector_read_only"` for a received detector, `"detector_shared"` for one
+that syncs to a container it owns (replacing that binding would leave its
+recipients with a copy that never updates; [stop sharing
+it](detectors.md#stop-sharing-a-detector) first, which archives the
+container), and `"sharing_unavailable"` - the message saying why - when its
+container's source is not this server's active sharing source (the binding
+waits for that source to come back; a fork is a plain copy that can sync
+anywhere).
 
 ### Force sync from labelset source
 
