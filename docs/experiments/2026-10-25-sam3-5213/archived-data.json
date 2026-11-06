@@ -154,6 +154,48 @@
      "oid": "cb39458a5eaed72b57e1d42f34d5df10db45cfd0"
     }
    }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.8170ea028bff.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5521_cut05_cells.csv": {
+     "bytes": 136420,
+     "oid": "36c874083e5d34e91ee26f712bd5c63ded30ee31"
+    },
+    "tables/sam3_5521_cut05_info.json": {
+     "bytes": 330,
+     "oid": "f4c56b10e38136a449d528493064389de5a98d46"
+    },
+    "tables/sam3_5521_cut05_price.csv": {
+     "bytes": 62893,
+     "oid": "3fbc1c2ae4338810955b3805baa85bdfccc881c9"
+    },
+    "tables/sam3_5521_cut05_shares.csv": {
+     "bytes": 3121,
+     "oid": "4392109e92d48cd41d4ff395ca264333e8bfbe9f"
+    },
+    "tables/sam3_5521_fgvc_sets.csv": {
+     "bytes": 112598,
+     "oid": "aed180452dee8f5bbb08fba3cc47dd430e0418a0"
+    },
+    "tables/sam3_5521_shipped_cells.csv": {
+     "bytes": 303976,
+     "oid": "6d906cae88bccc8d879d5bf48e0e043646d1ac68"
+    },
+    "tables/sam3_5521_shipped_price.csv": {
+     "bytes": 64732,
+     "oid": "91dab43ef9990e15efe93601efa26407c7415531"
+    },
+    "tables/sam3_5521_shipped_shares.csv": {
+     "bytes": 1273,
+     "oid": "0e4c50807984d30cab3d08ddbede388cbcef3a36"
+    },
+    "tables/sam3_5521_shipped_summary.csv": {
+     "bytes": 5379,
+     "oid": "c3d63f86abfa1a49d12a40b6c0560900c87ce783"
+    }
+   }
   }
  ]
 }

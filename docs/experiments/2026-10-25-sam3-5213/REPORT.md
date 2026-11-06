@@ -37,7 +37,10 @@ over votes 1-150 on Binary and +0.07 (± 0.016) on Region, against today. Handin
 opening does, keeps only +0.02-0.03. See [SAM3 as the opening](#sam3-as-the-opening-5241). #5311 confirmed it at
 beta 1. #5565 makes it right at every preset: SAM3's cut moves with the preset (0.85 / 0.75 / 0.4 at beta 1/4 / 1 /
 4), with a hand-over at the 20th Good, and no hand-over at 4. On a fresh seed that is +0.11 / +0.13 / +0.23 on
-Binary and +0.06 / +0.09 / +0.14 on Region. See [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565).
+Binary and +0.06 / +0.09 / +0.14 on Region. See [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565). #5521 adds a guard:
+open on SigLIP when SAM3's set covers more than 10% of the pool or under 3 images. That keeps all of COCO's gain and
+takes back most of FGVC-Aircraft's loss, where SAM3 reads every aircraft name as "airplane" (Binary -0.27 to -0.05).
+See [A guard on the set's size](#a-guard-on-the-sets-size-5521).
 
 | seed 0, mean over cells (± SE over classes) | all (144) | small (46) | medium (49) | large (49) |
 |---|---|---|---|---|
@@ -500,6 +503,117 @@ Reproduce, from a frozen worktree:
    `S5241_TAG=-v03 S5241_LINE=fixed:0.3` for the check.
 2. `sam3_cut_5565.py sets|check|price --out DIR`.
 
+## A guard on the set's size (#5521)
+
+**Status (2026-11-06): open on SigLIP instead when SAM3's set at the preset's cut covers more than 10% of the pool or
+holds fewer than 3 images of the withheld half. On COCO the guard never fires on a broad set, at any preset, so
+#5565's gains stay (+0.11 / +0.13 / +0.23 Binary, +0.06 / +0.09 / +0.14 Region). On FGVC-Aircraft (#5490) it takes
+back 81-87% of the route's Binary loss: family typed -0.27 to -0.05, variant typed -0.28 to -0.035. Priced offline
+on sessions that already ran. No new arms.**
+
+**The symptom.** #5490 found SAM3 reads every aircraft name as "airplane": "Boeing 737", "Boeing 737-400", even an
+invented "Boeing Veltra". On those cells SAM3's 0.5 set covers a median 45% of the pool. On COCO's 144 cells the
+median is 0.8%, and the broadest is person@medium at 6.3%. The app cannot know whether SAM3 tells a prompt from its
+siblings, but it sees the set's size before the first vote.
+
+**Design.** Both studies ran a SigLIP arm on the same cells and seeds as their SAM3 arm, and picks never read the set.
+So a guarded session is the SigLIP arm's session when the guard fires, and the SAM3 arm's route when it does not. A
+set's share is read off each session's vote-1 row (`threshold_percentile`, the share of the pool below the cut) at
+0.5, and off the rebuilt withheld half at any other cut, as in #5565. The FGVC rebuild matches all 276 sessions'
+recorded 0.5 sets. Two routes are priced:
+
+- **The issue's:** SAM3's 0.5 set, the head from the 20th Good, beta 1. This covers #5241 seed 0, #5311 seeds 1-2 and
+  #5490's three prompt levels.
+- **The shipped one (#5565):** a cut of 0.85 / 0.75 / 0.4 at beta 1/4 / 1 / 4, the 20th Good, held at 4. COCO is
+  seeds 1-2 at every preset (#5565's per-cell areas, with today being its hold-0 rerun on Binary). FGVC is beta 1
+  only, at 0.75, because #5490 ran no other preset.
+
+F is F-beta shown over votes 1-150, paired per cell against today. ± is the SE over COCO's classes and over FGVC's 16
+families: a family's variants share every prompt but one.
+
+**1. On the shipped route.** Each cell gives the route's gain over today; the guard is set beside it. The share of
+cells where the guard fires is in brackets:
+
+| bench, preset | path | no guard | share > 10% | k < 3 | **share > 10% or k < 3** |
+|---|---|---|---|---|---|
+| COCO, beta 1/4 (cut 0.85) | Binary | +0.107 (± 0.016) | +0.107 (0%) | +0.106 (1%) | **+0.106** (1%) |
+| | Region | +0.061 (± 0.015) | +0.061 (0%) | +0.060 (1%) | **+0.060** (1%) |
+| COCO, beta 1 (cut 0.75) | Binary | +0.133 (± 0.015) | +0.133 (0%) | +0.133 (0%) | **+0.133** (0%) |
+| | Region | +0.089 (± 0.013) | +0.089 (0%) | +0.089 (0%) | **+0.089** (0%) |
+| COCO, beta 4 (cut 0.4) | Binary | +0.230 (± 0.021) | +0.230 (0%) | +0.230 (0%) | **+0.230** (0%) |
+| | Region | +0.138 (± 0.015) | +0.138 (0%) | +0.138 (0%) | **+0.138** (0%) |
+| FGVC, family typed, beta 1 | Binary | -0.268 (± 0.030) | -0.092 (65%) | -0.226 (11%) | **-0.050** (± 0.029, 76%) |
+| | Region | -0.108 (± 0.021) | -0.024 (65%) | -0.097 (11%) | **-0.013** (± 0.008, 76%) |
+| FGVC, variant typed | Binary | -0.279 (± 0.045) | -0.061 (72%) | -0.253 (11%) | **-0.035** (± 0.014, 83%) |
+| | Region | -0.097 (± 0.034) | -0.008 (72%) | -0.091 (11%) | **-0.002** (± 0.003, 83%) |
+| FGVC, invented name | Binary | -0.069 (± 0.046) | -0.028 (78%) | -0.069 (0%) | **-0.028** (± 0.031, 78%) |
+| | Region | -0.034 (± 0.019) | -0.011 (78%) | -0.034 (0%) | **-0.011** (± 0.009, 78%) |
+
+![Binary: each cell's SAM3 set share at the shipped cut against the route's gain over today. Every COCO cell, at every preset, is under 8% of the pool; most FGVC cells are at 15-50%. The dashed line is the 10% guard](figures/sam3_5521_guard.webp)
+
+- **There is room between the benches, but not much at beta 4.** COCO's broadest set is 1.7% of the pool at 1/4,
+  3.3% at 1, and 7.8% at 4 (bag or luggage@medium; the 0.4 cut keeps more). Any line from 8% to 15% gives the same
+  COCO rows. A lower line catches more of FGVC: at 7.5% (or k < 3) family typed is -0.026 instead of -0.050, because
+  BAE 146 (8.3%) and A330 (9.5%) fall back too. It already fires on 2% of COCO's beta-4 cells, though, for -0.001
+  Binary / +0.003 Region. 10% is the line recommended here, for the 1.3x headroom over COCO at 4; 7.5% is the
+  alternative if FGVC-like prompts matter more than headroom.
+- **"k < 3" is the narrow half.** It fires only where the 0.75 cut empties SAM3's set (E-Jets keep 2 of 10,000
+  images, Gulfstreams 0). Today's SigLIP opening scores F1 0.32-0.56 there, so showing an empty set is a pure loss. On
+  COCO it fires on 2 cells at 1/4 (enclosed road vehicle@small, 0-1 images), for -0.001. #5565's skis@small keeps
+  3 images at 0.85, so this guard does not catch it.
+- **A ratio to SigLIP's typed set buys nothing over the share.** SigLIP's set is often tiny on COCO too (median
+  0.4%). At the 0.5 cut, "more than 10x SigLIP's set" falls back on 15% of COCO cells and costs -0.015 Binary.
+  "More than 20x" costs -0.004 and gives FGVC family -0.034 against the share's -0.041
+  (`tables/sam3_5521_cut05_price.csv`). The share needs no second set and costs COCO nothing.
+
+**2. On the issue's route (0.5, 20th Good, beta 1).** The same shape. Any share line from 7.5% to 30% keeps all of
+COCO's +0.118 Binary / +0.071 Region (seeds 0-2: no COCO cell reaches 6.3%). At 10% it cuts FGVC family typed from
+-0.265 to -0.041 (± 0.037) on Binary and from -0.105 to -0.010 on Region. Variant typed goes from -0.278 to -0.031,
+and the invented name from -0.070 to -0.018.
+
+**What is left: SAM3 sets of a plausible size that hold the wrong aircraft.** The 11 FGVC family cells (24%) the
+guard lets through still lose -0.21 on average. Literal examples (family typed, cut 0.75, withheld half of 10,000):
+
+- **737-200, "Boeing 737" (caught).** SAM3 keeps 4,217 images (42%). Route F1 0.024, today 0.27.
+- **BAE 146-200, "BAE 146" (missed).** 834 images (8.3%): the guard lets it through. Route 0.002, today 0.47.
+- **A330-200, "Airbus A330" (missed).** 949 images (9.5%). Route 0.047, today 0.16.
+- **747-100, "Boeing 747" (missed).** 47 images (0.5%), the size of a real cell, but they are 747s of any variant.
+  Route 0.24, today 0.37.
+- **Gulfstream IV, "Gulfstream" (caught by k < 3).** 0 images. Route 0, today 0.54.
+
+A size cannot tell those from a good set. Seeing them would take labels (the first Bads among SAM3's top), which is
+#5241's judge question, and the judge did not beat a count there.
+
+**What this means for #5312.** Before showing SAM3's set at the preset's cut, count it over the pool. If it is more
+than 10% of the pool, or fewer than 3 images of the withheld half (about 6 of the pool), open on SigLIP's typed sort
+as today. Nothing else about the route changes.
+
+**Caveats.**
+
+- **The line is relative to the class's frequency, and COCO's cells are rare classes.** COCO's broadest cell is 7.8%
+  at beta 4. A real class that fills more than 10% of someone's pool (cars in street footage) would be guarded to
+  SigLIP even when SAM3 is right. That costs at most #5565's gain, never more than today, because the fallback is
+  today's app.
+- **FGVC is one bench, at beta 1, seed 0.** Its sessions ran on #5490's tree, before hold 0 (#5556), so FGVC's
+  today is SigLIP's arm from that tree, paired with its own SAM3 arm. FGVC at 1/4 and 4 has no sessions. At 0.4
+  (beta 4) SAM3's FGVC sets can only grow, so the share half of the guard fires at least as often there.
+- **The line is chosen on the cells it is priced on.** COCO's seeds 1-2 and 0 give the same COCO maximum (6.1% vs
+  6.3% at 0.5), so the COCO side is stable across splits. A new bench with a class at 8-15% would be the test.
+- **Share is measured on the withheld half,** where the cells' sets are rebuilt. The app would count the whole pool.
+  A random half gives the same share to within sampling noise.
+
+Tables (archived with the study), all in `tables/`:
+
+- `sam3_5521_shipped_summary.csv`: the table above.
+- `sam3_5521_shipped_price.csv`: every guard (share 2-30%, k < 1-10, both), per bench, preset, path and seed.
+- `sam3_5521_shipped_cells.csv`: per cell, the set at the shipped cut (k, share), today and the route.
+- `sam3_5521_shipped_shares.csv`: share quantiles per bench and preset.
+- `sam3_5521_cut05_price.csv`, `sam3_5521_cut05_cells.csv`, `sam3_5521_cut05_shares.csv`: the same at 0.5 / g20, with
+  the SigLIP-ratio guards.
+- `sam3_5521_fgvc_sets.csv`: SAM3's set on each FGVC cell's withheld half at every cut, per prompt level.
+
+Reproduce: `sam3_set_guard_5521.py sets|shipped|cut05 --out DIR` (`sets` in `unknown_class_5490.sh`'s environment).
+
 ## Follow-ups (filed)
 
 - **SAM3 as the opening (#5241), done:** see [SAM3 as the opening](#sam3-as-the-opening-5241). As an opt-in path,
@@ -509,8 +623,10 @@ Reproduce, from a frozen worktree:
 - **A SAM3 cut per preset (#5565), done:** see [A SAM3 cut per preset](#a-sam3-cut-per-preset-5565). The cuts are 0.85
   / 0.75 / 0.4, with a hand-over at the 20th Good at 1/4 and 1 and a hold at 4. That is +0.11 / +0.13 / +0.23 Binary
   and +0.06 / +0.09 / +0.14 Region on a fresh seed.
+- **A guard on the set's size (#5521), done:** see [A guard on the set's size](#a-guard-on-the-sets-size-5521).
+  Open on SigLIP when SAM3's set is over 10% of the pool or under 3 images: COCO unchanged, FGVC's loss -0.27 to -0.05.
 - **SAM3 as an opt-in opening in the app (#5312):** the route, the feature cache, SAM3's cut per preset and the
-  hand-over (#5565). SigLIP stays the default.
+  hand-over (#5565), and the set-size guard (#5521). SigLIP stays the default.
 - **A light head on SAM3's object queries (#5242):** each image's 200 decoder queries are region embeddings that come with
   boxes. A Good box picks its query, a Bad floods them, and the SVM trains on them: #4711's Region loop with SAM3's
   regions in place of DINOv3 patches. This is the "learnable head" question, and it would keep SAM3's prior.
@@ -538,5 +654,7 @@ Reproduce, from a frozen worktree:
 - `scripts/experiments/state_of_app/sam3_cut_5565.py`: #5565's sets at any cut off the rebuilt withheld half
   (`sets`), their check against the sessions (`check`) and every route's price (`price`). The launcher takes
   `S5241_LINE` for the sam3 arm's line.
+- `scripts/experiments/state_of_app/sam3_set_guard_5521.py`: #5521's FGVC sets at any cut (`sets`) and the set-size
+  guards on the shipped route (`shipped`) and on the 0.5 / 20th-Good route (`cut05`).
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.
