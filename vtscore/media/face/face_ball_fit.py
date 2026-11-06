@@ -143,7 +143,7 @@ def build_cells(
                 if n_vote_pos == 0:
                     continue
                 order = choose_examples(sim_ids, pool, person, n_vote_pos, seed)
-                t = np.asarray([row[c] for c in test_ids])
+                t = np.asarray([row[c] for c in test_ids], dtype=np.intp)
                 y = np.asarray([1 if media_is_positive(pool[c], person) else 0 for c in test_ids], dtype=np.uint8)
                 if not y.any():
                     continue

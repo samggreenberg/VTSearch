@@ -1288,6 +1288,20 @@ class TestDetectorStats:
         # A detector no label importer created was not imported (#5334).
         assert data["imported"] is None
 
+    def test_stats_name_the_embedder_by_its_display_name(self, client):
+        """#5617: the window shows the embedder as its pickers name it."""
+        from vtscore.detectors.registry import update_detector
+        from vtscore.media import get_embedder
+
+        detector_id = self._register(client, name="EmbedName")
+        data = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        assert data["embedder_display_name"] == ""  # never trained: no embedder recorded
+
+        update_detector(detector_id, embedder="clap")
+        data = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        assert data["embedder"] == "clap"
+        assert data["embedder_display_name"] == get_embedder("clap").display_name
+
     def test_stats_counts_positives_and_negatives(self, client):
         from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 

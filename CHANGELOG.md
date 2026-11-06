@@ -68,6 +68,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   match are left out, and a list longer than four ends in "…" with a count of the rest. See
   [Save as default](docs/user/USER_GUIDE.md#save-as-default).
 
+- **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
+  to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
+  `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
+  `Include archives' contents: No`, `Importer: Folder`, and the embedder by its picker name (`SigLIP 2 (general
+  images)`, not `Siglip2`). A Media type row that repeated the Type row is gone, and so is an Include media row
+  for a dataset of its own type alone. In both Stats windows, dataset and detector, a stat with no value says `None`
+  instead of `-` (an untrained detector's Last trained says `Never`), and the detector's embedder is named the same
+  way.
+
 ### Added
 
 - **People: a Face dataset's people, and who appears with whom** (issue #5590). A new view, opened from a Face

@@ -574,7 +574,8 @@ section reads it.
 
 → The positive / negative / total label counts, `num_positive_resolved` and
 `active_dataset_name`, the detector's `embedder` (the loaded context's live
-one, else the one it last trained in), `embedder_type`, query and example,
+one, else the one it last trained in) and its `embedder_display_name` (`""`
+when there is none), `embedder_type`, query and example,
 `clipper`, creation and training times, ownership, its `autofind` flag, and
 `test_verdicts`. Each verdict carries the tested dataset, `tested_at`, the
 `beta` it was tested at, `line_count` (the line kept the top `line_count` of
