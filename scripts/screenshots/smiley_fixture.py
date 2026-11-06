@@ -5,8 +5,9 @@
     python scripts/screenshots/smiley_fixture.py drawings-new
     python scripts/screenshots/smiley_fixture.py drawing-regions
 
-Every screenshot in the user guide is taken against these folders of cartoon
-drawings (see `smiley-example.mjs`). Each is drawn by the Synthetic Media
+Every screenshot in the user guide but the face path's (`face_fixture.py`)
+is taken against these folders of cartoon drawings (see
+`smiley-example.mjs`). Each is drawn by the Synthetic Media
 importer's own generator, `vtscore.utils.synthetic.generate_image_dataset`,
 with the importer's own `size` and `seed` (`CORPORA`), so a reader who loads
 **Demo -> Synthetic Media** with those settings gets the very same pictures.

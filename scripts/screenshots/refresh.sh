@@ -31,6 +31,17 @@
 # item, the vote swipe, Browse's zoom tweens), so a frame taken soon after one
 # landed somewhere different each run (#4339). "OS Setting" defers to the page.
 #
+# And it runs the face path on InsightFace's buffalo_s models, pinned by hash:
+# face_fixture.py fetches them into the models folder (once; about 128 MB) and
+# the app is pointed at them with IMAGEKIT_FACE_CONFIG (and this package's own
+# provider, IMAGEKIT_FACE_PROVIDER=oss), so every shot is taken with Face on and
+# the same models on every machine, whatever face.json the models folder holds.
+# The face shots need them, and with Face on for every shot none depends on
+# whether the machine has face models (Add Dataset's Multi-Dataset rows offer
+# Face only on a server with them). A failed fetch stops the run, saying what
+# is missing (the weights are non-commercial research only, so they are
+# fetched, never committed).
+#
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's
 # commit, though: one from any other commit is refused, and named (#4324).
@@ -42,6 +53,7 @@ REPO_ROOT="$(cd ../.. && pwd)"
 PROJECTION_SEED=0
 SPOT_CHECK_SEED=0
 APP_DATA_DIR="$REPO_ROOT/data/.screenshots-app"
+MODELS_DIR="${VTSEARCH_MODELS_DIR:-$REPO_ROOT/data/models}"
 APP_LOG=/tmp/vtshots-refresh-app.log
 
 started_app=""
@@ -97,13 +109,19 @@ if curl -sf -o /dev/null "$APP/" 2>/dev/null; then
     echo "shots, stop it and let refresh.sh start one on a fresh data dir."
 else
     echo "No app at $APP — starting one on a fresh data dir ($APP_DATA_DIR)…"
+    # The face models, fetched and checked first: without them nothing below
+    # would be the committed shots, and the face shots could not be taken.
+    face_config=$(cd "$REPO_ROOT" && VTSEARCH_MODELS_DIR="$MODELS_DIR" python scripts/screenshots/face_fixture.py models) \
+        || { echo "refresh.sh needs the buffalo_s face models; see the message above." >&2; exit 1; }
     rm -rf "$APP_DATA_DIR"
     mkdir -p "$APP_DATA_DIR"
     # `exec`, so $! is the app itself and stop_app's kill reaches it.
     (
         cd "$REPO_ROOT"
         VTSEARCH_DATA_DIR="$APP_DATA_DIR" \
-            VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$REPO_ROOT/data/models}" \
+            VTSEARCH_MODELS_DIR="$MODELS_DIR" \
+            IMAGEKIT_FACE_CONFIG="$face_config" \
+            IMAGEKIT_FACE_PROVIDER=oss \
             VTSEARCH_TORCH_THREADS=1 \
             VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
             VTSEARCH_SPOT_CHECK_SEED=$SPOT_CHECK_SEED \

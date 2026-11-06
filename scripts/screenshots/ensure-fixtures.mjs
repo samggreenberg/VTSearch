@@ -23,12 +23,14 @@
  *
  * The dashboard shows every dataset and detector in the app, so a run also
  * removes the fixtures this harness used to build (the synthetic `syn-imgs` /
- * `syn-patch` / `doc-demo`) and the slide deck's Book example (`photos-train`,
- * … , `Book detector`), which its own shooter rebuilds every run. It never touches a
- * dataset or detector it does not know by name.
+ * `syn-patch` / `doc-demo`), the slide deck's Book example (`photos-train`,
+ * … , `Book detector`), which its own shooter rebuilds every run, and the face
+ * example (`face-example.mjs`), which capture.ts builds only around the face
+ * shots. It never touches a dataset or detector it does not know by name.
  *
  * Usage:  node ensure-fixtures.mjs   (APP env overrides the URL)
  */
+import { FACE_FIXTURES } from './face-example.mjs';
 import {
   appClient,
   BOOK_FIXTURES,
@@ -47,8 +49,10 @@ const APP = process.env.APP || 'http://localhost:5000';
 const log = (...a) => console.log('[fixtures]', ...a);
 const app = appClient(APP, log);
 
-await app.dropDetectors('doc-demo', ...BOOK_FIXTURES.detectors);
-await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets);
+// The face example too, should a run have stopped before it removed it:
+// capture.ts builds it only for the face shots, which run last.
+await app.dropDetectors('doc-demo', ...BOOK_FIXTURES.detectors, ...FACE_FIXTURES.detectors);
+await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets, ...FACE_FIXTURES.datasets);
 
 const train = await app.ensureCorpus(TRAIN_DATASET, 'siglip');
 await app.ensureProjection(train);

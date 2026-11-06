@@ -10,7 +10,9 @@
  * embedder twice and risk OOM. refresh.sh starts that app on a fresh data dir
  * with a seeded Browse map, so every run begins from the same state; the
  * fixtures are the Smiley example's generated drawings (`smiley-example.mjs`),
- * a pure function of the generator and its seeds.
+ * a pure function of the generator and its seeds. The *Faces* shots
+ * (`fixture: 'faces'`) run last, on the face example (`face-example.mjs`),
+ * which is built just before them and removed after them (`main`).
  *
  * Usage:
  *   tsx capture.ts                 # capture every shot, both themes
@@ -25,6 +27,8 @@ import { launchChromium } from './launch.mjs';
 import { LAYER_ID, drawCallouts, resolveBox } from './callouts.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { dropFaceFixture, ensureFaceFixture } from './face-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -66,7 +70,11 @@ const QUIET_MS = 1000;
 const CALM_CAP_MS = 10000;
 
 const onlyIds = process.argv.slice(2);
-const shots = onlyIds.length ? SHOTS.filter((s) => onlyIds.includes(s.id)) : SHOTS;
+const chosen = onlyIds.length ? SHOTS.filter((s) => onlyIds.includes(s.id)) : SHOTS;
+// The face shots last, each group in manifest order: the face example is
+// built once, before the first of them, so no Smiley shot ever has it in the
+// app (the Dashboard lists every dataset).
+const shots = [...chosen.filter((s) => s.fixture !== 'faces'), ...chosen.filter((s) => s.fixture === 'faces')];
 
 function ramFreeMB(): number {
   try {
@@ -851,8 +859,30 @@ async function main() {
   const started = Date.now();
   const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];
   const runs: { label: string; total: number }[] = [];
+  // The face example, built on reaching the first face shot. A failure to
+  // build it fails every face shot with its reason (missing face models,
+  // photos that no longer match their pins); it never skips them quietly.
+  let faces: 'unbuilt' | 'built' | { error: string } = 'unbuilt';
   try {
     for (const shot of shots) {
+      if (shot.fixture === 'faces' && faces === 'unbuilt') {
+        console.log('[faces] building the face example (face-example.mjs) …');
+        const t0 = Date.now();
+        try {
+          await ensureFaceFixture(appClient(APP), (...a: unknown[]) => console.log('[faces]', ...a));
+          faces = 'built';
+          console.log(`[faces] ready in ${secs((Date.now() - t0) / 1000)}`);
+        } catch (e: any) {
+          faces = { error: firstLine(e) };
+          console.log(`[faces] FAILED: ${faces.error}`);
+        }
+      }
+      if (shot.fixture === 'faces' && typeof faces === 'object') {
+        for (const theme of shot.themes) {
+          results.push({ id: shot.id, theme, err: `no face example: ${faces.error}` });
+        }
+        continue;
+      }
       // One recipe run for every theme, unless the shot's frame cannot take a
       // theme flip (`rerunPerTheme`).
       const passes = shot.rerunPerTheme ? shot.themes.map((t) => [t]) : [shot.themes];
@@ -888,6 +918,9 @@ async function main() {
     }
   } finally {
     await browser.close();
+    if (faces !== 'unbuilt') {
+      await dropFaceFixture(appClient(APP)).catch((e: unknown) => console.log(`[faces] could not remove the face example: ${firstLine(e)}`));
+    }
   }
   // The encodes run behind the captures; a shot is captured once its file is written.
   for (const r of results) await r.written?.catch((e) => { r.err = firstLine(e); r.written = undefined; });

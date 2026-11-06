@@ -71,8 +71,10 @@ need to think about sort modes or selection strategies directly.
 > scenes - and a detector that learns to find the **yellow smiley faces**
 > among them. VTSearch draws the pictures itself, so you can make the very
 > same ones and follow along (see
-> [Step by step](#step-by-step-your-first-search)). Screenshots follow your
-> light or dark theme.
+> [Step by step](#step-by-step-your-first-search)). The one exception is
+> [Faces](#faces-find-a-person-in-a-set-of-photos), shot on photos from the
+> Celebrities in Context demo, since drawings have no faces to find.
+> Screenshots follow your light or dark theme.
 
 ### Words this guide uses
 
@@ -643,6 +645,11 @@ you left it. If the Image
 dataset isn't loaded, the window offers to load it first. A face whose photo
 isn't in the Image dataset (you left that image out, say) has no button.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/show-in-photo.dark.webp" />
+  <img src="assets/show-in-photo.light.webp" alt="Show in photo from Train: the photo a face was cut from, opened over the ranking with that face outlined, and ← Back to return to the face" width="720" />
+</picture>
+
 **Collapse to photos.** On the same kind of Face dataset, the list in Train's
 **Manual** tab and Tune's **Review** tab has a **Show: Faces | Photos** switch
 under its header. **Photos** shows the ranking as the photos the faces came
@@ -657,12 +664,22 @@ line above the photos reminds you. A face whose photo isn't in the Image
 dataset shows on its own, marked "photo not found". If the Image dataset isn't
 loaded, the list offers to load it.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/collapse-to-photos.dark.webp" />
+  <img src="assets/collapse-to-photos.light.webp" alt="Train's Manual list with Show set to Photos: each photo once, where its best face ranks, every ranked face in it outlined (a voted Good in green, faces below the line faintly) and a small picture of each face underneath" width="400" />
+</picture>
+
 **People.** A Face dataset can also be read as the people in it: VTSearch
 merges the faces that are one person, at the same cut Find uses to say a face
 is someone's, and shows who appears with whom in the photos. Open it from the
 Face dataset's **⋯** menu on the Dashboard (**People**), or with the
 **People** button in its Browse toolbar. The first time, the dataset's row
 shows the people being found; after that, People opens at once.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/people-view.dark.webp" />
+  <img src="assets/people-view.light.webp" alt="The People view of a Face dataset: everyone in it on the left, Person 1's faces in the middle with one shown large, and on the right the people Person 1 appears with, the photos they share with Person 2 underneath, Person 1 and Person 2 outlined and anyone else dashed" width="720" />
+</picture>
 
 The view has three panes:
 
@@ -681,6 +698,11 @@ The view has three panes:
   they appear with next, and anyone else faintly, with dashes; hover a box to
   see whose face it is. Click a photo to open it large, with the same
   outlines.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/show-in-photo-people.dark.webp" />
+  <img src="assets/show-in-photo-people.light.webp" alt="A shared photo opened from People: the person in the middle outlined most heavily, the person they appear with next, and the others dashed" width="720" />
+</picture>
 
 The photos come from the Image dataset the import made beside the faces. If
 it isn't loaded, **Appears with** offers to load it; the people and their
