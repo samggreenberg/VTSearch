@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-06-people-cut-5591.f881e9c03a7c.tar.gz",
+   "source_commit": null,
+   "files": {
+    "arms.csv": {
+     "bytes": 154688,
+     "oid": "af2f1249e4f18b7cf875946a7786e5d6300c28f8"
+    },
+    "cic_summary.json": {
+     "bytes": 220,
+     "oid": "501c2009876819555dfa8e65350cb467ce99e5ad"
+    }
+   }
+  }
+ ]
+}
