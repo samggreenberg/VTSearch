@@ -153,7 +153,8 @@ invite a partition that disagrees with Find.
 
 The open questions were taken as proposed (2026-11-05): centroid linkage
 ships and #5591 measures it against average linkage, with the
-split-over-merge rule as the tiebreak; the entry points are the dataset
+split-over-merge rule as the tiebreak. It did, and the shipped cut stands
+([2026-11-06-people-cut-5591](../experiments/2026-11-06-people-cut-5591/REPORT.md)); the entry points are the dataset
 card's menu and Browse's toolbar; the view is *People* and the relation
 *Appears with*. A *Show person* action from Train's face list is not filed,
 and is worth revisiting once the view ships.

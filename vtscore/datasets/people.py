@@ -93,7 +93,10 @@ PEOPLE_MEDIA_TYPES = frozenset({"face"})
 PEOPLE_METHOD = "knn_agglomerative"
 
 #: The agglomerative step's linkage: the cosine between unit centroids.  #5591
-#: measures it against average linkage.
+#: measured it against average linkage and kept it
+#: (``docs/experiments/2026-11-06-people-cut-5591/REPORT.md``); below about
+#: 0.42 on buffalo_s it collapses chained components, so a lower floor needs a
+#: fresh look at the linkage.
 PEOPLE_LINKAGE = "centroid"
 
 #: How many nearest faces each face's neighbour-graph edges are drawn from.
