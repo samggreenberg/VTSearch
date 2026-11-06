@@ -77,7 +77,7 @@ describe('ShareDetectorModalComponent', () => {
     await settleZoneless(fixture);
   }
 
-  async function pressEnter(): Promise<void> {
+  async function hitEnterKey(): Promise<void> {
     entryBox().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settleZoneless(fixture);
   }
@@ -124,7 +124,7 @@ describe('ShareDetectorModalComponent', () => {
       const success = vi.spyOn(TestBed.inject(ToastService), 'success');
       await open(autoExported);
       await typeIn('bob');
-      await pressEnter();
+      await hitEnterKey();
 
       const req = httpMock.expectOne(SHARE_URL);
       expect(req.request.method).toBe('POST');
@@ -161,7 +161,7 @@ describe('ShareDetectorModalComponent', () => {
       await openShared([]);
       expect(el().querySelector('vt-plugin-combobox')).toBeNull();
       await typeIn('  dave  ');
-      await pressEnter();
+      await hitEnterKey();
       const req = httpMock.expectOne(SHARE_URL);
       expect(req.request.body).toEqual({ add: ['dave'] });
       req.flush(shareResponse(['dave']));
@@ -240,7 +240,7 @@ describe('ShareDetectorModalComponent', () => {
         .flush({ suggestions: [{ id: 'alice@example.org', display_name: 'Alice Smith', kind: 'user' }] });
       await settleZoneless(fixture);
 
-      await pressEnter();
+      await hitEnterKey();
       const req = httpMock.expectOne(SHARE_URL);
       expect(req.request.body).toEqual({ add: ['alice@example.org'] });
       req.flush(shareResponse(['alice@example.org']));
