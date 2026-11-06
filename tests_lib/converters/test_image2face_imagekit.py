@@ -215,6 +215,12 @@ class TurningPipeline:
             return [_record(self.turned_box, self.turned_quality, self.compat, LM, conf=0.95)]
         return [_record((10, 10, 40, 40), 30.0, self.compat)]  # some other face, elsewhere
 
+    def initialize(self, opts, config):
+        pass
+
+    def process_buffer(self, buffer, *, confidence_threshold=None, media_id=""):
+        return []
+
     def compatibility(self):
         return self.compat
 
