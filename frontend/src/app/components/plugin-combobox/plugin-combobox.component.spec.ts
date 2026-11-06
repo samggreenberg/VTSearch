@@ -207,6 +207,46 @@ describe('PluginComboboxComponent', () => {
     expect(box().id).toBe('field-dataset');
   });
 
+  // The hooks a search-as-you-type host uses (the share dialog, #5579).
+  describe('for a host whose options answer a search', () => {
+    let texts: string[];
+    let picks: string[];
+
+    beforeEach(async () => {
+      texts = [];
+      picks = [];
+      fixture.componentInstance.textChange.subscribe((t: string) => texts.push(t));
+      fixture.componentInstance.picked.subscribe((o) => picks.push(o.value));
+      fixture.componentRef.setInput('filterOptions', false);
+      await settleZoneless(fixture);
+    });
+
+    it('offers every option whatever is typed, and reports the text as typed', async () => {
+      // "birds" is a label: the value stands in for it, the text does not.
+      await type('birds');
+      expect(texts).toEqual(['birds']);
+      expect(emitted).toEqual(['uuid-3']);
+      expect(rows()).toHaveLength(3);
+    });
+
+    it('reports a pick, and a reset empties the box', async () => {
+      fixture.componentRef.setInput('options', [{ value: 'g1', label: 'Birders', tag: 'group' }]);
+      await type('bir');
+      expect(rows()[0].querySelector('.plugin-combobox-option-tag')!.textContent!.trim()).toBe('group');
+      rows()[0].click();
+      await settleZoneless(fixture);
+      expect(picks).toEqual(['g1']);
+
+      // A host that used what was typed, and stores nothing, gets a blank box.
+      await type('someone');
+      fixture.componentRef.setInput('value', '');
+      fixture.componentInstance.reset();
+      await settleZoneless(fixture);
+      expect(box().value).toBe('');
+      expect(rows()).toEqual([]);
+    });
+  });
+
   it('opens nothing while disabled', async () => {
     fixture.componentRef.setInput('disabled', true);
     await settleZoneless(fixture);

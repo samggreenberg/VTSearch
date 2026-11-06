@@ -64,6 +64,8 @@ import { LabelImporterModalComponent } from '../modals/label-importer-modal/labe
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { AutoExportModalComponent } from '../modals/auto-export-modal/auto-export-modal.component';
+import { ShareDetectorModalComponent } from '../modals/share-detector-modal/share-detector-modal.component';
+import { ReceivedDetectorsModalComponent } from '../modals/received-detectors-modal/received-detectors-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { topOpenModal } from '../modal/modal.component';
@@ -110,6 +112,8 @@ type DashboardHintId = Extract<
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
     AutoExportModalComponent,
+    ShareDetectorModalComponent,
+    ReceivedDetectorsModalComponent,
     IconComponent,
     ToastyHintComponent,
     UsageBarComponent,
@@ -147,7 +151,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private autofind = inject(AutoFindService);
   private autofindSetup = inject(AutoFindSetupService);
   private sharingFlows = inject(DetectorSharingFlowsService);
-  /** Public: each detector row reads `sharing.enabled()` for its menu. */
+  /** Public: each detector row reads `sharing.enabled()` for its menu, and
+   *  the card header shows Received… on it. */
   readonly sharing = inject(SharingCapabilityService);
   private hints = inject(HintsService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
@@ -974,6 +979,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Selected ahead of the refresh that lists it, as a created detector is.
     this.dashSelection.setDetectorTab('drafts');
     this.dashSelection.selectOnly('detector', [entry.id]);
+  }
+
+  /** The Received list added a detector: re-list, and land it in Drafts
+   *  selected, as a fork lands. The list stays open for the next one. */
+  onDetectorReceived(entry: DetectorRegistryEntry): void {
+    this.datasetState.refresh();
+    this.dashSelection.setDetectorTab('drafts');
+    this.dashSelection.selectOnly('detector', [entry.id]);
+  }
+
+  /** A Received row's "Show": close the list and select the user's copy, on
+   *  whichever tab it lives. */
+  showReceivedCopy(detectorId: string): void {
+    this.modals.closeReceived();
+    const entry = this.datasetState.detectorById().get(detectorId);
+    this.dashSelection.setDetectorTab(entry?.autofind ? 'autofind' : 'drafts');
+    this.dashSelection.selectOnly('detector', [detectorId]);
   }
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {

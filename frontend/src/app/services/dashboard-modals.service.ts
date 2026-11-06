@@ -44,6 +44,11 @@ export interface ShareState {
   detectorName: string;
 }
 
+/** The list of detectors shared with the user (Received…). */
+export interface ReceivedState {
+  open: boolean;
+}
+
 export interface DetectorStatsState {
   open: boolean;
   detectorId: string;
@@ -102,6 +107,8 @@ export class DashboardModalsService {
     detectorName: '',
   });
 
+  private readonly receivedSubject = new BehaviorSubject<ReceivedState>({ open: false });
+
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
   readonly export$ = this.exportSubject.asObservable();
@@ -110,6 +117,7 @@ export class DashboardModalsService {
   readonly detectorStats$ = this.detectorStatsSubject.asObservable();
   readonly autoExport$ = this.autoExportSubject.asObservable();
   readonly share$ = this.shareSubject.asObservable();
+  readonly received$ = this.receivedSubject.asObservable();
 
   get combineDatasets(): CombineDatasetsState {
     return this.combineDatasetsSubject.value;
@@ -141,6 +149,10 @@ export class DashboardModalsService {
 
   get share(): ShareState {
     return this.shareSubject.value;
+  }
+
+  get received(): ReceivedState {
+    return this.receivedSubject.value;
   }
 
   openCombineDatasets(datasets: DatasetRegistryEntry[]): void {
@@ -200,13 +212,22 @@ export class DashboardModalsService {
   }
 
   /** Open Share… for a detector. The card's "Share…" verb and its
-   *  "Remote sync failed" link both land here; the dialog itself reads
-   *  {@link share} (the share dialog, #5579). */
+   *  "Remote sync failed" link both land here. */
   openShare(detectorId: string, detectorName: string): void {
     this.shareSubject.next({ open: true, detectorId, detectorName });
   }
 
   closeShare(): void {
     this.shareSubject.next({ open: false, detectorId: '', detectorName: '' });
+  }
+
+  /** Open the list of detectors shared with the user (the Detectors card's
+   *  Received… button, shown while sharing is on). */
+  openReceived(): void {
+    this.receivedSubject.next({ open: true });
+  }
+
+  closeReceived(): void {
+    this.receivedSubject.next({ open: false });
   }
 }

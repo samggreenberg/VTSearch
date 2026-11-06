@@ -195,16 +195,9 @@ dialog's input; and each refusal carries an `error_code` to branch on
 
 ### Dashboard
 
-The badges, the read-only treatment and the row's verbs shipped in #5578; the
-permanent notes are in `docs/FRONTEND.md` (the Dashboard and Label view
-sections). What the dialogs slice builds on: "Share…" (and the "Remote sync
-failed" link) opens `DashboardModalsService.openShare`, which nothing renders
-yet; `SharingCapabilityService` is the switch to show the header button on;
-and `DetectorSharingFlowsService.askAboutForeignRecords` is the integrity
-dialog, for the receive flow to reuse.
-
-- A **Received…** button in the card header, shown only when sharing is on,
-  opening the list of containers available to the user with an Add action.
+The badges, the read-only treatment, the row's verbs (#5578) and the Share
+and Received dialogs (#5579) have shipped; the permanent notes are in
+`docs/FRONTEND.md` (the Dashboard and Label view sections).
 
 ### Out of scope
 
@@ -280,8 +273,6 @@ Which issues can run at once. An arrow means "needs merged first".
 - [ ] #5578 — Dashboard: Received and Shared badges, read-only gating with fork-instead, Check for updates with the integrity dialog, Fork — Opus
 
 <!-- item-sep -->
-
-- [ ] #5579 — Share dialog and the Received list modal — Sonnet
 
 <!-- item-sep -->
 
