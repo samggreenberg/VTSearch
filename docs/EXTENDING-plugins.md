@@ -2629,8 +2629,10 @@ active one does nothing, logged once. Neither the load-time pull nor
 `POST .../labelset-source/sync` touches a shared detector: the manual sync
 answers 409 (`detector_read_only` for a received one, `detector_shared` for
 an owner, `sharing_unavailable` with the reason when the source is not
-active). The library guide's [Roles](../vtscore/docs/packages/labels.md#roles)
-has the table.
+active). `PUT .../labelset-source` answers the same 409s for any body, so a
+sharing binding is never replaced there: an owner unshares first. The
+library guide's [Roles](../vtscore/docs/packages/labels.md#roles) has the
+table.
 
 ### Sharing detectors
 
