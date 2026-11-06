@@ -86,6 +86,7 @@ def get_detector_stats(detector_id: str):
         get_detector,
         get_loaded_detector_ids,
     )
+    from vtscore.detectors.embedder_sync import embedder_display_name
     from vtscore.media import get_clipper
     from vtscore.state.core import get_detector_context
     from vtsearch.settings import get_autofind_detectors
@@ -132,6 +133,7 @@ def get_detector_stats(detector_id: str):
         "num_positive_resolved": _resolved_positive_count(positives),
         "active_dataset_name": _active_dataset_name(),
         "embedder": embedder,
+        "embedder_display_name": embedder_display_name(embedder),
         "text_query": data.get("text_query", "") or "",
         "media_example": data.get("media_example", "") or "",
         "clipper": clipper_display,

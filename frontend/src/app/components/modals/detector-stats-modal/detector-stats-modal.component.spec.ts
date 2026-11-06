@@ -20,6 +20,7 @@ describe('DetectorStatsModalComponent', () => {
     active_dataset_name: 'My Dataset',
     media_type: 'audio',
     embedder: 'clap',
+    embedder_display_name: 'CLAP (general, faster)',
     clipper: 'whole',
     text_query: '',
     media_example: '',
@@ -125,12 +126,45 @@ describe('DetectorStatsModalComponent', () => {
       );
       expect(rows).toContain('Importer server_json_file');
       expect(rows).toContain('Filepath /data/labels/cats.json');
-      expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported -')).toBe(true);
+      expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported None')).toBe(true);
     });
 
     it('is absent for a detector no importer created', async () => {
       const el = await load(mockStats);
       expect(sectionTitles(el)).not.toContain('Import');
+    });
+  });
+
+  // Issue #5617: a stat with no value says so in a word, not a dash.
+  describe('empty values', () => {
+    async function rowsOf(overrides: Partial<typeof mockStats>): Promise<string[]> {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/detectors/registry/det1/stats').flush({ ...mockStats, ...overrides });
+      await settleZoneless(fixture);
+      return Array.from(fixture.nativeElement.querySelectorAll('tr') as NodeListOf<HTMLElement>).map((tr) =>
+        Array.from(tr.querySelectorAll('td'))
+          .map((td) => td.textContent?.trim())
+          .join(' '),
+      );
+    }
+
+    it('names the embedder by its display name', async () => {
+      expect(await rowsOf({})).toContain('Embedder CLAP (general, faster)');
+    });
+
+    it('says None for an unset clipper, embedder or creator, and Never for an untrained detector', async () => {
+      const rows = await rowsOf({
+        clipper: '',
+        embedder: '',
+        embedder_display_name: '',
+        created_by: '',
+        last_trained_at: null as unknown as number,
+      });
+      expect(rows).toContain('Clipper None');
+      expect(rows).toContain('Embedder None');
+      expect(rows).toContain('Created by None');
+      expect(rows).toContain('Last trained Never');
+      expect(rows.some((r) => r.endsWith(' -'))).toBe(false);
     });
   });
 

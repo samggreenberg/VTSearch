@@ -11,7 +11,8 @@ import type { DatasetRegistryStatsResponse } from '../../../generated/api-client
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
-import { originParamRows, type OriginParamRow } from '../../../utils/origin-params';
+import { NO_VALUE } from '../../../utils/no-value';
+import type { DatasetSourceRow } from '../../../generated/api-client/models/dataset-source-row';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,6 +41,9 @@ export class DatasetStatsModalComponent implements OnInit {
    *  as the grid gates its Type column; see {@link showMediaType}. */
   readonly soloMediaType = input<string | null>(null);
   readonly closed = output<void>();
+
+  /** What a row with no value shows. */
+  readonly noValue = NO_VALUE;
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
   // schedules CD when the stats land.
@@ -167,10 +171,10 @@ export class DatasetStatsModalComponent implements OnInit {
     return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
-  /** Media type as the grid renders it: capitalized, `-` when unset. */
+  /** Media type as the grid renders it, capitalized; {@link NO_VALUE} when unset. */
   get mediaType(): string {
     const t = this.stats()?.media_type;
-    if (!t) return '-';
+    if (!t) return NO_VALUE;
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
 
@@ -195,26 +199,33 @@ export class DatasetStatsModalComponent implements OnInit {
 
   get readers(): string {
     const list = this.stats()?.readers ?? [];
-    return list.length ? list.join(', ') : '-';
+    return list.length ? list.join(', ') : NO_VALUE;
   }
 
+  /** The importer's display name, as the Add Dataset picker names it. */
   get importerName(): string {
-    const src = this.stats()?.source as { importer?: string } | undefined;
-    return src?.importer || '';
+    const s = this.stats();
+    const src = s?.source as { importer?: string } | undefined;
+    return s?.importer_display_name || src?.importer || '';
   }
 
-  get originParams(): OriginParamRow[] {
-    const src = this.stats()?.source as { params?: Record<string, unknown> } | undefined;
-    return originParamRows(src?.params);
+  /** The importer's recorded fields, labelled and worded by the server. */
+  get originParams(): DatasetSourceRow[] {
+    return this.stats()?.source_rows ?? [];
+  }
+
+  /** The row's tooltip: the importer field's description, else its raw key. */
+  paramTitle(row: DatasetSourceRow): string {
+    return row.description || `Importer field: ${row.key}`;
   }
 
   formatTimestamp(ts: number | null): string {
-    return formatTs(ts);
+    return ts ? formatTs(ts) : NO_VALUE;
   }
 
   get duration(): string {
     const s = this.stats();
-    if (!s?.ingest_started_at || !s?.ingest_finished_at) return '-';
+    if (!s?.ingest_started_at || !s?.ingest_finished_at) return NO_VALUE;
     const seconds = Math.round(s.ingest_finished_at - s.ingest_started_at);
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);

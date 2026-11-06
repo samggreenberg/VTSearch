@@ -2144,6 +2144,10 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_display_name": {
+            "description": "The display name of ``embedder``; empty when the dataset records none.",
+            "type": "string"
+          },
           "expires_at": {
             "nullable": true
           },
@@ -2153,6 +2157,10 @@
             },
             "description": "File type \u2192 item count. The type is the item's filename extension, or the format sniffed from its bytes when it has none (a service importer may name items after an opaque content id). Items no signal could type land in a parenthesised \"(unknown)\" bucket.",
             "type": "object"
+          },
+          "importer_display_name": {
+            "description": "The display name of ``source``'s importer; empty when the origin names none.",
+            "type": "string"
           },
           "ingest_finished_at": {
             "nullable": true
@@ -2188,6 +2196,13 @@
           "source": {
             "additionalProperties": {},
             "type": "object"
+          },
+          "source_rows": {
+            "description": "``source``'s params worded for display, in recorded order. Empty values, a ``media_type`` that is the dataset's own, and ``source_specs`` that only include the dataset's own type are left out.",
+            "items": {
+              "$ref": "#/components/schemas/DatasetSourceRow"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -2196,7 +2211,9 @@
           "created_by",
           "dropped_groups",
           "embedder",
+          "embedder_display_name",
           "file_type_counts",
+          "importer_display_name",
           "media_type",
           "name",
           "num_dropped",
@@ -2204,7 +2221,36 @@
           "num_items",
           "origin",
           "readers",
-          "source"
+          "source",
+          "source_rows"
+        ],
+        "type": "object"
+      },
+      "DatasetSourceRow": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "The importer field's description; empty when the key names no field.",
+            "type": "string"
+          },
+          "key": {
+            "description": "The raw origin param key.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The importer field's own label, or the key spelled out when it names no field.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value as the importer words it: Yes/No for a checkbox, a media type's name, the converters an import ran (``Images \u2192 Faces``).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "key",
+          "label",
+          "value"
         ],
         "type": "object"
       },
@@ -3331,6 +3377,10 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_display_name": {
+            "description": "The display name of ``embedder``; empty when the detector has none.",
+            "type": "string"
+          },
           "embedder_type": {
             "type": "string"
           },
@@ -3384,6 +3434,7 @@
           "clipper",
           "created_by",
           "embedder",
+          "embedder_display_name",
           "embedder_type",
           "imported",
           "media_example",

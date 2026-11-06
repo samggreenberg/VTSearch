@@ -555,6 +555,10 @@ class DetectorRegistryStatsResponseSchema(Schema):
     num_positive_resolved = fields.Integer(required=True)
     active_dataset_name = fields.String(required=True)
     embedder = fields.String(required=True)
+    embedder_display_name = fields.String(
+        required=True,
+        metadata={"description": "The display name of ``embedder``; empty when the detector has none."},
+    )
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural"); ``""`` for a legacy detector with neither type nor a
     # migratable primary name.

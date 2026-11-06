@@ -295,6 +295,29 @@ class DroppedItemsGroupSchema(Schema):
     )
 
 
+class DatasetSourceRowSchema(Schema):
+    """One of a dataset's origin params, worded for its Stats window."""
+
+    key = fields.String(required=True, metadata={"description": "The raw origin param key."})
+    label = fields.String(
+        required=True,
+        metadata={"description": "The importer field's own label, or the key spelled out when it names no field."},
+    )
+    value = fields.String(
+        required=True,
+        metadata={
+            "description": (
+                "The value as the importer words it: Yes/No for a checkbox, a media type's name, the "
+                "converters an import ran (``Images → Faces``)."
+            )
+        },
+    )
+    description = fields.String(
+        required=True,
+        metadata={"description": "The importer field's description; empty when the key names no field."},
+    )
+
+
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``.
 
@@ -343,8 +366,27 @@ class DatasetRegistryStatsResponseSchema(Schema):
     ingest_finished_at = fields.Raw(allow_none=True)
     origin = fields.String(required=True)
     source = fields.Dict(required=True)
+    importer_display_name = fields.String(
+        required=True,
+        metadata={"description": "The display name of ``source``'s importer; empty when the origin names none."},
+    )
+    source_rows = fields.List(
+        fields.Nested(DatasetSourceRowSchema),
+        required=True,
+        metadata={
+            "description": (
+                "``source``'s params worded for display, in recorded order. Empty values, a ``media_type`` "
+                "that is the dataset's own, and ``source_specs`` that only include the dataset's own type "
+                "are left out."
+            )
+        },
+    )
     clipper = fields.String(required=True)
     embedder = fields.String(required=True)
+    embedder_display_name = fields.String(
+        required=True,
+        metadata={"description": "The display name of ``embedder``; empty when the dataset records none."},
+    )
     coverage_atlas = fields.Nested(
         DatasetCoverageAtlasStatusSchema,
         required=True,

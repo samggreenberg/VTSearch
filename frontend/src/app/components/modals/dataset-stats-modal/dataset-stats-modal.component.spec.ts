@@ -30,10 +30,22 @@ describe('DatasetStatsModalComponent', () => {
     ingest_finished_at: 1700000075,
     clipper: 'whole',
     embedder: 'clap',
+    embedder_display_name: 'CLAP (general, faster)',
     file_type_counts: { wav: 80, mp3: 20 },
     source: { importer: 'server_folder', params: { path: '/data', media_type: 'audio' } },
+    importer_display_name: 'Folder',
+    source_rows: [{ key: 'path', label: 'Folder or archive', value: '/data', description: 'Absolute path to a directory.' }],
     coverage_atlas: null,
   };
+
+  /** Each table row's cells, joined: ``"Label value"``. */
+  function rowTexts(): string[] {
+    return Array.from(fixture.nativeElement.querySelectorAll('tr') as NodeListOf<HTMLElement>).map((tr) =>
+      Array.from(tr.querySelectorAll('td'))
+        .map((td) => td.textContent?.trim())
+        .join(' '),
+    );
+  }
 
   beforeEach(async () => {
     loadingTasks$ = new Subject<LoadingTask[]>();
@@ -73,7 +85,7 @@ describe('DatasetStatsModalComponent', () => {
 
     expect(fixture.nativeElement.querySelector('.loading-text')).toBeFalsy();
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('server_folder'); // importerName
+    expect(text).toContain('Folder'); // importerName
     expect(text).toContain('1m 15s'); // duration getter
   });
 
@@ -137,6 +149,59 @@ describe('DatasetStatsModalComponent', () => {
   // Issue #2698: the Stats window covers the Dashboard grid, so it has to
   // carry the grid's own columns (Type / # Items / Created / Age-Off /
   // Creator / Readers) rather than force the user to dismiss it to look.
+  // Issue #5617: the Creation rows read as words, not as the stored recipe.
+  describe('the Creation section', () => {
+    async function load(overrides: Partial<typeof mockStats> = {}): Promise<void> {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/datasets/registry/ds1/stats').flush({ ...mockStats, ...overrides });
+      await settleZoneless(fixture);
+    }
+
+    it('lists the importer and its fields as the server words them', async () => {
+      await load({
+        source_rows: [
+          { key: 'recursive', label: 'Include subfolders', value: 'Yes', description: 'Scan subdirectories.' },
+          { key: 'source_specs', label: 'Include media', value: 'Images → Faces', description: '' },
+        ],
+      });
+      const rows = rowTexts();
+      expect(rows).toContain('Importer Folder');
+      expect(rows).toContain('Include subfolders Yes');
+      expect(rows).toContain('Include media Images → Faces');
+      expect(rows).toContain('Embedder CLAP (general, faster)');
+      expect(fixture.nativeElement.textContent).not.toContain('source_specs');
+    });
+
+    it("titles a row with its field's description, else its raw key", async () => {
+      await load({
+        source_rows: [
+          { key: 'recursive', label: 'Include subfolders', value: 'Yes', description: 'Scan subdirectories.' },
+          { key: 'source_specs', label: 'Include media', value: 'Images → Faces', description: '' },
+        ],
+      });
+      const titles = Array.from(fixture.nativeElement.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).map(
+        (el) => el.title,
+      );
+      expect(titles).toContain('Scan subdirectories.');
+      expect(titles).toContain('Importer field: source_specs');
+    });
+
+    it('names the importer by its registry name when the server has no display name for it', async () => {
+      await load({ importer_display_name: '' });
+      expect(rowTexts()).toContain('Importer server_folder');
+    });
+
+    it('says None, not a dash, for a stat with no value', async () => {
+      await load({ clipper: '', embedder: '', embedder_display_name: '', ingest_started_at: null as unknown as number });
+      const rows = rowTexts();
+      expect(rows).toContain('Clipper None');
+      expect(rows).toContain('Embedder None');
+      expect(rows).toContain('Ingest started None');
+      expect(rows).toContain('Duration None');
+      expect(rows.some((r) => r.endsWith(' -'))).toBe(false);
+    });
+  });
+
   it('renders every Dashboard grid column', async () => {
     fixture.componentRef.setInput('isDefaultLogin', false);
     fixture.componentRef.setInput('serverSetsAgeOff', true);

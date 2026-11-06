@@ -100,6 +100,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The dataset Stats window reads as words, not as the import's recipe** (issue #5617). The Creation section used
+  to print each import setting as stored: `Source specs` as JSON, `Dig archives: false`, the importer as
+  `server_folder`. It now uses the import form's own labels and values: `Include media: Images → Faces`,
+  `Include archives' contents: No`, `Importer: Folder`, and the embedder by its picker name (`SigLIP 2 (general
+  images)`, not `Siglip2`). A Media type row that repeated the Type row is gone, and so is an Include media row
+  for a dataset of its own type alone. In both Stats windows, dataset and detector, a stat with no value says `None`
+  instead of `-` (an untrained detector's Last trained says `Never`), and the detector's embedder is named the same
+  way.
+
 - **The face search line is calibrated per face embedder** (issue #5497). The face crops' line from two photos
   at a balance of 1 or more (the cosine floor around a person's photos) used one embedder's numbers whatever
   embedder made the faces. Each face embedder now has its own, fitted from a labelled face set by
