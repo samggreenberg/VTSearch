@@ -1,5 +1,5 @@
 import { CanActivateFn } from '@angular/router';
-import { PEOPLE_MEDIA_TYPE } from '../components/dashboard/card-context-menu-items';
+import { PEOPLE_MEDIA_TYPE } from '../utils/people';
 import { datasetContextGuard } from './browse-context.guard';
 
 /**
