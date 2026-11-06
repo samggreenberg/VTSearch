@@ -110,7 +110,7 @@ def _cell(corpus: str, person: str, seed: int, k: int, spread: float, s: np.ndar
 
 
 def build_cells(
-    corpora: Mapping[str, Mapping[Any, Mapping[str, Any]]],
+    corpora: Mapping[str, Mapping[Any, dict[str, Any]]],
     people: Sequence[str],
     seeds: Sequence[int] = (0,),
     *,
@@ -129,7 +129,7 @@ def build_cells(
 
     cells: list[Cell] = []
     for corpus, given in corpora.items():
-        medias = dict(given)
+        medias: dict[Any, dict[str, Any]] = dict(given)
         ids = list(medias)
         row = {cid: i for i, cid in enumerate(ids)}
         u = np.stack([np.asarray(media_embedding(medias[c]), dtype=np.float64) for c in ids])
@@ -236,7 +236,7 @@ def check(cells: Sequence[Cell], betas: Sequence[float] = FIT_BETAS) -> dict[str
 
 def fit_face_ball(
     compat: str,
-    corpora: Mapping[str, Mapping[Any, Mapping[str, Any]]],
+    corpora: Mapping[str, Mapping[Any, dict[str, Any]]],
     people: Sequence[str],
     seeds: Sequence[int] = (0,),
     *,
