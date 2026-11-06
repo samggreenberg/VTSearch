@@ -1,6 +1,6 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
+import { PEOPLE_MEDIA_TYPE } from '../../utils/people';
 import { isLinked, sharingNote, type SharingEntry } from '../../utils/detector-sharing';
-import { PEOPLE_MEDIA_TYPE } from '../../utils/people-media-type';
 
 /**
  * Builds the action menu for the dashboard's dataset and detector rows. The

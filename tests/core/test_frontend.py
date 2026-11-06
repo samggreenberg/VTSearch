@@ -319,7 +319,7 @@ class TestEagerBundleComposition:
             "Something on the eager path imports from it -- most likely a route guard,\n"
             "which app.routes.ts loads eagerly. The People guard once took\n"
             "PEOPLE_MEDIA_TYPE from it and put the bundle over budget; a constant a\n"
-            "guard needs belongs in a module of its own (utils/people-media-type.ts).\n"
+            "guard needs belongs in a module of its own (utils/people.ts).\n"
             "If the eager import is genuinely required, re-audit the budget in\n"
             "frontend/angular.json rather than deleting this."
         )

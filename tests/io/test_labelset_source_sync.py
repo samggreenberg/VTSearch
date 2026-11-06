@@ -706,19 +706,21 @@ class TestDetectorSourceRoutes:
         assert "labelset_source" not in row
 
 
+@pytest.fixture
+def owned(tmp_path) -> dict:
+    """A detector shared from here: its binding names container ``ref-1`` at the active sharing source."""
+    settings.set_detector_sharing_source(
+        {"source_name": "shared_folder", "field_values": {"folder": str(tmp_path / "shared")}}
+    )
+    return _make_detector(
+        "owned",
+        [GOOD_A],
+        binding={"source_name": "shared_folder", "field_values": {}, "remote_ref": "ref-1", "sync_error": None},
+    )
+
+
 class TestSharedDetectorSyncRoute:
     """The manual sync pulls into a plain binding only (#5576); a shared detector's owner gets a 409."""
-
-    @pytest.fixture
-    def owned(self, tmp_path) -> dict:
-        settings.set_detector_sharing_source(
-            {"source_name": "shared_folder", "field_values": {"folder": str(tmp_path / "shared")}}
-        )
-        return _make_detector(
-            "owned",
-            [GOOD_A],
-            binding={"source_name": "shared_folder", "field_values": {}, "remote_ref": "ref-1", "sync_error": None},
-        )
 
     def test_an_owner_has_nothing_to_pull(self, client, owned):
         from vtsearch.errors import DETECTOR_SHARED
@@ -740,6 +742,68 @@ class TestSharedDetectorSyncRoute:
         body = resp.get_json()
         assert body["error_code"] == SHARING_UNAVAILABLE
         assert "sharing is off" in body["message"]
+
+
+#: Every body ``PUT .../labelset-source`` takes: a plain source, a clear, and an opt-out.
+_PUT_BODIES = [
+    pytest.param(
+        {"source_name": "server_json_file", "field_values": {"filepath": "elsewhere.json"}}, id="plain-source"
+    ),
+    pytest.param({}, id="clear"),
+    pytest.param({"source_name": OPT_OUT}, id="opt-out"),
+]
+
+
+class TestSharedDetectorBindingRoute:
+    """A sharing binding is never replaced by ``PUT .../labelset-source`` (#5601), whatever the body.
+
+    Dropping an owner's ``remote_ref`` would strand its container: recipients
+    keep a copy that never updates, and the owner loses the link to it.
+    """
+
+    def _assert_untouched(self, owned: dict, before: bytes) -> None:
+        assert _entry(owned["id"])["labelset_source"] == owned["labelset_source"]
+        assert _detector_path("owned").read_bytes() == before
+
+    @pytest.mark.parametrize("body", _PUT_BODIES)
+    def test_an_owner_must_unshare_first(self, client, owned, body):
+        from vtsearch.errors import DETECTOR_SHARED
+
+        assert label_sync.sync_role(owned) == label_sync.SYNC_ROLE_OWNER
+        before = _detector_path("owned").read_bytes()
+        resp = client.put(f"/api/detectors/{owned['id']}/labelset-source", json=body)
+        assert resp.status_code == 409, resp.get_json()
+        payload = resp.get_json()
+        assert payload["error_code"] == DETECTOR_SHARED
+        assert "Stop sharing it first" in payload["message"]
+        self._assert_untouched(owned, before)
+
+    @pytest.mark.parametrize("body", _PUT_BODIES)
+    def test_a_source_that_is_not_active_keeps_its_binding(self, client, owned, body):
+        from vtsearch.errors import SHARING_UNAVAILABLE
+
+        settings.set_detector_sharing_source(None)
+        assert label_sync.sync_role(owned) == label_sync.SYNC_ROLE_UNAVAILABLE
+        before = _detector_path("owned").read_bytes()
+        resp = client.put(f"/api/detectors/{owned['id']}/labelset-source", json=body)
+        assert resp.status_code == 409, resp.get_json()
+        payload = resp.get_json()
+        assert payload["error_code"] == SHARING_UNAVAILABLE
+        assert "sharing is off" in payload["message"]
+        assert "fork it" in payload["message"]
+        self._assert_untouched(owned, before)
+
+    def test_only_the_creator_hears_about_the_share(self, client, tmp_path):
+        settings.set_detector_sharing_source(
+            {"source_name": "shared_folder", "field_values": {"folder": str(tmp_path / "shared")}}
+        )
+        entry = _make_detector(
+            "theirs_shared",
+            [GOOD_A],
+            binding={"source_name": "shared_folder", "field_values": {}, "remote_ref": "ref-2", "sync_error": None},
+            created_by="alice",
+        )
+        assert client.put(f"/api/detectors/{entry['id']}/labelset-source", json={}).status_code == 403
 
 
 class TestRecoveryOnLoad:

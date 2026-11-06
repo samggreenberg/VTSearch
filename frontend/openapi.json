@@ -13449,7 +13449,7 @@
         }
       ],
       "put": {
-        "description": "A body of ``{}`` (or an empty ``source_name``) clears the detector's own\nbinding, so it follows the deployment default again, if any.\n``source_name: \"none\"`` opts it out even when a default exists.\nOtherwise the detector syncs with the named source using ``field_values``\n(any values the default fixes for that source are dropped: they always\ncome from the server).  Setting a source pulls what it already holds into\nthe detector, then pushes the detector's labels back to it.",
+        "description": "A body of ``{}`` (or an empty ``source_name``) clears the detector's own\nbinding, so it follows the deployment default again, if any.\n``source_name: \"none\"`` opts it out even when a default exists.\nOtherwise the detector syncs with the named source using ``field_values``\n(any values the default fixes for that source are dropped: they always\ncome from the server).  Setting a source pulls what it already holds into\nthe detector, then pushes the detector's labels back to it.\n\nA binding that names a shared container is never replaced here, by any\nbody: dropping its ``remote_ref`` would leave the container's recipients\nwith a copy that never updates again, and nothing would say so.  Its\nowner unshares first, which archives the container.  A sharing binding\nwhose source is not the active one is refused too: it is never pointed at\na different source, so it can resume once that source is back.",
         "operationId": "set_detector_labelset_source",
         "requestBody": {
           "content": {
@@ -13482,7 +13482,7 @@
             "description": "Unknown detector or labelset source."
           },
           "409": {
-            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it."
+            "description": "The detector is a received, read-only copy (``error_code: detector_read_only``); fork it to change it. Also when the detector's binding names a shared container, whatever the body: it owns that container (``error_code: detector_shared``; stop sharing it first, with ``DELETE /api/detectors/registry/<id>/share``, which archives the container), or the container's source is not this server's active sharing source (``error_code: sharing_unavailable``, the message saying why; a fork is a plain copy that can sync anywhere)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
