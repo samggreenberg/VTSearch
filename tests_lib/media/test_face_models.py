@@ -243,7 +243,7 @@ class TestHardView:
                 pass
 
             def process(self, image, *, confidence_threshold=None, media_id="") -> list[Any]:
-                return [types.SimpleNamespace(quality=q) for q in qualities]
+                return [types.SimpleNamespace(quality=q, compat="fake:5372") for q in qualities]
 
             def process_buffer(self, buffer, *, confidence_threshold=None, media_id="") -> list[Any]:
                 return []

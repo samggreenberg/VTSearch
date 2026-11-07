@@ -273,7 +273,9 @@ class Image2FaceMediaConverter(MediaConverter):
 
         pipeline = bridge.get_face_pipeline()
         try:
-            records = pipeline.process(np.asarray(img), confidence_threshold=p.threshold, media_id=media_id)
+            records = bridge.process_upright(
+                pipeline, np.asarray(img), confidence_threshold=p.threshold, media_id=media_id
+            )
         except Exception:
             if strict:
                 raise
