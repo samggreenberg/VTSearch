@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-06-face-rotation-5373.e06c973aaf66.tar.gz",
+   "source_commit": "e06c973aaf66d6ee00901330d79d3975bb18d80f",
+   "files": {
+    "cuts.csv": {
+     "bytes": 2117,
+     "oid": "e312437e4b90d6b4ff2884f89100d66c1dcb65f7"
+    },
+    "gain_bins.csv": {
+     "bytes": 294,
+     "oid": "4e6c280b79f4389b2fbd2fa229c275d28198d4e2"
+    },
+    "paired.csv": {
+     "bytes": 5780,
+     "oid": "208bbd9e13f6df156afa9b36a949c9ad05edafa7"
+    },
+    "turned.csv": {
+     "bytes": 58,
+     "oid": "87f6c66751d3f01d822a9094d10c63264fe056e2"
+    }
+   }
+  }
+ ]
+}

@@ -115,6 +115,8 @@ turned face (about 45 of 562).
   → `paired.csv`, `turned.csv`. A dry run with ctl on both sides gives 0 everywhere.
 - Figures: `face_rotation_5373_figure.py`.
 - Committed files hold aggregates only. The per-face sizing rows stay owner-only in the work dir.
+- The four CSVs (`cuts.csv`, `gain_bins.csv`, `paired.csv`, `turned.csv`) are on the `experiments-data`
+  release: `python scripts/experiments/study_data.py fetch 2026-11-06-face-rotation-5373` puts them back.
 
 The live FHIBE face cells were not rebuilt here. The next `build_pile` of `fhibe_faces_ik_*` picks up the
 retry, and later face benches read it from there.
