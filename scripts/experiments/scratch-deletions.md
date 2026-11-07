@@ -44,6 +44,7 @@ hand.
 
 | Date | Cleanup |
 |---|---|
+| 2026-11-02 | [unused model weights and a stash cell from the pile (8.2 GB by `du`, owner-approved)](scratch-deletions/2026-11-02-pile-models-and-stash.md) |
 | 2026-10-24 | [#5084's worktrees and a mis-set rerun (1.4 GB by `du`, owner-approved)](scratch-deletions/2026-10-24-5084-worktrees-and-misset-rerun.md) |
 | 2026-10-19 | [#5092 and #5095 gzip the kept runs' cells in place (238 GB, owner-approved; a rewrite, nothing deleted)](scratch-deletions/2026-10-19-gzip-kept-run-cells.md) |
 | 2026-10-19 | [closed face studies, old SotA arms and leftovers (139 GB by `du`, owner-approved)](scratch-deletions/2026-10-19-old-sota-arms-and-face-studies.md) |
