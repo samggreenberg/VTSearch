@@ -12,6 +12,9 @@ The scoring, the pairing check, Done and the splits are ``head_count_5039_ab.py`
 
     python head_bulk_5084_ab.py --root <state-of-the-app dir> --date 2026-10-23 --seeds 5 --path binary \\
         --baseline <text_baseline.csv> --out <dir> [--docs <report dir>/tables] [--tag smoke] [--betas 0.25,1]
+
+#5214 reran Region Photo with 5 seeds to 150 clicks: ``--horizon 150 --stem ab_region5`` reads it without
+overwriting #5084's 1-seed, 100-click Region tables.
 """
 
 from __future__ import annotations
@@ -54,11 +57,11 @@ def read_cell(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     return m, pk[pk["embedder"] == _EMB]
 
 
-def set_path(path: str) -> None:
-    """Point #5039's analysis at *path*: its embedder, its horizon, this study's arms."""
+def set_path(path: str, horizon: int | None = None) -> None:
+    """Point #5039's analysis at *path*: its embedder, its horizon (or *horizon*), this study's arms."""
     global _EMB
     _EMB = EMBEDDER[path]
-    hc.T = HORIZON[path]
+    hc.T = horizon or HORIZON[path]
     hc.GRID_T = np.arange(hc.T + 1)
     hc.CLICKS = tuple(c for c in (10, 25, 35, 50, 75, 100, 125, 150, 175, 200) if c <= hc.T)
     hc.AREAS = tuple((0, hi) for hi in (25, 50, 100, 150, 200) if hi <= hc.T)
@@ -83,8 +86,10 @@ def main() -> int:
     ap.add_argument("--docs", type=Path, help="the report's tables dir; figures go beside it")
     ap.add_argument("--procs", type=int, default=8)
     ap.add_argument("--arms", default=",".join(ARMS), help="the arms to read; the control is always one")
+    ap.add_argument("--horizon", type=int, help="clicks the runs went to (default: the path's, Region 100)")
+    ap.add_argument("--stem", help="output file stem (default ab_<path>)")
     a = ap.parse_args()
-    set_path(a.path)
+    set_path(a.path, a.horizon)
     arms = [x for x in ARMS if x in {"ctl", *a.arms.split(",")}]
     base = pd.read_csv(a.baseline)
     base = base[(base["embedder"] == _EMB) & (base["seed"] < a.seeds)]
@@ -106,7 +111,7 @@ def main() -> int:
         res[beta] = hc.analyse_beta(runs, beta)
     if not res:
         return 1
-    stem = f"ab_{a.path}"
+    stem = a.stem or f"ab_{a.path}"
     for o in [a.out] + ([a.docs] if a.docs else []):
         o.mkdir(parents=True, exist_ok=True)
         for name in ("summary", "splits", "examples", "curves", "gains"):
