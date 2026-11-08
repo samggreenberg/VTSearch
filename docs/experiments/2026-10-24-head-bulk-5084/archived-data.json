@@ -70,6 +70,36 @@
      "oid": "203d34f84a03f464e9a7668c5137cbb4b55ce6bb"
     }
    }
+  },
+  {
+   "asset": "2026-10-24-head-bulk-5084.bb3627abcc3d.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/ab_region5_counts.json": {
+     "bytes": 102,
+     "oid": "8417b66825bc059c8023a8b6db26e28ba8c053a4"
+    },
+    "tables/ab_region5_curves.csv": {
+     "bytes": 13829,
+     "oid": "1f87192e090fd79dbbd9612c5d4e4d459cb4bb17"
+    },
+    "tables/ab_region5_examples.csv": {
+     "bytes": 2567,
+     "oid": "81a4aa5fd7d02187e12d4a4f9db90a9f1f8534c4"
+    },
+    "tables/ab_region5_gains.csv": {
+     "bytes": 15196,
+     "oid": "bc993c71a1efb2a4ef60388dfd33d261be8d53b5"
+    },
+    "tables/ab_region5_splits.csv": {
+     "bytes": 2986,
+     "oid": "2f0424d3c23604b2520f825794fb39d0a6d68df0"
+    },
+    "tables/ab_region5_summary.csv": {
+     "bytes": 4607,
+     "oid": "bdf99cf427271e1e80e400d0a9d1238cce8784e0"
+    }
+   }
   }
  ]
 }
