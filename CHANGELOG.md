@@ -20,6 +20,8 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-11-10
+
 ### Changed
 
 - **The detector Stats window's Import section reads as words too** (issue #5620). A detector made from imported
