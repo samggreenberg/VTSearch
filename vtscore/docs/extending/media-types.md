@@ -137,7 +137,8 @@ either shape sets the same attributes; nothing else special-cases them.
 not an image: audio is a WAV, video an MP4, a document an
 `application/pdf`. Everything that shows a *picture* of a media - the grid
 tile, the VTSBrowse bin popup, the labeling thumbnail,
-`GET /api/medias/<id>/image` and `/api/medias/<id>/thumbnail` - calls
+`GET /api/medias/<id>/image`, `/api/medias/<id>/thumbnail` and the Browse
+map's batched `/api/medias/thumbnails` - calls
 `image_response` instead, and falls back to a placeholder when it returns
 `None`.
 
