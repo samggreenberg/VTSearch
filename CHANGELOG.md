@@ -52,6 +52,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   Browse map keeps the ones it has decoded when you leave it, so going back to the same dataset's map paints them at
   once. On an 8,000-image map with 347 thumbnails on screen, every thumbnail was in 3.1 s after opening Browse
   instead of 9.4 s with 100 ms of latency, and 1.6 s instead of 4.2 s with 40 ms.
+- **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
+  downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
+  originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,
+  as it already did thumbnails. The review flows still fetch the next two pictures while you look at the current
+  one, but they now do it by filling the browser's cache, so a picture you come back to is not fetched again.
+  For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
+  max-age=86400`, and answers `304` to a matching `If-None-Match`.
 
 ## 2026-11-10
 

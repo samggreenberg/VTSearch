@@ -503,20 +503,39 @@ class TestMediaImage:
         assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_returns_404_for_invalid_id(self, client):
-        resp = client.get("/api/medias/1/image")
-        # Pins the premise the reviewer-side image prefetch is built on (#3896):
-        # `no-cache` with no validator. The browser may keep these bytes but may
-        # not reuse them without revalidating, and with neither an ETag nor a
-        # Last-Modified there is nothing to revalidate against -- so a reuse is a
-        # fresh download of the whole body. That is why `MediaPrefetchService`
-        # holds the bytes client-side instead of warming the HTTP cache. Giving
-        # this route a validator would be a real improvement; it would also make
-        # that store redundant, so it should change this test too.
-        assert resp.headers.get("Cache-Control") == "no-cache"
-        assert "ETag" not in resp.headers and "Last-Modified" not in resp.headers
-
         resp = client.get("/api/medias/9999/image")
         assert resp.status_code == 404
+
+    def test_is_cacheable_with_a_validator(self, client):
+        # Pins the premise the reviewer-side image prefetch is built on (#5648):
+        # a day's `max-age` plus an ETag, so `MediaPrefetchService` can warm the
+        # browser's HTTP cache and the viewer's `<img>` reuses those bytes
+        # without a request. Before #5648 this route answered `no-cache` with no
+        # validator, and every reuse was a fresh download of the whole image.
+        resp = client.get("/api/medias/1/image")
+        assert resp.status_code == 200
+        assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+        assert resp.headers.get("ETag")
+
+    def test_etag_fingerprints_the_bytes_served(self, client):
+        # For audio the bytes served are the waveform picture, not the clip,
+        # so the ETag must be a hash of the picture rather than the media's md5.
+        resp = client.get("/api/medias/1/image")
+        assert resp.get_etag()[0] == content_md5(resp.data)
+        assert resp.get_etag()[0] != medias[1].get("md5")
+
+    def test_conditional_request_returns_304(self, client):
+        etag = client.get("/api/medias/1/image").headers["ETag"]
+        resp = client.get("/api/medias/1/image", headers={"If-None-Match": etag})
+        assert resp.status_code == 304
+        assert resp.data == b""
+        assert resp.headers["ETag"] == etag
+        assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+
+    def test_stale_validator_gets_the_full_body(self, client):
+        resp = client.get("/api/medias/1/image", headers={"If-None-Match": '"not-the-etag"'})
+        assert resp.status_code == 200
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_consistent_responses(self, client):
         """Same media should return the same thumbnail."""

@@ -236,6 +236,11 @@ GET /api/medias/{media_id}/image
 For a non-image media type the route delegates to that type's
 `image_response` hook, so audio serves its waveform PNG, video its
 mid-frame, and a PDF document its first page.
+Cached like `/thumbnail`: an `ETag` over the bytes served (for audio and
+video, the picture rather than the media's own bytes), a `304` on a matching
+`If-None-Match`, and `private, max-age=86400`. So the Browse map's largest
+cells, which paint from this route, come from the browser cache on a revisit,
+and the reviewers' prefetch warms the next items by fetching these URLs.
 400 if the media is not an image and its `image_response` hook yielded
 nothing. 404 if not found.
 

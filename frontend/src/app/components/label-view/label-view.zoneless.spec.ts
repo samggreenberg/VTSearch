@@ -277,7 +277,7 @@ describe('LabelViewComponent', () => {
 
   /**
    * #3896: the next image used to be requested only once the vote POST came
-   * back. The view now hands the prefetch store the next PREFETCH_DEPTH images
+   * back. The view now hands the prefetch the next PREFETCH_DEPTH images
    * as soon as an item is on screen — and again whenever the prediction moves
    * with that item still on screen, which is the case a selection-only trigger
    * missed.
