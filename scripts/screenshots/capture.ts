@@ -528,11 +528,15 @@ function makeHelpers(page: Page, timing?: Timing): Helpers {
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});
       // First visit builds the UMAP projection (progress bar); wait it out.
       await page.waitForSelector('.browse-content, canvas', { timeout: 180000 });
-      // The canvas mounts under an opaque cover that only lifts once the opening
-      // view's tiles + thumbnails have painted; wait for it to detach so the shot
-      // frames the finished map, not the "Loading thumbnails…" cover.
+      // The canvas mounts under an opaque cover that lifts once the opening
+      // view's bins are in; its thumbnails fill in after that (#5636). Wait for
+      // both, so the shot frames the finished map rather than the "Loading
+      // map…" cover or grey bins under the loading bar.
       await page
         .waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 })
+        .catch(() => {});
+      await page
+        .waitForSelector('.browse-main[data-thumbs="settled"]', { timeout: 180000 })
         .catch(() => {});
       await wait(3000);
     },

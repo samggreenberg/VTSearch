@@ -78,7 +78,9 @@
             (mousedown)="onDetailsDividerMouseDown($event)"
           ></div>
         }
-        <div class="browse-main">
+        <!-- `data-thumbs` says whether thumbnails on screen are still coming in;
+             the screenshot harness waits on it to frame a finished map. -->
+        <div class="browse-main" [attr.data-thumbs]="thumbsLoading() ? 'loading' : 'settled'">
           <div class="browse-tools-left" #toolsLeft vtNoFocusSteal>
             @if (subset) {
               <button

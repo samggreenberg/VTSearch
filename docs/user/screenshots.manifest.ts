@@ -2311,6 +2311,7 @@ export const SHOTS: Shot[] = [
       await page.locator('.goods-actions button[aria-label="Browse"]').first().click();
       await page.waitForSelector('.bsp-verify-good', { timeout: 300000 });
       await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 }).catch(() => {});
+      await page.waitForSelector('.browse-main[data-thumbs="settled"]', { timeout: 180000 }).catch(() => {});
       await h.wait(2500);
       await clickTile(page, h, 'left', async () => (await page.locator('.bsp-entry').count()) > 0);
       await page.mouse.move(700, 60);
