@@ -376,10 +376,9 @@ def no_face_models(tmp_path, monkeypatch):
     monkeypatch.delenv("IMAGEKIT_EXT_BACKEND", raising=False)
     absent = tmp_path / "no-face-models" / imagekit_bridge.DEFAULT_CONFIG_RELPATH
     monkeypatch.setattr(imagekit_bridge, "default_config_path", lambda: absent)
-    # Nor the face ball's floors (#5497), which live beside the face pack: a test that wants a
-    # space's ball writes one (:func:`tests_shared.face_ball.face_ball_space`).
+    # Nor the face ball's floors (#5497): their file sits beside the pipeline config in use
+    # (:func:`vtscore.media.face.face_ball.face_ball_path`), so it is absent with it.  A test that
+    # wants a space's ball writes one (:func:`tests_shared.face_ball.face_ball_space`).
     from vtscore.media.face import face_ball
 
-    no_ball = tmp_path / "no-face-models" / face_ball.FACE_BALL_RELPATH
-    monkeypatch.setattr(face_ball, "face_ball_path", lambda: no_ball)
     face_ball.reset_for_tests()

@@ -3,9 +3,16 @@
 **Status (2026-10-24): offline on every snapshot on the head's count line of three benches (Binary Photo, Region
 Photo, FHIBE faces), at beta 1/4, 1 and 4, in four corpora each (0.44%, 0.1%, 1% and no positives); closed loop at
 beta 1/4 and 1 on Binary Photo (720 sessions per arm and preset, 5 seeds) and Region Photo (144 per arm and preset,
-1 seed, 100 clicks). Shipped: `HEAD_COUNT_PRECISION_SCALE` 0.71 and `HEAD_COUNT_PRECISION_EXPONENT` 1 are the
+1 seed, 100 clicks), and again on Region Photo with 5 seeds to 150 clicks on dev c7de6783e (720 per arm and preset,
+2026-11-07, #5214). Shipped: `HEAD_COUNT_PRECISION_SCALE` 0.71 and `HEAD_COUNT_PRECISION_EXPONENT` 1 are the
 defaults (the owner's call on these numbers); `CALIB_HEAD_COUNT_PRECISION_SCALE=off
 CALIB_HEAD_COUNT_PRECISION_EXPONENT=off` is the count before.**
+
+**#5214 (2026-11-07): on Region Photo with 5 seeds to 150 clicks, the early gain holds and the stop gain does not.**
+0.71 beta adds +0.0067 (± 0.0009) to Find's mean F-beta over clicks 0 to 50 at beta 1 and +0.014 (± 0.0023) at beta
+1/4, two thirds of the 1-seed read. F-beta at the stop moves -0.0008 (± 0.0003) at beta 1 and +0.0006 (± 0.0006) at
+beta 1/4, where the 1-seed read had +0.0040 and +0.0031, and the closing check leaves the arms level (+0.0000,
+-0.0001). [The 5-seed section](#region-photo-at-5-seeds-and-150-clicks-5214) has the table.
 
 **The count of what stands out over-reads the head's scores because the heads' bulks are not Gaussian above 3
 spreads: Region Photo's withheld negatives above median + 4 spreads number 96 where a Gaussian bulk puts 0.36, and its
@@ -64,6 +71,9 @@ heads, against today's line:
 | **closed loop, 0.71 beta: Find's mean F-beta gain, clicks 0-50 / 0-200 (Region 0-100), beta 1** | **+0.0030 (± 0.0007) / +0.0002 (± 0.0003)** | **+0.0093 (± 0.0023) / +0.0075 (± 0.0019)** | not run |
 | … beta 1/4 | +0.0014 (± 0.0013) / +0.0006 (± 0.0005) | +0.021 (± 0.0048) / +0.014 (± 0.0032) | not run |
 | … F-beta at the stop, beta 1 / beta 1/4 | -0.0015 (± 0.0005) / +0.0012 (± 0.0018) | +0.0040 (± 0.0018) / +0.0031 (± 0.0032) | not run |
+| **Region at 5 seeds, 150 clicks (#5214): clicks 0-50 / 0-150, beta 1** | | **+0.0067 (± 0.0009) / +0.0023 (± 0.0003)** | |
+| … beta 1/4 | | +0.014 (± 0.0023) / +0.0052 (± 0.0008) | |
+| … F-beta at the stop, beta 1 / beta 1/4 | | -0.0008 (± 0.0003) / +0.0006 (± 0.0006) | |
 
 *± one SE over classes: offline 0.004 to 0.008 on Binary, 0.004 to 0.015 on Region, under 0.002 on faces
 (`tables/offline_presets.csv`). Faces' corpora are at a person's own prevalence (about 4 of 5,439 crops) and its
@@ -218,6 +228,49 @@ trains from click 7, and the head's count line serves from there until 6 held-ou
   were rerun on another; a first rerun went to 150 clicks by mistake and was set aside, the second to 100 clicks
   pairs click for click with the control.
 
+## Region Photo at 5 seeds and 150 clicks (#5214)
+
+![Region Photo closed loop, 5 seeds](figures/ab_region5_over_clicks.webp)
+
+*Figure 5: Region Photo, as figure 4, 720 sessions per arm and preset (5 seeds, 150 clicks). The grey line is the count before #5084 (`off`), still labelled "the app" from #5084's run; blue, 0.71 beta, is today's app.*
+
+The 1-seed Region run above went to 100 clicks on the cpu partition. #5214 reran it with 5 seeds to 150 clicks and the
+closing check, at beta 1 and 1/4, on dev c7de6783e (after #5191, and after everything that shipped since #5084: hold
+0, Diversity off, the 16-pick dry run among them), on the same post-#5191 grid. `ctl` is
+`CALIB_HEAD_COUNT_PRECISION_SCALE=off CALIB_HEAD_COUNT_PRECISION_EXPONENT=off` and `s71e1` is today's default (0.71
+beta). Tables: `tables/ab_region5_summary.csv`, `ab_region5_splits.csv`, `ab_region5_examples.csv`.
+
+| Region Photo, 0.71 beta vs the count before (720 sessions per arm, ± one SE) | beta 1 | beta 1/4 |
+|---|---|---|
+| Find's F-beta gain at click 10 / 25 / 50 / 100 / 150 | +0.031 / +0.0064 / +0.0001 / -0.0004 / -0.0002 | +0.053 / +0.014 / +0.0028 / +0.0002 / +0.0004 |
+| **mean F-beta gain, clicks 0-25** | **+0.012 (± 0.0016)** | **+0.023 (± 0.0042)** |
+| **… clicks 0-50** | **+0.0067 (± 0.0009)** | **+0.014 (± 0.0023)** |
+| … clicks 0-100 | +0.0035 (± 0.0005) | +0.0077 (± 0.0012) |
+| … clicks 0-150 | +0.0023 (± 0.0003) | +0.0052 (± 0.0008) |
+| **F-beta at the stop** (the count before: 0.58 / 0.67) | **-0.0008 (± 0.0003)** | **+0.0006 (± 0.0006)** |
+| after the closing check (0.62 / 0.71) | +0.0000 (± 0.0003) | -0.0001 (± 0.0002) |
+| sessions that pick a different image (median click) | 36 of 720 (34.5), all on a phase change | 6 of 720 (33.5) |
+| Done reached / median click / mean shift | 94% / 41 / -0.17 clicks | 95% / 36 / -0.03 clicks |
+| 1-seed, 100-click read (above): clicks 0-50 / at the stop | +0.0093 (± 0.0023) / +0.0040 (± 0.0018) | +0.021 (± 0.0048) / +0.0031 (± 0.0032) |
+
+- **The early gain holds.** It is the first trained lines (click 7 onward) keeping fewer of the bulk's tail, as
+  offline: +0.031 at click 10 at beta 1 and +0.053 at beta 1/4, gone by click 50. Over clicks 0-50 it is two thirds
+  of the 1-seed read at both presets, within 1.3 SE of it.
+- **The stop gain does not.** At beta 1 the stop moves -0.0008 (± 0.0003), a small loss; at beta 1/4 +0.0006
+  (± 0.0006), level. The 1-seed read's +0.0040 at beta 1 was 2.2 SE from zero on 144 sessions and 100 clicks; on
+  720 sessions at 150 clicks it is not there. After the closing check the arms are level at both presets.
+- **By band** (clicks 0-50, 0-150): beta 1 large +0.011 (± 0.0014), +0.0038, 87% of classes better; medium +0.0058
+  (± 0.0011), +0.0019, 73%; small +0.0032 (± 0.0009), +0.0012, 60%. Beta 1/4 large +0.019 (± 0.0036), medium +0.014
+  (± 0.0032), small +0.0094 (± 0.0021). Sessions both arms leave under F 0.2 at click 150 are level at either preset.
+  (The splits table's `_0_200` and `F_*_200` columns are clicks 0-150 and click 150 here: the analyzer clips to the
+  run's horizon.)
+- **Sessions that part** (beta 1): "orange", large, seed 2 (parts at click 10): F at click 150 0.87 to 0.92, Done at
+  30 instead of 36. "sink", medium, seed 2 (parts at 23): F at click 100 0.61 to 0.51, at click 150 0.56 to 0.48, the
+  run that costs most.
+- **Run:** a pair worker (both arms of a cell on one node, so the pair is bit-for-bit comparable) pulled cells in
+  seed order onto 3 V100 nodes and 8 Intel cpu-partition packs, 2,880 cells in 28 h, none failed. Each arm ran
+  `head_bulk_5084.sh gpack`'s environment exactly (`HEADBULK5084_STEPS_REGION=150` set explicitly).
+
 ## Literal examples
 
 From `tables/offline_examples.csv`, the head at the median of today's kept / positives, native corpus:
@@ -243,7 +296,8 @@ From `tables/offline_examples.csv`, the head at the median of today's kept / pos
 
 ## What this leaves
 
-- Region's closed loop is 1 seed (144 sessions per arm) to 100 clicks; more seeds and 150 clicks wait for the V100s (#4711 holds them): #5214.
+- Region's closed loop at 5 seeds and 150 clicks (#5214) keeps the early gain and loses the stop gain (-0.0008 at
+  beta 1, level at beta 1/4); 0.71 beta stays the default on the strength of clicks 0-50.
 - Binary at 1% prevalence pays for any smaller count (-0.004 at beta 1, -0.014 at beta 1/4 offline). What separates
   a head whose positives sit under the bulk's tail (Binary's "book") from one whose positives sit above it (Region's
   "person") is not in the scores' shape or in 2 to 4 labels; the class model takes over at 6 held-out Goods. Finding a signal that does: #5215.
@@ -257,7 +311,9 @@ From `tables/offline_examples.csv`, the head at the median of today's kept / pos
   loop), `head_bulk_5084_ab.py` (closed-loop reader, on `head_count_5039_ab.py`), the knob in
   `vtscore/training/thresholds/labels_line.py` and `vtscore/eval/live_threshold_rules.py`
   (`head_count_precision`), tests in `tests_lib/training/test_head_count_line.py`.
-- Snapshots on dev f92a75558; closed loop on 6863aa637 (dev f92a75558 + the knob, default off).
+- Snapshots on dev f92a75558; closed loop on 6863aa637 (dev f92a75558 + the knob, default off); Region 5-seed
+  rerun (#5214) on c7de6783e, the knob's default 0.71 against `off`, run dirs
+  `state-of-the-app/2026-11-06-headbulk5084-{ctl,s71e1}-region-b{1,025}`, text baseline rebuilt on c7de6783e.
 - Data under `/expscratch/sgreenberg/`: `head-bulk-5084/` (extracts, priced pickles `pr_*.pkl`, text baseline),
   `state-of-the-app/2026-10-23-fscale4936-hb5084-binary-b*` and `2026-10-23-headbulk5084-<arm>-<path>-b*`,
   `fhibe/fhibe-full-resolution-674a7dcf-derived/runs/2026-10-23-5084snap-roll-k*-b*`.
@@ -287,4 +343,7 @@ python $S/head_bulk_5084_ab.py --root <sota> --seeds 5 --path binary --baseline 
   --docs docs/experiments/2026-10-24-head-bulk-5084/tables
 python $S/head_bulk_5084_ab.py --root <sota> --seeds 1 --path region --arms s71e1 --baseline text_baseline.csv \
   --out ab_region --docs docs/experiments/2026-10-24-head-bulk-5084/tables
+# #5214: Region at 5 seeds, 150 clicks (HEADBULK5084_DATE=2026-11-06 HEADBULK5084_STEPS_REGION=150, gpack per arm)
+python $S/head_bulk_5084_ab.py --root <sota> --date 2026-11-06 --seeds 5 --path region --arms s71e1 --horizon 150 \
+  --stem ab_region5 --baseline text_baseline.csv --out ab_region5 --docs docs/experiments/2026-10-24-head-bulk-5084/tables
 ```

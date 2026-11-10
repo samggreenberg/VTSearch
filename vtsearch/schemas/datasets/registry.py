@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.schemas.common import list_of_strings
+from vtsearch.schemas.common import OriginRowSchema, list_of_strings
 
 #: Upper bound on user-supplied dataset names, mirroring
 #: ``vtsearch.schemas.detectors.MAX_NAME_LENGTH``.  A name past this is already
@@ -295,29 +295,6 @@ class DroppedItemsGroupSchema(Schema):
     )
 
 
-class DatasetSourceRowSchema(Schema):
-    """One of a dataset's origin params, worded for its Stats window."""
-
-    key = fields.String(required=True, metadata={"description": "The raw origin param key."})
-    label = fields.String(
-        required=True,
-        metadata={"description": "The importer field's own label, or the key spelled out when it names no field."},
-    )
-    value = fields.String(
-        required=True,
-        metadata={
-            "description": (
-                "The value as the importer words it: Yes/No for a checkbox, a media type's name, the "
-                "converters an import ran (``Images → Faces``)."
-            )
-        },
-    )
-    description = fields.String(
-        required=True,
-        metadata={"description": "The importer field's description; empty when the key names no field."},
-    )
-
-
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``.
 
@@ -371,7 +348,7 @@ class DatasetRegistryStatsResponseSchema(Schema):
         metadata={"description": "The display name of ``source``'s importer; empty when the origin names none."},
     )
     source_rows = fields.List(
-        fields.Nested(DatasetSourceRowSchema),
+        fields.Nested(OriginRowSchema),
         required=True,
         metadata={
             "description": (

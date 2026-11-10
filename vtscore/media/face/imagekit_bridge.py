@@ -14,7 +14,9 @@ disk, and Face is on exactly when they are there (:func:`face_models`):
   block; the schema is in ``imagekit/README.md``).  Unset, the app looks for
   one at :func:`default_config_path`, ``imagekit/face.json`` in the models
   folder (``VTSEARCH_MODELS_DIR``), so dropping a models directory there turns
-  Face on with no environment to set.
+  Face on with no environment to set.  Whichever it is (:func:`config_path`),
+  the face ball's floors are read beside it (``face_ball.json``,
+  :mod:`vtscore.media.face.face_ball`), so a pack directory moves as one unit.
 * ``IMAGEKIT_FACE_PROVIDER`` picks the provider; unset, the config's own
   ``provider`` key, else ``oss``.  The ``ext`` provider imports the backend
   module ``IMAGEKIT_EXT_BACKEND`` names, else the config's ``ext_backend``,
@@ -73,6 +75,25 @@ QUALITY_METADATA_KEY = "Face Quality"
 #: starting face clears it did not fail, four-photo sessions included.
 HARD_VIEW_QUALITY: dict[str, float] = {"oss-arcface-mbf:1": 14.0}
 
+#: The Face Quality below which a face is looked for again in the photo turned
+#: a quarter, a half and three quarters (:func:`process_upright`, #5373), per
+#: embedding space.  The detector still finds a sideways face (someone lying
+#: down), but the crop it aligns is wrong and the vector misses the person;
+#: the same face found upright scores the quality of an ordinary face.  Read
+#: from every FHIBE face on buffalo_s at 1024 px: under 18 (8.5% of faces) holds
+#: 98% of what turning gains in matching a person's own photos, and above it a
+#: turn that wins is noise.
+UPRIGHT_RETRY_QUALITY: dict[str, float] = {"oss-arcface-mbf:1": 18.0}
+
+#: How much more quality a turned face needs to take the place of the face as
+#: found, per space: a smaller gain matches the person's own photos better about
+#: half the time, a gain of 2 nine times in ten.
+UPRIGHT_MIN_GAIN: dict[str, float] = {"oss-arcface-mbf:1": 2.0}
+
+#: The IoU, in the upright frame, at which a face found in a turned photo is the
+#: low-quality face being retried.
+UPRIGHT_MATCH_IOU = 0.5
+
 #: How long a :func:`face_models` answer is reused.  The listing routes ask once
 #: per converter and per demo, so a page load asks dozens of times; a model
 #: dropped in still shows up within a couple of seconds, with no restart.
@@ -107,6 +128,18 @@ def default_config_path() -> Path:
     from vtscore.config import paths  # noqa: PLC0415
 
     return Path(paths.MODELS_CACHE_DIR).expanduser() / DEFAULT_CONFIG_RELPATH
+
+
+def config_path() -> Path:
+    """The pipeline config the app reads: the one :data:`CONFIG_ENV_VAR` names, else :func:`default_config_path`.
+
+    Whether or not the file exists; :func:`face_models` says.  Everything that sits beside the
+    pack reads it from here, the face ball's ``face_ball.json`` included
+    (:func:`vtscore.media.face.face_ball.face_ball_path`), so a config named elsewhere brings
+    its own floors rather than the models folder's (#5621).
+    """
+    named = os.environ.get(CONFIG_ENV_VAR, "").strip()
+    return Path(named).expanduser() if named else default_config_path()
 
 
 def runtime_options() -> "RuntimeOptions":
@@ -175,7 +208,7 @@ def _check() -> FaceModels:
     from imagekit.face.pipeline import DEFAULT_PROVIDER, available_providers, read_pipeline_config  # noqa: PLC0415
 
     named = os.environ.get(CONFIG_ENV_VAR, "").strip()
-    path = Path(named).expanduser() if named else default_config_path()
+    path = config_path()
     provider = _env_provider() or DEFAULT_PROVIDER
     if not named and not path.is_file():
         return FaceModels(
@@ -315,7 +348,7 @@ def hard_view_of_file(path: Path) -> Optional[bool]:
     try:
         from imagekit.util import read_image_tensor  # noqa: PLC0415
 
-        records = get_face_pipeline().process(read_image_tensor(Path(path)), media_id=Path(path).name)
+        records = process_upright(get_face_pipeline(), read_image_tensor(Path(path)), media_id=Path(path).name)
     except Exception:
         logger.warning("could not read the Face Quality of %s", path, exc_info=True)
         return None
@@ -328,3 +361,77 @@ def media_hard_view(media: dict) -> Optional[bool]:
     """:func:`is_hard_view` for a loaded face, from the quality and space its converter stamped on it."""
     meta = media.get("custom_metadata") or {}
     return is_hard_view(meta.get(QUALITY_METADATA_KEY), meta.get(COMPAT_METADATA_KEY))
+
+
+def _box_iou(a: Any, b: Any) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _unturn_points(points: Any, turn: int, width: int, height: int) -> Any:
+    """Points of a photo turned *turn* quarters anticlockwise (``np.rot90``), in the upright *width* x *height* frame."""
+    import numpy as np  # noqa: PLC0415
+
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    u, v = pts[:, 0], pts[:, 1]
+    if turn == 1:
+        x, y = width - v, u
+    elif turn == 2:
+        x, y = width - u, height - v
+    else:
+        x, y = v, height - u
+    return np.column_stack([x, y])
+
+
+def _unturn(record: Any, turn: int, width: int, height: int) -> Any:
+    """*record*, found in the photo turned *turn* quarters, with its box and landmarks in the upright frame."""
+    import dataclasses  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    corners = _unturn_points([record.bbox[:2], record.bbox[2:]], turn, width, height)
+    lo, hi = corners.min(axis=0), corners.max(axis=0)
+    landmarks = record.landmarks
+    if landmarks is not None:
+        landmarks = _unturn_points(landmarks, turn, width, height).astype(np.asarray(landmarks).dtype)
+    return dataclasses.replace(
+        record, bbox=(float(lo[0]), float(lo[1]), float(hi[0]), float(hi[1])), landmarks=landmarks
+    )
+
+
+def process_upright(pipeline: "FacePipeline", image: Any, **kwargs: Any) -> list:
+    """``pipeline.process(image, **kwargs)``, with each low-quality face retried in the photo turned (#5373).
+
+    A face whose quality is under its space's :data:`UPRIGHT_RETRY_QUALITY` is
+    looked for again in the photo turned a quarter, a half and three quarters,
+    and the record with the highest quality among those that overlap it
+    (:data:`UPRIGHT_MATCH_IOU`) and beat it by :data:`UPRIGHT_MIN_GAIN` takes
+    its place: its vector, quality and
+    confidence, with its box and landmarks mapped back to the upright photo, so
+    a caller sees the same frame either way.  Landmarks found turned say how the
+    face lies in the photo, so a crop rolled upright by them comes out upright.
+
+    The loop sits here, in front of the provider, so it applies to whichever
+    backend the server runs (``oss`` or ``ext``) and imagekit's contract is
+    unchanged.  A space with no cut, or a photo with no low face, costs one call.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    records = list(pipeline.process(image, **kwargs))
+    low = [i for i, rec in enumerate(records) if rec.quality < UPRIGHT_RETRY_QUALITY.get(str(rec.compat), 0.0)]
+    if not low:
+        return records
+    arr = np.asarray(image)
+    height, width = arr.shape[:2]
+    found = {i: records[i] for i in low}
+    for turn in (1, 2, 3):
+        for rec in pipeline.process(np.ascontiguousarray(np.rot90(arr, turn)), **kwargs):
+            upright = _unturn(rec, turn, width, height)
+            for i, first in found.items():
+                need = max(records[i].quality, first.quality + UPRIGHT_MIN_GAIN.get(str(first.compat), 0.0))
+                if upright.quality > need and _box_iou(first.bbox, upright.bbox) >= UPRIGHT_MATCH_IOU:
+                    records[i] = upright
+    return records

@@ -2200,7 +2200,7 @@
           "source_rows": {
             "description": "``source``'s params worded for display, in recorded order. Empty values, a ``media_type`` that is the dataset's own, and ``source_specs`` that only include the dataset's own type are left out.",
             "items": {
-              "$ref": "#/components/schemas/DatasetSourceRow"
+              "$ref": "#/components/schemas/OriginRow"
             },
             "type": "array"
           }
@@ -2223,34 +2223,6 @@
           "readers",
           "source",
           "source_rows"
-        ],
-        "type": "object"
-      },
-      "DatasetSourceRow": {
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "description": "The importer field's description; empty when the key names no field.",
-            "type": "string"
-          },
-          "key": {
-            "description": "The raw origin param key.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The importer field's own label, or the key spelled out when it names no field.",
-            "type": "string"
-          },
-          "value": {
-            "description": "The value as the importer words it: Yes/No for a checkbox, a media type's name, the converters an import ran (``Images \u2192 Faces``).",
-            "type": "string"
-          }
-        },
-        "required": [
-          "description",
-          "key",
-          "label",
-          "value"
         ],
         "type": "object"
       },
@@ -3388,6 +3360,17 @@
             "$ref": "#/components/schemas/DetectorImportRecord",
             "nullable": true
           },
+          "imported_rows": {
+            "description": "``imported.params`` worded for display, in recorded order; empty when no importer created the detector. Empty values are left out.",
+            "items": {
+              "$ref": "#/components/schemas/OriginRow"
+            },
+            "type": "array"
+          },
+          "importer_display_name": {
+            "description": "The display name of ``imported``'s label importer; empty when no importer created the detector.",
+            "type": "string"
+          },
           "last_trained_at": {
             "nullable": true
           },
@@ -3437,6 +3420,8 @@
           "embedder_display_name",
           "embedder_type",
           "imported",
+          "imported_rows",
+          "importer_display_name",
           "media_example",
           "media_type",
           "name",
@@ -7170,6 +7155,34 @@
         },
         "required": [
           "importer"
+        ],
+        "type": "object"
+      },
+      "OriginRow": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "The importer field's description; empty when the key names no field.",
+            "type": "string"
+          },
+          "key": {
+            "description": "The raw param key.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The importer field's own label, or the key spelled out when it names no field.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value as the importer words it (its ``describe_origin_param``): Yes/No for a checkbox, a media type's name, the converters an import ran (``Images \u2192 Faces``).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "key",
+          "label",
+          "value"
         ],
         "type": "object"
       },
@@ -13161,7 +13174,7 @@
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``.",
+        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``; ``importer_display_name`` and\n``imported_rows`` are that record worded for the Import section (#5620).",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {

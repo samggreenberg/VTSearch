@@ -61,6 +61,7 @@ Optional:
 | `run_labelset(field_values)` | `{"labels": run(field_values)}` | The import as a serialised labelset, plus a `detector_meta` block when your source carries one. The app's import routes call this rather than `run()`, so a detector imported from a labelset this app exported keeps its training-domain summary (#5571, `vtscore.detectors.domain_summary.adopt_domain_summary`). Override it only when your source can hold the block, as the `server_json_file` importer does |
 | `run_labelset_cli(field_values)` | `{"labels": run_cli(field_values)}` | The CLI's `run_labelset()`, called by `--import-labels-into`. Override it whenever you override `run_labelset()` |
 | `default_detector_name(field_values)` | the first `file` field's filename stem, else `"<display_name> detector"` | The name a detector created from this importer gets by default; the app prefills the New Detector › Trained form's name box with it, live. Keep it cheap: it runs on every form change |
+| `describe_origin_param(key, value)` | `Yes` / `No` for a checkbox, else the value as recorded | One param of the record below, worded for the detector Stats window's Import section, which labels each row with your field's own `label`. The hook a dataset importer has. Override it to name a value you record as an id; return `""` to leave the row out, and fall back to the base method for the keys you leave alone |
 
 Expose `LABEL_IMPORTER = YourImporter()` at module level.
 
@@ -71,7 +72,9 @@ on its registry entry: your `name`, the field values it ran with, and the time
 a dataset origin's policy: `"file"` and `"password"` fields are left out, and
 `PluginField.include_in_origin` / `origin_serializer` tune any field as they do
 for a dataset importer. Set `include_in_origin=False` on a field whose value
-should not be written to disk.
+should not be written to disk. The detector's Stats window lists the record
+under your field labels, each value worded by `describe_origin_param()`
+(`vtscore.detectors.import_record.import_rows`).
 
 ## The returned label format
 

@@ -1,0 +1,333 @@
+"""#5244: do a Region session's Good (and Bad) vote boxes, pasted beside the target as SAM3 exemplars, beat the text prompt?
+
+Reads ``sam3_exemplars_score_5244.py``'s per-cell scores (six arms on two canvases), #5213's native
+text-only scores (the same noun prompts, the image alone at full resolution), and #4711's shipped ``max_patch``
+Region run. Every number is seed 0 on the cell's own withheld half, so the arms are the same images cell for cell.
+
+Per cell and arm: ``AP``, ``oracle`` (best F1 of any cut on the ranking) and ``F_native`` (F1 of SAM3's own
+operating point, a detection over 0.5), plus ``F@c`` at every cut in ``CUTS``: the boxes move SAM3's scores, so an
+arm's best fixed cut is not 0.5, and #5565 ships 0.75 / 0.85 for the text prompt. Region's ``AP`` and ``oracle`` are read at the vote the arm's last
+exemplar arrived (the k-th Good, or the Bad if it came later): the detector the same session had at that point.
+
+Paired gains are means over cells with SEs over classes (a class's bands are not independent), as in #5213.
+
+    python sam3_exemplars_5244.py --root <root> --native <sam3-5213>/scores --region <mp run>/results/cells --out <dir>
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import average_precision_score
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+
+from sam3_analyze_5213 import band_of, class_of, paired, summarize  # noqa: E402
+
+CUTS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
+ARMS = ("native", "c1", "g1", "g1b1", "c3", "g3", "g3b1")
+LABEL = {
+    "native": "SAM3 text, image alone (#5213)",
+    "c1": "canvas A, text only",
+    "g1": "canvas A, text + 1 Good box",
+    "g1b1": "canvas A, text + 1 Good + 1 Bad box",
+    "c3": "canvas B, text only",
+    "g3": "canvas B, text + 3 Good boxes",
+    "g3b1": "canvas B, text + 3 Good + 1 Bad box",
+}
+
+
+def oracle_f1(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> float:
+    """Best F1 of any cut, each image counted at its sample weight."""
+    o = np.argsort(-s, kind="stable")
+    tp = np.cumsum((y * w)[o])
+    k = np.cumsum(w[o])
+    f = 2 * tp / (k + (y * w).sum())
+    return float(f.max()) if len(f) else float("nan")
+
+
+def native_f1(y: np.ndarray, s: np.ndarray, w: np.ndarray, cut: float = 0.5) -> tuple[float, float, float]:
+    """F1, precision and recall of SAM3's own operating point (a detection over *cut*), weighted."""
+    pred = s > cut
+    tp = float(w[pred & (y == 1)].sum())
+    p = tp / w[pred].sum() if pred.any() else 0.0
+    r = tp / w[y == 1].sum()
+    return (2 * p * r / (p + r) if p + r else 0.0), p, r
+
+
+def metrics(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> dict:
+    """One arm's numbers on one cell. *w* is each scored image's sample weight (1 when the whole half is scored)."""
+    fn, pn, rn = native_f1(y, s, w)
+    return {
+        "AP": average_precision_score(y, s, sample_weight=w),
+        "oracle": oracle_f1(y, s, w),
+        "F_native": fn,
+        "P_native": pn,
+        "R_native": rn,
+        "k_native": float(w[s > 0.5].sum()),
+        "n_test": float(w.sum()),
+        "n_scored": len(y),
+        "n_pos": int(y.sum()),
+        **{f"F@{c}": native_f1(y, s, w, c)[0] for c in CUTS},
+    }
+
+
+def region_at(cells: Path) -> dict[str, pd.DataFrame]:
+    """cell -> its seed-0 ordinary rows (t, AP, oracle F1), one per vote."""
+    out = {}
+    for f in sorted(glob.glob(f"{cells}/task_*.csv*")):
+        if "__" in Path(f).name:
+            continue
+        d = pd.read_csv(
+            f, usecols=["seed", "category", "t", "phase", "embedder", "average_precision", "oracle_fbeta_b1"]
+        )
+        d = d[(d["seed"] == 0) & (d["embedder"] == "siglip+dinov3_patch") & (d["phase"].astype(str) != "check")]
+        for cat, g in d.groupby("category"):
+            out[cat] = g.drop_duplicates("t", keep="last").sort_values("t")[
+                ["t", "average_precision", "oracle_fbeta_b1"]
+            ]
+    return out
+
+
+def at_vote(g: pd.DataFrame, t: int) -> tuple[float, float]:
+    """Region's AP and oracle F1 after vote *t* (the last row at or before it)."""
+    h = g[g["t"] <= t]
+    if h.empty:
+        return float("nan"), float("nan")
+    return float(h["average_precision"].iloc[-1]), float(h["oracle_fbeta_b1"].iloc[-1])
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", required=True)
+    ap.add_argument("--native", required=True, help="#5213's score shards (sam3_score_5213.py output)")
+    ap.add_argument("--region", required=True)
+    ap.add_argument("--plan", default="plan_sampled", help="plan dir under --root (test_all: the estimator check)")
+    ap.add_argument("--out", required=True)
+    a = ap.parse_args()
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    from sam3_scores import load_sam3  # noqa: PLC0415
+
+    native = load_sam3(Path(a.native), "noun")
+    region = region_at(Path(a.region))
+    rows, diag, cost = [], [], []
+    for f in sorted((Path(a.root) / "scores").glob("*.npz")):
+        if "_limit" in f.name:
+            continue
+        z = np.load(f, allow_pickle=True)
+        meta = json.loads(str(z["meta"][0]))
+        cat = meta["category"]
+        ids, y = z["ids"], z["labels"].astype(int)
+        w = z["weights"].astype(np.float64) if "weights" in z else np.ones(len(y))
+        nat, _ = native(cat, {int(i): None for i in ids})
+        scores = {"native": np.asarray([nat[int(i)] for i in ids], np.float64)}
+        for j, arm in enumerate(z["arms"]):
+            scores[str(arm)] = z["score"][:, j].astype(np.float64)
+        tg = [g["t"] for g in meta["goods"]]
+        tb = meta["bad"]["t"]
+        vote = {"native": 0, "c1": tg[0], "g1": tg[0], "g1b1": max(tg[0], tb)}
+        if len(tg) >= 3:
+            vote.update({"c3": tg[2], "g3": tg[2], "g3b1": max(tg[2], tb)})
+        for arm, s in scores.items():
+            rows.append({"category": cat, "seed": 0, "arm": arm, "vote": vote.get(arm), **metrics(y, s, w)})
+            if arm != "native" and cat in region:
+                rap, ror = at_vote(region[cat], vote[arm])
+                rows.append(
+                    {"category": cat, "seed": 0, "arm": f"region@{arm}", "vote": vote[arm], "AP": rap, "oracle": ror}
+                )
+        # The estimator check: native text-only, exact over the whole withheld half.
+        pj = Path(a.root) / a.plan / f.name.replace(".npz", ".json")
+        full = json.loads(pj.read_text()).get("test_all") if pj.exists() else None
+        if full:
+            fy = np.asarray([r[1] for r in full])
+            fs, _ = native(cat, {int(r[0]): None for r in full})
+            fsc = np.asarray([fs[int(r[0])] for r in full])
+            rows.append(
+                {"category": cat, "seed": 0, "arm": "native_full", "vote": 0, **metrics(fy, fsc, np.ones(len(fy)))}
+            )
+        for j, arm in enumerate(z["arms"]):
+            diag.append(
+                {
+                    "category": cat,
+                    "arm": str(arm),
+                    "on_ref": float(np.average(z["on_ref"][:, j], weights=w)),
+                    "presence_neg_mean": float(np.average(z["presence"][y == 0, j], weights=w[y == 0])),
+                    "presence_pos_mean": float(z["presence"][y == 1, j].mean()),
+                    "bad_sam3_score": meta["bad"]["sam3_score"],
+                }
+            )
+        el, tv, td, n, ncanv, narms, nprom = z["timing"].tolist()
+        cost.append(
+            {
+                "category": cat,
+                "gpu": meta["gpu"],
+                "n": n,
+                "s_per_img": el / n,
+                "vision_ms_per_canvas": tv / n / ncanv * 1e3,
+                "decode_ms_per_img_arm_prompt": td / n / narms / nprom * 1e3,
+                "canvases": ncanv,
+                "prompts": nprom,
+            }
+        )
+
+    d = pd.DataFrame(rows)
+    d["band"] = d["category"].map(band_of)
+    d["class"] = d["category"].map(class_of)
+    d.to_csv(out / "sam3_5244_per_cell.csv", index=False)
+    cols = ["AP", "oracle", "F_native", "P_native", "R_native", "k_native", "vote"]
+    s = summarize(d, cols)
+    s.to_csv(out / "sam3_5244_summary.csv", index=False)
+
+    # Compare on the cells every arm has (canvas B needs 3 Goods within 150 votes).
+    b_cells = set(d.loc[d["arm"] == "g3", "category"])
+    common_d = d[d["category"].isin(b_cells)]
+    s_common = summarize(common_d, cols)
+    s_common.to_csv(out / "sam3_5244_summary_common.csv", index=False)
+
+    # F at each fixed cut, per arm and band; each arm's best cut over all cells (chosen in sample: an upper bound).
+    fc = [f"F@{c}" for c in CUTS]
+    sweep = d[d["arm"].isin(ARMS)].groupby(["arm"])[fc].mean().assign(band="all")
+    sweep = pd.concat([sweep, d[d["arm"].isin(ARMS)].groupby(["arm", "band"])[fc].mean().reset_index("band")])
+    sweep["best_cut"] = sweep[fc].idxmax(axis=1).str[2:].astype(float)
+    sweep["F_best_cut"] = sweep[fc].max(axis=1)
+    sweep.reset_index().to_csv(out / "sam3_5244_cut_sweep.csv", index=False)
+
+    pairs = []
+    for band in ("all", "small", "medium", "large"):
+        sub = d if band == "all" else d[d["band"] == band]
+        for x, ref in [
+            ("g1", "native"),
+            ("g1", "c1"),
+            ("g1b1", "g1"),
+            ("c1", "native"),
+            ("g3", "native"),
+            ("g3", "c3"),
+            ("g3b1", "g3"),
+            ("c3", "native"),
+            ("g3", "g1"),
+            ("g1", "region@g1"),
+            ("g3", "region@g3"),
+            ("g1b1", "region@g1b1"),
+            ("g3b1", "region@g3b1"),
+            ("native", "region@g1"),
+            ("native", "region@g3"),
+            ("native", "native_full"),
+        ]:
+            for col in ("AP", "oracle", "F_native", "F@0.75", "F@0.85"):
+                if col.startswith("F") and x.startswith("region") | ref.startswith("region"):
+                    continue
+                r = paired(sub, x, ref, col)
+                r["group"] = band
+                pairs.append(r)
+    p = pd.DataFrame(pairs)
+    p.to_csv(out / "sam3_5244_paired.csv", index=False)
+    dg = pd.DataFrame(diag)
+    dg.to_csv(out / "sam3_5244_diag.csv", index=False)
+    dg.groupby("arm").mean(numeric_only=True).to_csv(out / "sam3_5244_diag_summary.csv")
+    c = pd.DataFrame(cost)
+    c.to_csv(out / "sam3_5244_cost.csv", index=False)
+    pc = d[d["arm"].isin(ARMS)].pivot_table(index="class", columns="arm", values="AP")
+    pc.to_csv(out / "sam3_5244_per_class_AP.csv")
+    (out / "sam3_5244_counts.json").write_text(
+        json.dumps(
+            {"cells": int(d["category"].nunique()), "cells_canvas_b": len(b_cells), "arms": list(d["arm"].unique())}
+        )
+    )
+    _figure(s, out)
+    _cut_figure(sweep, out)
+    pd.set_option("display.width", 250)
+    print(s.round(3).to_string())
+    print(p[p["group"] == "all"].round(3).to_string())
+    print(dg.groupby("arm").mean(numeric_only=True).round(3).to_string())
+    print(c.groupby("gpu").median(numeric_only=True).round(3).to_string())
+    return 0
+
+
+def _figure(s: pd.DataFrame, out: Path) -> None:
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.2), sharey=True)
+    bands = ("all", "small", "medium", "large")
+    arms = [x for x in ARMS if x in set(s["arm"])]
+    colors = {
+        "native": "#111827",
+        "c1": "#9ca3af",
+        "g1": "#2563eb",
+        "g1b1": "#93c5fd",
+        "c3": "#d1d5db",
+        "g3": "#15803d",
+        "g3b1": "#86efac",
+    }
+    for ax, metric in zip(axes, ("AP", "oracle")):
+        w = 0.8 / (len(arms) + 2)
+        for i, arm in enumerate(arms + ["region@g1", "region@g3"]):
+            v = [s.loc[(s["group"] == b) & (s["arm"] == arm), metric] for b in bands]
+            e = [s.loc[(s["group"] == b) & (s["arm"] == arm), f"{metric}_se"] for b in bands]
+            v = [float(x.iloc[0]) if len(x) else np.nan for x in v]
+            e = [float(x.iloc[0]) if len(x) else np.nan for x in e]
+            col = colors.get(arm, "#dc2626" if arm == "region@g1" else "#f97316")
+            ax.bar(
+                np.arange(4) + (i - len(arms) / 2) * w,
+                v,
+                w,
+                yerr=e,
+                color=col,
+                label=LABEL.get(arm, f"Region at that vote ({arm[7:]})"),
+            )
+        ax.set_xticks(np.arange(4), bands)
+        ax.set_title({"AP": "AP on the withheld half", "oracle": "Oracle F1 (best cut)"}[metric])
+        ax.grid(axis="y", alpha=0.3)
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=8, loc="lower center", ncol=5, frameon=False)
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.savefig(out / "sam3_5244_bands.png", dpi=130)
+
+
+def _cut_figure(sweep: pd.DataFrame, out: Path) -> None:
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.6), sharey=True)
+    style = {
+        "native": ("#111827", "-"),
+        "c1": ("#9ca3af", "--"),
+        "g1": ("#2563eb", "-"),
+        "g1b1": ("#2563eb", ":"),
+        "c3": ("#d1d5db", "--"),
+        "g3": ("#15803d", "-"),
+        "g3b1": ("#15803d", ":"),
+    }
+    for ax, band in zip(axes, ("all", "small", "medium", "large")):
+        sub = sweep[sweep["band"] == band]
+        for arm in ARMS:
+            if arm not in sub.index:
+                continue
+            col, ls = style[arm]
+            ax.plot(CUTS, sub.loc[arm, [f"F@{c}" for c in CUTS]], color=col, ls=ls, lw=1.6, label=LABEL[arm])
+        ax.axvline(0.5, color="#6b7280", lw=0.6)
+        ax.axvline(0.75, color="#6b7280", lw=0.6, ls="--")
+        ax.set_title(f"{band}: F1 of 'score > cut'")
+        ax.set_xlabel("cut")
+        ax.grid(alpha=0.3)
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=8, loc="lower center", ncol=4, frameon=False)
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
+    fig.savefig(out / "sam3_5244_cuts.png", dpi=130)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

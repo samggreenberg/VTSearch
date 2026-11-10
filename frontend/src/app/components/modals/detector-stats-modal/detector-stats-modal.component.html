@@ -79,11 +79,11 @@
         <tbody>
           <tr>
             <td class="stat-label" title="The label importer that created this detector">Importer</td>
-            <td class="stat-value">{{ imported.importer }}</td>
+            <td class="stat-value">{{ importerName }}</td>
           </tr>
           @for (p of importParams; track p.key) {
             <tr>
-              <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.label }}</td>
+              <td class="stat-label" [title]="paramTitle(p)">{{ p.label }}</td>
               <td class="stat-value">{{ p.value }}</td>
             </tr>
           }

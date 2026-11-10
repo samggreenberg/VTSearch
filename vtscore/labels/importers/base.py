@@ -61,6 +61,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
+from vtscore.plugins.origin_rows import describe_field_value
 
 __all__ = ["LabelImporter", "PluginField"]
 
@@ -205,6 +206,26 @@ class LabelImporter(PluginBase):
             if stem:
                 return stem
         return f"{self.display_name} detector"
+
+    def describe_origin_param(self, key: str, value: str) -> str:
+        """Return the import record's param *key*'s *value* as a person reads it.
+
+        The detector Stats window's Import section lists the fields this
+        importer ran with (the record
+        :func:`~vtscore.detectors.import_record.build_import_record` keeps),
+        one row per param, labelled with this importer's own field labels
+        (:func:`~vtscore.detectors.import_record.import_rows`); this method
+        words each value, the way
+        :meth:`~vtscore.datasets.importers.base.core.ImporterBase.describe_origin_param`
+        does for a dataset's origin.  Return ``""`` to leave the row out.
+
+        The default reads a checkbox as ``Yes`` / ``No`` and returns anything
+        else as recorded.  Override it to name a value your importer records as
+        an id (a saved query, a catalogue entry), and call ``super()`` for the
+        keys you leave alone.
+        """
+        field = next((f for f in self.fields if f.key == key), None)
+        return describe_field_value(field, value)
 
     # ------------------------------------------------------------------
     # CLI support

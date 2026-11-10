@@ -13,9 +13,10 @@ and the people to fit on, one per line (``#`` comments skipped).  The space is t
 ``Face Compat`` tag; ``--compat`` names it for a set that carries none, and must agree with one
 that does.
 
-The entry is a calculated asset: it goes to the models folder (default
-``$VTSEARCH_MODELS_DIR/imagekit/face_ball.json``, beside the face pack), never into the repo.
-Other spaces' entries in the file are kept.
+The entry is a calculated asset: it goes beside the face pipeline config in use (default
+``$VTSEARCH_MODELS_DIR/imagekit/face_ball.json``, beside the face pack; beside the config
+``IMAGEKIT_FACE_CONFIG`` names when it is set), never into the repo.  Other spaces' entries in the
+file are kept.
 
 Usage::
 

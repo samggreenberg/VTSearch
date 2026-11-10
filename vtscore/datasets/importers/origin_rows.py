@@ -4,7 +4,8 @@ A dataset's origin (``{"importer": ..., "params": {...}}``, see
 :meth:`~vtscore.datasets.importers.base.ImporterBase.build_origin`) is a
 re-import recipe: every value is the string the importer wrote, so a checkbox
 reads ``"false"``, a media type reads ``"face"`` and the ``source_specs`` rows
-read as their JSON.  :func:`origin_rows` turns it into labelled rows for display,
+read as their JSON.  :func:`origin_rows` turns it into labelled rows for display
+(the builder both Stats windows share, :func:`vtscore.plugins.origin_rows.param_rows`),
 using the importer's own field labels and asking the importer to word each value
 (:meth:`~vtscore.datasets.importers.base.ImporterBase.describe_origin_param`).
 
@@ -16,10 +17,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
 from typing import Any
 
-from vtscore.plugins import PluginField, parse_checkbox
+from vtscore.plugins import PluginField
+from vtscore.plugins.origin_rows import OriginRow, describe_field_value, format_param_key, param_rows
 
 __all__ = [
     "INCLUDE_MEDIA_LABEL",
@@ -33,24 +34,6 @@ __all__ = [
 #: Label of the ``source_specs`` row: the name the Add Dataset dialog gives the
 #: same choice.
 INCLUDE_MEDIA_LABEL = "Include media"
-
-
-@dataclass(frozen=True)
-class OriginRow:
-    """One origin param as a Stats window lists it.
-
-    *key* is the raw param key; *label* and *value* are what the row shows; and
-    *description* is the importer field's description (empty when the key
-    names no field), for a tooltip.
-    """
-
-    key: str
-    label: str
-    value: str
-    description: str = ""
-
-    def to_dict(self) -> dict[str, str]:
-        return asdict(self)
 
 
 def _type_label(type_id: str) -> str:
@@ -89,13 +72,6 @@ def _same_value(given: Any, default: Any) -> bool:
         return False
 
 
-def _field_value(field: PluginField, value: Any) -> str:
-    """*value* of *field*: ``Yes`` / ``No`` for a checkbox, otherwise as given."""
-    if field.field_type == "checkbox":
-        return "Yes" if parse_checkbox(value) else "No"
-    return str(value)
-
-
 def _describe_converter(name: str, params: Any) -> str:
     """A converter's display name, with the parameters set away from their defaults.
 
@@ -112,7 +88,7 @@ def _describe_converter(name: str, params: Any) -> str:
     if not isinstance(params, Mapping):
         return label
     changed = [
-        f"{f.label}: {_field_value(f, params[f.key])}"
+        f"{f.label}: {describe_field_value(f, params[f.key])}"
         for f in converter.fields
         if not f.hidden and f.key in params and not _same_value(params[f.key], f.default)
     ]
@@ -162,16 +138,10 @@ def describe_origin_value(field: PluginField | None, key: str, value: str) -> st
     if key == "source_specs":
         return describe_source_specs(value)
     if field is not None and field.field_type == "checkbox":
-        return _field_value(field, value)
+        return describe_field_value(field, value)
     if key == "media_type":
         return _type_label(value)
     return value
-
-
-def _format_key(key: str) -> str:
-    """A label for a key that names no field: ``dig_archives`` → ``Dig archives``."""
-    spaced = key.replace("_", " ")
-    return spaced[:1].upper() + spaced[1:]
 
 
 def importer_display_name(name: str) -> str:
@@ -182,6 +152,11 @@ def importer_display_name(name: str) -> str:
     if importer is None:
         return name
     return importer.display_name or name
+
+
+def _label_for(key: str) -> str:
+    """The label of a key that names no field: ``source_specs`` gets :data:`INCLUDE_MEDIA_LABEL`."""
+    return INCLUDE_MEDIA_LABEL if key == "source_specs" else format_param_key(key)
 
 
 def origin_rows(origin: Mapping[str, Any] | None, *, media_type: str = "") -> list[OriginRow]:
@@ -205,27 +180,18 @@ def origin_rows(origin: Mapping[str, Any] | None, *, media_type: str = "") -> li
 
     name = str(origin.get("importer") or "")
     importer = get_importer(name) if name else None
-    fields = {f.key: f for f in importer.fields} if importer is not None else {}
 
-    rows: list[OriginRow] = []
-    for key, raw in params.items():
-        value = "" if raw is None else str(raw)
-        if not value:
-            continue
-        if key == "media_type" and media_type and _type_id(value) == _type_id(media_type):
-            continue
-        field = fields.get(key)
-        if importer is not None:
-            shown = importer.describe_origin_param(key, value)
-        else:
-            shown = describe_origin_value(field, key, value)
-        if not shown:
-            continue
-        if field is not None:
-            label = field.label
-        elif key == "source_specs":
-            label = INCLUDE_MEDIA_LABEL
-        else:
-            label = _format_key(key)
-        rows.append(OriginRow(key=key, label=label, value=shown, description=field.description if field else ""))
-    return rows
+    def _as_recorded(key: str, value: str) -> str:
+        return describe_origin_value(None, key, value)
+
+    shown = {
+        key: raw
+        for key, raw in params.items()
+        if not (key == "media_type" and media_type and raw is not None and _type_id(str(raw)) == _type_id(media_type))
+    }
+    return param_rows(
+        importer.fields if importer is not None else (),
+        shown,
+        describe=importer.describe_origin_param if importer is not None else _as_recorded,
+        label_for=_label_for,
+    )

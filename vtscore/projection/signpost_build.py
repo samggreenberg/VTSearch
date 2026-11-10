@@ -488,7 +488,11 @@ def _clusterable_vectors(
     # doesn't guarantee it never writes to its input in place.
     matrix = np.array(matrix, dtype=np.float32, copy=True, order="C")
     n_components = min(_CLUSTER_DIM, matrix.shape[1], max(2, matrix.shape[0] - 2))
-    reducer = umap.UMAP(n_components=n_components, metric="cosine", random_state=random_state)
+    # umap-learn 0.6 ships ``py.typed`` and imports ``UMAP`` at its root without
+    # re-exporting it; ``umap.UMAP`` stays the seam the tests patch.
+    reducer = umap.UMAP(  # pyright: ignore[reportPrivateImportUsage]
+        n_components=n_components, metric="cosine", random_state=random_state
+    )
     return np.asarray(reducer.fit_transform(matrix), dtype=np.float32)
 
 

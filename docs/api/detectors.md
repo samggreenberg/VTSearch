@@ -589,7 +589,18 @@ the `size` items scored), `labelled` (the picks the ranges rest on),
 "params": {"filepath": "/data/labels/cats.json"}, "imported_at": 1761580800.0}`.
 `params` holds the fields the importer ran with, minus `file` and `password`
 fields, the policy a dataset origin follows. It is `null` for a detector made
-any other way. The Stats dialog's *Import* section reads it.
+any other way.
+
+`importer_display_name` is that importer's display name (`"Server JSON File"`),
+and `imported_rows` is `imported.params` worded for display, in recorded order:
+`[{"key", "label", "value", "description"}]`, labelled with the importer's own
+field labels (`Server path`, not `filepath`) and worded by its
+`describe_origin_param()` (`Yes` / `No` for a checkbox), the way a dataset's
+[`source_rows`](datasets.md#dataset-statistics) are. Empty values are left
+out. For a detector made any other way the name is `""` and the list empty;
+for an importer no longer registered, the name is `imported.importer` and the
+rows read as recorded. `imported` itself is the raw record, unchanged. The
+Stats dialog's *Import* section reads the three together.
 
 403 if the caller cannot access the detector; 404 if it does not exist.
 
