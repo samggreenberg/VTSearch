@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnChanges, OnInit, signal, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnChanges, signal, SimpleChanges } from '@angular/core';
 
 import {
   SettingsStateService,
@@ -23,7 +23,11 @@ function coerceIconSize(raw: unknown): IconSize | undefined {
   templateUrl: './view-controls.component.html',
   styleUrl: './view-controls.component.scss',
 })
-export class ViewControlsComponent implements OnInit, OnChanges {
+export class ViewControlsComponent implements OnChanges {
+  /** Read, never loaded: the app loads the settings at start, and the views
+   *  these controls sit in refresh them as they open (Label, Tune, Browse, the
+   *  New Detector modal). Loading here too sent one more `GET /api/settings`
+   *  for each set of controls a view mounts, beside the view's own (#5649). */
   private settingsState = inject(SettingsStateService);
 
   readonly side = input<'left' | 'right' | 'popup' | 'picker' | 'results'>('left');
@@ -68,10 +72,6 @@ export class ViewControlsComponent implements OnInit, OnChanges {
     // change made in the Settings modal or by the sibling control on the other
     // panel, or a `side` / media-type switch.
     effect(() => this.refresh());
-  }
-
-  ngOnInit(): void {
-    this.settingsState.load();
   }
 
   /** The constructor effect already re-resolves on a `side` / media-type
