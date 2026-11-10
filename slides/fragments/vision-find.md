@@ -12,9 +12,9 @@
      books. Great for sending somewhere. Useless for looking. -->
 
 <!-- **b** — So hit Browse. The same 24, laid out as a map where look-alikes
-     land together: reading in bed down here, shelves up there. The odd ones
-     out, like the pizza box, sit apart, so they're easy to spot. We'll come
-     back to that map. -->
+     land together: reading in bed over on the right, shelves down below. The
+     odd ones out, like the laptop beside a muffin, sit apart, so they're easy
+     to spot. We'll come back to that map. -->
 
 <!-- **c** — Remember Find's results from the start? Back then we got 24
      books, as a list. -->
