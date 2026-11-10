@@ -29,7 +29,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import media_embedder_names
-from vtscore.media.provenance import CLIP_WINDOW_FIELDS
+from vtscore.media.provenance import CLIP_WINDOW_FIELDS, FACE_LANDMARKS_FIELD, face_landmarks_of
 from vtscore.datasets.labelset import hit_custom_metadata
 from vtsearch.routes._source import abort_source_not_loaded, source_locator
 from vtsearch.schemas.media import (
@@ -63,6 +63,9 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     :class:`~vtscore.media.clipping.cleaner.MediaCleaner` actually rewrote at load time
     (it kept a pre-clean snapshot), which is what gates the detail viewer's
     Clean/Original toggle and the byte routes' ``?variant=original``.
+    ``face_landmarks`` is a face crop's five landmarks on the crop, for
+    matching two faces' size and position (#5644); a malformed stored value is
+    left out rather than served.
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
 
@@ -72,6 +75,9 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
         out["origin_name"] = media["origin_name"]
     if "description" in media:
         out["description"] = media["description"]
+    landmarks = face_landmarks_of(media)
+    if landmarks is not None:
+        out[FACE_LANDMARKS_FIELD] = landmarks
     _attach_embedder_fields(out, media)
 
 

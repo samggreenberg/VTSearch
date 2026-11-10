@@ -615,6 +615,30 @@ class TestBatchMetadataBranches:
         assert item["clip_start"] == 4.0
         assert item["clip_end"] == 9.0
 
+    def test_face_landmarks_reach_the_client(self, client):
+        # A face crop's five landmarks on the crop, for matching two faces (#5644).
+        points = [[0.35, 0.45], [0.65, 0.45], [0.5, 0.6], [0.38, 0.78], [0.62, 0.78]]
+        mid = _inject(media_type="face", filename="group_face_1.png", face_landmarks=points)
+        resp = client.post("/api/medias/batch", json={"ids": [mid]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert item["face_landmarks"] == points
+
+    def test_media_without_landmarks_gets_no_field(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [_inject()]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert "face_landmarks" not in item
+
+    def test_malformed_landmarks_are_left_out(self, client):
+        # The field rides in a pickle; a value that is not five finite pairs is
+        # dropped rather than served or allowed to fail the whole batch.
+        mid = _inject(media_type="face", filename="f.png", face_landmarks=[[0.1, 0.2]] * 4)
+        bad = _inject(media_type="face", filename="g.png", face_landmarks=[[0.1, float("nan")]] * 5)
+        resp = client.post("/api/medias/batch", json={"ids": [mid, bad]})
+        assert resp.status_code == 200
+        assert all("face_landmarks" not in item for item in resp.get_json())
+
 
 # ---------------------------------------------------------------------------
 # Vote route edge branches

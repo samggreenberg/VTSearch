@@ -458,3 +458,165 @@ class TestImage2FaceAlign:
                 Image2FaceMediaConverter().convert_normalized(
                     {"filename": "x.png", "media_bytes": _png_bytes()}, {"align": mode}
                 )
+
+
+class TestImage2FaceLandmarks:
+    """Each crop keeps its five landmarks, as fractions of the crop as stored (#5644)."""
+
+    COLOURS = TestImage2FaceAlign.COLOURS
+
+    def _landmarks(self, side, angle_deg, centre):
+        return TestImage2FaceAlign()._landmarks(side, angle_deg, centre)
+
+    def _face_png(self, points, size=(240, 240)) -> bytes:
+        buf = io.BytesIO()
+        TestImage2FaceAlign()._face(points, size).save(buf, format="PNG")
+        return buf.getvalue()
+
+    def _convert(self, provider, points, box, params, size=(240, 240), drawn=None):
+        """Convert a photo with dots at *drawn* (default *points*) whose one face the provider puts at *points*."""
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        provider([box], [0.95], [points])
+        media = {"filename": "face.png", "media_bytes": self._face_png(points if drawn is None else drawn, size)}
+        (face,) = Image2FaceMediaConverter().convert_normalized(media, params)
+        return face
+
+    def test_upright_points_land_inside_the_crop(self, provider):
+        """No turn: a point is its photo pixel less the crop's corner, over the crop's size."""
+        pts = self._landmarks(80, 0, (120, 120))
+        face = self._convert(provider, pts, [80, 80, 160, 160], {"align": "none", "padding": "0.25"})
+
+        got = np.asarray(face["face_landmarks"])
+        assert got.shape == (5, 2)
+        assert ((got > 0) & (got < 1)).all()
+        # The padded box is 60..180 on both axes: 20 px a side of the 80 px face.
+        np.testing.assert_allclose(got, (pts - 60) / 120, atol=1e-4)
+
+    def test_points_are_fractions_of_a_non_square_crop(self, provider):
+        """x divides by the crop's width and y by its height, which differ at a clamped edge."""
+        pts = self._landmarks(80, 0, (60, 120))
+        face = self._convert(provider, pts, [20, 80, 100, 160], {"align": "none", "padding": "0.5"})
+
+        # 40 px a side: x runs -20..140 and clamps to 0..140; y runs 40..200.
+        assert (face["width"], face["height"]) == (140, 160)
+        np.testing.assert_allclose(
+            face["face_landmarks"], np.column_stack([pts[:, 0] / 140, (pts[:, 1] - 40) / 160]), atol=1e-4
+        )
+
+    def test_the_points_follow_the_roll_turn(self, provider):
+        """Under roll the points are where the stored crop shows each feature: the upright template."""
+        from imagekit.face.face_align import ARCFACE_TEMPLATE, TEMPLATE_SIZE
+
+        pts = self._landmarks(80, 35, (120, 120))
+        face = self._convert(provider, pts, [80, 80, 160, 160], {"align": "roll", "padding": "0"})
+
+        np.testing.assert_allclose(face["face_landmarks"], ARCFACE_TEMPLATE / TEMPLATE_SIZE, atol=1e-4)
+        # And the stored crop's pixels agree: each landmark's dot is under its point.
+        crop = np.asarray(Image.open(io.BytesIO(face["media_bytes"])).convert("RGB")).astype(int)
+        for (fx, fy), colour in zip(face["face_landmarks"], self.COLOURS):
+            got = crop[int(round(fy * face["height"])), int(round(fx * face["width"]))]
+            assert np.abs(got - np.asarray(colour)).max() < 60, (fx, fy, got.tolist(), colour)
+
+    def test_roll_and_none_differ_only_by_the_turn(self, provider):
+        pts = self._landmarks(80, 30, (120, 120))
+        box = [80, 80, 160, 160]
+        none = self._convert(provider, pts, box, {"align": "none", "padding": "0.25"})
+        roll = self._convert(provider, pts, box, {"align": "roll", "padding": "0.25"})
+
+        assert none["face_landmarks"] != roll["face_landmarks"]
+
+        # Both turn about the box's centre, the crop's middle here, so the
+        # distance of every point from it is the same either way.
+        def spread(f):
+            return np.hypot(*(np.asarray(f["face_landmarks"]) - 0.5).T)
+
+        np.testing.assert_allclose(spread(none), spread(roll), atol=1e-3)
+
+    def test_an_upside_down_face_turns_its_points_with_it(self, provider):
+        """A face found by the half-turn retry (#5373) rolls 180 degrees; its eyes swap sides."""
+        from imagekit.face.face_align import ARCFACE_TEMPLATE, TEMPLATE_SIZE
+
+        pts = self._landmarks(80, 180, (120, 120))
+        face = self._convert(provider, pts, [80, 80, 160, 160], {"align": "roll", "padding": "0"})
+
+        np.testing.assert_allclose(face["face_landmarks"], ARCFACE_TEMPLATE / TEMPLATE_SIZE, atol=1e-4)
+
+    def test_a_point_past_the_crop_edge_is_kept_not_clamped(self, provider):
+        """A face cut off by the photo's edge can have a landmark outside the crop."""
+        pts = self._landmarks(80, 0, (120, 120))
+        pts[0] = (75.0, pts[0][1])  # an eye placed left of the 80 px box
+        face = self._convert(provider, pts, [80, 80, 160, 160], {"align": "none", "padding": "0"})
+
+        assert face["face_landmarks"][0][0] == pytest.approx(-5 / 80)
+
+    def test_no_landmarks_no_field(self, provider):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        provider([[80, 80, 160, 160]], [0.95])
+        media = {"filename": "face.png", "media_bytes": _png_bytes(240, 240)}
+        (face,) = Image2FaceMediaConverter().convert_normalized(media, {"align": "roll"})
+
+        assert "face_landmarks" not in face
+        assert face["source_box"]
+
+    def test_unusable_landmarks_no_field(self, provider):
+        """Points ``_usable_landmarks`` refuses (a NaN) are not stored either."""
+        pts = self._landmarks(80, 0, (120, 120))
+        bad = pts.copy()
+        bad[2] = (np.nan, np.nan)
+        face = self._convert(provider, bad, [80, 80, 160, 160], {"align": "roll"}, drawn=pts)
+
+        assert "face_landmarks" not in face
+
+    def test_the_points_are_plain_floats(self, provider):
+        """JSON- and pickle-safe as they come: lists of Python floats, never numpy."""
+        pts = self._landmarks(80, 20, (120, 120))
+        face = self._convert(provider, pts, [80, 80, 160, 160], {"align": "roll"})
+
+        assert isinstance(face["face_landmarks"], list)
+        assert all(isinstance(p, list) and len(p) == 2 for p in face["face_landmarks"])
+        assert all(type(v) is float for p in face["face_landmarks"] for v in p)
+
+    def test_an_off_centre_crop_turns_about_the_providers_box(self):
+        """The turn is about the provider's own box, not the padded crop's middle, for points as for pixels."""
+        from imagekit.face.face_align import ARCFACE_TEMPLATE, TEMPLATE_SIZE
+        from vtscore.converters.image2face import FaceDetection, crop_face, crop_landmarks
+
+        pts = self._landmarks(80, -25, (120, 120))
+        det = FaceDetection((70, 60, 170, 180), 0.9, (80.0, 80.0, 160.0, 160.0), pts)
+        got = crop_landmarks(det, "roll")
+        # The box's centre (120, 120) sits 50 px in and 60 px down this
+        # 100 x 120 crop, and the template lands about it, upright.
+        want = (ARCFACE_TEMPLATE / TEMPLATE_SIZE * 80 - 40 + np.array([50, 60])) / np.array([100, 120])
+        np.testing.assert_allclose(got, want, atol=1e-4)
+        crop = np.asarray(crop_face(TestImage2FaceAlign()._face(pts), det, "roll", 0.0)).astype(int)
+        for (fx, fy), colour in zip(got, self.COLOURS):
+            px = crop[int(round(fy * 120)), int(round(fx * 100))]
+            assert np.abs(px - np.asarray(colour)).max() < 60, (fx, fy, px.tolist(), colour)
+
+    def test_crop_landmarks_without_points_or_with_an_unknown_mode(self):
+        from vtscore.converters.image2face import FaceDetection, crop_landmarks
+
+        det = FaceDetection((80, 80, 160, 160), 0.9, (80.0, 80.0, 160.0, 160.0), self._landmarks(80, 10, (120, 120)))
+        assert crop_landmarks(det._replace(landmarks=None), "roll") is None
+        with pytest.raises(ValueError):
+            crop_landmarks(det, "tilt")
+
+    def test_the_folder_runner_keeps_the_points(self, provider, tmp_path):
+        """The runner copies output through a named field list, so the points must be on it."""
+        from vtscore.converters.runner import run_converters_on_folder
+
+        pts = self._landmarks(80, 0, (120, 120))
+        (tmp_path / "face.png").write_bytes(self._face_png(pts))
+        provider([[80, 80, 160, 160]], [0.95], [pts])
+        medias: dict[int, dict] = {}
+        run_converters_on_folder(
+            tmp_path,
+            target_media_type="face",
+            medias=medias,
+            converter_specs=[{"converter": "image2face", "params": {"padding": "0", "align": "none"}}],
+        )
+
+        (face,) = medias.values()
+        np.testing.assert_allclose(face["face_landmarks"], (pts - 80) / 80, atol=1e-4)

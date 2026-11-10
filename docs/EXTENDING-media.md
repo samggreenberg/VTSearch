@@ -1111,10 +1111,11 @@ callers who invoke `convert()` by hand (they should call
 `TypeError` on the first conversion.
 
 Besides `filename` and the data fields, an output dict may carry
-`custom_metadata` (per-item metadata rows) and `source_box` (where the
-output sat in its source image, normalised `[x0, y0, x1, y1]`); both reach
-the media on every ingest path and persist with the dataset. The library
-guide,
+`custom_metadata` (per-item metadata rows), `source_box` (where the
+output sat in its source image, normalised `[x0, y0, x1, y1]`) and
+`face_landmarks` (a face crop's five landmarks, as fractions of the crop);
+all three reach the media on every ingest path and persist with the
+dataset. The library guide,
 [`vtscore/docs/extending/converters.md`](../vtscore/docs/extending/converters.md#what-convert-returns),
 has the details.
 

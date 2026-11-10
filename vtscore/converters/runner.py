@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
-from vtscore.media.provenance import SOURCE_BOX_FIELD
+from vtscore.media.provenance import FACE_LANDMARKS_FIELD, SOURCE_BOX_FIELD
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
 
@@ -68,6 +68,8 @@ def _normalise_converter_specs(
 #: ``thumbnail_bytes`` is the grid tile a converter built while it still held
 #: the output decoded (``image2face`` does, #5465); without it every tile of a
 #: converted dataset is decoded and resized on the request thread.
+#: ``face_landmarks`` is a face crop's five landmarks on the crop
+#: (:data:`vtscore.media.provenance.FACE_LANDMARKS_FIELD`, #5644).
 _OPTIONAL_OUTPUT_FIELDS = (
     "media_bytes",
     "media_string",
@@ -78,6 +80,7 @@ _OPTIONAL_OUTPUT_FIELDS = (
     "custom_metadata",
     "thumbnail_bytes",
     SOURCE_BOX_FIELD,
+    FACE_LANDMARKS_FIELD,
 )
 
 

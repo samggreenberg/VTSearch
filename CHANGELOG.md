@@ -34,6 +34,11 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Face datasets keep where each face's eyes, nose and mouth are** (issue #5644). Turning photos into faces now
+  saves five points on every face crop (the two eyes, the nose tip and the two corners of the mouth), which the
+  compare view will use to show a reference face at the same size and position as the face you are voting on.
+  Face datasets made before this keep working; re-import one to give its faces the points. For API users: `POST
+  /api/medias/batch` returns them as `face_landmarks`.
 - **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening
   Browse used to hold a blank "Loading thumbnails…" screen until every thumbnail on screen had arrived, up to 12
   seconds, and could then show a map with half its pictures still missing. The map now appears as soon as its tiles

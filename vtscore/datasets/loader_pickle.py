@@ -277,18 +277,22 @@ def _restore_clip_window(media_data: dict[str, Any], media_info: dict[str, Any])
             media_data[field] = value
 
 
-def _restore_source_box(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
-    """Carry a pickled ``source_box`` onto the media when one is recorded.
+def _restore_source_geometry(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled ``source_box`` and ``face_landmarks`` onto the media when recorded.
 
     Where a converter output sat in its source (a face crop's box in its
-    photo, #4748); see :data:`vtscore.media.provenance.SOURCE_BOX_FIELD`.  Set
-    only when present, so other media keep the shape they had before.
+    photo, #4748; :data:`vtscore.media.provenance.SOURCE_BOX_FIELD`) and a face
+    crop's five landmarks on the crop (#5644;
+    :data:`~vtscore.media.provenance.FACE_LANDMARKS_FIELD`).  Each is set only
+    when present, so other media keep the shape they had before: a Face
+    dataset saved before #5644 reloads without landmarks.
     """
-    from vtscore.media.provenance import SOURCE_BOX_FIELD  # noqa: PLC0415
+    from vtscore.media.provenance import FACE_LANDMARKS_FIELD, SOURCE_BOX_FIELD  # noqa: PLC0415
 
-    value = media_info.get(SOURCE_BOX_FIELD)
-    if value is not None:
-        media_data[SOURCE_BOX_FIELD] = value
+    for field in (SOURCE_BOX_FIELD, FACE_LANDMARKS_FIELD):
+        value = media_info.get(field)
+        if value is not None:
+            media_data[field] = value
 
 
 def _restore_ground_truth(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
@@ -339,7 +343,7 @@ def _build_pickle_thin_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
-    _restore_source_box(media_data, media_info)
+    _restore_source_geometry(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
     return media_data
 
@@ -380,7 +384,7 @@ def _build_pickle_full_media(
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
     _restore_clip_window(media_data, media_info)
-    _restore_source_box(media_data, media_info)
+    _restore_source_geometry(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
     return media_data
 
