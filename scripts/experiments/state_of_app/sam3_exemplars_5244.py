@@ -5,7 +5,8 @@ text-only scores (the same noun prompts, the image alone at full resolution), an
 Region run. Every number is seed 0 on the cell's own withheld half, so the arms are the same images cell for cell.
 
 Per cell and arm: ``AP``, ``oracle`` (best F1 of any cut on the ranking) and ``F_native`` (F1 of SAM3's own
-operating point, a detection over 0.5). Region's ``AP`` and ``oracle`` are read at the vote the arm's last
+operating point, a detection over 0.5), plus ``F@c`` at every cut in ``CUTS``: the boxes move SAM3's scores, so an
+arm's best fixed cut is not 0.5, and #5565 ships 0.75 / 0.85 for the text prompt. Region's ``AP`` and ``oracle`` are read at the vote the arm's last
 exemplar arrived (the k-th Good, or the Bad if it came later): the detector the same session had at that point.
 
 Paired gains are means over cells with SEs over classes (a class's bands are not independent), as in #5213.
@@ -30,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
 
 from sam3_analyze_5213 import band_of, class_of, paired, summarize  # noqa: E402
 
+CUTS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
 ARMS = ("native", "c1", "g1", "g1b1", "c3", "g3", "g3b1")
 LABEL = {
     "native": "SAM3 text, image alone (#5213)",
@@ -73,6 +75,7 @@ def metrics(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> dict:
         "n_test": float(w.sum()),
         "n_scored": len(y),
         "n_pos": int(y.sum()),
+        **{f"F@{c}": native_f1(y, s, w, c)[0] for c in CUTS},
     }
 
 
@@ -190,6 +193,14 @@ def main() -> int:
     s_common = summarize(common_d, cols)
     s_common.to_csv(out / "sam3_5244_summary_common.csv", index=False)
 
+    # F at each fixed cut, per arm and band; each arm's best cut over all cells (chosen in sample: an upper bound).
+    fc = [f"F@{c}" for c in CUTS]
+    sweep = d[d["arm"].isin(ARMS)].groupby(["arm"])[fc].mean().assign(band="all")
+    sweep = pd.concat([sweep, d[d["arm"].isin(ARMS)].groupby(["arm", "band"])[fc].mean().reset_index("band")])
+    sweep["best_cut"] = sweep[fc].idxmax(axis=1).str[2:].astype(float)
+    sweep["F_best_cut"] = sweep[fc].max(axis=1)
+    sweep.reset_index().to_csv(out / "sam3_5244_cut_sweep.csv", index=False)
+
     pairs = []
     for band in ("all", "small", "medium", "large"):
         sub = d if band == "all" else d[d["band"] == band]
@@ -211,8 +222,8 @@ def main() -> int:
             ("native", "region@g3"),
             ("native", "native_full"),
         ]:
-            for col in ("AP", "oracle", "F_native"):
-                if col == "F_native" and x.startswith("region") | ref.startswith("region"):
+            for col in ("AP", "oracle", "F_native", "F@0.75", "F@0.85"):
+                if col.startswith("F") and x.startswith("region") | ref.startswith("region"):
                     continue
                 r = paired(sub, x, ref, col)
                 r["group"] = band
@@ -232,6 +243,7 @@ def main() -> int:
         )
     )
     _figure(s, out)
+    _cut_figure(sweep, out)
     pd.set_option("display.width", 250)
     print(s.round(3).to_string())
     print(p[p["group"] == "all"].round(3).to_string())
@@ -277,9 +289,44 @@ def _figure(s: pd.DataFrame, out: Path) -> None:
         ax.set_xticks(np.arange(4), bands)
         ax.set_title({"AP": "AP on the withheld half", "oracle": "Oracle F1 (best cut)"}[metric])
         ax.grid(axis="y", alpha=0.3)
-    axes[0].legend(fontsize=7, loc="lower left")
-    fig.tight_layout()
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=8, loc="lower center", ncol=5, frameon=False)
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     fig.savefig(out / "sam3_5244_bands.png", dpi=130)
+
+
+def _cut_figure(sweep: pd.DataFrame, out: Path) -> None:
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.6), sharey=True)
+    style = {
+        "native": ("#111827", "-"),
+        "c1": ("#9ca3af", "--"),
+        "g1": ("#2563eb", "-"),
+        "g1b1": ("#2563eb", ":"),
+        "c3": ("#d1d5db", "--"),
+        "g3": ("#15803d", "-"),
+        "g3b1": ("#15803d", ":"),
+    }
+    for ax, band in zip(axes, ("all", "small", "medium", "large")):
+        sub = sweep[sweep["band"] == band]
+        for arm in ARMS:
+            if arm not in sub.index:
+                continue
+            col, ls = style[arm]
+            ax.plot(CUTS, sub.loc[arm, [f"F@{c}" for c in CUTS]], color=col, ls=ls, lw=1.6, label=LABEL[arm])
+        ax.axvline(0.5, color="#6b7280", lw=0.6)
+        ax.axvline(0.75, color="#6b7280", lw=0.6, ls="--")
+        ax.set_title(f"{band}: F1 of 'score > cut'")
+        ax.set_xlabel("cut")
+        ax.grid(alpha=0.3)
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, fontsize=8, loc="lower center", ncol=4, frameon=False)
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
+    fig.savefig(out / "sam3_5244_cuts.png", dpi=130)
 
 
 if __name__ == "__main__":
