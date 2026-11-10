@@ -145,10 +145,11 @@ exists; this plan adds nothing for it.
   ratio kept, is within what both allow.
 - **No measurements.** No distances, ratios or angles shown as numbers. That
   is the method the standard forbids.
-- **Say when a pair cannot be compared.** ACE-V starts with fitness. The app
-  already knows a hard view (`HARD_VIEW_QUALITY`, #5372); the helper says so
-  and reminds the user that moving on without voting is a valid answer. That
-  is the app's inconclusive level.
+- **Say when a pair is hard to compare.** ACE-V starts with fitness. The app
+  already knows a hard view (`HARD_VIEW_QUALITY`, #5372), so the helper says
+  so. It cannot offer an inconclusive answer: a vote here is good or bad, and
+  there is no way to move on without one. The helper tells the user the pair
+  is hard and leaves the vote as it is.
 - **The reference is a known quantity here.** ENFSI's order-of-viewing rule
   protects a blurry questioned image from a sharp reference. The helper
   cannot hide the reference, but it can prefer a reference no sharper than
@@ -244,7 +245,8 @@ greyed when its region falls outside either crop.
 ### Fitness notice
 
 When the candidate or the reference is a hard view, the strip says so in one
-line, and that moving on without voting is fine.
+line. It offers no way out of the vote, because the app has none; it only
+tells the user to expect a weaker comparison.
 
 ## Open decisions
 
@@ -255,6 +257,13 @@ These are the owner's; the recommendation is first in each.
 - **Does the checklist record anything?** Recommended: no. Recording
   per-feature answers would give data on which checks users rely on, at the
   cost of a slower vote.
+- **Does voting need an "I can't tell" answer?** Recommended: not in this
+  work. The ENFSI manual wants an inconclusive level on any scale of
+  conclusions, and the helper makes hard pairs more visible, which is where
+  users would reach for one. But votes are good or bad today. A graded vote
+  (say -2 to 2, with 0 for "can't tell") makes the label a number, so the
+  detector becomes a regression and needs a new kind of detector, not a
+  change to this UI. That is its own design.
 - **Re-import, or re-detect on demand, for landmarks on existing datasets?**
   Recommended: re-import. Re-detection on demand needs the parent photo and
   the face provider loaded at vote time.
