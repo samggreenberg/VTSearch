@@ -590,6 +590,14 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_hide_right_panel() is False
 
+    def test_face_compare_defaults_on_and_persists(self, isolated_settings):
+        # The Face compare layout is on until the user turns it off (#5642).
+        assert settings_mod.get_face_compare() is True
+        settings_mod.set_face_compare(False)
+        assert json.loads(isolated_settings.read_text())["face_compare"] is False
+        settings_mod.reset()
+        assert settings_mod.get_face_compare() is False
+
     def test_get_set_autopilot_goal_diversity(self, isolated_settings):
         settings_mod.set_autopilot_goal_diversity(60)
         assert settings_mod.get_autopilot_goal_diversity() == 60

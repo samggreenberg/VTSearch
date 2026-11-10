@@ -713,6 +713,13 @@ class TestSettingsAPI:
         assert data["hide_left_panel"] is False
         assert data["hide_right_panel"] is True
 
+    def test_face_compare_round_trip(self, client):
+        assert client.get("/api/settings/defaults").get_json()["face_compare"] is True
+
+        res = client.put("/api/settings", json={"face_compare": False})
+        assert res.status_code == 200
+        assert client.get("/api/settings").get_json()["face_compare"] is False
+
     def test_update_autopilot_goal_diversity(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": 60})
         assert res.status_code == 200

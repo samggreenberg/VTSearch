@@ -202,6 +202,10 @@ export class KeyboardHelpModalComponent implements OnInit {
             { keys: ['Esc'], description: 'Cancel armed vote / clear region box' },
           ],
         },
+        {
+          title: 'Comparing faces',
+          shortcuts: [{ keys: ['R'], description: 'Show the next reference face beside the one you are voting on' }],
+        },
       ],
     },
     {

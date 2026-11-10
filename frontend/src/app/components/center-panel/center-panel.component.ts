@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
-import { KeyValuePipe, TitleCasePipe } from '@angular/common';
+import { KeyValuePipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
@@ -10,12 +10,14 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { ActiveDetectorService } from '../../services/active-detector.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { ImageViewControlsComponent } from './image-view-controls/image-view-controls.component';
+import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
@@ -38,10 +40,12 @@ const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'i
   standalone: true,
   imports: [
     KeyValuePipe,
+    NgTemplateOutlet,
     TitleCasePipe,
     AudioPlayerComponent,
     ImageViewerComponent,
     ImageViewControlsComponent,
+    FaceReferenceComponent,
     VideoPlayerComponent,
     TextViewerComponent,
     DocumentViewerComponent,
@@ -63,6 +67,7 @@ export class CenterPanelComponent implements OnDestroy {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private activeDataset = inject(ActiveDatasetService);
+  private activeDetector = inject(ActiveDetectorService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   readonly sourcePhoto = inject(SourcePhotoService);
 
@@ -150,6 +155,9 @@ export class CenterPanelComponent implements OnDestroy {
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
   readonly videoPlayer = viewChild(VideoPlayerComponent);
+  /** The compare layout's reference pane, while it is on screen. Its own
+   *  viewer lives in its template, so {@link imageViewer} stays the candidate's. */
+  readonly faceReference = viewChild(FaceReferenceComponent);
 
   // These fields are written from non-bound callbacks — the keyboard-shortcut
   // dispatch (`KeyboardService.action$`), HTTP/vote subscriptions, and timers —
@@ -161,6 +169,9 @@ export class CenterPanelComponent implements OnDestroy {
   readonly audioPlaying = signal(true);
   readonly showAnimations = signal(true);
   readonly showMetadata = signal(false);
+  /** The user's Compare choice (the `face_compare` setting): on until they
+   *  turn it off. Whether it shows is {@link compareOn}. */
+  readonly faceCompare = signal(true);
   readonly swipeClass = signal('');
   readonly spinningVote = signal<'good' | 'bad' | null>(null);
 
@@ -241,6 +252,7 @@ export class CenterPanelComponent implements OnDestroy {
       this.audioPlaying.set(settings.audio_playing !== false);
       this.showAnimations.set(settings.show_animations !== 'hide');
       this.showMetadata.set(settings.show_metadata === true);
+      this.faceCompare.set(settings.face_compare !== false);
     });
 
     // Reset per-item transient state on every media change (including same-id
@@ -352,6 +364,9 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'reference':
+          this.faceReference()?.next();
+          break;
         case 'navigate':
           // Navigation moves the selection, never the labels, so an exhausted
           // queue is no reason to block it — walking back to a voted item is
@@ -417,6 +432,25 @@ export class CenterPanelComponent implements OnDestroy {
     const type = this.mediaType;
     if (OWN_VIEWER_TYPES.has(type)) return type as CenterViewer;
     return this.mediaTypeCaps.usesThumbnails(type) ? 'image' : 'document';
+  }
+
+  /**
+   * Whether the Face compare layout (#5642) is offered on the focused item: a
+   * face, with a detector active to say who is being looked for. Only then is
+   * there a reference to put beside it, so only then does the toggle show.
+   */
+  get compareOffered(): boolean {
+    return this.mediaType === 'face' && this.viewer === 'image' && !!this.activeDetector.activeId();
+  }
+
+  /** The reference pane is on screen: offered, and not turned off. */
+  get compareOn(): boolean {
+    return this.compareOffered && this.faceCompare();
+  }
+
+  toggleFaceCompare(): void {
+    this.faceCompare.set(!this.faceCompare());
+    this.settingsState.update({ face_compare: this.faceCompare() }).subscribe();
   }
 
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the
@@ -626,6 +660,8 @@ export class CenterPanelComponent implements OnDestroy {
    *  keeps its current behaviour. */
   onPanelMouseDown(event: MouseEvent): void {
     if (this.viewer !== 'image') return;
+    // The reference pane is another face's, not spare room around this one.
+    if ((event.target as Element | null)?.closest?.('vt-face-reference')) return;
     this.imageViewer()?.tryStartOffCanvasDraw(event);
   }
 

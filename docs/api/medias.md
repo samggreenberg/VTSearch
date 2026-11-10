@@ -832,6 +832,18 @@ image bytes, an audio waveform PNG, or a video mid-frame PNG (binary, not JSON).
 400 (filename escapes the media dir), 404 (not found / no thumbnail for the
 type), 500 (generation failed).
 
+### Server media file image
+
+```
+GET /api/server-media-files/{filename}/image
+```
+
+The full-size bytes of an image example in the user's `example_media/` dir
+(binary, not JSON). The Face compare layout shows a detector's example beside
+the face being voted on, where the thumbnail is too small to compare by.
+
+400 (filename escapes the media dir), 404 (not found, or not an image).
+
 ### Seed importers
 
 A **seed importer** is a plugin that contributes a *batch* of unlabeled seed

@@ -118,6 +118,13 @@ export class ImageViewerComponent implements OnDestroy {
    */
   readonly datasetId = input('');
   /**
+   * Show the picture at this URL instead of {@link media}'s own (`''`, the
+   * default, is the item's). A detector's example is a file of the user's,
+   * not an item of any dataset, and the Face compare layout shows one as the
+   * reference (#5642); `media` then only names it.
+   */
+  readonly srcOverride = input('');
+  /**
    * Whether a Shift- or Marquee-drag draws a region box. Off where a box would
    * mean nothing, so a drag only pans: the Show in photo overlay, where there
    * is nothing to vote on, and a face, whose embedder reads the whole crop.
@@ -163,6 +170,8 @@ export class ImageViewerComponent implements OnDestroy {
   // And for the dataset: media ids are per dataset, so the same id out of
   // another one is another image.
   private lastDatasetId = '';
+  // And for an overriding source, which is the whole identity of what it shows.
+  private lastSrcOverride = '';
   /** The network URL whose in-flight prefetch this viewer is waiting on, or
    *  `null`. See {@link showImage}. */
   private claimedSrc: string | null = null;
@@ -227,16 +236,21 @@ export class ImageViewerComponent implements OnDestroy {
       const media = this.media();
       const variant = this.variant();
       const datasetId = this.datasetId();
-      if (media.id === this.lastMediaId && variant === this.lastVariant && datasetId === this.lastDatasetId) return;
-      const sameMedia = media.id === this.lastMediaId && datasetId === this.lastDatasetId;
+      const srcOverride = this.srcOverride();
+      const sameSource = datasetId === this.lastDatasetId && srcOverride === this.lastSrcOverride;
+      if (media.id === this.lastMediaId && variant === this.lastVariant && sameSource) return;
+      const sameMedia = media.id === this.lastMediaId && sameSource;
       this.lastMediaId = media.id;
       this.lastVariant = variant;
       this.lastDatasetId = datasetId;
+      this.lastSrcOverride = srcOverride;
       this.imageReady.set(false);
       const path = `/api/medias/${media.id}/image`;
-      const src = datasetId
-        ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
-        : this.activeContext.mediaUrl(path, { variant });
+      const src =
+        srcOverride ||
+        (datasetId
+          ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
+          : this.activeContext.mediaUrl(path, { variant }));
       this.showImage(src);
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.

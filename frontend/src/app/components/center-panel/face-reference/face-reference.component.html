@@ -1,0 +1,39 @@
+@if (current(); as ref) {
+  <vt-image-viewer
+    #referenceViewer
+    [media]="viewerMedia()"
+    [srcOverride]="exampleSrc()"
+    [regionDraw]="false"
+  />
+  <div class="reference-bar">
+    <span class="reference-caption">
+      <span class="reference-count">Reference {{ index() + 1 }} of {{ references().length }}</span>
+      <span class="reference-source" [title]="sourceLabel()">{{ sourceLabel() }}</span>
+    </span>
+    <button
+      type="button"
+      class="btn btn--toolbar"
+      data-metric="faceReferenceNext"
+      [disabled]="references().length < 2"
+      (click)="next()"
+      [title]="references().length < 2 ? 'This is the only reference so far' : 'Show the next reference face (R)'"
+    >Next</button>
+    <button
+      type="button"
+      class="btn btn--toolbar reference-pin"
+      data-metric="faceReferencePin"
+      [class.active]="isPinned()"
+      [attr.aria-pressed]="isPinned()"
+      (click)="togglePin()"
+      [title]="isPinned()
+        ? 'Unpin: go back to starting each face on the best reference'
+        : 'Pin: start every face on this reference, until you unpin it or leave'"
+    >{{ isPinned() ? 'Pinned' : 'Pin' }}</button>
+    <vt-image-view-controls [viewer]="referenceViewer" />
+  </div>
+} @else {
+  <div class="empty-state" role="status">
+    <p class="reference-empty-heading">No reference face yet</p>
+    <p class="reference-empty-hint">Vote a face Good and it is shown here, beside the next one.</p>
+  </div>
+}

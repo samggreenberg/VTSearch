@@ -34,77 +34,120 @@
       <p class="placeholder-hint">{{ placeholderHint() }}</p>
     </div>
   } @else {
-    <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">
-      @switch (viewer) {
-        @case ('audio') {
-          <vt-audio-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
-        }
-        @case ('image') {
-          <vt-image-viewer
-            [media]="media()!"
-            [variant]="payloadVariant()"
-            [pendingBadConfirm]="pendingBadConfirm()"
-            [highlightBox]="highlightBox"
-            [regionDraw]="regionDrawOffered"
-            (regionBoxChange)="onRegionBoxChange($event)"
-            (armedConfirmCanceled)="onArmedConfirmCanceled()"
-          ></vt-image-viewer>
-        }
-        @case ('video') {
-          <vt-video-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
-        }
-        @case ('text') {
-          <vt-text-viewer [media]="media()!" [variant]="payloadVariant()"></vt-text-viewer>
-        }
-        @case ('document') {
-          <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
-        }
+    <!-- The item's toolbar: under the item, which in the compare layout is
+         the candidate's half of the stage rather than the whole panel. -->
+    <ng-template #itemTools>
+      @if (hasOriginalPayload) {
+        <div class="variant-toggle" role="group" aria-label="Payload variant">
+          <span class="variant-toggle__label">Showing</span>
+          <button
+            type="button"
+            class="btn btn--toolbar"
+            [class.active]="payloadVariant() === ''"
+            [attr.aria-pressed]="payloadVariant() === ''"
+            (click)="setPayloadVariant('')"
+            title="The cleaned version — the bytes that were actually analyzed and scored."
+          >
+            Clean
+          </button>
+          <button
+            type="button"
+            class="btn btn--toolbar"
+            [class.active]="payloadVariant() === 'original'"
+            [attr.aria-pressed]="payloadVariant() === 'original'"
+            (click)="setPayloadVariant('original')"
+            title="The version as imported, before cleanup ran. Shown for reference; it is not what was analyzed."
+          >
+            Original
+          </button>
+        </div>
+      }
+
+      @if (compareOffered || showInPhotoOffered()) {
+        <div class="item-actions">
+          @if (compareOffered) {
+            <button
+              type="button"
+              class="btn btn--toolbar compare-toggle"
+              data-metric="faceCompare"
+              [class.active]="faceCompare()"
+              [attr.aria-pressed]="faceCompare()"
+              (click)="toggleFaceCompare()"
+              [title]="faceCompare()
+                ? 'Hide the reference face and give this one the whole panel'
+                : 'Show a reference face beside this one, to compare the two'"
+            >Compare</button>
+          }
+
+          @if (showInPhotoOffered()) {
+            <button
+              type="button"
+              class="btn btn--toolbar"
+              (click)="openSourcePhoto()"
+              title="Open the photo this item was cut from, with the item outlined"
+            >Show in photo</button>
+          }
+        </div>
+      }
+
+      @if (viewer === 'image' && imageViewer(); as imageViewer) {
+        <vt-image-view-controls
+          [viewer]="imageViewer"
+          [marquee]="regionDrawOffered"
+          [highlight]="regionOverlayCapable"
+          [marqueeTitle]="marqueeTitle"
+          [marqueeAriaLabel]="marqueeAriaLabel"
+        />
+      }
+    </ng-template>
+
+    <!-- The stage holds the item alone, except in the Face compare layout
+         (#5642): there it is a two-column grid, a reference face and its bar on
+         the left, the item and its toolbar on the right, so the two faces get
+         the same height whatever their bars wrap to. The candidate's cell clips
+         its vote swipe, so a Bad vote does not fly across the reference. -->
+    <div class="media-stage" [class.media-stage--compare]="compareOn">
+      @if (compareOn) {
+        <vt-face-reference [candidateId]="media()!.id" />
+      }
+      <div class="media-stage__candidate">
+        <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">
+          @switch (viewer) {
+            @case ('audio') {
+              <vt-audio-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
+            }
+            @case ('image') {
+              <vt-image-viewer
+                [media]="media()!"
+                [variant]="payloadVariant()"
+                [pendingBadConfirm]="pendingBadConfirm()"
+                [highlightBox]="highlightBox"
+                [regionDraw]="regionDrawOffered"
+                (regionBoxChange)="onRegionBoxChange($event)"
+                (armedConfirmCanceled)="onArmedConfirmCanceled()"
+              ></vt-image-viewer>
+            }
+            @case ('video') {
+              <vt-video-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
+            }
+            @case ('text') {
+              <vt-text-viewer [media]="media()!" [variant]="payloadVariant()"></vt-text-viewer>
+            }
+            @case ('document') {
+              <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
+            }
+          }
+        </div>
+      </div>
+      @if (compareOn) {
+        <div class="media-stage__tools">
+          <ng-container [ngTemplateOutlet]="itemTools" />
+        </div>
       }
     </div>
 
-    @if (hasOriginalPayload) {
-      <div class="variant-toggle" role="group" aria-label="Payload variant">
-        <span class="variant-toggle__label">Showing</span>
-        <button
-          type="button"
-          class="btn btn--toolbar"
-          [class.active]="payloadVariant() === ''"
-          [attr.aria-pressed]="payloadVariant() === ''"
-          (click)="setPayloadVariant('')"
-          title="The cleaned version — the bytes that were actually analyzed and scored."
-        >
-          Clean
-        </button>
-        <button
-          type="button"
-          class="btn btn--toolbar"
-          [class.active]="payloadVariant() === 'original'"
-          [attr.aria-pressed]="payloadVariant() === 'original'"
-          (click)="setPayloadVariant('original')"
-          title="The version as imported, before cleanup ran. Shown for reference; it is not what was analyzed."
-        >
-          Original
-        </button>
-      </div>
-    }
-
-    @if (showInPhotoOffered()) {
-      <button
-        type="button"
-        class="btn btn--toolbar"
-        (click)="openSourcePhoto()"
-        title="Open the photo this item was cut from, with the item outlined"
-      >Show in photo</button>
-    }
-
-    @if (viewer === 'image' && imageViewer(); as imageViewer) {
-      <vt-image-view-controls
-        [viewer]="imageViewer"
-        [marquee]="regionDrawOffered"
-        [highlight]="regionOverlayCapable"
-        [marqueeTitle]="marqueeTitle"
-        [marqueeAriaLabel]="marqueeAriaLabel"
-      />
+    @if (!compareOn) {
+      <ng-container [ngTemplateOutlet]="itemTools" />
     }
 
     @if (pendingBadConfirm()) {
