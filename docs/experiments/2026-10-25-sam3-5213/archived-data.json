@@ -196,6 +196,52 @@
      "oid": "c3d63f86abfa1a49d12a40b6c0560900c87ce783"
     }
    }
+  },
+  {
+   "asset": "2026-10-25-sam3-5213.bcc6b97d0456.tar.gz",
+   "source_commit": null,
+   "files": {
+    "tables/sam3_5244_cost.csv": {
+     "bytes": 15636,
+     "oid": "7f271503fa40d8633826b66c90af9c26c48e1d35"
+    },
+    "tables/sam3_5244_counts.json": {
+     "bytes": 194,
+     "oid": "3671a59e02438eeca104588170dbff6d0d1291cd"
+    },
+    "tables/sam3_5244_cut_sweep.csv": {
+     "bytes": 6330,
+     "oid": "77e3fc9aed12167173fd39f04c50990563d29d75"
+    },
+    "tables/sam3_5244_diag.csv": {
+     "bytes": 75459,
+     "oid": "d09bb9e98be44743e23bc2b7e0281a2d70c50642"
+    },
+    "tables/sam3_5244_diag_summary.csv": {
+     "bytes": 543,
+     "oid": "515f72f4f625ff9d0b114a1fb76d8a88d45512c3"
+    },
+    "tables/sam3_5244_paired.csv": {
+     "bytes": 21140,
+     "oid": "c10a9cfb3f656cd9db1880ece1bf7d5630c421f3"
+    },
+    "tables/sam3_5244_per_cell.csv": {
+     "bytes": 441123,
+     "oid": "d67c63e3760eadcd80215d3ac7bcd87deee4f071"
+    },
+    "tables/sam3_5244_per_class_AP.csv": {
+     "bytes": 6971,
+     "oid": "ad69e4489b9bddf7ef589b7f62ce1109e5ce12a8"
+    },
+    "tables/sam3_5244_summary.csv": {
+     "bytes": 12414,
+     "oid": "016d8972b072c7bebeeec9924481bc8768c4d02b"
+    },
+    "tables/sam3_5244_summary_common.csv": {
+     "bytes": 12499,
+     "oid": "af1aa824ffb6e1e2f00340d1721362633894f62d"
+    }
+   }
   }
  ]
 }

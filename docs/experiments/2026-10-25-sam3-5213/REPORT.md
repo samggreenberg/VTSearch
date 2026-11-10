@@ -42,6 +42,12 @@ open on SigLIP when SAM3's set covers more than 10% of the pool or under 3 image
 takes back most of FGVC-Aircraft's loss, where SAM3 reads every aircraft name as "airplane" (Binary -0.27 to -0.05).
 See [A guard on the set's size](#a-guard-on-the-sets-size-5521).
 
+**Cross-image exemplars from votes (#5244): no gain in ranking.** A session's first Good box (and Bad box) pasted
+beside each pool image, FSS-SAM3's canvas, gives AP 0.72-0.74 against 0.74 for the text prompt alone. The boxes
+mostly lower SAM3's scores (F1 at 0.5 +0.08 to +0.14, at 0.75 +0.03). Large objects gain (AP +0.03, F1 at 0.75 +0.13),
+and small ones lose to the halved canvas (-0.075). A Bad box helps (+0.016 AP), against the paper. Every vote
+re-scores the pool uncached, ~10x the cached prompt. See [Cross-image exemplars](#cross-image-exemplars-from-votes-5244).
+
 | seed 0, mean over cells (± SE over classes) | all (144) | small (46) | medium (49) | large (49) |
 |---|---|---|---|---|
 | **AP**, SigLIP typed sort (vote 0) | 0.42 (± 0.04) | 0.17 | 0.38 | 0.70 |
@@ -614,6 +620,177 @@ Tables (archived with the study), all in `tables/`:
 
 Reproduce: `sam3_set_guard_5521.py sets|shipped|cut05 --out DIR` (`sets` in `unknown_class_5490.sh`'s environment).
 
+## Cross-image exemplars from votes (#5244)
+
+**Status (2026-11-10): a Good vote's box on a shared canvas does not out-rank the text prompt alone. Over 140 cells,
+AP is 0.72 with 1 Good box and 0.73 with 3, against 0.74 for SAM3's text prompt on the image alone. The boxes move
+SAM3's scores down rather than re-rank them. That raises F1 at SAM3's 0.5 cut (+0.081), but at the shipped 0.75 cut
+the gain is +0.026 ± 0.017, about noise. The size of the object splits the result: large objects gain (AP +0.029,
+F1 at 0.75 +0.13), and small ones lose, because the canvas halves the target's pixels (AP -0.075). Contrary to
+FSS-SAM3, a Bad box helps (AP +0.016 over the Good box alone, ahead in 82% of classes). Each new exemplar set costs a
+full uncached backbone pass over the pool. Nothing ships.**
+
+**The question.** SAM3 takes exemplar boxes with a positive or negative label, but only inside the image it is
+searching (facebookresearch/sam3 issue 426). FSS-SAM3 (arXiv 2604.05433) gets around this by pasting the reference
+and the target onto one canvas, and reports that negative exemplars often hurt few-shot use. #5244 asked whether a
+Region session's first Good boxes (and a Bad one), pasted that way, beat the text prompt (#5213's AP 0.72), and what
+it costs.
+
+**Setup.**
+
+- **Exemplars:** from #4711's shipped `max_patch` Region run, seed 0. They are the boxes of the first 1 or 3 Good
+  votes and the first Bad vote, in pick order.
+  - A Good box is the box the simulated user drags: the union of the class's instances (`region_box_for_category`).
+  - A Bad image has no labelled object, so its box is SAM3's own top text detection there. Those boxes score a mean
+    of 0.20: SAM3's best guess at the class on an image the user rejected.
+- **Canvas:** 1008 x 1008, SAM3's input size.
+  - The target fills one half: the top if it is landscape, the left if portrait.
+  - The references share the other half. Each is the exemplar's box x2, and at least 40% of each side.
+  - The box prompts point at the references. Only detections whose centre lies on the target count, because the
+    references hold the object too: the top detection on the whole canvas sits on a reference ~100% of the time.
+- **Arms:** six, on two canvases.
+  - Canvas A holds G1 and B1: text only (`c1`), + the Good box (`g1`), + Good and Bad (`g1b1`).
+  - Canvas B holds G1-G3 and B1: `c3`, `g3`, `g3b1`.
+  - The text-only arms price the canvas itself.
+  - The noun prompts and scoring (best query, sigmoid(logit) x sigmoid(presence)) are #5213's.
+- **Cells:** 140 of the 144, on each cell's seed-0 withheld half, the same images as #5213 and #4711.
+  - 4 cells never get a Good in 150 votes: bag or luggage, chair, knife and spoon, all small.
+  - Canvas B has 139 cells: bowl@small's only Good comes at vote 136.
+  - The first Good arrives at vote 1 in the median cell (mean 9). The third arrives at vote 4 (mean 18). Small cells
+    are slower: a mean of vote 25 for the first Good.
+- **Region at the same vote:** Region's AP at the vote the arm's last exemplar arrived. That is the detector the same
+  session had then.
+- **Sampling (the 4-GPU cap):** the whole withheld halves are 1.63M image-cell pairs, ~206 V100-h, ~51 h at 4 GPUs.
+  Each cell scores instead:
+  - every positive;
+  - the 800 negatives SAM3's text prompt ranks highest;
+  - 8% of the rest, weighted 12.5.
+
+  That is 243k images, ~1.7k a cell, and AP, F1 and the oracle are weighted. On the text-only scores, which are known
+  for the whole half, the sample's AP matches the exact one to 0.0000 (oracle +0.0003, F1 0.0001).
+- **Runs:** 144 one-cell tasks on V100 at fp16, 4 at a time, ~14 min each, ~30 V100-h, no failures. fp16 matches fp32
+  on 300 images of 2 cells: Spearman >= 0.999 per arm, and the 0.5 cut agrees on >= 99.3%.
+
+![A canvas-B example from bus@small: the target on the left; G1-G3 (green) and B1 (red) on the right](figures/sam3_5244_canvas_bus_small.webp)
+
+*The example is bus@small: three small buses (green boxes) beside the target, and the Bad vote (red) is a bus
+interior. The Bad is a bus at the wrong size, the band's own negative.*
+
+| seed 0, mean over cells | all (140) | small (42) | medium (49) | large (49) |
+|---|---|---|---|---|
+| **AP**, SAM3 text, image alone (#5213) | **0.74** | **0.51** | 0.79 | 0.88 |
+| AP, canvas A, text only | 0.70 | 0.41 | 0.77 | 0.89 |
+| AP, + 1 Good box | 0.72 | 0.44 | 0.78 | **0.91** |
+| AP, + 1 Good + 1 Bad box | **0.74** | 0.47 | **0.80** | **0.91** |
+| AP, canvas B, + 3 Good boxes | 0.73 | 0.47 | 0.78 | **0.91** |
+| AP, + 3 Good + 1 Bad box | **0.74** | 0.48 | 0.78 | **0.91** |
+| AP, Region at the vote of G1 / G3 | 0.47 / 0.52 | 0.25 / 0.32 | 0.43 / 0.48 | 0.70 / 0.72 |
+| Oracle F1, text alone / G1 / G1+B1 / G3 | 0.75 / 0.74 / 0.75 / 0.74 | 0.59 / 0.53 / 0.55 / 0.55 | 0.78 / 0.78 / 0.79 / 0.77 | 0.85 / 0.88 / 0.88 / 0.88 |
+| F1 at 0.5, text alone / G1 / G1+B1 / G3 | 0.53 / 0.61 / **0.67** / 0.62 | 0.50 / 0.46 / 0.50 / 0.48 | 0.54 / 0.65 / **0.71** / 0.64 | 0.55 / 0.70 / **0.78** / 0.72 |
+| F1 at 0.75, text alone / G1 / G1+B1 / G3 | 0.64 / 0.66 / 0.65 / 0.67 | **0.53** / 0.39 / 0.37 / 0.42 | 0.67 / 0.73 / 0.71 / 0.71 | 0.70 / 0.83 / **0.84** / **0.84** |
+| F1 at each arm's best cut, text alone / G1 / G1+B1 / G3 | 0.64 (0.8) / 0.67 (0.7) / 0.69 (0.6) / 0.68 (0.7) | 0.53 / 0.49 / 0.50 / 0.50 | 0.71 / 0.73 / 0.73 / 0.72 | 0.78 / 0.84 / 0.84 / 0.84 |
+
+*"Best cut" is one cut per arm for all cells, picked on these same cells. It is an upper bound for every arm alike.
+Everything is in `tables/sam3_5244_summary.csv`, `_cut_sweep.csv` and `_paired.csv`. Paired gains below are means
+over cells, ± SE over classes, with the share of classes ahead.*
+
+**1. The canvas costs on its own.** Text alone on the canvas, against text on the image alone: AP -0.035 ± 0.007,
+ahead in 24% of classes. Small objects carry it (-0.099). Medium objects lose a little (-0.029), and large objects
+gain (+0.014). The target gets half the canvas, so a small object loses half its pixels. On large objects the
+reference crops seem to help even without a box.
+
+**2. A Good box helps against its own canvas, and only large objects come out ahead overall.** Against the same
+canvas with text only, the box adds AP +0.020 ± 0.003 (78% of classes), and 3 boxes add +0.022. Against the text
+prompt on the image alone, 1 Good box gives:
+
+| band | AP | F1 at 0.75 |
+|---|---|---|
+| small | -0.075 | -0.13 |
+| medium | -0.010 | +0.054 |
+| large | +0.029 ± 0.007 (80% of classes) | +0.13 ± 0.02 |
+
+Some literal cells:
+
+- **Large objects gain.** bag or luggage@large goes from AP 0.60 to 0.80 with the first Good, which comes at vote 1.
+  Its F1 at 0.75 goes from 0.18 to 0.59. dining table@large goes from 0.31 to 0.47, and clock@large from 0.86 to 0.96.
+- **Small objects lose.** snowboard@small goes from 0.63 to 0.31, and the canvas alone already takes it to 0.29.
+  bus@small goes from 0.43 to 0.14: the canvas above.
+
+**3. Three Goods are not better than one.** G3 against G1 gives AP +0.0045 ± 0.004 (67% of classes): +0.024 on small
+objects, -0.007 on medium and 0.000 on large. Three references share the half that one had, so each is smaller.
+
+**4. The boxes lower the scores more than they re-rank them.** With a box the oracle hardly moves (G1 -0.009, G1+B1
++0.002 against text alone), but the scores drop. Measured at SAM3's 0.5 cut on the withheld half:
+
+| arm | images kept, weighted | precision | recall | F1 |
+|---|---|---|---|---|
+| text alone | 227 | 0.41 | 0.92 | 0.53 |
+| + 1 Good box | 112 | 0.52 | 0.83 | 0.61 |
+| + 1 Good + 1 Bad box | 82 | 0.64 | 0.79 | 0.67 |
+
+So F1 at 0.5 rises +0.081 (G1) and +0.14 (G1+B1). But #5565 already moved the text prompt's cut to 0.75 for the same
+reason. At 0.75 the gain is +0.026 ± 0.017 (G1, 49% of classes) and +0.030 (G3). At each arm's own best cut it is
++0.03 to +0.05. The F1-against-cut figure shows the curves shifting left rather than rising, except on large objects.
+
+**5. A Bad box helps, against FSS-SAM3's finding.** Adding B1 to G1:
+
+- AP +0.016 ± 0.002, ahead in 82% of classes; oracle +0.011.
+- Small objects +0.035 (95% of classes), medium +0.015, large +0.001.
+
+On canvas B, with three Goods beside it, the Bad adds only +0.004. The paper's negatives were other instances in the
+target image. Here a Bad is a rejected image, and often the wrong size of the same class. bus@small's Bad is a bus
+interior (above). That Bad gains +0.081, skis@large +0.10, and microwave@small +0.10. The Bad also pushes the scores
+down further, so at 0.75 it costs F1 -0.011: its best cut is 0.6.
+
+**6. Against Region at the same vote, every arm wins, but so does no exemplar at all.** G1 is AP +0.25 ± 0.03 over
+Region at G1's vote, and G3 +0.21. The text prompt alone is +0.27 and +0.22 over the same Region rows. Region has had
+1-4 votes in the median cell, and #5213 already showed SAM3's text prompt ahead of Region until vote 109 on large
+objects. Exemplars do not widen that lead.
+
+**7. Presence saturates.** SAM3's presence head ("is the concept in this image") reads 0.96-1.0 on every canvas, on
+negatives as on positives, because the references always show the object. On the canvas, the score is the query
+logit alone. This is one likely reason the text-only canvas already loses AP: the image-level presence signal is
+gone.
+
+![AP and oracle F1 by object size: the text prompt alone, the six canvas arms, and Region at the vote of G1 / G3, ±1 SE over classes](figures/sam3_5244_bands.webp)
+
+![F1 of "score > cut" for each arm, by object size; solid grey line 0.5, dashed 0.75 (#5565's cut at beta 1)](figures/sam3_5244_cuts.webp)
+
+**Cost.** Measured per image on V100 at fp16, over the 140 cells (`tables/sam3_5244_cost.csv`):
+
+- **The backbone:** 154 ms per canvas, against #5213's 126 ms for the image alone, though both are 1008 x 1008.
+  The two runs differ in batch size and job, so only the order of magnitude carries over.
+- **The decoder:** 23 ms per arm and prompt (17 ms for #5213's text-only prompt).
+
+| new query or exemplar set, 24.5k-image pool | V100 fp16 | L40S bf16 (scaled by #5213's ratio) |
+|---|---|---|
+| SAM3 text alone, backbone cached (#5213) | ~7 min | ~2 min |
+| SAM3 text alone, uncached | ~58 min | ~33 min |
+| **Canvas, 1 exemplar set** | **~72 min** | **~40 min** |
+
+The canvas cannot use a cache, because the target's pixels change scale and share attention with the references.
+Every new exemplar set, which means every Good or Bad vote that changes it, re-scores the whole pool with the
+backbone. That is ~10x the cached text prompt per vote, for a ranking that is no better outside large objects.
+
+**What would make it pay, and why it is not filed.** The large-object gain is real (AP +0.029, F1 at 0.75 +0.13). The
+app knows the Good box's size, so a route could use canvas exemplars only when the first Good's box is large. That
+still costs ~40 min of L40S per vote, and the large band is where Region's own votes catch SAM3 anyway (#5213: vote
+40-109). A cheaper way to take a vote's box into SAM3 is #5242 (a light head on SAM3's object queries): one backbone
+pass per image at ingest, cached, then nothing per vote. So this study leaves the exemplar question to #5242.
+
+Tables (archived with the study), all in `tables/`:
+
+- `sam3_5244_summary.csv` and `_summary_common.csv`: by arm and band. The second holds only the 139 cells with 3
+  Goods.
+- `sam3_5244_paired.csv`: every paired gain, for AP, oracle, F1 at 0.5, F1 at 0.75 and F1 at 0.85, by band.
+- `sam3_5244_cut_sweep.csv`: F1 at cuts 0.3-0.95 per arm and band, and each arm's best cut.
+- `sam3_5244_per_cell.csv` (every cell and arm, with the vote), `_per_class_AP.csv`.
+- `sam3_5244_diag.csv` and `_diag_summary.csv`: the share of images where the top query sits on a reference, the
+  mean presence on negatives and positives, and the Bad box's SAM3 score.
+- `sam3_5244_cost.csv`: timing per cell.
+
+Reproduce: `state_of_app/sam3_exemplars_5244.sh plan`, `sample`, `score 144` and `analyze`.
+
 ## Follow-ups (filed)
 
 - **SAM3 as the opening (#5241), done:** see [SAM3 as the opening](#sam3-as-the-opening-5241). As an opt-in path,
@@ -632,8 +809,9 @@ Reproduce: `sam3_set_guard_5521.py sets|shipped|cut05 --out DIR` (`sets` in `unk
   regions in place of DINOv3 patches. This is the "learnable head" question, and it would keep SAM3's prior.
 - **SAM3 masks as Region geometry for DINOv3 (#5243):** mask-pooled patch features and a HAC over SAM3's objects, against
   `max_patch`, the "DINO on SAM3 masks" question.
-- **Cross-image exemplars from votes (#5244):** the canvas trick with a cell's Good (and Bad) boxes, scored on the
-  withheld half, against zero-shot. Includes whether negatives help or hurt.
+- **Cross-image exemplars from votes (#5244), done:** see [Cross-image exemplars](#cross-image-exemplars-from-votes-5244).
+  No better ranking than the text prompt (AP 0.72-0.74 vs 0.74); large objects gain, small ones lose to the canvas;
+  a Bad box helps (+0.016); ~10x the cached text prompt per vote. The vote-box route stays with #5242.
 - **Training overlap (#5240), done:** see [Training overlap](#training-overlap-5240). Labelled exposure buys SAM3 nothing,
   so the follow-ups above can be built on #5213's numbers.
 
@@ -656,5 +834,7 @@ Reproduce: `sam3_set_guard_5521.py sets|shipped|cut05 --out DIR` (`sets` in `unk
   `S5241_LINE` for the sam3 arm's line.
 - `scripts/experiments/state_of_app/sam3_set_guard_5521.py`: #5521's FGVC sets at any cut (`sets`) and the set-size
   guards on the shipped route (`shipped`) and on the 0.5 / 20th-Good route (`cut05`).
+- `scripts/experiments/state_of_app/sam3_exemplars_score_5244.py`: #5244's plan (first Goods and Bad per cell), importance
+  sample and canvas scorer; `sam3_exemplars_5244.sh` (launcher) and `.py` (tables and figures).
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.
