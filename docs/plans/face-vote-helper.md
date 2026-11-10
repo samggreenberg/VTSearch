@@ -261,7 +261,21 @@ These are the owner's; the recommendation is first in each.
 
 ## Open work
 
-Each item is an issue; the issue holds its scope.
+Each item is an issue; the issue holds its scope. An arrow means "must land
+before"; the dotted one is a soft dependency, for the checklist rows' click to
+zoom only.
+
+```text
+#5642 compare layout ──> #5643 checklist strip ┄┄┄┄┄┄┐
+        │                                             ┆
+        ├──────────────> #5645 wider view             ▼
+        │                                     #5647 size and position,
+        └───────────────────────────────────> linked zoom
+                                                      ▲
+#5644 keep landmarks ─────────────────────────────────┘
+```
+
+#5642 and #5644 can start together. Nothing else is blocked on #5645.
 
 <!-- item-sep -->
 
@@ -286,7 +300,5 @@ Each item is an issue; the issue holds its scope.
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- [ ] #5646 — Does the helper make votes more accurate? Design and run the measurement (Opus)
 
 <!-- item-sep -->
