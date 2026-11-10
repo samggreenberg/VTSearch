@@ -51,7 +51,7 @@ Identification Subcommittee; Europe: ENFSI):
   - 19 components: skin, face/head outline, face/head composition, hair,
     forehead, eyebrows, eyes, cheeks, nose, ears, mouth, chin/jawline, neck,
     facial hair, facial lines, scars, facial marks, alterations, other.
-  - Each splits twice more. The ear alone has 18 named parts (helix,
+  - Each splits twice more. The ear table alone has 19 rows, 15 of them named parts (helix,
     antihelix, tragus, concha, lobe "attached or detached", ...); the mouth
     table starts with the philtrum.
   - The order is "from the top of the face to the bottom, not in order of
