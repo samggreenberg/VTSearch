@@ -109,6 +109,12 @@ export class ThumbStore {
   /** Waveform masks composited to the live accent, keyed like {@link images}
    *  and evicted alongside them so a tint can never outlive its source. */
   private readonly tintedImages = new Map<number, HTMLCanvasElement>();
+  /** Pending off-view warm-ups whose landing repaints nothing, because no cell
+   *  on screen is waiting on them. A visible request for one of them
+   *  ({@link get}) takes it out of this set, so it repaints when it lands
+   *  rather than sitting in the cache, loaded but unpainted, until something
+   *  else happens to redraw the frame (#5636). */
+  private readonly quiet = new WeakSet<HTMLImageElement>();
   /** Whether the cache currently holds full-res originals rather than capped
    *  thumbnails. Flipped by {@link setFullRes}, which drops the cache. */
   private fullRes = false;
@@ -177,16 +183,33 @@ export class ThumbStore {
       // never evict something that's on screen.
       this.images.delete(id);
       this.images.set(id, cached);
-      return cached.complete && cached.naturalWidth > 0 ? cached : null;
+      if (cached.complete && cached.naturalWidth > 0) return cached;
+      // Still in flight. If it started as an off-view warm-up, a cell on
+      // screen now wants it, so its landing must repaint.
+      this.quiet.delete(cached);
+      return null;
     }
     this.startLoad(id, false);
     return null;
   }
 
+  /** Whether the image for an id has decoded and can be painted. A pure read:
+   *  no recency bump, no fetch. */
+  loaded(id: number): boolean {
+    const img = this.images.get(id);
+    return !!img && img.complete && img.naturalWidth > 0;
+  }
+
+  /** Whether an id is done loading either way — painted, or failed and falling
+   *  back to flat shading — so nothing on screen is still waiting on it. */
+  settled(id: number): boolean {
+    return this.loaded(id) || this.failures.has(id);
+  }
+
   /**
    * The cached image for an id *without* bumping its recency or starting a
-   * fetch — a pure read, for callers that only want to know whether a load has
-   * landed (the first-view gate). Undefined when nothing is cached.
+   * fetch — a pure read. Undefined when nothing is cached. (To ask whether it
+   * has landed, use {@link loaded} or {@link settled}.)
    */
   peek(id: number): HTMLImageElement | undefined {
     return this.images.get(id);
@@ -230,9 +253,9 @@ export class ThumbStore {
    * Kick off the fetch for a representative id and stash the pending image in
    * the cache; returns whether a fetch was started. ``preload`` marks an
    * off-view warm-up: it loads at low network priority and does not repaint
-   * when it lands (the cell isn't on screen), so it never competes with visible
-   * thumbnails. A no-op when the id is already cached, or when a previous
-   * failure's backoff has not yet expired.
+   * when it lands (the cell isn't on screen) — unless a visible cell asks for
+   * it while it is still in flight (see {@link quiet}). A no-op when the id is
+   * already cached, or when a previous failure's backoff has not yet expired.
    */
   private startLoad(id: number, preload: boolean): boolean {
     if (this.images.has(id)) return false;
@@ -248,22 +271,28 @@ export class ThumbStore {
       // tile requests, and skip the repaint — the cell is off-screen, so a later
       // draw picks it up from the cache once the user pans to it.
       img.setAttribute('fetchpriority', 'low');
+      this.quiet.add(img);
     } else {
-      img.onload = () => {
-        // A load that lands clears the failure history: the id is good again,
-        // so a later blip gets the full retry schedule rather than resuming a
-        // spent one.
-        this.failures.delete(id);
-        this.deps.onLoaded();
-      };
+      // A cell on screen is waiting on this one: ask for it ahead of the
+      // warm-ups and tile prefetches queued behind the same few connections.
+      img.setAttribute('fetchpriority', 'high');
     }
+    img.onload = () => {
+      // A load that lands clears the failure history: the id is good again,
+      // so a later blip gets the full retry schedule rather than resuming a
+      // spent one.
+      this.failures.delete(id);
+      if (!this.quiet.has(img)) this.deps.onLoaded();
+    };
     img.onerror = () => {
-      this.images.delete(id);
+      // A stale handle (the cache was cleared, or the id evicted and fetched
+      // again since) must not drop the entry that replaced it.
+      if (this.images.get(id) === img) this.images.delete(id);
       this.recordFailure(id, failure);
       // Repaint so the frame stops waiting on this cell (it now falls back to
-      // flat density shading) instead of stranding the first-view cover until
-      // its backstop timer fires. Warm-ups paint nothing, so they stay silent.
-      if (!preload) this.deps.onLoaded();
+      // flat density shading) and the loading count moves on. Warm-ups nobody
+      // has asked for since paint nothing, so they stay silent.
+      if (!this.quiet.has(img)) this.deps.onLoaded();
     };
     // Downscaled /thumbnail by default: a browse projection can hold thousands
     // of points, so painting full-size bitmaps onto every bin would exhaust
