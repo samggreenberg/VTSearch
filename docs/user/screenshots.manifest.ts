@@ -19,7 +19,7 @@
 
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, REPO, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 // @ts-expect-error - plain .mjs helper, shared with capture.ts
@@ -865,6 +865,25 @@ async function openPeople(page: Page, h: Helpers): Promise<void> {
   await page.waitForSelector('.people-with-row.picked', { timeout: 60000 });
   await page.waitForSelector('.people-photo .people-photo-box', { timeout: 60000 });
   await picturesLoaded(page, '.people-panes');
+}
+
+/**
+ * Scroll *card* to the middle of its pane and keep it there: the photos above
+ * it take their height as they load, and push it down after a single scroll,
+ * by a different amount on every run (#5630). Re-centres until a pass with
+ * every picture in view loaded leaves it where it was.
+ */
+async function centreSteady(page: Page, card: Locator): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    const top = await card.evaluate((el) => {
+      el.scrollIntoView({ block: 'center' });
+      return el.getBoundingClientRect().top;
+    });
+    await picturesLoaded(page, '.people-panes');
+    await page.waitForTimeout(300);
+    if ((await card.evaluate((el) => el.getBoundingClientRect().top)) === top) return;
+  }
+  throw new Error('the People photo never stopped moving');
 }
 
 /** The remembered left-panel widths from before the Collapse to photos shot widened the Face one. */
@@ -2515,6 +2534,13 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await rankFaces(page, h);
       await h.serveItem(faceItem(SHOWN_FACE));
+      // The click leaves the list where it was on the GRID, but the container
+      // scrolled the face's row to the top (#5630); put it back at the top,
+      // where the reader's click left it.
+      await page.locator('.panel-left .media-list').first().evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await h.wait(300);
       await page.locator('.panel-center').getByRole('button', { name: 'Show in photo' }).first().click();
       await sourcePhotoOpen(page);
     },
@@ -2567,7 +2593,7 @@ export const SHOTS: Shot[] = [
       const photo = photos.find((m: { filename: string }) => m.filename === SHARED_PHOTO);
       if (!photo) throw new Error(`${SHARED_PHOTO} is not in ${IMAGE_DATASET}`);
       const card = page.locator(`.people-photo:has(img[src*="/api/medias/${photo.id}/thumbnail"])`).first();
-      await card.scrollIntoViewIfNeeded();
+      await centreSteady(page, card);
       await card.click();
       await sourcePhotoOpen(page);
     },

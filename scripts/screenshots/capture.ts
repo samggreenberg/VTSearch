@@ -739,6 +739,13 @@ async function captureShot(
     // Holds only while the app's Show Animations defers to it; see
     // warnIfMotionForced.
     reducedMotion: 'reduce',
+    // The app buckets a vote's calendar day by the browser's clock (the
+    // `X-Timezone-Offset` header), and the fixtures' own votes, cast through
+    // `app-client.mjs` with no header, by UTC. In any other zone a run taken
+    // in the hours when the two dates differ counts two days, and Your Days
+    // are Numbered reads Bronze (#5630). UTC is also the container's zone, the
+    // one the baselines were drawn in.
+    timezoneId: 'UTC',
   });
   const page = await ctx.newPage();
   const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, loud: 0, capture: 0 };
