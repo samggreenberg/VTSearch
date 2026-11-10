@@ -33,7 +33,7 @@ Identification Subcommittee; Europe: ENFSI):
   - **Superimposition** (overlaying two aligned images) "should be used only
     to aid" and "shall never be used as a stand-alone approach". It applies
     only when both images are "taken from the same viewpoint", and only with
-    tools "which preserve shapes".
+    tools "which preserve shapes". The European manual below is stricter.
   - **Photo-anthropometry** (measuring distances and angles between
     landmarks) "shall not be used". It "does not produce consistent results
     and may be misleading".
@@ -43,11 +43,21 @@ Identification Subcommittee; Europe: ENFSI):
     practice", because observers disagree on them.
   - The process is ACE-V: **A**nalysis (is the image fit to compare at all?),
     **C**omparison, **E**valuation, **V**erification (a second examiner).
-- [ASTM E3149 / the FISWG feature list](https://store.astm.org/e3149-26.html)
-  is the list of parts the method walks: 19 components, top of the face to
-  bottom, each split into finer detail. The ASTM text is paid; this plan
-  takes the component names from the free stability standard below, which
-  follows the same list.
+- [FISWG, *Facial Image Comparison Feature List for Morphological Analysis*
+  v2.0](https://fiswg.org/FISWG_Morph_Analysis_Feature_List_v2.0_20180911.pdf)
+  (sold by ASTM as E3149; the FISWG copy is free) is the list of parts the
+  method walks. It is a vocabulary, not a procedure: it "does not define the
+  comparison process itself".
+  - 19 components: skin, face/head outline, face/head composition, hair,
+    forehead, eyebrows, eyes, cheeks, nose, ears, mouth, chin/jawline, neck,
+    facial hair, facial lines, scars, facial marks, alterations, other.
+  - Each splits twice more. The ear alone has 18 named parts (helix,
+    antihelix, tragus, concha, lobe "attached or detached", ...); the mouth
+    table starts with the philtrum.
+  - The order is "from the top of the face to the bottom, not in order of
+    importance or priority".
+  - Where it says "distance" it means relative size judged by eye, and it
+    repeats that photo-anthropometry should "not be used at all".
 - [OSAC 2020-S-0002, *Physical Stability of Facial Features of
   Adults*](https://www.nist.gov/document/osac-2020-s-0002-physicalstabilityoffacialfeaturesofadultsosacproposedstandard)
   rates each part High / Medium / Low for how much it changes with
@@ -64,9 +74,26 @@ Identification Subcommittee; Europe: ENFSI):
   | Facial hair, skin appearance | Low under alteration | Makeup, tanning, grooming |
 
 - [ENFSI-BPM-DI-01, *Best Practice Manual for Facial Image
-  Comparison*](https://www.mvr.bg/upload/19089/enfsi-bpm-di-01.pdf) is the
-  European counterpart. It was not read for this plan; it is listed for
-  whoever takes up the checklist item.
+  Comparison*](https://www.mvr.bg/upload/19089/enfsi-bpm-di-01.pdf) (2018)
+  is the European counterpart. It adopts the FISWG list as its checklist and
+  ACE-V as its workflow, and differs from the OSAC guide in four ways that
+  matter here.
+  - **It rejects overlays outright.** Superimposition, "proportional
+    alignment" and feature classification are all "not recommend[ed]". It
+    cites two studies in which chimeric, blinked and wiped overlays "reduced
+    matching accuracy compared to full facial images" and biased viewers
+    toward calling a match.
+  - **It allows resizing and rotating** an image to aid observation, with the
+    aspect ratio kept.
+  - **It guards the order of viewing.** The questioned image is assessed
+    before the reference is studied, so that a sharp reference does not lead
+    the viewer to see detail the questioned image cannot resolve.
+  - **It wants an inconclusive answer** on any scale of conclusions, and recommends
+    that "statements of absolute certainty are not used".
+
+  It also names the useful features: "the ears, nose, and scars and
+  blemishes were most diagnostic", and feature-by-feature comparison improved
+  accuracy "when the facial images are a true match".
 
 **The psychology** (mostly the UNSW Sydney group):
 
@@ -107,17 +134,25 @@ exists; this plan adds nothing for it.
 - **A second face on screen is the core of it.** Every method above is a
   comparison of two images. Today the user compares the candidate against
   their memory of the target.
-- **A checklist, short and in diagnostic order.** Marks and ears first, face
-  shape and mouth last, with hair, facial hair and skin tone named as things
-  *not* to weigh. It is a prompt, not a form: the vote is still one key.
-- **Alignment as an aid, with shape-preserving transforms only.** Scale, turn
-  and shift; never warp. An overlay is offered only when the two faces are
-  near the same viewpoint.
+- **A checklist, short and in diagnostic order.** Marks, ears and nose first,
+  face shape and mouth last, with hair, facial hair and skin tone named as
+  things *not* to weigh. It is a prompt, not a form: the vote is still one
+  key. The FISWG list supplies the wording; its 19 components are far too
+  many for a vote.
+- **Side by side, never overlaid.** The two standards disagree on overlays
+  and the stricter one cites measured harm, so this plan has no overlay,
+  blink or wipe. Matching the two faces' size and position, with the aspect
+  ratio kept, is within what both allow.
 - **No measurements.** No distances, ratios or angles shown as numbers. That
   is the method the standard forbids.
 - **Say when a pair cannot be compared.** ACE-V starts with fitness. The app
   already knows a hard view (`HARD_VIEW_QUALITY`, #5372); the helper says so
-  and reminds the user that moving on without voting is a valid answer.
+  and reminds the user that moving on without voting is a valid answer. That
+  is the app's inconclusive level.
+- **The reference is a known quantity here.** ENFSI's order-of-viewing rule
+  protects a blurry questioned image from a sharp reference. The helper
+  cannot hide the reference, but it can prefer a reference no sharper than
+  it needs to be, and the fitness notice covers the rest.
 
 ### What the repo already has
 
@@ -174,22 +209,14 @@ the detector or kept for the session is an open decision (below).
 Both crops are already levelled. What is missing is scale and position: one
 face may fill its crop and the other sit small in a corner. With each face's
 five landmarks, the frontend scales and shifts the reference so the two eye
-midpoints coincide and the eye-to-mouth distances match. That is a similarity
-transform, the shape-preserving kind the standard allows.
+midpoints coincide and the eye-to-mouth distances match. That is a resize
+and a shift with the aspect ratio kept, which both standards allow. The two
+faces stay in their own panes.
 
 This needs the landmarks kept. `image2face` would store them on the item as
 five points in crop fractions, beside `source_box`. They are geometry, not an
 embedding, so the no-persisted-vectors rule does not apply. Existing Face
 datasets have none and would show the unregistered layout until re-imported.
-
-### Overlay
-
-A hold-to-blink key swaps the reference into the candidate's pane, registered.
-It is offered only when both faces look frontal. With no pose estimate, the
-test is a proxy from the landmarks: how far the nose tip sits from the
-midline between the eyes. This is this plan's own inference, not a method
-from the references, and it needs checking against real crops before it
-gates anything.
 
 ### Wider view
 
@@ -203,8 +230,8 @@ A narrow strip beside the pair, in this order:
 
 1. **Marks** — moles, scars, freckles. Same place on both?
 2. **Ears** — lobe attached or free, rim shape, how far they stand out.
-3. **Eyes and brows** — lid folds, brow shape (not brow grooming).
-4. **Nose** — tip, nostrils, bridge.
+3. **Nose** — tip, nostrils, bridge.
+4. **Eyes and brows** — lid folds, brow shape (not brow grooming).
 5. **Mouth, chin, face outline** — weakest evidence; expression moves them.
 
 Under it, one line: *don't weigh hair, beard, makeup or skin tone.*
@@ -246,8 +273,8 @@ None of these is filed as an issue yet.
 <!-- item-sep -->
 
 - **Checklist strip** — the five rows, the do-not-weigh line and the fitness
-  notice, as static guidance. Read the ENFSI manual first and reconcile the
-  wording with it. After *Compare layout*. *Recommended Claude model: Sonnet.*
+  notice, as static guidance, worded from the FISWG feature list. After
+  *Compare layout*. *Recommended Claude model: Sonnet.*
 
 <!-- item-sep -->
 
@@ -266,10 +293,6 @@ None of these is filed as an issue yet.
   larger box. After *Compare layout*. *Recommended Claude model: Sonnet.*
 
 <!-- item-sep -->
-
-- **Overlay** — hold-to-blink, gated on the frontal proxy. The proxy has to
-  be checked on real crops first. After *Registration and linked zoom*.
-  *Recommended Claude model: Sonnet.*
 
 <!-- item-sep -->
 
