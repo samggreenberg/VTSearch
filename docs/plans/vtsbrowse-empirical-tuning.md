@@ -127,7 +127,7 @@ the rework below exists.
 | `max_useful_levels(N)` | `1 + ceil(log2 N)`, clamped `[1, 14]` | Runaway-guard **ceiling** for the auto-depth descent only, not the operating depth. |
 | `base_cols` | `6.0` | Level-0 spans ~6 hex columns across the larger extent. Drives `base_radius`. Part 2's target. |
 | `base_radius` | derived (`None` → `_base_radius_for`) | Override path exists but unused. |
-| `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs round-trip-count tradeoff. Part 2's target. |
+| `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs request-count tradeoff, softened since the client fetches tiles in batches of up to 64 per request (#5637): smaller tiles now cost little in round trips, while larger ones still fetch more off-screen cells. Part 2's target. |
 
 `build_pyramid(proj, bin_shape=...)` is called with **no** `n_levels`
 (auto-depth) from `vtscore/projection/service.py` (`fit_and_install_layout`,

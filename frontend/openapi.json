@@ -8850,6 +8850,22 @@
         ],
         "type": "object"
       },
+      "TileBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tiles": {
+            "description": "One entry per requested tile, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/TileResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tiles"
+        ],
+        "type": "object"
+      },
       "TileResponse": {
         "additionalProperties": false,
         "properties": {
@@ -17201,6 +17217,79 @@
           }
         },
         "summary": "Drop ids from the current subset browse **without re-fitting UMAP**.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/tiles": {
+      "get": {
+        "description": "The canvas needs a few dozen tiles to paint a view, and over HTTP/1.1 a\nbrowser fetches only about six URLs at a time per host, so on a remote\nserver one request per tile spends most of the wait on round trips (#5637).\nThe client asks for each level's tiles in sorted batches, so a revisit\nthat frames the same view asks for the same URLs and the browser cache\nanswers them, as it did per tile.\n\nA tile outside the pyramid answers an empty cell list, exactly as\n``GET /api/projection/tiles/<level>/<tx>/<ty>`` does.",
+        "operationId": "get_tiles",
+        "parameters": [
+          {
+            "description": "Read the ephemeral subset layout rather than the full-dataset one.",
+            "in": "query",
+            "name": "subset",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Cache token (``<projection_id>:<content_version>``) the client appends so each layout's immutable tiles get their own URL. The server ignores it.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": null,
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Pyramid level every requested tile is at.",
+            "in": "query",
+            "name": "level",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The tiles to return, as ``tx:ty`` pairs separated by commas (``0:0,1:0,-1:2``), at most 128. Answered in this order, repeats dropped.",
+            "in": "query",
+            "name": "tiles",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileBatchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Projection not ready."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return several tiles of one pyramid level in one response.",
         "tags": [
           "projection"
         ]

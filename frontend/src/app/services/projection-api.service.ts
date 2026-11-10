@@ -5,7 +5,7 @@ import { map } from 'rxjs/operators';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import { buildProjection } from '../generated/api-client/fn/projection/build-projection';
-import { getTile } from '../generated/api-client/fn/projection/get-tile';
+import { getTiles } from '../generated/api-client/fn/projection/get-tiles';
 import { projectionLabels } from '../generated/api-client/fn/projection/projection-labels';
 import { projectionMeta } from '../generated/api-client/fn/projection/projection-meta';
 import { removeFromSubset } from '../generated/api-client/fn/projection/remove-from-subset';
@@ -96,27 +96,36 @@ export class ProjectionApiService {
     );
   }
 
-  getTile(
+  /**
+   * Several tiles of one pyramid level in one request, in the order asked.
+   *
+   * The backend resolves the pyramid (and its bin shape) from the active
+   * dataset context, so the URL is keyed only by the level and the tile list,
+   * which the caller sorts so the same view asks for the same URL every visit.
+   * Tiles are served ``immutable``, so ``cacheToken``
+   * (``<projection_id>:<content_version>``) rides along as ``?v=`` to give
+   * each projection — and each in-place edit of a subset — a distinct URL,
+   * busting the HTTP cache when content changes.
+   */
+  getTiles(
     level: number,
-    tx: number,
-    ty: number,
+    tiles: readonly (readonly [number, number])[],
     subset = false,
     cacheToken = '',
-  ): Observable<TileResponse> {
-    // The backend resolves the pyramid (and its bin shape) from the active
-    // dataset context, so the tile URL is keyed only by (level, tx, ty). Tiles
-    // are served ``immutable``, so ``cacheToken``
-    // (``<projection_id>:<content_version>``) rides along as ``?v=`` to give
-    // each projection — and each in-place edit of a subset — a distinct URL,
-    // busting the HTTP cache when content changes.
-    const params = { level, tx, ty, ...subsetParams(subset), v: cacheToken || undefined };
+  ): Observable<TileResponse[]> {
+    const params = {
+      level,
+      tiles: tiles.map(([tx, ty]) => `${tx}:${ty}`).join(','),
+      ...subsetParams(subset),
+      v: cacheToken || undefined,
+    };
     // Suppress the global error toast: a tile can 404 transiently when it is
     // requested before the projection has finished building. The caller
     // (TileCacheService) already recovers by rendering an empty tile and
     // refetching once the build lands, so the failure is expected and
     // self-healing — surfacing it as a banner would just alarm the user.
     // Mirrors getMeta's SKIP_ERROR_TOAST rationale.
-    return getTile(this.http, this.config.rootUrl, params, quietContext()).pipe(map((r) => r.body));
+    return getTiles(this.http, this.config.rootUrl, params, quietContext()).pipe(map((r) => r.body.tiles));
   }
 
   /** `POST /api/projection/build`: `ids` scopes it to a subset, `force` re-fits a cached layout. */

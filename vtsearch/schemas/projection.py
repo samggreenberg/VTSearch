@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from typing import Any
+
+from marshmallow import Schema, ValidationError, fields, validate
+
+#: Most tiles one ``GET /api/projection/tiles`` may ask for. The canvas asks in
+#: batches of 64; the cap only bounds what a hand-made URL can make the server do.
+MAX_TILES_PER_BATCH = 128
 
 
 class LevelMetaSchema(Schema):
@@ -140,6 +146,50 @@ class TileQuerySchema(ProjectionSubsetQuerySchema):
     )
 
 
+class TileCoordList(fields.Field):
+    """``tx:ty,tx:ty,…`` in a query string, as a list of ``(tx, ty)`` pairs.
+
+    Tile coordinates may be negative (``-1:3``), so the pair separator is a
+    colon rather than the minus-prone comma alone.
+    """
+
+    def _deserialize(self, value: Any, attr: str | None, data: Any, **kwargs: Any) -> list[tuple[int, int]]:
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError("Expected tiles as tx:ty pairs separated by commas.")
+        coords: list[tuple[int, int]] = []
+        for part in value.split(","):
+            tx, sep, ty = part.strip().partition(":")
+            try:
+                if not sep:
+                    raise ValueError
+                coords.append((int(tx), int(ty)))
+            except ValueError:
+                raise ValidationError(f"Bad tile {part!r}: expected tx:ty, e.g. 3:-1.") from None
+        if len(coords) > MAX_TILES_PER_BATCH:
+            raise ValidationError(f"At most {MAX_TILES_PER_BATCH} tiles per request.")
+        return coords
+
+
+class TileBatchQuerySchema(TileQuerySchema):
+    """Query for ``GET /api/projection/tiles``."""
+
+    level = fields.Integer(
+        required=True,
+        validate=validate.Range(min=0),
+        metadata={"description": "Pyramid level every requested tile is at."},
+    )
+    tiles = TileCoordList(
+        required=True,
+        metadata={
+            "description": (
+                f"The tiles to return, as ``tx:ty`` pairs separated by commas (``0:0,1:0,-1:2``), "
+                f"at most {MAX_TILES_PER_BATCH}. Answered in this order, repeats dropped."
+            ),
+            "type": "string",
+        },
+    )
+
+
 class SubsetRemoveRequestSchema(Schema):
     """Body for ``POST /api/projection/subset/remove``."""
 
@@ -230,6 +280,16 @@ class TileResponseSchema(Schema):
     cells = fields.List(fields.Nested(HexCellSchema), required=True)
 
 
+class TileBatchResponseSchema(Schema):
+    """Response for ``GET /api/projection/tiles``."""
+
+    tiles = fields.List(
+        fields.Nested(TileResponseSchema),
+        required=True,
+        metadata={"description": "One entry per requested tile, in request order."},
+    )
+
+
 __all__ = [
     "HexCellSchema",
     "LevelMetaSchema",
@@ -238,5 +298,7 @@ __all__ = [
     "ProjectionMetaSchema",
     "RegionLabelSchema",
     "SubsetRemoveRequestSchema",
+    "TileBatchQuerySchema",
+    "TileBatchResponseSchema",
     "TileResponseSchema",
 ]

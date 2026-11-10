@@ -30,6 +30,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   minimap, the off-screen ring) ahead of the ones on screen. On an 8,000-image map over a link with 100 ms of
   latency, the map now shows after 2.7 s instead of 8.8 s, and every picture on screen is in after 5.1 s instead of
   8.8 s.
+- **Browse fetches its map tiles a batch at a time** (issue #5637). The map's tiles used to arrive one request each,
+  and a browser talking plain HTTP to a remote server runs only about six requests at a time, so opening a map cost
+  a round trip for every five or six of its 160–260 tiles. They now come in a handful of requests (six, on an
+  8,000-image map), and since the same view asks for the same batches, revisits still come from the browser cache.
+  With 100 ms of latency the map appeared 0.7 s sooner (2.1 s instead of 2.8 s).
 
 ## 2026-11-10
 

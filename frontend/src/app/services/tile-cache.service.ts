@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, Subject } from 'rxjs';
-import { tap, shareReplay, catchError } from 'rxjs/operators';
+import { Observable, of, ReplaySubject, Subject } from 'rxjs';
 import { ProjectionApiService } from './projection-api.service';
 import type { TileResponse } from '../models/projection.models';
 
@@ -9,12 +8,38 @@ interface CacheEntry {
   lastAccess: number;
 }
 
+/** A tile asked for and not yet sent, with what its batch needs to send it. */
+interface QueuedTile {
+  level: number;
+  tx: number;
+  ty: number;
+  /** Cache key, under the view the tile was asked for in. */
+  key: string;
+  /** {@link TileCacheService.viewToken} when asked for: the batch's view. */
+  token: string;
+  subset: boolean;
+  cacheToken: string;
+  /** Answers every caller waiting on this tile, once its batch lands. */
+  done: ReplaySubject<TileResponse>;
+  /** What {@link TileCacheService.getTile} handed out, held in `inflight`. */
+  tile$: Observable<TileResponse>;
+}
+
+/**
+ * Most tiles one request carries. A view asks for a few dozen tiles at once,
+ * and the minimap's overview for over a hundred; the server takes up to 128.
+ */
+export const TILE_BATCH_SIZE = 64;
+
 @Injectable({ providedIn: 'root' })
 export class TileCacheService {
   private projectionApi = inject(ProjectionApiService);
 
   private cache = new Map<string, CacheEntry>();
   private inflight = new Map<string, Observable<TileResponse>>();
+  /** Tiles asked for in this task, sent together when it ends. */
+  private queue: QueuedTile[] = [];
+  private flushQueued = false;
   // Deeper datasets carve more pyramid levels, so a small flat LRU thrashes:
   // panning back over seen ground misses and the hex grid blanks. Hold more.
   private readonly MAX_ENTRIES = 2048;
@@ -59,6 +84,22 @@ export class TileCacheService {
     this.subset = subset;
   }
 
+  /**
+   * A tile, from the cache when it's there, else fetched.
+   *
+   * Fetches are batched (#5637). Every tile asked for in one task — a canvas
+   * frame asks for all of its visible tiles in one draw — goes out together,
+   * one request per level per {@link TILE_BATCH_SIZE} tiles, instead of one
+   * request each. Over HTTP/1.1 a browser runs only about six requests at a
+   * time per host, so one request per tile made a remote server's round trip
+   * time the cost of every five or six tiles. Each batch lists its tiles
+   * sorted, so the same view asks for the same URLs on every visit and the
+   * browser cache keeps answering them.
+   *
+   * The returned observable emits the tile once and completes; on a failed
+   * fetch it emits an empty tile, which is not cached, so a later frame asks
+   * again.
+   */
   getTile(level: number, tx: number, ty: number): Observable<TileResponse> | null {
     const key = this.key(level, tx, ty);
 
@@ -73,27 +114,29 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
+    const done = new ReplaySubject<TileResponse>(1);
+    const tile$ = done.asObservable();
+    this.inflight.set(key, tile$);
     // Identity of the view this request belongs to, captured now. Subscribers
     // are fire-and-forget (the canvas and minimap never unsubscribe), so a
-    // response can land long after a projection switch cleared the cache; the
-    // guard below drops it instead of caching another projection's cells.
-    const token = this.viewToken();
-    const req$ = this.projectionApi.getTile(level, tx, ty, this.subset, this.cacheToken()).pipe(
-      tap((tile) => {
-        this.inflight.delete(key);
-        if (this.viewToken() !== token) return;
-        this.put(key, tile);
-        this.tileLoaded$.next(tile);
-      }),
-      catchError(() => {
-        this.inflight.delete(key);
-        const empty: TileResponse = { level, tx, ty, cells: [] };
-        return of(empty);
-      }),
-      shareReplay(1),
-    );
-    this.inflight.set(key, req$);
-    return req$;
+    // response can land long after a projection switch cleared the cache;
+    // `land` drops it instead of caching another projection's cells.
+    this.queue.push({
+      level,
+      tx,
+      ty,
+      key,
+      token: this.viewToken(),
+      subset: this.subset,
+      cacheToken: this.cacheToken(),
+      done,
+      tile$,
+    });
+    if (!this.flushQueued) {
+      this.flushQueued = true;
+      queueMicrotask(() => this.flush());
+    }
+    return tile$;
   }
 
   getCached(level: number, tx: number, ty: number): TileResponse | null {
@@ -116,6 +159,61 @@ export class TileCacheService {
     this.inflight.clear();
     this.projectionId = '';
     this.contentVersion = 0;
+  }
+
+  /**
+   * Send this task's queued tiles: one request per (view, level), in
+   * {@link TILE_BATCH_SIZE} chunks of row-major sorted tiles. A tile whose view
+   * was switched away from before it went out is not sent at all.
+   */
+  private flush(): void {
+    this.flushQueued = false;
+    const queued = this.queue;
+    this.queue = [];
+    const groups = new Map<string, QueuedTile[]>();
+    for (const q of queued) {
+      if (q.token !== this.viewToken()) {
+        this.land(q, null);
+        continue;
+      }
+      const group = `${q.token}|${q.level}`;
+      const list = groups.get(group);
+      if (list) list.push(q);
+      else groups.set(group, [q]);
+    }
+    for (const group of groups.values()) {
+      group.sort((a, b) => a.ty - b.ty || a.tx - b.tx);
+      for (let i = 0; i < group.length; i += TILE_BATCH_SIZE) {
+        this.send(group.slice(i, i + TILE_BATCH_SIZE));
+      }
+    }
+  }
+
+  private send(batch: QueuedTile[]): void {
+    const { level, subset, cacheToken } = batch[0];
+    const coords = batch.map((q) => [q.tx, q.ty] as const);
+    this.projectionApi.getTiles(level, coords, subset, cacheToken).subscribe({
+      next: (tiles) => {
+        const byCoord = new Map(tiles.map((t) => [`${t.tx}:${t.ty}`, t]));
+        for (const q of batch) this.land(q, byCoord.get(`${q.tx}:${q.ty}`) ?? null);
+      },
+      error: () => {
+        for (const q of batch) this.land(q, null);
+      },
+    });
+  }
+
+  /** Settle one queued tile: cache it (if its view is still current) and
+   *  answer its callers; ``null`` answers an uncached empty tile. */
+  private land(q: QueuedTile, tile: TileResponse | null): void {
+    // Only our own entry: a clear() and a re-ask may have put a newer one there.
+    if (this.inflight.get(q.key) === q.tile$) this.inflight.delete(q.key);
+    if (tile && this.viewToken() === q.token) {
+      this.put(q.key, tile);
+      this.tileLoaded$.next(tile);
+    }
+    q.done.next(tile ?? { level: q.level, tx: q.tx, ty: q.ty, cells: [] });
+    q.done.complete();
   }
 
   private key(level: number, tx: number, ty: number): string {
