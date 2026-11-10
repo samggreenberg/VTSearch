@@ -10,21 +10,6 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
-### Added
-
-- **`LabelImporter.describe_origin_param(key, value)`, `vtscore.plugins.origin_rows`, and
-  `vtscore.detectors.import_record.import_rows`** (issue #5620). The row builder behind the dataset Stats window
-  (#5617) now serves the detector Stats window's Import section too, so a detector made from imported labels lists
-  the fields its label importer ran with under the importer's own field labels (`Server path`, not `filepath`), a
-  checkbox as `Yes` / `No`. `vtscore.plugins.origin_rows` holds the half both families share: `OriginRow` (which
-  `vtscore.datasets.importers.origin_rows` still exports), `describe_field_value` (the checkbox wording every hook's
-  default starts from), `format_param_key`, and `param_rows(fields, params, describe=..., label_for=...)`, which
-  builds the rows from a plugin's fields and a `describe(key, value)` callable. `origin_rows` wraps it with the dataset
-  rules (`media_type`, `source_specs`, the importer hook); `import_rows(imported)` wraps it with a label importer's,
-  and `label_importer_display_name(name)` reads the importer's display name, falling back to the name.
-  `LabelImporter.describe_origin_param` is the hook `ImporterBase` has, with the same default minus the dataset keys.
-  Additive: an importer that does not override the hook gets the default, and nothing changes what a record stores.
-
 ### Changed
 
 - **`vtscore.media.face.face_ball.face_ball_path()` resolves beside the face pipeline config in use** (issue
@@ -1671,6 +1656,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **`LabelImporter.describe_origin_param(key, value)`, `vtscore.plugins.origin_rows`, and
+  `vtscore.detectors.import_record.import_rows`** (issue #5620). The row builder behind the dataset Stats window
+  (#5617) now serves the detector Stats window's Import section too, so a detector made from imported labels lists
+  the fields its label importer ran with under the importer's own field labels (`Server path`, not `filepath`), a
+  checkbox as `Yes` / `No`. `vtscore.plugins.origin_rows` holds the half both families share: `OriginRow` (which
+  `vtscore.datasets.importers.origin_rows` still exports), `describe_field_value` (the checkbox wording every hook's
+  default starts from), `format_param_key`, and `param_rows(fields, params, describe=..., label_for=...)`, which
+  builds the rows from a plugin's fields and a `describe(key, value)` callable. `origin_rows` wraps it with the dataset
+  rules (`media_type`, `source_specs`, the importer hook); `import_rows(imported)` wraps it with a label importer's,
+  and `label_importer_display_name(name)` reads the importer's display name, falling back to the name.
+  `LabelImporter.describe_origin_param` is the hook `ImporterBase` has, with the same default minus the dataset keys.
+  Additive: an importer that does not override the hook gets the default, and nothing changes what a record stores.
 
 - **`vtscore.datasets.people`: a Face dataset's faces merged into people** (issue #5586). `fit_people` merges
   the face vectors at the face ball's beta 1 floor (`people_cutoff(compat)`; `None`, and so no partition, outside the
