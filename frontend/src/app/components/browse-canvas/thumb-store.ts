@@ -20,6 +20,10 @@
  *   (clip, theme) rather than once per frame.
  * - **Retryable failure records.** A load error is remembered with a backoff so
  *   a transient blip doesn't blank that bin for the rest of the session.
+ * - **Batched fetching** (#5637). Capped-tier thumbnails asked for in one task go
+ *   out together through ``GET /api/medias/thumbnails``, sorted, a
+ *   {@link THUMB_BATCH_SIZE} at a time. One request per thumbnail made a remote
+ *   server's round trip the cost of every six of them.
  *
  * It is deliberately free of Angular and of the tile pyramid: it knows how to
  * fetch, retain, evict and tint one image per media id, and nothing about which
@@ -459,8 +463,12 @@ export class ThumbStore {
 
   /** Drop the oldest quarter of cached thumbnails (insertion-ordered LRU). */
   private evict(): void {
-    const target = Math.floor(this.capacity * EVICT_RETAIN);
-    const toRemove = this.images.size - target;
+    this.trim(Math.floor(this.capacity * EVICT_RETAIN));
+  }
+
+  /** Keep only the ``max`` most recently painted thumbnails. */
+  trim(max: number): void {
+    const toRemove = this.images.size - max;
     let i = 0;
     for (const key of this.images.keys()) {
       if (i++ >= toRemove) break;

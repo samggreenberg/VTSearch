@@ -562,6 +562,21 @@ describe('ThumbStore waveform tinting', () => {
   });
 });
 
+describe('ThumbStore trim', () => {
+  it('keeps only the most recently painted thumbnails', () => {
+    const { store } = makeStore();
+    for (let id = 0; id < 5; id++) store.get(id);
+    // A paint bumps 0 to the newest.
+    finishLoad(created[0]);
+    store.get(0);
+    store.trim(2);
+    expect(store.size).toBe(2);
+    expect(store.peek(0)).toBeDefined();
+    expect(store.peek(4)).toBeDefined();
+    expect(store.peek(1)).toBeUndefined();
+  });
+});
+
 describe('ThumbStore clear', () => {
   it('drops images, tints and failure history together', () => {
     stubDocumentCanvas();
