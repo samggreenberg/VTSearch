@@ -38,6 +38,8 @@ from vtsearch.schemas.projection import (
     ProjectionMetaSchema,
     ProjectionSubsetQuerySchema,
     SubsetRemoveRequestSchema,
+    TileBatchQuerySchema,
+    TileBatchResponseSchema,
     TileQuerySchema,
     TileResponseSchema,
 )
@@ -164,6 +166,29 @@ def projection_labels(query: dict):
     return service.labels_payload(ctx, service.shape_for(ctx), subset=query["subset"])
 
 
+_NOT_BUILT = "Projection not built yet — call POST /api/projection/build first."
+
+
+def _cache_tiles() -> None:
+    """Mark this response's tiles cacheable by the browser.
+
+    Tiles are frozen at ingest, so let the browser serve repeat visits from its
+    HTTP cache without a round-trip — this is what keeps the hex grid from
+    blanking when you pan/zoom back over ground you've already seen. The tile
+    URL omits the dataset id (it rides on the X-Dataset-Id header), so we must
+    Vary on it or the cache could hand one dataset's tiles to another. Scoped
+    to this response only, and called after the not-built check so a
+    not-yet-built projection is never cached. ``?subset`` and the ``?v=``
+    layout token are already part of the URL.
+    """
+
+    @after_this_request
+    def _cache_tile(response):  # type: ignore[unused-ignore]
+        response.headers["Cache-Control"] = "private, max-age=3600, immutable"
+        response.vary.add("X-Dataset-Id")
+        return response
+
+
 @projection_bp.route(
     "/api/projection/tiles/<int:level>/<int(signed=True):tx>/<int(signed=True):ty>",
     methods=["GET"],
@@ -191,23 +216,41 @@ def get_tile(query: dict, level: int, tx: int, ty: int):
         subset=query["subset"],
     )
     if payload is None:
-        abort(404, message="Projection not built yet — call POST /api/projection/build first.")
-
-    # Tiles are frozen at ingest, so let the browser serve repeat visits from its
-    # HTTP cache without a round-trip — this is what keeps the hex grid from
-    # blanking when you pan/zoom back over ground you've already seen. The tile
-    # URL omits the dataset id (it rides on the X-Dataset-Id header), so we must
-    # Vary on it or the cache could hand one dataset's tiles to another. Scoped
-    # to this response only, and registered after the not-built check so a
-    # not-yet-built projection is never cached. ``?subset`` is already part of
-    # the URL.
-    @after_this_request
-    def _cache_tile(response):  # type: ignore[unused-ignore]
-        response.headers["Cache-Control"] = "private, max-age=3600, immutable"
-        response.vary.add("X-Dataset-Id")
-        return response
-
+        abort(404, message=_NOT_BUILT)
+    _cache_tiles()
     return payload
+
+
+@projection_bp.route("/api/projection/tiles", methods=["GET"])
+@projection_bp.arguments(TileBatchQuerySchema, location="query")
+@projection_bp.response(200, TileBatchResponseSchema)
+@projection_bp.alt_response(404, description="Projection not ready.")
+def get_tiles(query: dict):
+    """Return several tiles of one pyramid level in one response.
+
+    The canvas needs a few dozen tiles to paint a view, and over HTTP/1.1 a
+    browser fetches only about six URLs at a time per host, so on a remote
+    server one request per tile spends most of the wait on round trips (#5637).
+    The client asks for each level's tiles in sorted batches, so a revisit
+    that frames the same view asks for the same URLs and the browser cache
+    answers them, as it did per tile.
+
+    A tile outside the pyramid answers an empty cell list, exactly as
+    ``GET /api/projection/tiles/<level>/<tx>/<ty>`` does.
+    """
+    from vtscore.projection import service
+    from vtscore.state.core import get_active_context
+
+    ctx = get_active_context()
+    shape = service.shape_for(ctx)
+    tiles = []
+    for tx, ty in dict.fromkeys(query["tiles"]):
+        payload = service.tile_payload(ctx, shape, query["level"], tx, ty, subset=query["subset"])
+        if payload is None:
+            abort(404, message=_NOT_BUILT)
+        tiles.append(payload)
+    _cache_tiles()
+    return {"tiles": tiles}
 
 
 __all__ = ["projection_bp"]

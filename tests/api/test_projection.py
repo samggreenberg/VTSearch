@@ -462,6 +462,98 @@ class TestProjectionTiles:
         assert "immutable" not in resp.headers.get("Cache-Control", "")
 
 
+class TestProjectionTileBatch:
+    """``GET /api/projection/tiles``: several tiles of one level per request (#5637)."""
+
+    @staticmethod
+    def _install(name: str, n: int = 6, seed: int = 5):
+        ctx = get_active_context()
+        rng = np.random.default_rng(seed)
+        ids = list(ctx.medias.keys())[:n]
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection(name, ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        return pyr
+
+    def test_404_when_not_built(self, client):
+        resp = client.get("/api/projection/tiles?level=0&tiles=0:0")
+        assert resp.status_code == 404
+        assert "immutable" not in resp.headers.get("Cache-Control", "")
+
+    def test_answers_each_tile_as_the_single_route_does_in_request_order(self, client):
+        pyr = self._install("batch-order")
+        level0 = [(tx, ty) for level, tx, ty in pyr.tiles if level == 0]
+        # A real tile, one far outside the pyramid, then the rest of the level.
+        wanted = [level0[0], (999, -999), *level0[1:]]
+        query = ",".join(f"{tx}:{ty}" for tx, ty in wanted)
+
+        resp = client.get(f"/api/projection/tiles?level=0&tiles={query}")
+        assert resp.status_code == 200
+        tiles = resp.get_json()["tiles"]
+        assert [(t["tx"], t["ty"]) for t in tiles] == wanted
+        for tile in tiles:
+            single = client.get(f"/api/projection/tiles/0/{tile['tx']}/{tile['ty']}").get_json()
+            assert tile == single
+        assert tiles[1]["cells"] == []
+        assert any(t["cells"] for t in tiles)
+
+    def test_drops_repeats(self, client):
+        self._install("batch-repeats")
+        resp = client.get("/api/projection/tiles?level=0&tiles=0:0,1:0,0:0")
+        assert resp.status_code == 200
+        assert [(t["tx"], t["ty"]) for t in resp.get_json()["tiles"]] == [(0, 0), (1, 0)]
+
+    def test_takes_negative_coordinates(self, client):
+        self._install("batch-negative")
+        resp = client.get("/api/projection/tiles?level=1&tiles=-1:-2,3:-4")
+        assert resp.status_code == 200
+        tiles = resp.get_json()["tiles"]
+        assert [(t["level"], t["tx"], t["ty"]) for t in tiles] == [(1, -1, -2), (1, 3, -4)]
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "level=0",  # no tiles
+            "level=0&tiles=",  # empty list
+            "level=0&tiles=0-0",  # no colon
+            "level=0&tiles=a:b",  # not integers
+            "level=-1&tiles=0:0",  # negative level
+            "tiles=0:0",  # no level
+        ],
+    )
+    def test_rejects_a_malformed_query(self, client, query):
+        self._install("batch-malformed")
+        assert client.get(f"/api/projection/tiles?{query}").status_code == 422
+
+    def test_caps_the_tiles_per_request(self, client):
+        from vtsearch.schemas.projection import MAX_TILES_PER_BATCH
+
+        self._install("batch-cap")
+        ok = ",".join(f"{i}:0" for i in range(MAX_TILES_PER_BATCH))
+        assert client.get(f"/api/projection/tiles?level=0&tiles={ok}").status_code == 200
+        too_many = ",".join(f"{i}:0" for i in range(MAX_TILES_PER_BATCH + 1))
+        assert client.get(f"/api/projection/tiles?level=0&tiles={too_many}").status_code == 422
+
+    def test_is_cacheable_per_dataset(self, client):
+        self._install("batch-cache")
+        resp = client.get("/api/projection/tiles?level=0&tiles=0:0&v=batch-cache:0")
+        assert resp.status_code == 200
+        assert "max-age=" in resp.headers["Cache-Control"]
+        assert "immutable" in resp.headers["Cache-Control"]
+        assert "X-Dataset-Id" in resp.headers["Vary"]
+
+    def test_reads_the_subset_layout_with_the_flag(self, client):
+        ctx = get_active_context()
+        pyr = self._install("batch-full")
+        ctx._subset_projection = ctx._projection
+        ctx._subset_pyramids = {"hex": pyr}
+        ctx._pyramids = {}
+        assert client.get("/api/projection/tiles?level=0&tiles=0:0").status_code == 404
+        assert client.get("/api/projection/tiles?level=0&tiles=0:0&subset=1").status_code == 200
+
+
 class TestBinShapeByMediaType:
     """The bin shape is a fixed property of the dataset's media type.
 
