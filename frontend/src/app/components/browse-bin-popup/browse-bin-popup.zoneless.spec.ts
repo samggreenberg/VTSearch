@@ -146,8 +146,9 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // The original report reached this state through the popup's own
     // ngAfterViewInit `settingsState.load()`, which used to blank
     // `settingsSignal()` for the length of the refetch. `load()` reloads in place
-    // now (see `SettingsStateService.load`), so that route is closed — but a
-    // genuine first load still opens the same window, which is what this drives.
+    // now (see `SettingsStateService.load`), and the popup no longer calls it
+    // (#5649), so that route is closed — but a genuine first load still opens
+    // the same window, which is what this drives.
     //
     // Reproduce that state precisely: place with settings null (→ hidden, `placed`
     // false), then pre-seed the effect's "last seen prefs" to the values the arriving
