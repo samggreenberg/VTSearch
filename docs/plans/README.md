@@ -20,6 +20,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 - [`angular-22-upgrade.md`](angular-22-upgrade.md)
 - [`httpresource-migration.md`](httpresource-migration.md)
+- [`face-vote-helper.md`](face-vote-helper.md)
 
 ## Browse / projection
 
