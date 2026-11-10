@@ -169,7 +169,9 @@ def umap_fit_transform(
     # ``Any``, not the inferred ``UMAP``: umap-learn ships no annotations, so
     # pyright would infer ``fit_transform``'s return type from its body (and
     # ``fit``'s, and everything it calls), which cost 15-60s per check (#5070).
-    reducer: Any = umap.UMAP(
+    # umap-learn 0.6 ships ``py.typed`` and imports ``UMAP`` at its root without
+    # re-exporting it; ``umap.UMAP`` stays the seam the tests patch.
+    reducer: Any = umap.UMAP(  # pyright: ignore[reportPrivateImportUsage]
         n_components=n_components,
         n_neighbors=n_neighbors,
         min_dist=min_dist,
