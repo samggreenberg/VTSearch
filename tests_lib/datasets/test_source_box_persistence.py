@@ -157,6 +157,7 @@ class TestFaceLandmarksOf:
     def test_well_formed_points_come_back_as_float_lists(self):
         got = face_landmarks_of({FACE_LANDMARKS_FIELD: [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)]})
 
+        assert got is not None
         assert got == [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]]
         assert all(isinstance(v, float) for p in got for v in p)
 
@@ -168,7 +169,9 @@ class TestFaceLandmarksOf:
 
     def test_the_result_is_a_fresh_list(self):
         media = {FACE_LANDMARKS_FIELD: [list(p) for p in POINTS]}
-        face_landmarks_of(media)[0][0] = 99.0
+        got = face_landmarks_of(media)
+        assert got is not None
+        got[0][0] = 99.0
 
         assert media[FACE_LANDMARKS_FIELD][0][0] == POINTS[0][0]
 

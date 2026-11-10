@@ -586,6 +586,7 @@ class TestImage2FaceLandmarks:
         pts = self._landmarks(80, -25, (120, 120))
         det = FaceDetection((70, 60, 170, 180), 0.9, (80.0, 80.0, 160.0, 160.0), pts)
         got = crop_landmarks(det, "roll")
+        assert got is not None
         # The box's centre (120, 120) sits 50 px in and 60 px down this
         # 100 x 120 crop, and the template lands about it, upright.
         want = (ARCFACE_TEMPLATE / TEMPLATE_SIZE * 80 - 40 + np.array([50, 60])) / np.array([100, 120])
