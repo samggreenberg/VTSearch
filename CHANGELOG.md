@@ -20,6 +20,17 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening
+  Browse used to hold a blank "Loading thumbnails…" screen until every thumbnail on screen had arrived, up to 12
+  seconds, and could then show a map with half its pictures still missing. The map now appears as soon as its tiles
+  are laid out, each tile grey until its picture lands, with a bar at the bottom counting them in. The pictures come
+  sooner too: the opening view no longer queues a few hundred background fetches (the next zoom level, the
+  minimap, the off-screen ring) ahead of the ones on screen. On an 8,000-image map over a link with 100 ms of
+  latency, the map now shows after 2.7 s instead of 8.8 s, and every picture on screen is in after 5.1 s instead of
+  8.8 s.
+
 ## 2026-11-10
 
 ### Changed

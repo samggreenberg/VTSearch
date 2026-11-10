@@ -75,6 +75,14 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
    * browse). The count itself is read from ``meta.point_count``.
    */
   readonly countNoun = input('items');
+  /**
+   * Whether to fetch the overview's tiles yet. The overview asks for every tile
+   * of its level at once — on a big map over a hundred requests — which on the
+   * opening visit queued ahead of the main view's own tiles and thumbnails
+   * (#5636). The browse view holds this false until the main view's opening
+   * load settles; the overview draws whatever is already cached meanwhile.
+   */
+  readonly fetchTiles = input(true);
 
   // The input→resize/redraw dispatch that used to live in ngOnChanges (signal
   // inputs don't fire it). Bodies run untracked so incidental reads can't
@@ -101,6 +109,12 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
       this.requestOverviewTiles();
       this.requestRedraw();
     });
+  });
+
+  /** Fetching released: ask for the overview's tiles now. */
+  private readonly fetchTilesChanged = effect(() => {
+    if (!this.fetchTiles() || !this.ctx) return;
+    untracked(() => this.requestOverviewTiles());
   });
 
   /** A colormap change only recolours the heatmap; repaint. */
@@ -229,6 +243,7 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
 
   /** Fetch every tile of the overview level spanning the bounds (idempotent). */
   private requestOverviewTiles(): void {
+    if (!untracked(this.fetchTiles)) return;
     const meta = this.meta();
     if (!meta || meta.point_count === 0) return;
     const f = this.fit();

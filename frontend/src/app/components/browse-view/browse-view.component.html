@@ -78,7 +78,9 @@
             (mousedown)="onDetailsDividerMouseDown($event)"
           ></div>
         }
-        <div class="browse-main">
+        <!-- `data-thumbs` says whether thumbnails on screen are still coming in;
+             the screenshot harness waits on it to frame a finished map. -->
+        <div class="browse-main" [attr.data-thumbs]="thumbsLoading() ? 'loading' : 'settled'">
           <div class="browse-tools-left" #toolsLeft vtNoFocusSteal>
             @if (subset) {
               <button
@@ -193,7 +195,25 @@
             (contextMenu)="onCanvasContextMenu($event)"
             (navigated)="onNavigated()"
             (firstViewReady)="onCanvasFirstView()"
+            (thumbProgress)="onThumbProgress($event)"
+            (openingViewSettled)="onOpeningViewSettled()"
           />
+          <!-- The map is shown before its thumbnails land, each bin grey until
+               its image arrives (#5636); this says how many are still coming. -->
+          @if (revealed() && thumbBarShown()) {
+            <div class="browse-thumb-progress" role="status" aria-live="polite">
+              <span class="browse-thumb-progress-label">Loading thumbnails</span>
+              <vt-progress-bar
+                class="browse-thumb-progress-bar"
+                [smooth]="true"
+                [value]="thumbProgress().loaded"
+                [max]="thumbProgress().total"
+              />
+              <span class="browse-thumb-progress-count">
+                {{ thumbProgress().loaded }} / {{ thumbProgress().total }}
+              </span>
+            </div>
+          }
           <vt-browse-hover-preview
             [hover]="hoverEvent"
             [mediaType]="mediaType()"
@@ -322,6 +342,7 @@
                 [meta]="layout()"
                 [colormap]="colormap()"
                 [countNoun]="countNoun"
+                [fetchTiles]="openingViewSettled()"
               />
             </div>
             <vt-browse-legend
@@ -367,12 +388,13 @@
         }
 
         <!-- Cover the mounted-but-loading canvas until it signals its opening
-             view is fully painted (fit + top-view thumbnails), so the user is
-             shown the finished view rather than a thumbnail-less grid. -->
+             layout is painted (the fit and the bins under it), so the user
+             never sees the framing jump. Thumbnails fill in after the cover
+             lifts, counted by the bar above (#5636). -->
         @if (!revealed()) {
           <div class="browse-preload-cover">
             <div class="browse-status">
-              <p class="browse-status-message">{{ preloadMessage }}</p>
+              <p class="browse-status-message">Loading map…</p>
               <vt-progress-bar [indeterminate]="true" [value]="0" [max]="1" />
             </div>
           </div>

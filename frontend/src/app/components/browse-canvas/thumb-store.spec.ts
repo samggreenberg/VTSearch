@@ -169,6 +169,63 @@ describe('ThumbStore fetching', () => {
     expect(onLoaded).not.toHaveBeenCalled();
   });
 
+  it('asks for a visible thumbnail at high priority', () => {
+    const { store } = makeStore();
+    store.get(1);
+    expect(last().attrs['fetchpriority']).toBe('high');
+  });
+
+  it('repaints when a warm-up a visible cell has since asked for lands', () => {
+    // #5636: a warm-up that came on screen while still in flight used to land
+    // silently, so the bin stayed grey until something else redrew the frame.
+    const { store, onLoaded } = makeStore();
+    store.warm(1);
+    expect(store.get(1)).toBeNull();
+    expect(created).toHaveLength(1);
+    finishLoad(last());
+    expect(onLoaded).toHaveBeenCalledTimes(1);
+    expect(store.get(1)).toBe(last());
+  });
+
+  it('repaints when a warm-up a visible cell has since asked for fails', () => {
+    const { store, onLoaded } = makeStore();
+    store.warm(1);
+    store.get(1);
+    failLoad(last());
+    expect(onLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports loaded and settled without fetching', () => {
+    const { store } = makeStore();
+    expect(store.loaded(1)).toBe(false);
+    expect(store.settled(1)).toBe(false);
+    expect(created).toHaveLength(0);
+    store.get(1);
+    expect(store.settled(1)).toBe(false);
+    finishLoad(last());
+    expect(store.loaded(1)).toBe(true);
+    expect(store.settled(1)).toBe(true);
+  });
+
+  it('counts a failed id as settled, so nothing waits on it', () => {
+    const { store } = makeStore();
+    store.get(1);
+    failLoad(last());
+    expect(store.loaded(1)).toBe(false);
+    expect(store.settled(1)).toBe(true);
+  });
+
+  it('does not let a stale failure drop the entry that replaced it', () => {
+    const { store } = makeStore();
+    store.get(1);
+    const stale = last();
+    store.clear();
+    store.get(1);
+    const fresh = last();
+    failLoad(stale);
+    expect(store.peek(1)).toBe(fresh);
+  });
+
   it('does not re-fetch an id that is already cached', () => {
     const { store } = makeStore();
     store.get(1);

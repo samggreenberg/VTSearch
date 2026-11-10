@@ -8,6 +8,7 @@ import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
   HexHoverEvent,
+  type ThumbProgress,
 } from '../browse-canvas/browse-canvas.component';
 import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
@@ -159,6 +160,30 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * in-place refresh of an already-ready canvas leaves it untouched.
    */
   readonly revealed = signal(false);
+  /**
+   * Thumbnails on screen that have landed, out of how many are on screen, as
+   * the canvas last reported them (#5636). The map is uncovered before its
+   * thumbnails arrive, painting each bin flat grey until its image lands; this
+   * drives the bar that says how many are still coming.
+   */
+  readonly thumbProgress = signal<ThumbProgress>({ loaded: 0, total: 0 });
+  /** Whether some thumbnail on screen is still loading. */
+  readonly thumbsLoading = computed(() => {
+    const { loaded, total } = this.thumbProgress();
+    return loaded < total;
+  });
+  /**
+   * Whether the thumbnail bar is up. It follows {@link thumbsLoading}, but
+   * comes up only once loading has run for {@link THUMB_BAR_DELAY_MS}, so a pan
+   * whose few new thumbnails land at once never flashes it; it goes down the
+   * moment the last one lands.
+   */
+  readonly thumbBarShown = signal(false);
+  /** Whether the canvas's opening load is over; until then the minimap holds
+   *  its tile fetch (see {@link BrowseCanvasComponent.openingViewSettled}). */
+  readonly openingViewSettled = signal(false);
+  private static readonly THUMB_BAR_DELAY_MS = 300;
+  private thumbBarTimer: ReturnType<typeof setTimeout> | null = null;
   readonly errorMessage = signal('');
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
@@ -603,12 +628,46 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       }
       if (settings || settingsErrored) this.maybeStartInitialLoad();
     });
+    effect(() => {
+      const loading = this.thumbsLoading();
+      untracked(() => this.syncThumbBar(loading));
+    });
     // Any first selection retires the select hint: a tile clicked or boxed on
     // the canvas, select-all, or an item picked in the bin details.
     effect(() => {
       this.selection.version();
       if (this.selection.size > 0) untracked(() => this.hints.markUsed('browse-select'));
     });
+  }
+
+  /** Raise the thumbnail bar after a beat of loading, drop it when done. */
+  private syncThumbBar(loading: boolean): void {
+    if (!loading) {
+      this.clearThumbBarTimer();
+      this.thumbBarShown.set(false);
+      return;
+    }
+    if (this.thumbBarShown() || this.thumbBarTimer !== null) return;
+    this.thumbBarTimer = setTimeout(() => {
+      this.thumbBarTimer = null;
+      if (this.thumbsLoading()) this.thumbBarShown.set(true);
+    }, BrowseViewComponent.THUMB_BAR_DELAY_MS);
+  }
+
+  private clearThumbBarTimer(): void {
+    if (this.thumbBarTimer === null) return;
+    clearTimeout(this.thumbBarTimer);
+    this.thumbBarTimer = null;
+  }
+
+  /** The canvas's opening load is over: let the minimap fetch its tiles. */
+  onOpeningViewSettled(): void {
+    this.openingViewSettled.set(true);
+  }
+
+  /** The canvas re-tallied the thumbnails on screen. */
+  onThumbProgress(progress: ThumbProgress): void {
+    this.thumbProgress.set(progress);
   }
 
   /** The user moved the map (see {@link BrowseCanvasComponent.navigated}). */
@@ -760,6 +819,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // to reopen over the next one.
     this.sourcePhoto.close();
     this.stopPoll();
+    this.clearThumbBarTimer();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
@@ -1675,20 +1735,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * (the existing canvas won't re-emit the one-shot signal).
    */
   private enterReady(): void {
-    if (this.status() !== 'ready') this.revealed.set(false);
+    if (this.status() !== 'ready') {
+      this.revealed.set(false);
+      // A fresh canvas starts its own count and its own opening load; the last
+      // one's must not linger.
+      this.thumbProgress.set({ loaded: 0, total: 0 });
+      this.openingViewSettled.set(false);
+    }
     this.status.set('ready');
   }
 
-  /** The canvas finished painting its opening view (fit + top-view thumbnails);
-   *  uncover it. */
+  /** The canvas finished painting its opening view (the fit and the bins
+   *  under it; thumbnails follow); uncover it. */
   onCanvasFirstView(): void {
     this.revealed.set(true);
-  }
-
-  /** Message on the pre-reveal cover: names thumbnails for media that paint
-   *  them (the case this cover exists for), the projection otherwise. */
-  get preloadMessage(): string {
-    return this.mediaTypeCaps.usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
   /** Enter the building state with a cleared bar (a fresh build starts at 0). */

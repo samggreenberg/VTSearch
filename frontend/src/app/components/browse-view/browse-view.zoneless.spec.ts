@@ -6,6 +6,7 @@ import { Component, input, output, signal, type WritableSignal } from '@angular/
 import { By } from '@angular/platform-browser';
 
 import { BrowseViewComponent } from './browse-view.component';
+import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -270,20 +271,95 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(fixture.nativeElement.querySelector('.browse-status-eta')).toBeNull();
   });
 
-  it('covers the canvas until it reports its opening view is painted', async () => {
+  it('covers the canvas until it reports its opening layout is painted', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;
 
-    // On entry the canvas is covered so the user never sees a half-loaded grid.
+    // On entry the canvas is covered so the user never sees the framing jump.
     expect(component.revealed()).toBe(false);
-    // The cover names what it's loading. The canary DS is audio, which now
-    // tiles as waveform-thumbnail squares, so the cover reads "Loading
-    // thumbnails…"; a pure-density type (text) would read "Loading map…".
-    expect(component.preloadMessage).toBe('Loading thumbnails…');
 
-    // The canvas signals its opening view is fully painted → uncover it.
+    // The canvas signals its bins are on screen → uncover it. Thumbnails are
+    // not waited for (#5636): they fill in under the loading bar.
     component.onCanvasFirstView();
     expect(component.revealed()).toBe(true);
+  });
+
+  describe('while the thumbnails on screen load (#5636)', () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    /** Open an image dataset's map and lift its cover. */
+    async function openMap(): Promise<HTMLElement> {
+      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
+        of({ display_name: 'Photos', media_type: 'image' }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      fixture.componentInstance.onCanvasFirstView();
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    /** Let real time pass (the bar's show-delay is a plain timeout). */
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    it('shows the map under a bar that counts them in, after a beat', async () => {
+      const el = await openMap();
+      const component = fixture.componentInstance;
+      expect(el.querySelector('.browse-preload-cover')).toBeNull();
+
+      component.onThumbProgress({ loaded: 3, total: 10 });
+      await settleZoneless(fixture);
+      // Not straight away: a load that lands within the beat never shows it.
+      expect(el.querySelector('.browse-thumb-progress')).toBeNull();
+      await wait(350);
+      await settleZoneless(fixture);
+
+      const bar = el.querySelector('.browse-thumb-progress');
+      expect(bar).not.toBeNull();
+      expect(bar!.querySelector('.browse-thumb-progress-count')!.textContent).toContain('3 / 10');
+
+      component.onThumbProgress({ loaded: 7, total: 10 });
+      await settleZoneless(fixture);
+      expect(el.querySelector('.browse-thumb-progress-count')!.textContent).toContain('7 / 10');
+
+      // The last one lands: the bar goes at once.
+      component.onThumbProgress({ loaded: 10, total: 10 });
+      await settleZoneless(fixture);
+      expect(el.querySelector('.browse-thumb-progress')).toBeNull();
+    });
+
+    it('never flashes the bar for thumbnails that land within the beat', async () => {
+      await openMap();
+      const component = fixture.componentInstance;
+
+      component.onThumbProgress({ loaded: 0, total: 4 });
+      await settleZoneless(fixture);
+      component.onThumbProgress({ loaded: 4, total: 4 });
+      await settleZoneless(fixture);
+      await wait(400);
+      await settleZoneless(fixture);
+      expect(component.thumbBarShown()).toBe(false);
+      expect(fixture.nativeElement.querySelector('.browse-thumb-progress')).toBeNull();
+    });
+
+    it('holds the minimap tile fetch until the opening load settles', async () => {
+      await openMap();
+      const minimap = fixture.debugElement.query(By.directive(BrowseMinimapComponent))
+        .componentInstance as BrowseMinimapComponent;
+      expect(minimap.fetchTiles()).toBe(false);
+
+      fixture.componentInstance.onOpeningViewSettled();
+      await settleZoneless(fixture);
+      expect(minimap.fetchTiles()).toBe(true);
+    });
   });
 
   it('engages region-draw while Shift is held, releasing on keyup and blur', async () => {

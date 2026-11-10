@@ -1132,6 +1132,8 @@ async function openedMap(page, signs = true) {
   // nothing, so wait for the map first and then for the cover to lift.
   await page.waitForSelector('.browse-content', { timeout: 600000 });
   await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 });
+  // The cover lifts once the tiles are laid out; their thumbnails land after.
+  await page.waitForSelector('.browse-main[data-thumbs="settled"]', { timeout: 600000 });
   if (signs) await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
   const close = page.locator('.browse-details .bin-popup-close');
   if (await close.count()) await close.first().click();

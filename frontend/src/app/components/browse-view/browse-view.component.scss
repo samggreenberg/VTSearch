@@ -229,6 +229,37 @@
   overflow: hidden;
 }
 
+// Thumbnail-loading bar (#5636), bottom-centre over the canvas while the bins
+// on screen are still waiting on their thumbnails. Never intercepts pointer:
+// the map under it stays draggable.
+.browse-thumb-progress {
+  position: absolute;
+  bottom: var(--space-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-canvas-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.browse-thumb-progress-bar {
+  width: 12rem;
+}
+
+.browse-thumb-progress-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 // The draggable pane rule uses the shared `.pane-divider` primitive
 // (`scss/_components.scss`).
 

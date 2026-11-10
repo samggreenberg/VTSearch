@@ -2087,7 +2087,9 @@ scores; it's a pure explorer.
 
 The first time you browse a dataset, VTSearch builds the map (a
 progress bar shows the work). The layout is cached on the dataset, so
-later visits open instantly.
+later visits skip that step. Once the map is up, the tiles' thumbnails
+load in: each tile shows as grey until its picture arrives, and a bar
+at the bottom of the map counts them in.
 
 ### Reading the map
 
