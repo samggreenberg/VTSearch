@@ -49,6 +49,7 @@ import {
 } from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { MAX_THUMBS, THUMB_NATIVE_MAX_DIM, ThumbStore } from './thumb-store';
+import { BrowseThumbsService, type ThumbHost } from '../../services/browse-thumbs.service';
 import {
   finerTilesForZoom,
   offViewRing,
@@ -251,13 +252,15 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * Representative-thumbnail cache: the LRU of decoded images, the tinted
    * waveform masks, the resolution tier, and the retry backoff for failed
    * loads. See `thumb-store.ts`; the canvas only decides *which* ids to ask
-   * for, never how they are fetched or retained.
+   * for, never how they are fetched or retained. It outlives the canvas, so a
+   * revisit to the map paints at once (see {@link BrowseThumbsService}).
    */
-  private readonly thumbs = new ThumbStore({
-    mediaUrl: (path) => this.activeContext.mediaUrl(path),
+  private readonly thumbCache = inject(BrowseThumbsService);
+  private readonly thumbHost: ThumbHost = {
     onLoaded: () => this.requestRedraw(),
     accent: () => this.waveAccent,
-  });
+  };
+  private readonly thumbs = this.thumbCache.attach(this.thumbHost);
   /** Cap on new thumbnail fetches kicked off per idle preload pass, so a fast
    * pan can warm the just-revealed ring without flooding the network or filling
    * the thumbnail cache in a single burst. */
@@ -647,13 +650,15 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
       // pan/zoom and just re-bin visually; only a genuinely new projection
-      // re-frames to data and drops stale representative thumbnails.
+      // re-frames to data.
       if (meta.projection_id !== this.lastProjectionId) {
         this.lastProjectionId = meta.projection_id;
         // A brand-new projection opens auto-fit: clear the user-framed flag so a
         // saved cell size applied right after load re-fits to keep it all in view.
         this.framedByUser = false;
-        this.thumbs.clear();
+        // Thumbnails are per item, not per layout: a new layout of the same
+        // dataset paints the ones already cached. Another dataset drops them.
+        this.thumbCache.useDataset(this.activeContext.datasetId);
         // A new projection (media-type switch / rebuild) re-lays-out every item,
         // so the old selection no longer maps to what's on screen — drop it. A
         // bin-shape toggle keeps the same projection id and selection, since the
@@ -823,7 +828,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     }
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    this.thumbs.clear();
+    this.thumbCache.detach(this.thumbHost);
   }
 
   private resize(): void {

@@ -35,6 +35,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   a round trip for every five or six of its 160–260 tiles. They now come in a handful of requests (six, on an
   8,000-image map), and since the same view asks for the same batches, revisits still come from the browser cache.
   With 100 ms of latency the map appeared 0.7 s sooner (2.1 s instead of 2.8 s).
+- **Browse fetches its thumbnails a batch at a time too** (issue #5637). With the tiles batched, the map's
+  thumbnails were the wait: one request each, a few hundred on screen. They now come 32 to a request, and the
+  Browse map keeps the ones it has decoded when you leave it, so going back to the same dataset's map paints them at
+  once. On an 8,000-image map with 347 thumbnails on screen, every thumbnail was in 3.1 s after opening Browse
+  instead of 9.4 s with 100 ms of latency, and 1.6 s instead of 4.2 s with 40 ms.
 
 ## 2026-11-10
 

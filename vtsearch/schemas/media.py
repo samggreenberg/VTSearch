@@ -52,7 +52,9 @@ docstring there.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from typing import Any
+
+from marshmallow import Schema, ValidationError, fields, validate
 
 from vtscore.datasets import vote_provenance
 
@@ -106,6 +108,46 @@ class MediaVariantQuerySchema(Schema):
         # Tolerate the request-context params (``dataset_id`` / ``detector_id``)
         # that browser-native requests smuggle in as query args, plus the
         # thumbnail route's ``region``, matching SortPageQuerySchema.
+        unknown = "exclude"
+
+
+#: Most ids one ``GET /api/medias/thumbnails`` may ask for. The Browse canvas
+#: asks in batches of 32; the cap only bounds what a hand-made URL can cost.
+MAX_THUMBNAILS_PER_BATCH = 256
+
+
+class _MediaIdList(fields.Field):
+    """``1,2,3`` in a query string, as a list of media ids."""
+
+    def _deserialize(self, value: Any, attr: str | None, data: Any, **kwargs: Any) -> list[int]:
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError("Expected media ids separated by commas.")
+        try:
+            ids = [int(part) for part in value.split(",")]
+        except ValueError:
+            raise ValidationError("Expected media ids separated by commas, e.g. 3,17,42.") from None
+        if len(ids) > MAX_THUMBNAILS_PER_BATCH:
+            raise ValidationError(f"At most {MAX_THUMBNAILS_PER_BATCH} ids per request.")
+        return ids
+
+
+class ThumbnailBatchQuerySchema(Schema):
+    """Query for ``GET /api/medias/thumbnails``."""
+
+    ids = _MediaIdList(
+        required=True,
+        metadata={
+            "description": (
+                f"The media whose thumbnails to return, as ids separated by commas, at most "
+                f"{MAX_THUMBNAILS_PER_BATCH}. Answered in this order."
+            ),
+            "type": "string",
+        },
+    )
+
+    class Meta:
+        # The request-context params (``dataset_id`` / ``detector_id``) ride
+        # along as query args, as on every browser-fetched media URL.
         unknown = "exclude"
 
 
@@ -864,4 +906,5 @@ __all__ = [
     "ServerMediaFromMediaIdRequestSchema",
     "ServerMediaListResponseSchema",
     "ServerMediaUploadResponseSchema",
+    "ThumbnailBatchQuerySchema",
 ]

@@ -16,7 +16,7 @@ from vtscore.utils.hashing import content_md5, new_md5
 from vtscore.datasets.labelset import hit_custom_metadata
 
 
-def _sniff_image_mimetype(data: bytes) -> str:
+def sniff_image_mimetype(data: bytes) -> str:
     """Best-effort image mimetype from magic bytes (PNG vs JPEG).
 
     Precomputed thumbnails are always either PNG (alpha / waveform / video
@@ -28,14 +28,15 @@ def _sniff_image_mimetype(data: bytes) -> str:
     return "image/jpeg"
 
 
-def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
+def cached_thumbnail_response(thumb_bytes: bytes, download_name: str, mimetype: str | None = None):
     """Serve already-final thumbnail bytes with an ``ETag`` and cache headers.
 
     Unlike :func:`image_thumbnail_response`, this does **no** decode/resize:
     the bytes are a thumbnail that was precomputed at ingest (the media dict's
     ``thumbnail_bytes``), so the request path just streams them.  The ``ETag``
     fingerprints the thumbnail bytes so the browser reuses one tile per item
-    across scrolls and zoom levels, short-circuiting to a 304.
+    across scrolls and zoom levels, short-circuiting to a 304.  ``mimetype``
+    defaults to a PNG/JPEG sniff of the bytes.
     """
     etag = content_md5(thumb_bytes)
     if etag in request.if_none_match:
@@ -45,7 +46,11 @@ def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
         return resp
 
     resp = make_response(
-        send_file(io.BytesIO(thumb_bytes), mimetype=_sniff_image_mimetype(thumb_bytes), download_name=download_name)
+        send_file(
+            io.BytesIO(thumb_bytes),
+            mimetype=mimetype or sniff_image_mimetype(thumb_bytes),
+            download_name=download_name,
+        )
     )
     resp.set_etag(etag)
     resp.headers["Cache-Control"] = "private, max-age=86400"

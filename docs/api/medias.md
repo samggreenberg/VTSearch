@@ -391,6 +391,34 @@ of high-resolution items doesn't decode every full-size bitmap at once.
 nothing. 404 if
 not found or bytes unavailable.
 
+### Thumbnails in a batch
+
+```
+GET /api/medias/thumbnails?ids=3,17,42
+```
+
+The whole-frame thumbnails of up to 256 media in one response, each exactly
+what [`/thumbnail`](#thumbnail) serves for that id. The Browse map asks for its
+missing thumbnails here, sorted and 32 at a time, rather than one request per
+bin: over HTTP/1.1 a browser runs only about six requests at a time per host,
+so on a remote server per-thumbnail requests spent most of the wait on round
+trips. Cached like `/thumbnail` (`ETag`, `private, max-age=86400`), so the
+same view's batches come from the browser cache on a revisit.
+
+The body is `application/octet-stream`, one entry per requested id in request
+order:
+
+| Field | Size | Content |
+|---|---|---|
+| length | 4 bytes, big-endian | byte length of the image, `0` when the id has no thumbnail |
+| mimetype length | 1 byte | `0` when the id has no thumbnail |
+| mimetype | as given | ASCII, e.g. `image/jpeg` |
+| image | `length` bytes | the thumbnail |
+
+An id that is not loaded, or whose media type has no picture, is an empty
+entry rather than an error, so one missing picture never fails the batch.
+422 on a malformed `ids` or more than 256 of them.
+
 ---
 
 ## Sorting
