@@ -261,44 +261,32 @@ These are the owner's; the recommendation is first in each.
 
 ## Open work
 
-None of these is filed as an issue yet.
+Each item is an issue; the issue holds its scope.
 
 <!-- item-sep -->
 
-- **Compare layout** — the split panel, the reference set drawn from
-  examples and the Good pile, pin and cycle, and the per-user toggle. Usable
-  on its own, unregistered. *Recommended Claude model: Opus, for the
-  center-panel reactivity.*
+- [ ] #5642 — Compare layout with a reference face beside the candidate (Opus)
 
 <!-- item-sep -->
 
-- **Checklist strip** — the five rows, the do-not-weigh line and the fitness
-  notice, as static guidance, worded from the FISWG feature list. After
-  *Compare layout*. *Recommended Claude model: Sonnet.*
+- [ ] #5643 — Checklist strip of what to compare, in diagnostic order (Sonnet)
 
 <!-- item-sep -->
 
-- **Keep the landmarks** — `image2face` stores the five points in crop
-  fractions; the media API serves them. *Recommended Claude model: Sonnet.*
+- [ ] #5644 — image2face: keep each face's five landmarks on its item (Sonnet)
 
 <!-- item-sep -->
 
-- **Registration and linked zoom** — scale and shift the reference from the
-  landmarks; link zoom and pan; checklist rows zoom to their region. After
-  *Keep the landmarks*. *Recommended Claude model: Opus.*
+- [ ] #5647 — Match the two faces' size and position, with linked zoom (Opus)
 
 <!-- item-sep -->
 
-- **Wider view** — both sides re-rendered from their parent photos with a
-  larger box. After *Compare layout*. *Recommended Claude model: Sonnet.*
+- [ ] #5645 — Wider view of both faces from their parent photos (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Does it help?** — the research warns that users rate a helper well
-  regardless. A measurement would compare vote accuracy with and without the
-  helper on FHIBE, where identity is known. It needs people voting, so it is
-  a study to design, not a harness run.
+- [ ] #5646 — Does the helper make votes more accurate? Design and run the measurement (Opus)
 
 <!-- item-sep -->
