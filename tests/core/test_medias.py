@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from werkzeug.exceptions import NotFound
 
 import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
@@ -714,7 +713,9 @@ class TestMediaThumbnailBatch:
 
         media = get_media(2)
         assert media is not None
-        with patch("vtsearch.routes.media.content._resolve_display_image", side_effect=NotFound()):
+        from vtsearch.routes.media.content import _NoImage  # noqa: PLC0415
+
+        with patch("vtsearch.routes.media.content._display_image", return_value=_NoImage.NO_PICTURE):
             saved = media.get("thumbnail_bytes")
             media["thumbnail_bytes"] = None
             try:
