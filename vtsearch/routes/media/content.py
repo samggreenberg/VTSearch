@@ -13,14 +13,20 @@ helpers behind them live in :mod:`vtsearch.routes.media._serving`.
 from __future__ import annotations
 
 import io
+import struct
 from pathlib import Path
 
 from flask import Response, make_response, request, send_file
 from flask_smorest import abort
+from werkzeug.exceptions import HTTPException
 
 from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.utils.hashing import content_md5
-from vtsearch.routes._media_response import cached_thumbnail_response, image_thumbnail_response
+from vtsearch.routes._media_response import (
+    cached_thumbnail_response,
+    image_thumbnail_response,
+    sniff_image_mimetype,
+)
 from vtsearch.routes.media._serving import (
     _BROWSER_VIDEO_EXTS,
     _MIMETYPE_BY_EXT,
@@ -35,7 +41,11 @@ from vtsearch.routes.media._serving import (
     _transcode_to_mp4,
 )
 from vtsearch.routes.media.list import medias_bp
-from vtsearch.schemas.media import MediaParagraphResponseSchema, MediaVariantQuerySchema
+from vtsearch.schemas.media import (
+    MediaParagraphResponseSchema,
+    MediaVariantQuerySchema,
+    ThumbnailBatchQuerySchema,
+)
 
 
 @medias_bp.route("/api/medias/<int:media_id>/audio")
@@ -261,25 +271,88 @@ def media_thumbnail(query: dict, media_id: int):
     if region is not None:
         data, src_mimetype, _ = _resolve_display_image(media_id)
         return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}", crop=region)
-    thumb = c.get("thumbnail_bytes")
+    thumb, mimetype = _full_frame_thumbnail(media_id, c)
+    return cached_thumbnail_response(thumb, f"thumb_{media_id}", mimetype)
+
+
+def _full_frame_thumbnail(media_id: int, media: dict) -> tuple[bytes, str]:
+    """The whole-frame thumbnail of *media* and its mimetype.
+
+    The precomputed ``thumbnail_bytes`` when the media has them; otherwise one
+    is generated from the display image and memoised onto the in-memory media,
+    so later cold fetches (each fresh browse-canvas zoom/pan) stream the bytes
+    instead of re-decoding the full-resolution original every time. Datasets
+    backed by an external media dir lose their ingest-time ``thumbnail_bytes``
+    on save and never regenerate them on load, so without this every tile pays
+    a request-time decode+resize forever. In-memory only -- the bytes ride in
+    the existing dataset context and are never written to disk unless the user
+    explicitly exports. A source the thumbnailer cannot decode (an SVG, say) is
+    answered as itself, for the browser to draw.
+
+    Aborts as :func:`_resolve_display_image` does when there is no picture.
+    """
+    thumb = media.get("thumbnail_bytes")
     if thumb:
-        return cached_thumbnail_response(thumb, f"thumb_{media_id}")
+        return thumb, sniff_image_mimetype(thumb)
     data, src_mimetype, _ = _resolve_display_image(media_id)
-    # Memoise the generated full-frame thumbnail onto the in-memory media so
-    # subsequent cold fetches (each fresh browse-canvas zoom/pan) stream the
-    # bytes instead of re-decoding the full-resolution original every time.
-    # Datasets backed by an external media dir lose their ingest-time
-    # ``thumbnail_bytes`` on save and never regenerate them on load, so without
-    # this every tile pays a request-time decode+resize forever.  In-memory
-    # only -- the bytes ride in the existing dataset context and are never
-    # written to disk unless the user explicitly exports.
     from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
     result = make_image_thumbnail(data)
-    if result is not None:
-        c["thumbnail_bytes"] = result[0]
-        return cached_thumbnail_response(result[0], f"thumb_{media_id}")
-    return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
+    if result is None:
+        return data, src_mimetype
+    media["thumbnail_bytes"] = result[0]
+    return result
+
+
+@medias_bp.route("/api/medias/thumbnails")
+@medias_bp.arguments(ThumbnailBatchQuerySchema, location="query")
+def media_thumbnails(query: dict):
+    """Stream several media's whole-frame thumbnails in one response.
+
+    The Browse map paints a thumbnail per bin, a few hundred at a time, and
+    over HTTP/1.1 a browser fetches only about six URLs at a time per host, so
+    from a remote server one request per thumbnail spent most of the wait on
+    round trips (#5637). The canvas asks for each frame's missing thumbnails
+    here instead, in sorted batches, so the same view asks for the same URLs
+    and the browser cache answers a revisit.
+
+    The body is ``application/octet-stream``: one entry per requested id, in
+    request order, each a big-endian ``uint32`` byte length, a ``uint8``
+    mimetype length, the ASCII mimetype, then the image bytes. An id with no
+    thumbnail (not loaded, or a media type with no picture) has a zero length
+    and an empty mimetype. Each image is exactly what
+    ``GET /api/medias/<id>/thumbnail`` would serve.
+    """
+    body = io.BytesIO()
+    for media_id in query["ids"]:
+        image, mimetype = _batch_thumbnail(media_id)
+        mime = mimetype.encode("ascii")
+        body.write(struct.pack(">IB", len(image), len(mime)))
+        body.write(mime)
+        body.write(image)
+    payload = body.getvalue()
+
+    etag = content_md5(payload)
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+    else:
+        resp = make_response(payload)
+        resp.mimetype = "application/octet-stream"
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
+
+
+def _batch_thumbnail(media_id: int) -> tuple[bytes, str]:
+    """One entry of a thumbnail batch: ``(b"", "")`` where the single route
+    would have answered an error, so one missing picture never fails the rest."""
+    media = _get_media_variant(media_id)
+    if not media:
+        return b"", ""
+    try:
+        return _full_frame_thumbnail(media_id, media)
+    except HTTPException:
+        return b"", ""
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")

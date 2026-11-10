@@ -79,6 +79,14 @@ export const THUMB_RETRY_BACKOFF_MS = [2_000, 8_000, 32_000];
 export interface ThumbStoreDeps {
   /** Build a dataset-scoped URL for a media endpoint (``/api/medias/…``). */
   mediaUrl(path: string): string;
+  /**
+   * Build the ``GET /api/medias/thumbnails`` URL for these ids (sorted). Given,
+   * the capped tier fetches thumbnails in batches through it (#5637); left out,
+   * one request per thumbnail. The full-res tier is always one per image.
+   */
+  batchUrl?(ids: readonly number[]): string;
+  /** ``fetch``, injectable for tests. Defaults to the global one. */
+  fetch?(url: string, init: RequestInit): Promise<Response>;
   /** Schedule a repaint: a *visible* thumbnail has finished decoding, or has
    *  failed and the frame should stop waiting on it. Never called for an
    *  off-view warm-up, which has no cell on screen to repaint. */
@@ -89,6 +97,59 @@ export interface ThumbStoreDeps {
   accent(): string;
   /** Clock, injectable so the retry backoff is testable without real timers. */
   now?(): number;
+}
+
+/**
+ * Most thumbnails one batch request carries. Small enough that a view's few
+ * hundred thumbnails go out as several requests in parallel and arrive in
+ * steps the loading bar can show; the server takes up to 256.
+ */
+export const THUMB_BATCH_SIZE = 32;
+
+/** One thumbnail out of a batch response. */
+export interface ThumbPayload {
+  bytes: Uint8Array<ArrayBuffer>;
+  type: string;
+}
+
+/**
+ * Split a ``GET /api/medias/thumbnails`` body into its ``count`` entries, in
+ * request order. Each entry is a big-endian ``uint32`` byte length, a ``uint8``
+ * mimetype length, the ASCII mimetype and the bytes. An empty entry (the id has
+ * no thumbnail) is ``null``, and so is every entry a short or garbled body
+ * fails to cover.
+ */
+export function parseThumbBatch(body: ArrayBuffer, count: number): (ThumbPayload | null)[] {
+  const view = new DataView(body);
+  const bytes = new Uint8Array(body);
+  const entries: (ThumbPayload | null)[] = [];
+  let at = 0;
+  for (let i = 0; i < count; i++) {
+    if (at + 5 > body.byteLength) {
+      entries.push(null);
+      continue;
+    }
+    const size = view.getUint32(at);
+    const typeLength = view.getUint8(at + 4);
+    at += 5;
+    if (at + typeLength + size > body.byteLength) {
+      entries.push(null);
+      at = body.byteLength;
+      continue;
+    }
+    const type = String.fromCharCode(...bytes.subarray(at, at + typeLength));
+    at += typeLength;
+    entries.push(size > 0 ? { bytes: bytes.subarray(at, at + size), type } : null);
+    at += size;
+  }
+  return entries;
+}
+
+/** A capped-tier thumbnail waiting for its batch to go out. */
+interface QueuedThumb {
+  img: HTMLImageElement;
+  /** The failure record when the load started, for the retry schedule. */
+  failure: FailureRecord | undefined;
 }
 
 /** A remembered load failure and when it may be retried. */
@@ -115,6 +176,11 @@ export class ThumbStore {
    *  rather than sitting in the cache, loaded but unpainted, until something
    *  else happens to redraw the frame (#5636). */
   private readonly quiet = new WeakSet<HTMLImageElement>();
+  /** Batched loads asked for in this task, sent when it ends: those a cell on
+   *  screen waits on, and off-view warm-ups, which go out at low priority. */
+  private readonly visibleQueue = new Map<number, QueuedThumb>();
+  private readonly warmQueue = new Map<number, QueuedThumb>();
+  private flushQueued = false;
   /** Whether the cache currently holds full-res originals rather than capped
    *  thumbnails. Flipped by {@link setFullRes}, which drops the cache. */
   private fullRes = false;
@@ -185,8 +251,14 @@ export class ThumbStore {
       this.images.set(id, cached);
       if (cached.complete && cached.naturalWidth > 0) return cached;
       // Still in flight. If it started as an off-view warm-up, a cell on
-      // screen now wants it, so its landing must repaint.
+      // screen now wants it, so its landing must repaint — and if its batch
+      // has not gone out yet, it goes in the visible one.
       this.quiet.delete(cached);
+      const queued = this.warmQueue.get(id);
+      if (queued) {
+        this.warmQueue.delete(id);
+        this.visibleQueue.set(id, queued);
+      }
       return null;
     }
     this.startLoad(id, false);
@@ -277,33 +349,100 @@ export class ThumbStore {
       // warm-ups and tile prefetches queued behind the same few connections.
       img.setAttribute('fetchpriority', 'high');
     }
-    img.onload = () => {
-      // A load that lands clears the failure history: the id is good again,
-      // so a later blip gets the full retry schedule rather than resuming a
-      // spent one.
-      this.failures.delete(id);
-      if (!this.quiet.has(img)) this.deps.onLoaded();
-    };
-    img.onerror = () => {
-      // A stale handle (the cache was cleared, or the id evicted and fetched
-      // again since) must not drop the entry that replaced it.
-      if (this.images.get(id) === img) this.images.delete(id);
-      this.recordFailure(id, failure);
-      // Repaint so the frame stops waiting on this cell (it now falls back to
-      // flat density shading) and the loading count moves on. Warm-ups nobody
-      // has asked for since paint nothing, so they stay silent.
-      if (!this.quiet.has(img)) this.deps.onLoaded();
-    };
+    img.onload = () => this.landed(id, img);
+    img.onerror = () => this.lost(id, img, failure);
+    this.images.set(id, img);
     // Downscaled /thumbnail by default: a browse projection can hold thousands
     // of points, so painting full-size bitmaps onto every bin would exhaust
     // memory. The /thumbnail route serves the frame for video via the same
     // image_response hook, then downscales it. At the largest zoom levels a cell
     // is drawn wider than the thumbnail's native resolution, so the full-res
-    // /image is fetched instead — see {@link wantsFullRes}.
-    const endpoint = this.fullRes ? 'image' : 'thumbnail';
-    img.src = this.deps.mediaUrl(`/api/medias/${id}/${endpoint}`);
-    this.images.set(id, img);
+    // /image is fetched instead — see {@link wantsFullRes}. Only a handful of
+    // those fit on screen, so they are never batched.
+    if (!this.fullRes && this.deps.batchUrl) {
+      (preload ? this.warmQueue : this.visibleQueue).set(id, { img, failure });
+      if (!this.flushQueued) {
+        this.flushQueued = true;
+        queueMicrotask(() => this.flush());
+      }
+    } else {
+      const endpoint = this.fullRes ? 'image' : 'thumbnail';
+      img.src = this.deps.mediaUrl(`/api/medias/${id}/${endpoint}`);
+    }
     return true;
+  }
+
+  /** A thumbnail decoded. */
+  private landed(id: number, img: HTMLImageElement): void {
+    // A load that lands clears the failure history: the id is good again, so a
+    // later blip gets the full retry schedule rather than resuming a spent one.
+    this.failures.delete(id);
+    if (!this.quiet.has(img)) this.deps.onLoaded();
+  }
+
+  /** A thumbnail failed to load or decode, or its batch had none for it. */
+  private lost(id: number, img: HTMLImageElement, failure: FailureRecord | undefined): void {
+    // A stale handle (the cache was cleared, or the id evicted and fetched
+    // again since) must not drop the entry that replaced it.
+    if (this.images.get(id) === img) this.images.delete(id);
+    this.recordFailure(id, failure);
+    // Repaint so the frame stops waiting on this cell (it now falls back to
+    // flat density shading) and the loading count moves on. Warm-ups nobody
+    // has asked for since paint nothing, so they stay silent.
+    if (!this.quiet.has(img)) this.deps.onLoaded();
+  }
+
+  /**
+   * Send this task's batched loads, visible ones at high priority and
+   * warm-ups at low, each as sorted {@link THUMB_BATCH_SIZE} chunks. Sorting is
+   * what lets a revisit hit the browser cache: the opening view asks for the
+   * same thumbnails each time, so it asks for the same URLs. An entry evicted
+   * or cleared since it was queued has nobody waiting on it and is dropped.
+   */
+  private flush(): void {
+    this.flushQueued = false;
+    const queues: [Map<number, QueuedThumb>, RequestPriority][] = [
+      [this.visibleQueue, 'high'],
+      [this.warmQueue, 'low'],
+    ];
+    for (const [queue, priority] of queues) {
+      const ids = [...queue.keys()].filter((id) => this.images.get(id) === queue.get(id)!.img).sort((a, b) => a - b);
+      const batch = ids.map((id) => [id, queue.get(id)!] as const);
+      queue.clear();
+      for (let i = 0; i < batch.length; i += THUMB_BATCH_SIZE) {
+        this.sendBatch(batch.slice(i, i + THUMB_BATCH_SIZE), priority);
+      }
+    }
+  }
+
+  private sendBatch(batch: (readonly [number, QueuedThumb])[], priority: RequestPriority): void {
+    const ids = batch.map(([id]) => id);
+    const doFetch = this.deps.fetch ?? ((url: string, init: RequestInit) => fetch(url, init));
+    doFetch(this.deps.batchUrl!(ids), { priority })
+      .then((response) => {
+        if (!response.ok) throw new Error(`thumbnail batch: HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(
+        (body) => parseThumbBatch(body, ids.length),
+        () => ids.map(() => null),
+      )
+      .then((entries) => batch.forEach(([id, queued], i) => this.fill(id, queued, entries[i])));
+  }
+
+  /** Hand one batch entry to its waiting image, or fail it when there is none. */
+  private fill(id: number, queued: QueuedThumb, entry: ThumbPayload | null): void {
+    // Evicted or cleared while the batch was out: nothing waits on it.
+    if (this.images.get(id) !== queued.img) return;
+    if (!entry) {
+      this.lost(id, queued.img, queued.failure);
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([entry.bytes], { type: entry.type }));
+    const release = () => URL.revokeObjectURL(url);
+    queued.img.addEventListener('load', release, { once: true });
+    queued.img.addEventListener('error', release, { once: true });
+    queued.img.src = url;
   }
 
   /** Note a failed attempt and schedule (or give up on) the next retry. */

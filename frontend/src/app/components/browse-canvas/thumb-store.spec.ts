@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_THUMBS,
   MAX_THUMBS_FULL_RES,
+  THUMB_BATCH_SIZE,
   THUMB_NATIVE_MAX_DIM,
   THUMB_RETRY_BACKOFF_MS,
   ThumbStore,
+  parseThumbBatch,
 } from './thumb-store';
 
 /**
@@ -30,6 +32,8 @@ interface FakeImage {
   naturalHeight: number;
   attrs: Record<string, string>;
   setAttribute(name: string, value: string): void;
+  listeners: Record<string, (() => void)[]>;
+  addEventListener(type: string, listener: () => void): void;
 }
 
 /** Every image the store has constructed this test, in construction order. */
@@ -41,11 +45,13 @@ function finishLoad(img: FakeImage, w = 64, h = 48): void {
   img.naturalWidth = w;
   img.naturalHeight = h;
   img.onload?.();
+  for (const listener of img.listeners['load'] ?? []) listener();
 }
 
 /** Simulate a failed fetch. */
 function failLoad(img: FakeImage): void {
   img.onerror?.();
+  for (const listener of img.listeners['error'] ?? []) listener();
 }
 
 /** The most recently constructed image (the one a `get`/`warm` just started). */
@@ -71,6 +77,10 @@ beforeEach(() => {
       attrs: Record<string, string> = {};
       setAttribute(name: string, value: string) {
         this.attrs[name] = value;
+      }
+      listeners: Record<string, (() => void)[]> = {};
+      addEventListener(type: string, listener: () => void) {
+        (this.listeners[type] ??= []).push(listener);
       }
       constructor() {
         created.push(this as unknown as FakeImage);
@@ -579,4 +589,211 @@ describe('ThumbStore clear', () => {
       getContext: () => null,
     } as unknown as HTMLCanvasElement);
   }
+});
+
+/** Encode a ``GET /api/medias/thumbnails`` body: ``[mimetype, bytes]`` per id,
+ *  ``null`` for an id with no thumbnail. */
+function batchBody(entries: ([string, number[]] | null)[]): ArrayBuffer {
+  const parts: number[] = [];
+  for (const entry of entries) {
+    const [type, bytes] = entry ?? ['', []];
+    const n = bytes.length;
+    parts.push((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, type.length);
+    for (const ch of type) parts.push(ch.charCodeAt(0));
+    parts.push(...bytes);
+  }
+  return new Uint8Array(parts).buffer;
+}
+
+describe('parseThumbBatch', () => {
+  it('splits a body into its entries in order, empty ones as null', () => {
+    const body = batchBody([['image/jpeg', [1, 2, 3]], null, ['image/png', [9]]]);
+    const entries = parseThumbBatch(body, 3);
+    expect(entries.map((e) => e && { type: e.type, bytes: [...e.bytes] })).toEqual([
+      { type: 'image/jpeg', bytes: [1, 2, 3] },
+      null,
+      { type: 'image/png', bytes: [9] },
+    ]);
+  });
+
+  it('answers null for every entry a short body fails to cover', () => {
+    const whole = new Uint8Array(batchBody([['image/jpeg', [1, 2, 3]], ['image/png', [4, 5]]]));
+    const cut = whole.slice(0, whole.length - 1).buffer;
+    const entries = parseThumbBatch(cut, 3);
+    expect(entries[0]?.type).toBe('image/jpeg');
+    expect(entries.slice(1)).toEqual([null, null]);
+  });
+});
+
+describe('ThumbStore batching (#5637)', () => {
+  /** Answers to hand back, one per `fetch` call, and the calls made. */
+  let fetchCalls: { url: string; priority: string | undefined }[];
+  let answer: (url: string) => Promise<Response>;
+  let revoked: string[];
+
+  beforeEach(() => {
+    fetchCalls = [];
+    revoked = [];
+    // Each id's thumbnail is its own id as one byte, typed by the id's parity.
+    answer = async (url) => {
+      const ids = new URL(url).searchParams.get('ids')!.split(',').map(Number);
+      const body = batchBody(ids.map((id) => [id % 2 ? 'image/png' : 'image/jpeg', [id & 255]]));
+      return { ok: true, status: 200, arrayBuffer: async () => body } as unknown as Response;
+    };
+    let n = 0;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:thumb-${n++}`);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => void revoked.push(url));
+  });
+
+  function makeBatchStore() {
+    const onLoaded = vi.fn();
+    const clock = { t: 1_000 };
+    const store = new ThumbStore({
+      mediaUrl: (path) => `https://host${path}?ds=7`,
+      batchUrl: (ids) => `https://host/api/medias/thumbnails?ids=${ids.join(',')}&ds=7`,
+      fetch: (url, init) => {
+        fetchCalls.push({ url, priority: init.priority });
+        return answer(url);
+      },
+      onLoaded,
+      accent: () => '#ff0000',
+      now: () => clock.t,
+    });
+    return { store, onLoaded, clock };
+  }
+
+  /** Let the end-of-task flush send, and the stubbed fetch chain land. */
+  const settle = async () => {
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+  };
+
+  const idsOf = (call: { url: string }) => new URL(call.url).searchParams.get('ids');
+
+  it('sends the thumbnails asked for in one task as one sorted, high-priority request', async () => {
+    const { store } = makeBatchStore();
+    for (const id of [30, 4, 17]) expect(store.get(id)).toBeNull();
+    // Nothing is fetched until the task ends, and no image has a URL yet.
+    expect(fetchCalls).toHaveLength(0);
+    expect(created.every((img) => img.src === '')).toBe(true);
+    await settle();
+    expect(fetchCalls).toEqual([{ url: expect.any(String), priority: 'high' }]);
+    expect(idsOf(fetchCalls[0])).toBe('4,17,30');
+  });
+
+  it('hands each image its bytes and repaints as each lands', async () => {
+    const { store, onLoaded } = makeBatchStore();
+    store.get(4);
+    store.get(17);
+    await settle();
+    const [four, seventeen] = created;
+    expect(four.src).toMatch(/^blob:/);
+    expect(seventeen.src).toMatch(/^blob:/);
+    finishLoad(four);
+    expect(onLoaded).toHaveBeenCalledTimes(1);
+    expect(store.get(4)).toBe(four);
+    // The blob URL is let go once the image has decoded.
+    expect(revoked).toEqual([four.src]);
+  });
+
+  it('splits a big ask into batches of the batch size', async () => {
+    const { store } = makeBatchStore();
+    const n = THUMB_BATCH_SIZE * 2 + 3;
+    for (let id = 0; id < n; id++) store.get(id);
+    await settle();
+    expect(fetchCalls.map((c) => idsOf(c)!.split(',').length)).toEqual([THUMB_BATCH_SIZE, THUMB_BATCH_SIZE, 3]);
+  });
+
+  it('sends warm-ups in their own low-priority batch', async () => {
+    const { store, onLoaded } = makeBatchStore();
+    store.get(1);
+    store.warm(2);
+    await settle();
+    expect(fetchCalls.map((c) => [idsOf(c), c.priority])).toEqual([
+      ['1', 'high'],
+      ['2', 'low'],
+    ]);
+    finishLoad(created[1]);
+    expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it('moves a queued warm-up into the visible batch when a cell asks for it first', async () => {
+    const { store, onLoaded } = makeBatchStore();
+    store.warm(2);
+    store.get(2);
+    await settle();
+    expect(fetchCalls.map((c) => [idsOf(c), c.priority])).toEqual([['2', 'high']]);
+    finishLoad(created[0]);
+    expect(onLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails an id the batch had no thumbnail for, so nothing waits on it', async () => {
+    answer = async () =>
+      ({ ok: true, status: 200, arrayBuffer: async () => batchBody([['image/png', [1]], null]) }) as unknown as Response;
+    const { store, onLoaded } = makeBatchStore();
+    store.get(1);
+    store.get(2);
+    await settle();
+    expect(store.failed(2)).toBe(true);
+    expect(store.settled(2)).toBe(true);
+    expect(store.failed(1)).toBe(false);
+    expect(onLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the whole batch when the request does', async () => {
+    answer = async () => ({ ok: false, status: 500 }) as unknown as Response;
+    const { store } = makeBatchStore();
+    store.get(1);
+    store.get(2);
+    await settle();
+    expect(store.failed(1) && store.failed(2)).toBe(true);
+  });
+
+  it('retries a failed id in a later batch once its backoff has passed', async () => {
+    answer = async () => {
+      throw new Error('offline');
+    };
+    const { store, clock } = makeBatchStore();
+    store.get(1);
+    await settle();
+    expect(store.failed(1)).toBe(true);
+    store.get(1);
+    await settle();
+    expect(fetchCalls).toHaveLength(1);
+    clock.t += THUMB_RETRY_BACKOFF_MS[0];
+    store.get(1);
+    await settle();
+    expect(fetchCalls).toHaveLength(2);
+  });
+
+  it('never batches the full-res tier', async () => {
+    const { store } = makeBatchStore();
+    store.setFullRes(true);
+    store.get(1);
+    expect(last().src).toBe('https://host/api/medias/1/image?ds=7');
+    await settle();
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('does not send an id cleared before its batch went out', async () => {
+    const { store } = makeBatchStore();
+    store.get(1);
+    store.clear();
+    await settle();
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('ignores a batch entry whose image was cleared while it was out', async () => {
+    let release!: (r: Response) => void;
+    answer = () => new Promise<Response>((resolve) => (release = resolve));
+    const { store, onLoaded } = makeBatchStore();
+    store.get(1);
+    await settle();
+    const stale = created[0];
+    store.clear();
+    release({ ok: true, status: 200, arrayBuffer: async () => batchBody([['image/png', [1]]]) } as unknown as Response);
+    await settle();
+    expect(stale.src).toBe('');
+    expect(store.failed(1)).toBe(false);
+    expect(onLoaded).not.toHaveBeenCalled();
+  });
 });

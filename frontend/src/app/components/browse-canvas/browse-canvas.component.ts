@@ -255,6 +255,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    */
   private readonly thumbs = new ThumbStore({
     mediaUrl: (path) => this.activeContext.mediaUrl(path),
+    batchUrl: (ids) => this.activeContext.mediaUrl('/api/medias/thumbnails', { ids: ids.join(',') }),
     onLoaded: () => this.requestRedraw(),
     accent: () => this.waveAccent,
   });

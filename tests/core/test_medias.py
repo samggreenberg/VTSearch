@@ -1,7 +1,10 @@
 import io
 import wave
+from unittest.mock import patch
 
 import numpy as np
+import pytest
+from werkzeug.exceptions import NotFound
 
 import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
@@ -667,6 +670,91 @@ class TestMediaThumbnail:
         assert whole.status_code == 200
         assert whole.data == almost.data
         assert whole.data != half.data
+
+
+def _unpack_thumbnail_batch(body: bytes) -> list[tuple[str, bytes]]:
+    """Split a ``GET /api/medias/thumbnails`` body into ``(mimetype, bytes)``."""
+    import struct  # noqa: PLC0415
+
+    entries = []
+    at = 0
+    while at < len(body):
+        size, mime_len = struct.unpack_from(">IB", body, at)
+        at += 5
+        mime = body[at : at + mime_len].decode("ascii")
+        at += mime_len
+        entries.append((mime, body[at : at + size]))
+        at += size
+    return entries
+
+
+class TestMediaThumbnailBatch:
+    """``GET /api/medias/thumbnails``: many thumbnails in one response (#5637)."""
+
+    def test_each_entry_is_what_the_single_route_serves_in_request_order(self, client):
+        resp = client.get("/api/medias/thumbnails?ids=3,1,2")
+        assert resp.status_code == 200
+        assert resp.content_type == "application/octet-stream"
+        entries = _unpack_thumbnail_batch(resp.data)
+        assert len(entries) == 3
+        for media_id, (mime, image) in zip((3, 1, 2), entries, strict=True):
+            single = client.get(f"/api/medias/{media_id}/thumbnail")
+            assert image == single.data
+            assert mime == single.content_type
+
+    def test_a_missing_media_is_an_empty_entry_not_an_error(self, client):
+        resp = client.get("/api/medias/thumbnails?ids=1,9999,2")
+        assert resp.status_code == 200
+        entries = _unpack_thumbnail_batch(resp.data)
+        assert [len(image) > 0 for _, image in entries] == [True, False, True]
+        assert entries[1] == ("", b"")
+
+    def test_a_media_with_no_picture_is_an_empty_entry(self, client):
+        from vtsearch.state import get_media  # noqa: PLC0415
+
+        media = get_media(2)
+        assert media is not None
+        with patch("vtsearch.routes.media.content._resolve_display_image", side_effect=NotFound()):
+            saved = media.get("thumbnail_bytes")
+            media["thumbnail_bytes"] = None
+            try:
+                entries = _unpack_thumbnail_batch(client.get("/api/medias/thumbnails?ids=2").data)
+            finally:
+                media["thumbnail_bytes"] = saved
+        assert entries == [("", b"")]
+
+    def test_generated_thumbnails_are_memoised_like_the_single_route(self, client):
+        from vtsearch.state import get_media  # noqa: PLC0415
+
+        media = get_media(1)
+        assert media is not None
+        original = media.get("thumbnail_bytes")
+        media["thumbnail_bytes"] = None
+        try:
+            ((_, image),) = _unpack_thumbnail_batch(client.get("/api/medias/thumbnails?ids=1").data)
+            assert image and media.get("thumbnail_bytes") == image
+        finally:
+            media["thumbnail_bytes"] = original
+
+    def test_is_cacheable_and_revalidates_to_304(self, client):
+        first = client.get("/api/medias/thumbnails?ids=1,2")
+        assert "max-age" in first.headers.get("Cache-Control", "")
+        etag = first.headers["ETag"]
+        second = client.get("/api/medias/thumbnails?ids=1,2", headers={"If-None-Match": etag})
+        assert second.status_code == 304
+        assert second.data == b""
+
+    @pytest.mark.parametrize("query", ["", "ids=", "ids=1,x", "ids=1,,2"])
+    def test_rejects_a_malformed_id_list(self, client, query):
+        assert client.get(f"/api/medias/thumbnails?{query}").status_code == 422
+
+    def test_caps_the_ids_per_request(self, client):
+        from vtsearch.schemas.media import MAX_THUMBNAILS_PER_BATCH  # noqa: PLC0415
+
+        ok = ",".join("1" for _ in range(MAX_THUMBNAILS_PER_BATCH))
+        assert client.get(f"/api/medias/thumbnails?ids={ok}").status_code == 200
+        too_many = ",".join("1" for _ in range(MAX_THUMBNAILS_PER_BATCH + 1))
+        assert client.get(f"/api/medias/thumbnails?ids={too_many}").status_code == 422
 
 
 class TestMediaAudio:

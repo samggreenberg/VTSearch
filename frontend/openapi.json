@@ -16161,6 +16161,35 @@
         ]
       }
     },
+    "/api/medias/thumbnails": {
+      "get": {
+        "description": "The Browse map paints a thumbnail per bin, a few hundred at a time, and\nover HTTP/1.1 a browser fetches only about six URLs at a time per host, so\nfrom a remote server one request per thumbnail spent most of the wait on\nround trips (#5637). The canvas asks for each frame's missing thumbnails\nhere instead, in sorted batches, so the same view asks for the same URLs\nand the browser cache answers a revisit.\n\nThe body is ``application/octet-stream``: one entry per requested id, in\nrequest order, each a big-endian ``uint32`` byte length, a ``uint8``\nmimetype length, the ASCII mimetype, then the image bytes. An id with no\nthumbnail (not loaded, or a media type with no picture) has a zero length\nand an empty mimetype. Each image is exactly what\n``GET /api/medias/<id>/thumbnail`` would serve.",
+        "operationId": "media_thumbnails",
+        "parameters": [
+          {
+            "description": "The media whose thumbnails to return, as ids separated by commas, at most 256. Answered in this order.",
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stream several media's whole-frame thumbnails in one response.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/vote-bulk": {
       "post": {
         "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
