@@ -43,6 +43,7 @@ import os
 import sys
 import time
 import zipfile
+import zlib
 from pathlib import Path
 
 import common
@@ -138,6 +139,33 @@ def plan(args) -> int:
         common.log(
             f"{cat:30s} test {len(test)} ({npos} pos)  goods at t={[g['t'] for g in goods]}  bad at {[b['t'] for b in bads]}"
         )
+    return 0
+
+
+def sample(args) -> int:
+    """Importance-sample each plan's withheld half: every positive, the *top* negatives by SAM3's native text score
+    (the ones AP turns on), and a seeded *frac* of the rest at weight 1/frac. ``test_all`` keeps the whole half's
+    ids and labels, so the analyzer can check the weighted estimate against the exact native AP."""
+    from sam3_scores import load_sam3  # noqa: PLC0415
+
+    native = load_sam3(Path(args.native), "noun")
+    src, dst = Path(args.out) / "plan", Path(args.out) / "plan_sampled"
+    dst.mkdir(parents=True, exist_ok=True)
+    for pf in sorted(src.glob("*.json")):
+        rec = json.loads(pf.read_text())
+        test = rec["test"]
+        nat, _ = native(rec["category"], {i: None for i, _, _ in test})
+        neg = sorted((r for r in test if not r[2]), key=lambda r: -nat[r[0]])
+        top, rest = neg[: args.top], neg[args.top :]
+        rng = np.random.default_rng(zlib.crc32(rec["category"].encode()))
+        pick = rng.random(len(rest)) < args.frac
+        kept = [[*r, 1.0] for r in test if r[2]] + [[*r, 1.0] for r in top]
+        kept += [[*r, 1.0 / args.frac] for r, k in zip(rest, pick) if k]
+        rec["test_all"] = [[i, y] for i, _, y in test]
+        rec["test"] = kept
+        rec["sample"] = {"top": args.top, "frac": args.frac}
+        (dst / pf.name).write_text(json.dumps(rec))
+        common.log(f"{rec['category']:30s} {len(test)} -> {len(kept)}")
     return 0
 
 
@@ -264,7 +292,7 @@ def score(args) -> int:
     from vtscore.eval import scale_bands  # noqa: PLC0415
 
     root = Path(args.out)
-    plans = sorted((root / "plan").glob("*.json"))
+    plans = sorted((root / args.plan).glob("*.json"))
     plans = plans[args.shard :: args.nshards]
     (root / "scores").mkdir(parents=True, exist_ok=True)
 
@@ -437,6 +465,7 @@ def score(args) -> int:
             dest,
             ids=np.asarray([r[0] for r in items]),
             labels=np.asarray([r[2] for r in items], dtype=np.uint8),
+            weights=np.asarray([r[3] if len(r) > 3 else 1.0 for r in items], dtype=np.float32),
             arms=np.asarray(arms),
             score=sc,
             logit=lg,
@@ -466,9 +495,15 @@ def main() -> int:
     s.add_argument("--batch", type=int, default=4)
     s.add_argument("--workers", type=int, default=6)
     s.add_argument("--dtype", default="fp16", choices=["bf16", "fp16", "fp32"])
+    s.add_argument("--plan", default="plan", help="plan dir under --out (plan_sampled for the importance sample)")
     s.add_argument("--dump-canvases", action="store_true", help="write the first 4 canvases per cell as JPEGs")
+    m = sub.add_parser("sample")
+    m.add_argument("--out", required=True)
+    m.add_argument("--native", required=True, help="#5213's score shards")
+    m.add_argument("--top", type=int, default=800, help="negatives kept by native rank")
+    m.add_argument("--frac", type=float, default=0.08, help="share of the other negatives kept (weight 1/frac)")
     args = ap.parse_args()
-    return plan(args) if args.cmd == "plan" else score(args)
+    return {"plan": plan, "sample": sample, "score": score}[args.cmd](args)
 
 
 if __name__ == "__main__":

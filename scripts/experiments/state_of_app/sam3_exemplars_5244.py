@@ -42,20 +42,38 @@ LABEL = {
 }
 
 
-def oracle_f1(y: np.ndarray, s: np.ndarray) -> float:
+def oracle_f1(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> float:
+    """Best F1 of any cut, each image counted at its sample weight."""
     o = np.argsort(-s, kind="stable")
-    tp = np.cumsum(y[o])
-    k = np.arange(1, len(y) + 1)
-    f = 2 * tp / (k + y.sum())
+    tp = np.cumsum((y * w)[o])
+    k = np.cumsum(w[o])
+    f = 2 * tp / (k + (y * w).sum())
     return float(f.max()) if len(f) else float("nan")
 
 
-def native_f1(y: np.ndarray, s: np.ndarray, cut: float = 0.5) -> tuple[float, float, float]:
+def native_f1(y: np.ndarray, s: np.ndarray, w: np.ndarray, cut: float = 0.5) -> tuple[float, float, float]:
+    """F1, precision and recall of SAM3's own operating point (a detection over *cut*), weighted."""
     pred = s > cut
-    tp = float((pred & (y == 1)).sum())
-    p = tp / pred.sum() if pred.sum() else 0.0
-    r = tp / y.sum()
+    tp = float(w[pred & (y == 1)].sum())
+    p = tp / w[pred].sum() if pred.any() else 0.0
+    r = tp / w[y == 1].sum()
     return (2 * p * r / (p + r) if p + r else 0.0), p, r
+
+
+def metrics(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> dict:
+    """One arm's numbers on one cell. *w* is each scored image's sample weight (1 when the whole half is scored)."""
+    fn, pn, rn = native_f1(y, s, w)
+    return {
+        "AP": average_precision_score(y, s, sample_weight=w),
+        "oracle": oracle_f1(y, s, w),
+        "F_native": fn,
+        "P_native": pn,
+        "R_native": rn,
+        "k_native": float(w[s > 0.5].sum()),
+        "n_test": float(w.sum()),
+        "n_scored": len(y),
+        "n_pos": int(y.sum()),
+    }
 
 
 def region_at(cells: Path) -> dict[str, pd.DataFrame]:
@@ -88,6 +106,7 @@ def main() -> int:
     ap.add_argument("--root", required=True)
     ap.add_argument("--native", required=True, help="#5213's score shards (sam3_score_5213.py output)")
     ap.add_argument("--region", required=True)
+    ap.add_argument("--plan", default="plan_sampled", help="plan dir under --root (test_all: the estimator check)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     out = Path(a.out)
@@ -105,6 +124,7 @@ def main() -> int:
         meta = json.loads(str(z["meta"][0]))
         cat = meta["category"]
         ids, y = z["ids"], z["labels"].astype(int)
+        w = z["weights"].astype(np.float64) if "weights" in z else np.ones(len(y))
         nat, _ = native(cat, {int(i): None for i in ids})
         scores = {"native": np.asarray([nat[int(i)] for i in ids], np.float64)}
         for j, arm in enumerate(z["arms"]):
@@ -115,36 +135,29 @@ def main() -> int:
         if len(tg) >= 3:
             vote.update({"c3": tg[2], "g3": tg[2], "g3b1": max(tg[2], tb)})
         for arm, s in scores.items():
-            fn, pn, rn = native_f1(y, s)
-            rows.append(
-                {
-                    "category": cat,
-                    "seed": 0,
-                    "arm": arm,
-                    "vote": vote.get(arm),
-                    "AP": average_precision_score(y, s),
-                    "oracle": oracle_f1(y, s),
-                    "F_native": fn,
-                    "P_native": pn,
-                    "R_native": rn,
-                    "k_native": int((s > 0.5).sum()),
-                    "n_test": len(y),
-                    "n_pos": int(y.sum()),
-                }
-            )
+            rows.append({"category": cat, "seed": 0, "arm": arm, "vote": vote.get(arm), **metrics(y, s, w)})
             if arm != "native" and cat in region:
                 rap, ror = at_vote(region[cat], vote[arm])
                 rows.append(
                     {"category": cat, "seed": 0, "arm": f"region@{arm}", "vote": vote[arm], "AP": rap, "oracle": ror}
                 )
+        # The estimator check: native text-only, exact over the whole withheld half.
+        pj = Path(a.root) / a.plan / f.name.replace(".npz", ".json")
+        full = json.loads(pj.read_text()).get("test_all") if pj.exists() else None
+        if full:
+            fy = np.asarray([r[1] for r in full])
+            fs, _ = native(cat, {int(r[0]): None for r in full})
+            fsc = np.asarray([fs[int(r[0])] for r in full])
+            rows.append(
+                {"category": cat, "seed": 0, "arm": "native_full", "vote": 0, **metrics(fy, fsc, np.ones(len(fy)))}
+            )
         for j, arm in enumerate(z["arms"]):
             diag.append(
                 {
                     "category": cat,
                     "arm": str(arm),
-                    "on_ref": float(z["on_ref"][:, j].mean()),
-                    "presence_mean": float(z["presence"][:, j].mean()),
-                    "presence_neg_mean": float(z["presence"][y == 0, j].mean()),
+                    "on_ref": float(np.average(z["on_ref"][:, j], weights=w)),
+                    "presence_neg_mean": float(np.average(z["presence"][y == 0, j], weights=w[y == 0])),
                     "presence_pos_mean": float(z["presence"][y == 1, j].mean()),
                     "bad_sam3_score": meta["bad"]["sam3_score"],
                 }
@@ -196,6 +209,7 @@ def main() -> int:
             ("g3b1", "region@g3b1"),
             ("native", "region@g1"),
             ("native", "region@g3"),
+            ("native", "native_full"),
         ]:
             for col in ("AP", "oracle", "F_native"):
                 if col == "F_native" and x.startswith("region") | ref.startswith("region"):
