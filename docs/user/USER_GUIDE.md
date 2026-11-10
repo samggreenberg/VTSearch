@@ -653,6 +653,28 @@ isn't in the Image dataset (you left that image out, say) has no button.
   <img src="assets/show-in-photo.light.webp" alt="Show in photo from Train: the photo a face was cut from, opened over the ranking with that face outlined, and ← Back to return to the face" width="720" />
 </picture>
 
+**Compare with a reference.** While you vote on a face, a second face of the
+person you are looking for stays on screen beside it: the **reference** on the
+left, the face you are voting on (the *candidate*) on the right. Compare the
+two part by part instead of trusting your memory of the person.
+
+- **Which face is the reference.** Before your first vote it is the example
+  you made the detector from. After that it is your **Good** pile, the
+  clearest face first; hard views (turned away, covered or small) come last.
+- **Next** (or `R`) shows another reference without moving the candidate, so
+  you can find one at the same angle. Each new candidate starts on the best
+  one again.
+- **Pin** keeps the reference on screen as the one every candidate starts on,
+  until you click **Pinned** or leave the page.
+- Each face has its own rotate, zoom and reset controls under it. Zoom with
+  the mouse wheel and drag to move around; `+` / `-` and `[` / `]` act on the
+  candidate.
+- **Compare**, under the candidate, turns the reference off and gives the
+  candidate the whole panel. The choice is remembered.
+
+The two faces are always side by side, never laid over one another: overlays
+have been found to make people worse at telling two faces apart.
+
 **Collapse to photos.** On the same kind of Face dataset, the list in Train's
 **Manual** tab and Tune's **Review** tab has a **Show: Faces | Photos** switch
 under its header. **Photos** shows the ranking as the photos the faces came

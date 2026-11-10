@@ -316,6 +316,9 @@
           "enrich_descriptions": {
             "type": "boolean"
           },
+          "face_compare": {
+            "type": "boolean"
+          },
           "focus_mode_left": {
             "additionalProperties": {
               "type": "string"
@@ -8304,6 +8307,9 @@
             "type": "boolean"
           },
           "enrich_descriptions": {
+            "type": "boolean"
+          },
+          "face_compare": {
             "type": "boolean"
           },
           "focus_mode_left": {},
@@ -17630,6 +17636,37 @@
           "media_server"
         ]
       }
+    },
+    "/api/server-media-files/{filename}/image": {
+      "get": {
+        "description": "The thumbnail above is bounded for a row of tiles.  The Face compare layout\n(#5642) puts an example beside the face being voted on, to be compared part\nby part, which needs every pixel the user uploaded.",
+        "operationId": "server_media_file_image",
+        "responses": {
+          "400": {
+            "description": "Filename escapes the example_media directory."
+          },
+          "404": {
+            "description": "File not found, or not an image."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the full-size bytes of an image example.",
+        "tags": [
+          "media_server"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "filename",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/server-media-files/{filename}/thumbnail": {
       "get": {

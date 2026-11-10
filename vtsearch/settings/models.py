@@ -499,6 +499,10 @@ class UserSettings(BaseModel):
     # choice back here.
     hide_left_panel: bool = True
     hide_right_panel: bool = True
+    # Whether voting on a Face dataset shows a reference face beside the
+    # candidate (#5642). The centre panel's Compare toggle writes it; it only
+    # has an effect on a face with a detector active.
+    face_compare: bool = True
     # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it

@@ -168,9 +168,14 @@ exists; this plan adds nothing for it.
 - **The photo a crop came from.** `GET /api/medias/<id>/source` returns the
   parent photo's item and the crop's `source_box`, when the sibling Image
   dataset is loaded (`vtscore/datasets/source_item.py`).
-- **Candidates for a reference.** A detector's media examples
-  (`PUT /api/detectors/<name>/examples`) and its Good pile (`GET /api/votes`,
-  `vote-state.service.ts`). There is no "reference face" concept.
+- **The compare layout.** On a Face dataset with a detector active, the
+  center panel is a two-column grid: `vt-face-reference` on the left, the
+  candidate on the right, each a `vt-image-viewer` with its own toolbar
+  (`components/center-panel/face-reference/`). The reference is a set the
+  user steps through with **Next** or `R`: the Good pile by `Face Quality`
+  once there is one, the detector's example pictures before
+  (`face-reference.service.ts`). One can be pinned for the page's lifetime.
+  The Compare toggle is the per-user `face_compare` setting.
 - **Five landmarks, used once and dropped.** `image2face` gets two eyes, a
   nose tip and two mouth corners per face
   (`imagekit/face/records.py`), uses them to level the crop (`align="roll"`,
@@ -180,30 +185,12 @@ exists; this plan adds nothing for it.
 
 ## Design
 
-### The compare layout
-
-On a Face dataset with an active detector, the center panel splits in two:
-the **reference** on the left, the **candidate** on the right, each a
-`vt-image-viewer`. The candidate keeps everything it has today. The layout is
-a toggle in the panel's toolbar, on by default for faces, and its state is a
-per-user setting.
+### Linked zoom
 
 Zoom and pan are **linked**: zooming to the candidate's left ear zooms the
 reference to the same place. This is what makes part-by-part comparison
-quick, and it depends on the two faces being registered (below).
-
-### Choosing the reference
-
-A person is not one photo, so the reference is a small set the user cycles
-through, not a single image.
-
-- Before any vote: the detector's media examples.
-- After votes: the Good pile, best `Face Quality` first, hard views last.
-- The user can **pin** one. A pinned reference stays until unpinned.
-- A key steps to the next reference without leaving the candidate.
-
-The pin is detector state that names a media item. Whether it is saved with
-the detector or kept for the session is an open decision (below).
+quick, and it depends on the two faces being registered (below). Today each
+pane zooms on its own.
 
 ### Registering the two faces
 
@@ -252,8 +239,6 @@ tells the user to expect a weaker comparison.
 
 These are the owner's; the recommendation is first in each.
 
-- **Is the pinned reference saved with the detector?** Recommended: session
-  only at first. Saving it adds a field to detector JSON for a convenience.
 - **Does the checklist record anything?** Recommended: no. Recording
   per-feature answers would give data on which checks users rely on, at the
   cost of a slower vote.

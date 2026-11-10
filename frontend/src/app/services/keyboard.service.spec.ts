@@ -130,6 +130,16 @@ describe('KeyboardService', () => {
     expect(actions[0].navDirection).toBe('back');
   });
 
+  it('should emit a reference step on R, once per press (#5642)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'R' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', repeat: true }));
+    expect(actions).toEqual([{ type: 'reference' }, { type: 'reference' }]);
+  });
+
   it('should not emit when modifier keys are held', () => {
     service.start();
     const actions: KeyboardAction[] = [];

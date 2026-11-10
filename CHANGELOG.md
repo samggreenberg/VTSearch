@@ -20,6 +20,18 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **Compare a face with a reference while you vote** (issue #5642). On a Face dataset with a detector selected,
+  the panel you vote in now shows two faces: a **reference** face of the person on the left and the
+  face you are voting on on the right, so you compare the two on screen instead of from memory. The reference is
+  the example you made the detector from until you have voted, then your Good pile, clearest face first and hard
+  views last. **Next** (or the new `R` key) steps to another reference without moving the face you are on, and
+  **Pin** keeps one as the starting reference until you unpin it or leave the page. Each face has its own rotate
+  and zoom controls. **Compare**, under the face, turns the layout off; the choice is saved in a new per-user
+  `face_compare` setting, on by default. The faces are never overlaid on each other. For API users: `GET
+  /api/server-media-files/{filename}/image` serves an example picture at full size.
+
 ### Changed
 
 - **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening

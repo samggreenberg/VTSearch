@@ -9,7 +9,7 @@ export type RotateDirection = 'left' | 'right';
 export type NavDirection = 'back' | 'forward';
 
 export interface KeyboardAction {
-  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo' | 'navigate';
+  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo' | 'navigate' | 'reference';
   direction?: VoteDirection;
   volumeDelta?: number;
   zoomDirection?: ZoomDirection;
@@ -209,6 +209,15 @@ export class KeyboardService implements OnDestroy {
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
         this.action$.next({ type: 'rotate', rotateDirection: 'right' });
+        break;
+      // The Face compare layout's next reference (#5642). A discrete press, as
+      // a held key would spin through the set too fast to see any of it.
+      case 'r':
+      case 'R':
+        if (e.repeat) break;
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.action$.next({ type: 'reference' });
         break;
     }
   }

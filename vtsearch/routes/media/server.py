@@ -222,6 +222,38 @@ def server_media_file_thumbnail(filename: str):
     abort(404, message=f"No thumbnail available for {suffix}")
 
 
+@media_server_bp.route("/api/server-media-files/<path:filename>/image", methods=["GET"])
+@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(404, description="File not found, or not an image.")
+def server_media_file_image(filename: str):
+    """Return the full-size bytes of an image example.
+
+    The thumbnail above is bounded for a row of tiles.  The Face compare layout
+    (#5642) puts an example beside the face being voted on, to be compared part
+    by part, which needs every pixel the user uploaded.
+    """
+    media_dir = _get_server_media_dir()
+    file_path = media_dir / filename
+
+    try:
+        file_path.resolve().relative_to(media_dir.resolve())
+    except ValueError:
+        abort(400, message="Invalid filename")
+
+    if not file_path.is_file():
+        abort(404, message=f"File not found: {filename}")
+
+    suffix = file_path.suffix.lower()
+    if _media_type_from_ext(suffix) != "image":
+        abort(404, message=f"Not an image: {suffix}")
+
+    return send_file(
+        io.BytesIO(file_path.read_bytes()),
+        mimetype=_IMAGE_MIMETYPES.get(suffix, "image/jpeg"),
+        download_name=file_path.name,
+    )
+
+
 @media_server_bp.route("/api/server-media-files", methods=["GET"])
 @media_server_bp.response(200, ServerMediaListResponseSchema)
 def list_server_media_files():
