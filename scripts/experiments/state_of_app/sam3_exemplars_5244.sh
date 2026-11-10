@@ -10,7 +10,7 @@
 #   sam3_exemplars_5244.sh score [NSHARDS]      every cell's sampled half, an array of NSHARDS (default 144, one cell each)
 #   sam3_exemplars_5244.sh analyze              sam3_exemplars_5244.py on the scores -> <root>/analysis (CPU)
 #
-# The GPU half is calibration/sam3_exemplars_5244.py; the native text-only scores it is compared with are #5213's
+# The GPU half is sam3_exemplars_score_5244.py; the native text-only scores it is compared with are #5213's
 # (SAM3_NATIVE, default /expscratch/$USER/sam3-5213/scores). Env: SAM3X_ROOT (default /expscratch/$USER/sam3-5244),
 # SAM3X_GPU (score: v100), SAM3X_DTYPE (fp16 on v100, else bf16), SAM3X_CONC (array concurrency, 4: the user GPU cap).
 set -euo pipefail
@@ -41,13 +41,13 @@ dtype_for() { [[ $1 == v100 ]] && echo fp16 || echo "${SAM3X_DTYPE:-bf16}"; }
 case "${1:-}" in
 plan)
   { echo '#!/bin/bash'; env_lines
-    echo "python sam3_exemplars_5244.py plan --results $GRID/results --region $REGION-mp-region-b1/results/cells --out $ROOT"
+    echo "python $HERE/sam3_exemplars_score_5244.py plan --results $GRID/results --region $REGION-mp-region-b1/results/cells --out $ROOT"
   } >"$ROOT/plan.sh"
   sbatch --parsable -p cpu -c 2 --mem 32G -t 1:00:00 -J sam3x-plan -o "$ROOT/logs/plan-%j.out" "$ROOT/plan.sh"
   ;;
 sample)
   { echo '#!/bin/bash'; env_lines
-    echo "python sam3_exemplars_5244.py sample --out $ROOT --native $NATIVE --top ${SAM3X_TOP:-800} --frac ${SAM3X_FRAC:-0.08}"
+    echo "python $HERE/sam3_exemplars_score_5244.py sample --out $ROOT --native $NATIVE --top ${SAM3X_TOP:-800} --frac ${SAM3X_FRAC:-0.08}"
   } >"$ROOT/sample.sh"
   sbatch --parsable -p cpu -c 2 --mem 16G -t 1:00:00 -J sam3x-sample -o "$ROOT/logs/sample-%j.out" "$ROOT/sample.sh"
   ;;
@@ -58,7 +58,7 @@ smoke)
   mkdir -p "$out/plan"
   for c in bus__small dog__large; do ln -sf "$ROOT/plan/$c.json" "$out/plan/$c.json"; done
   { echo '#!/bin/bash'; env_lines
-    echo "python sam3_exemplars_5244.py score --out $out --dtype $dt --limit $n --dump-canvases"
+    echo "python $HERE/sam3_exemplars_score_5244.py score --out $out --dtype $dt --limit $n --dump-canvases"
   } >"$out/smoke.sh"
   sbatch --parsable -p gpu --gres="gpu:$gpu:1" -c 8 --mem 48G -t 2:00:00 -J "sam3x-smoke-$gpu" \
     -o "$ROOT/logs/smoke-$gpu-$dt-%j.out" "$out/smoke.sh"
@@ -66,7 +66,7 @@ smoke)
 score)
   ns="${2:-144}"; gpu="${SAM3X_GPU:-v100}"; dt="$(dtype_for "$gpu")"
   { echo '#!/bin/bash'; env_lines
-    echo "python sam3_exemplars_5244.py score --out $ROOT --plan plan_sampled --dtype $dt --shard \$SLURM_ARRAY_TASK_ID --nshards $ns"
+    echo "python $HERE/sam3_exemplars_score_5244.py score --out $ROOT --plan plan_sampled --dtype $dt --shard \$SLURM_ARRAY_TASK_ID --nshards $ns"
   } >"$ROOT/score.sh"
   sbatch --parsable -p gpu --gres="gpu:$gpu:1" -c 8 --mem 32G -t "${SAM3X_TIME:-3:00:00}" -J sam3x-score \
     --array="0-$((ns - 1))%${SAM3X_CONC:-4}" -o "$ROOT/logs/score-%A_%a.out" "$ROOT/score.sh"

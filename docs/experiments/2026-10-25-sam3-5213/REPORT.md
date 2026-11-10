@@ -834,7 +834,7 @@ Reproduce: `state_of_app/sam3_exemplars_5244.sh plan`, `sample`, `score 144` and
   `S5241_LINE` for the sam3 arm's line.
 - `scripts/experiments/state_of_app/sam3_set_guard_5521.py`: #5521's FGVC sets at any cut (`sets`) and the set-size
   guards on the shipped route (`shipped`) and on the 0.5 / 20th-Good route (`cut05`).
-- `scripts/experiments/calibration/sam3_exemplars_5244.py`: #5244's plan (first Goods and Bad per cell), importance
-  sample and canvas scorer; `state_of_app/sam3_exemplars_5244.sh` (launcher) and `.py` (tables and figures).
+- `scripts/experiments/state_of_app/sam3_exemplars_score_5244.py`: #5244's plan (first Goods and Bad per cell), importance
+  sample and canvas scorer; `sam3_exemplars_5244.sh` (launcher) and `.py` (tables and figures).
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.

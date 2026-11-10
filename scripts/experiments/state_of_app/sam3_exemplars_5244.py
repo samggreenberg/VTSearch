@@ -1,6 +1,6 @@
 """#5244: do a Region session's Good (and Bad) vote boxes, pasted beside the target as SAM3 exemplars, beat the text prompt?
 
-Reads ``calibration/sam3_exemplars_5244.py``'s per-cell scores (six arms on two canvases), #5213's native
+Reads ``sam3_exemplars_score_5244.py``'s per-cell scores (six arms on two canvases), #5213's native
 text-only scores (the same noun prompts, the image alone at full resolution), and #4711's shipped ``max_patch``
 Region run. Every number is seed 0 on the cell's own withheld half, so the arms are the same images cell for cell.
 
