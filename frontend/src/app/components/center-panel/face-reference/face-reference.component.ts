@@ -6,7 +6,8 @@ import { FaceReference, FaceReferenceService, referenceKey } from '../../../serv
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SourcePhotoService, WiderView, widerView } from '../../../services/source-photo.service';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
-import { ViewLink } from '../image-viewer/face-link';
+import { FaceLandmarks, ViewLink } from '../image-viewer/face-link';
+import { landmarkTurn } from '../face-checklist/face-regions';
 import { ImageViewControlsComponent } from '../image-view-controls/image-view-controls.component';
 
 /**
@@ -16,9 +17,11 @@ import { ImageViewControlsComponent } from '../image-view-controls/image-view-co
  *
  * A person is not one photo, so the reference is a set the user steps through
  * (`FaceReferenceService.pool`) without the candidate moving. Each new
- * candidate starts on the best reference again, or on the pinned one: a step
- * is a look at this candidate from another angle, and a pin is the answer to
- * "always start from this one".
+ * candidate starts on the best reference for it again, or on the pinned one: a
+ * step is a look at this candidate from another angle, and a pin is the answer
+ * to "always start from this one". The best is a face of the Good pile whose
+ * head is turned the way the candidate's is, so the two show the same ear
+ * (#5670), and the clearest of those.
  *
  * The two faces are never laid over each other, blinked or wiped. The practice
  * manuals disagree on overlays, and the stricter one (ENFSI-BPM-DI-01) cites
@@ -55,6 +58,11 @@ export class FaceReferenceComponent {
   readonly wider = input(false);
   /** The candidate's viewer's link, which this pane's viewer follows. */
   readonly link = input<ViewLink | null>(null);
+  /** The candidate's five landmarks (`face_landmarks`), which say which way its head is turned. */
+  readonly candidateLandmarks = input<FaceLandmarks | null | undefined>(null);
+
+  /** How far the candidate's head is turned, or null with no landmarks to read it from. */
+  private readonly candidateTurn = computed(() => landmarkTurn(this.candidateLandmarks()));
 
   /**
    * The reference stepped to, and the candidate it was stepped to for. Kept
@@ -63,11 +71,11 @@ export class FaceReferenceComponent {
    */
   private readonly step = signal<{ candidateId: number; key: string } | null>(null);
 
-  /** The references for this candidate: the pinned one first, then the rest. */
+  /** The references for this candidate: the pinned one first, then the rest, turned like it first. */
   readonly references = computed<FaceReference[]>(() => {
     const candidateId = this.candidateId();
     const isCandidate = (ref: FaceReference): boolean => ref.kind === 'media' && ref.id === candidateId;
-    const pool = this.refs.pool().filter((ref) => !isCandidate(ref));
+    const pool = this.refs.pool(this.candidateTurn()).filter((ref) => !isCandidate(ref));
     const pin = this.refs.pinned();
     if (!pin || isCandidate(pin)) return pool;
     const pinKey = referenceKey(pin);

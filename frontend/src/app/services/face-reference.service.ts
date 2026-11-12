@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { landmarkTurn } from '../components/center-panel/face-checklist/face-regions';
 import { ActiveDatasetService } from './active-dataset.service';
 import { ActiveDetectorService } from './active-detector.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
@@ -41,13 +42,53 @@ export function orderByQuality(ids: Iterable<number>, quality: (id: number) => u
 }
 
 /**
+ * How near two heads' turns are for the faces to count as one view (#5670),
+ * as a difference of the sines `landmarkTurn` reads: about 12 degrees near
+ * the front. Five points give a rough turn, so finer steps would sort faces by
+ * noise.
+ */
+export const VIEW_STEP = 0.2;
+
+/**
+ * The Good pile in the order to show beside a candidate whose head is turned
+ * by *candidateTurn* (#5670): faces turned like it first, then ever further
+ * from it, and *ranked*'s order (best quality first, {@link orderByQuality})
+ * among the faces within one {@link VIEW_STEP} band of each other.
+ *
+ * The turn decides before quality does because the parts worth comparing most
+ * are at the sides of the head: a reference turned the other way may not show
+ * the ear the candidate does, however clear it is. A face with no turn to read
+ * (no landmarks, or none loaded yet) goes after every face with one; with no
+ * turn for the candidate, *ranked* is kept as it is.
+ */
+export function orderByView(
+  ranked: readonly number[],
+  candidateTurn: number | null,
+  turn: (id: number) => number | null,
+): number[] {
+  if (candidateTurn === null) return [...ranked];
+  const band = (id: number): number => {
+    const t = turn(id);
+    return t === null ? Infinity : Math.floor(Math.abs(t - candidateTurn) / VIEW_STEP);
+  };
+  // A stable sort, so each band keeps the quality order it came in.
+  return ranked
+    .map((id) => ({ id, band: band(id) }))
+    .sort((a, b) => (a.band === b.band ? 0 : a.band < b.band ? -1 : 1))
+    .map(({ id }) => id);
+}
+
+/**
  * The reference faces of the Face compare layout (#5642), and the one the user
  * pinned.
  *
  * The set is the Good pile once there is one, and the detector's example
  * pictures before that: the examples are what the user said the person looks
  * like until their own votes say it better. An unlabeled seed is left out; it
- * steers a sort and was never claimed to be the person.
+ * steers a sort and was never claimed to be the person. The pile is ordered
+ * for each candidate, faces whose heads are turned like its own first
+ * ({@link orderByView}, #5670); the examples have no landmarks here, so they
+ * keep the order the detector lists them in.
  *
  * The pin is kept here, in memory, for as long as the page lives. It is not
  * written to the detector (the issue's decision): a pin is a convenience of
@@ -98,24 +139,28 @@ export class FaceReferenceService {
     return out;
   });
 
-  /** The Good pile, best Face Quality first (see {@link orderByQuality}). */
-  private readonly goods = computed<FaceReference[]>(() => {
+  /** The Good pile's ids, best Face Quality first (see {@link orderByQuality}). */
+  private readonly goods = computed<number[]>(() => {
     // Media ids, and so the cache's rows, are per dataset.
     this.activeDataset.activeId();
     // A batch of metadata landing re-ranks the pile.
     this.metadataCache.version();
-    const ids = orderByQuality(
-      this.voteState.goodVotes,
-      (id) => this.metadataCache.get(id)?.custom_metadata?.[FACE_QUALITY_KEY],
-    );
-    return ids.map((id) => ({ kind: 'media', id }));
+    return orderByQuality(this.voteState.goodVotes, (id) => this.metadataCache.get(id)?.custom_metadata?.[FACE_QUALITY_KEY]);
   });
 
-  /** The references to step through: the Good pile, or the examples before it. */
-  readonly pool = computed<FaceReference[]>(() => {
+  /**
+   * The references to step through: the Good pile, ordered for a candidate
+   * turned by *candidateTurn* (`landmarkTurn`; null for the quality order
+   * alone), or the examples before there is a pile.
+   */
+  pool(candidateTurn: number | null = null): FaceReference[] {
     const goods = this.goods();
-    return goods.length ? goods : this.examples();
-  });
+    if (!goods.length) return this.examples();
+    // Read in a computed, this tracks what goods() does: the pile, the dataset
+    // and the cache's version, so landmarks landing re-order it too.
+    const ids = orderByView(goods, candidateTurn, (id) => landmarkTurn(this.metadataCache.get(id)?.face_landmarks));
+    return ids.map((id) => ({ kind: 'media', id }));
+  }
 
   /**
    * The pinned reference, or null. A pin lapses with what it named: a face

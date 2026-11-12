@@ -1,5 +1,5 @@
-import { FaceRect, FaceShape } from '../image-viewer/face-link';
-import { FaceRegion, regionViews, sharedViews } from './face-regions';
+import { FaceRect, FaceShape, faceShape } from '../image-viewer/face-link';
+import { FaceRegion, landmarkTurn, regionViews, sharedViews } from './face-regions';
 
 /**
  * Where the checklist's rows zoom to (#5647): each part's rectangle of face
@@ -110,5 +110,67 @@ describe('face-regions', () => {
     expect(shared.length).toBe(1);
     // The right-hand one, wide enough for both faces' ears.
     expect(shared[0].x0).toBeGreaterThan(0.5);
+  });
+});
+
+/**
+ * Which way a head is turned, from its five points alone (#5670): what the
+ * reference pane orders the Good pile by, so the reference shows the ear the
+ * candidate does.
+ */
+describe('landmarkTurn', () => {
+  /**
+   * The landmarks, as crop fractions, of a head turned by the angle whose sine
+   * is *turn*, by the head regionViews reads: the nose stands 0.45 face units
+   * out of the face and the eyes are 0.9 apart, in a crop *w* × *h* face units.
+   */
+  function head(turn: number, w = 5, h = 5): number[][] {
+    const across = Math.sqrt(1 - turn * turn);
+    const face: [number, number][] = [
+      [-0.45 * across, 0],
+      [0.45 * across, 0],
+      [0.45 * turn, 0.55],
+      [-0.4 * across, 1],
+      [0.4 * across, 1],
+    ];
+    // The eye midpoint a little above the crop's middle.
+    return face.map(([x, y]) => [0.5 + x / w, 0.4 + y / h]);
+  }
+
+  it('reads a head that looks ahead as no turn', () => {
+    expect(landmarkTurn(head(0))).toBeCloseTo(0, 9);
+  });
+
+  it('reads the turn of the head regionViews reads, with its sign', () => {
+    for (const turn of [-0.6, -0.25, 0.1, 0.4]) {
+      const landmarks = head(turn);
+      expect(landmarkTurn(landmarks)).toBeCloseTo(turn, 9);
+      // The side regionViews hides an ear on: a nose to the image's left is a
+      // negative turn, and past the cut that hides the left-hand ear.
+      const shape = faceShape(landmarks, 1, 1)!;
+      const [left, right] = regionViews(shape, 'ears');
+      if (turn < -0.5) expect(left).toBeNull();
+      if (turn > -0.5) expect(left).not.toBeNull();
+      expect(right).not.toBeNull();
+    }
+  });
+
+  it('reads the same turn off a crop of any shape', () => {
+    const square = landmarkTurn(head(0.3))!;
+    // Cut short at a photo's edge, or tall and thin.
+    expect(landmarkTurn(head(0.3, 3, 5))).toBeCloseTo(square, 9);
+    expect(landmarkTurn(head(0.3, 5, 8))).toBeCloseTo(square, 9);
+  });
+
+  it('caps a head seen side on, as regionViews does', () => {
+    expect(landmarkTurn(head(0.99))).toBe(0.9);
+    expect(landmarkTurn(head(-1))).toBe(-0.9);
+  });
+
+  it('has no turn to read without five usable points', () => {
+    expect(landmarkTurn(null)).toBeNull();
+    expect(landmarkTurn(undefined)).toBeNull();
+    expect(landmarkTurn(head(0).slice(0, 4))).toBeNull();
+    expect(landmarkTurn([[0.4, 0.4], [0.6, 0.4], [0.5, NaN], [0.45, 0.6], [0.55, 0.6]])).toBeNull();
   });
 });
