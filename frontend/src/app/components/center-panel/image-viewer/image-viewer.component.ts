@@ -373,27 +373,48 @@ export class ImageViewerComponent implements OnDestroy {
   }
 
   onZoomInput(event: Event): void {
-    this.zoom.set(parseFloat((event.target as HTMLInputElement).value));
-    this.applyTransform();
+    this.zoomAboutCentre(parseFloat((event.target as HTMLInputElement).value));
   }
 
+  // The toolbar's and the keys' rotate and zoom keep whatever is in the middle
+  // of the pane there, which matters once the view is panned: a face framed by
+  // `fitBox` stays in view through a turn or a zoom rather than swinging off
+  // round the image's own centre. With no pan, the only view there was before
+  // `fitBox`, it is the same transform as turning or zooming the image alone.
+
   rotateLeft(): void {
-    this.rotation.update((r) => r - 90);
-    this.applyTransform();
+    this.rotateAboutCentre(-90);
   }
 
   rotateRight(): void {
-    this.rotation.update((r) => r + 90);
-    this.applyTransform();
+    this.rotateAboutCentre(90);
   }
 
   zoomIn(): void {
-    this.zoom.update((z) => this.clampZoom(z + 0.15 * z));
-    this.applyTransform();
+    this.zoomAboutCentre(this.zoom() * 1.15);
   }
 
   zoomOut(): void {
-    this.zoom.update((z) => this.clampZoom(z - 0.15 * z));
+    this.zoomAboutCentre(this.zoom() * 0.85);
+  }
+
+  /** Turn by a quarter (*deg* is ±90), turning the pan with the image. */
+  private rotateAboutCentre(deg: 90 | -90): void {
+    this.rotation.update((r) => r + deg);
+    // Clockwise on screen, y pointing down: (x, y) -> (-y, x).
+    const [x, y] = [this.panX(), this.panY()];
+    this.panX.set(deg === 90 ? -y : y);
+    this.panY.set(deg === 90 ? x : -x);
+    this.applyTransform();
+  }
+
+  /** Zoom to *newZoom* (clamped), scaling the pan with it. */
+  private zoomAboutCentre(newZoom: number): void {
+    const oldZoom = this.zoom();
+    this.zoom.set(this.clampZoom(newZoom));
+    const ratio = this.zoom() / oldZoom;
+    this.panX.update((p) => p * ratio);
+    this.panY.update((p) => p * ratio);
     this.applyTransform();
   }
 

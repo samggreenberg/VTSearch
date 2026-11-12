@@ -27,7 +27,9 @@ what is on `dev` but not yet on `main`; each release dates that section
   much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is
   offered when the Image dataset with the photos is loaded. The photos are shown as taken, not levelled like the
   crops. A face whose photo can't be found, or a reference that is your example picture, stays as it is. Wider
-  stays on until you turn it off or leave the page.
+  stays on until you turn it off or leave the page. Everywhere an image is shown, the zoom and rotate buttons and
+  keys now keep what is in the middle of the view in the middle, so a part you have moved to look at stays on
+  screen as you zoom or turn it.
 - **Compare a face with a reference while you vote** (issue #5642). On a Face dataset with a detector selected,
   the panel you vote in now shows two faces: a **reference** face of the person on the left and the
   face you are voting on on the right, so you compare the two on screen instead of from memory. The reference is

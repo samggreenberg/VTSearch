@@ -1164,6 +1164,26 @@ describe('ImageViewerComponent', () => {
       expect(under(50, 50).y).toBeCloseTo(0.25, 6);
     });
 
+    it('keeps the framed face in the middle through the toolbar\'s zoom and turns', () => {
+      open([0.6, 0.1, 0.8, 0.3]);
+      const centred = (): void => {
+        expect(under(50, 50).x).toBeCloseTo(0.7, 6);
+        expect(under(50, 50).y).toBeCloseTo(0.2, 6);
+      };
+      component.zoomOut();
+      centred();
+      component.rotateRight();
+      centred();
+      component.zoomIn();
+      centred();
+      component.rotateLeft();
+      component.rotateLeft();
+      centred();
+      component.onZoomInput({ target: { value: '3' } } as unknown as Event);
+      expect(component.zoom()).toBe(3);
+      centred();
+    });
+
     it('comes back to the framing on Reset view, and on a double-click at the cap', () => {
       open([0.6, 0.1, 0.8, 0.3]);
       component.zoom.set(1);
