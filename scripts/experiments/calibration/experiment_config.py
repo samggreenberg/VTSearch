@@ -1420,6 +1420,14 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: default) is the app's honest user.
 FLIP_VOTE: "str | None" = os.environ.get("CALIB_FLIP_VOTE", "").strip() or None
 
+#: Issue #3688's held-out record: a JSON file ``{class: [media ids]}`` of images a
+#: human found mislabelled.  A cell of that class (``class@band``) takes them out
+#: of its withheld half; ``CALIB_HOLD_OUT_SCOPE=both`` takes them out of the
+#: voting half too (the corrected arm; ``withheld``, the default, is the as-built
+#: arm).  Unset (the default) is the app's cell as built.
+HOLD_OUT: "str | None" = os.environ.get("CALIB_HOLD_OUT", "").strip() or None
+HOLD_OUT_SCOPE: str = os.environ.get("CALIB_HOLD_OUT_SCOPE", "").strip() or "withheld"
+
 #: Issue #4668's floor knob: ``absolute`` holds the labels line's spread floor at
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.

@@ -190,6 +190,8 @@ ENVX="$ENVX CALIB_SPAN_GREEN=${CALIB_SPAN_GREEN:-}"
 ENVX="$ENVX CALIB_MIN_GOOD=${CALIB_MIN_GOOD:-} CALIB_HARD_DRY_RUN=${CALIB_HARD_DRY_RUN:-}"
 # One wrong vote (#3688): unset is the honest simulated user; good:K / bad:K flips the K-th true positive / negative.
 ENVX="$ENVX CALIB_FLIP_VOTE=${CALIB_FLIP_VOTE:-}"
+# The held-out record (#3688): unset is the cell as built.
+ENVX="$ENVX CALIB_HOLD_OUT=${CALIB_HOLD_OUT:-} CALIB_HOLD_OUT_SCOPE=${CALIB_HOLD_OUT_SCOPE:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

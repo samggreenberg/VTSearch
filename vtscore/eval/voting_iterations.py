@@ -3241,6 +3241,8 @@ def simulate_voting_iterations(  # noqa: C901
     hard_dry_run: Optional[int] = None,
     band_share: Optional[int] = None,
     flip_vote: Optional[str] = None,
+    hold_out: Optional[Iterable[int]] = None,
+    hold_out_voting: bool = False,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
@@ -3701,6 +3703,13 @@ def simulate_voting_iterations(  # noqa: C901
             reads the truth.  The pick log's ``picked_label`` stays the truth
             and ``picked_vote`` is what was voted.  ``None`` - the default - is
             the app.
+        hold_out: An experiment knob (issue #3688): media ids taken out of the
+            withheld half after the split (and out of its band cohorts), so a
+            run is scored only on images nobody disputes.  With
+            *hold_out_voting* they leave the voting half too: the corrected arm
+            of a pair whose other arm votes them as built.  After the split, so
+            neither half otherwise moves.  ``None`` - the default - is the app.
+        hold_out_voting: Whether *hold_out* also leaves the voting half.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -4227,6 +4236,17 @@ def simulate_voting_iterations(  # noqa: C901
         realized_prevalence = round(
             sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
         )
+
+    # #3688: images a human found mislabelled leave the withheld half in both arms
+    # of a pair, and the voting half in the corrected one.
+    if hold_out:
+        held_out = set(hold_out)
+        test_ids = [cid for cid in test_ids if cid not in held_out]
+        band_cohorts = {b: [cid for cid in ids if cid not in held_out] for b, ids in band_cohorts.items()}
+        if hold_out_voting:
+            sim_ids = [cid for cid in sim_ids if cid not in held_out]
+    elif hold_out_voting:
+        raise ValueError("hold_out_voting needs hold_out, the ids to hold out")
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the

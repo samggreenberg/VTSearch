@@ -375,7 +375,16 @@ SCALE_BAND_ON_LARGEST = True
 #: * ``not_positive`` -- COCO's picked box is not ONE of the class. The pair is
 #:   ``excluded``, like a lump: never a positive, and still no negative, because
 #:   the image may hold a real one elsewhere.
-COCO_BETTER_CORRECTIONS = Path(__file__).resolve().parent / "human_record" / "COCO_BETTER__label_review_4179.json"
+#:
+#: ``VTS_COCO_BETTER_CORRECTIONS`` names another file, for a staging build only:
+#: #3688 builds the cells as they stood before any review (a path that does not
+#: exist is no corrections) to price the errors the record removed.
+COCO_BETTER_CORRECTIONS = Path(
+    os.environ.get(
+        "VTS_COCO_BETTER_CORRECTIONS",
+        str(Path(__file__).resolve().parent / "human_record" / "COCO_BETTER__label_review_4179.json"),
+    )
+)
 
 
 class LumpRule(NamedTuple):

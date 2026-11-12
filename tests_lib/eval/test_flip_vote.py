@@ -69,3 +69,45 @@ class TestInTheHarness:
     def test_a_bad_spec_is_refused_before_the_run(self):
         with pytest.raises(ValueError):
             self._run("good:0")
+
+
+class TestHoldOut:
+    """#3688's held-out record: out of the withheld half always, out of the voting half on request."""
+
+    def _run(self, **kw):
+        from tests_lib.eval.test_startup_schedule import _seeded_dataset
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        medias, seed_scores = _seeded_dataset(n_pos=40)
+        picks: list = []
+        simulate_voting_iterations(
+            medias,
+            target_category="target",
+            seed=3,
+            dataset_name="stub",
+            max_steps=40,
+            seed_scores=seed_scores,
+            atlas_min_node_size=8,
+            spot_check="off",
+            pick_sink=picks,
+            **kw,
+        )
+        return picks
+
+    def test_withheld_only_leaves_the_picks_alone(self):
+        from tests_lib.eval.test_startup_schedule import _seeded_dataset
+
+        plain = self._run()
+        # Every fifth media, so both halves lose some: the voting half keeps serving its share.
+        held = {cid for cid in _seeded_dataset(n_pos=40)[0] if cid % 5 == 0}
+        assert held & {p["picked_id"] for p in plain}
+        assert [p["picked_id"] for p in self._run(hold_out=held)] == [p["picked_id"] for p in plain]
+
+    def test_voting_too_never_serves_them(self):
+        plain = self._run()
+        held = {p["picked_id"] for p in plain[:6]}
+        assert not held & {p["picked_id"] for p in self._run(hold_out=held, hold_out_voting=True)}
+
+    def test_voting_needs_ids(self):
+        with pytest.raises(ValueError):
+            self._run(hold_out_voting=True)
