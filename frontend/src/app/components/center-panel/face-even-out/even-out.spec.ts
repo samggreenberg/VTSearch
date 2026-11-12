@@ -13,7 +13,8 @@ import {
   applyCurve,
   evenOutChoices,
   greyPair,
-  greyWorld,
+  balanceFor,
+  lightOf,
   innerFaceBox,
   measurePixels,
   toneMap,
@@ -199,18 +200,18 @@ describe('even-out', () => {
   });
 
   describe('white balance', () => {
-    it('makes the scene grey at its own luminance', () => {
-      const means: Rgb = [0.55, 0.5, 0.42];
-      const gains = greyWorld(means);
-      const balanced = means.map((m, c) => m * gains[c]);
+    it('makes the light grey at its own luminance', () => {
+      const light: Rgb = [0.55, 0.5, 0.42];
+      const gains = balanceFor(light);
+      const balanced = light.map((m, c) => m * gains[c]);
       expect(balanced[0]).toBeCloseTo(balanced[1], 6);
       expect(balanced[1]).toBeCloseTo(balanced[2], 6);
       const luma = (c: readonly number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-      expect(luma(balanced)).toBeCloseTo(luma(means), 6);
+      expect(luma(balanced)).toBeCloseTo(luma(light), 6);
     });
 
     it('caps every gain', () => {
-      const gains = greyWorld([0.9, 0.4, 0.1]);
+      const gains = balanceFor([0.9, 0.4, 0.1]);
       for (const g of gains) {
         expect(g).toBeGreaterThanOrEqual(BALANCE_MIN);
         expect(g).toBeLessThanOrEqual(BALANCE_MAX);
@@ -219,42 +220,70 @@ describe('even-out', () => {
       expect(gains[2]).toBe(BALANCE_MAX);
     });
 
-    it('gives a black picture no gain', () => {
-      expect(greyWorld([0, 0, 0])).toEqual([1, 1, 1]);
+    it('gives a black light no gain', () => {
+      expect(balanceFor([0, 0, 0])).toEqual([1, 1, 1]);
     });
 
-    it('takes most of a warm cast out, and two people keep their skin', () => {
-      const grey: Rgb = [128, 128, 128];
-      const warm: Rgb = [1.15, 1, 0.78];
-      const lightSkin: Rgb = [210, 165, 140];
-      const darkSkin: Rgb = [120, 80, 60];
-      const ratio = (c: Rgb) => c[0] / c[2];
-      const shown = (skin: Rgb, light?: Rgb) => {
-        const { data, box } = faceCrop(skin, grey, light);
-        return { out: through(toneMap(measurePixels(data, W, H, box), ALL_OFF_BUT('white_balance')), data), box };
-      };
+    it('reads the light from the brightest pixels, not the skin, and leaves clipped ones out', () => {
+      // Mostly skin; a tenth a lit wall, the light's colour; a little blown out to white.
+      const data = picture((x, y) => {
+        if (y < 3) return [255, 255, 255];
+        if (y < 15) return [220, 205, 180];
+        return [150 + (x % 7), 100, 80];
+      });
+      const light = lightOf(data)!;
+      expect(light[0]).toBeCloseTo(220 / 255, 2);
+      expect(light[1]).toBeCloseTo(205 / 255, 2);
+      expect(light[2]).toBeCloseTo(180 / 255, 2);
+    });
 
-      // The scene round the face: grey in daylight, warm under the lamp.
-      const daylight = shown(lightSkin);
-      const indoor = shown(lightSkin, warm);
-      const corner: PixelBox = { x0: 0, y0: 0, x1: 10, y1: 10 };
-      const castBefore = ratio(meanIn(faceCrop(lightSkin, grey, warm).data, corner));
-      const castAfter = ratio(meanIn(indoor.out, corner));
-      // The cast (red over blue, 1.15 / 0.78 = 1.47) is mostly gone.
-      expect(Math.abs(castAfter - 1)).toBeLessThan(0.5 * Math.abs(castBefore - 1));
-      // And the indoor face comes out nearer the daylight one than it went in.
-      const skinRatioDaylight = ratio(meanIn(daylight.out, daylight.box));
-      const skinRatioIndoorBefore = ratio(meanIn(faceCrop(lightSkin, grey, warm).data, indoor.box));
-      expect(Math.abs(ratio(meanIn(indoor.out, indoor.box)) - skinRatioDaylight)).toBeLessThan(
-        Math.abs(skinRatioIndoorBefore - skinRatioDaylight),
-      );
+    it('reads a picture blown out everywhere rather than nothing', () => {
+      expect(lightOf(picture(() => [255, 255, 255]))).toEqual([1, 1, 1]);
+      expect(lightOf(new Uint8ClampedArray(0))).toBeNull();
+    });
+
+    it("leaves a greyscale photo's balance alone", () => {
+      const data = picture((x, y) => {
+        const v = 40 + ((x * 7 + y * 3) % 180);
+        return [v, v, v];
+      });
+      expect(measurePixels(data, W, H, null).balance).toEqual([1, 1, 1]);
+    });
+
+    /** A crop of *skin* against a darker grey scene, with a lit pale wall across its top, all under *light*. */
+    function litCrop(skin: Rgb, light: Rgb = [1, 1, 1]): { data: Uint8ClampedArray; box: PixelBox } {
+      const crop = faceCrop(skin, [90, 90, 90], light);
+      for (let y = 0; y < 12; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          [crop.data[i], crop.data[i + 1], crop.data[i + 2]] = [210 * light[0], 210 * light[1], 210 * light[2]];
+        }
+      }
+      return crop;
+    }
+
+    it('takes most of a warm cast out, and two people keep their skin', () => {
+      const warm: Rgb = [1.15, 1, 0.82];
+      const lightSkin: Rgb = [200, 150, 125];
+      const darkSkin: Rgb = [115, 75, 58];
+      const ratio = (c: Rgb) => c[0] / c[2];
+      const shown = (crop: { data: Uint8ClampedArray; box: PixelBox }) =>
+        through(toneMap(measurePixels(crop.data, W, H, crop.box), ALL_OFF_BUT('white_balance')), crop.data);
+
+      // One person by daylight and under a lamp: the cast between the two photos is mostly gone.
+      const daylight = litCrop(lightSkin);
+      const indoor = litCrop(lightSkin, warm);
+      const box = daylight.box;
+      const castBefore = ratio(meanIn(indoor.data, box)) / ratio(meanIn(daylight.data, box));
+      const castAfter = ratio(meanIn(shown(indoor), box)) / ratio(meanIn(shown(daylight), box));
+      expect(castBefore).toBeGreaterThan(1.3);
+      expect(Math.abs(castAfter - 1)).toBeLessThan(0.25 * Math.abs(castBefore - 1));
 
       // Two people in the same light: their skins differ as much after as before.
-      const light = shown(lightSkin);
-      const dark = shown(darkSkin);
-      const before = ratio(darkSkin) - ratio(lightSkin);
-      const after = ratio(meanIn(dark.out, dark.box)) - ratio(meanIn(light.out, light.box));
-      expect(after).toBeGreaterThan(0.6 * before);
+      const before = ratio(meanIn(litCrop(darkSkin).data, box)) - ratio(meanIn(daylight.data, box));
+      const after = ratio(meanIn(shown(litCrop(darkSkin)), box)) - ratio(meanIn(shown(daylight), box));
+      expect(after).toBeCloseTo(before, 1);
+      expect(after).toBeGreaterThan(0.2);
     });
   });
 

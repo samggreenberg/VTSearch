@@ -25,9 +25,11 @@ import { innerFace } from '../face-checklist/face-regions';
  *   clipping its highlights.
  * - **Contrast** is the inner face's spread, its 5th to 95th percentile,
  *   brought to {@link CONTRAST_TARGET} by a stretch about the median.
- * - **White balance** is measured on the whole crop, the scene, and never on
- *   the skin alone: two people's skin should keep its difference. It is a
- *   grey-world gain per channel, which keeps the crop's luminance.
+ * - **White balance** is measured on the whole crop, the scene, never on the
+ *   skin alone: two people's skin should keep its difference. It is a gain
+ *   per channel that makes the light grey, keeping the crop's luminance, with
+ *   the light's colour read from the crop's brightest pixels
+ *   ({@link lightOf}).
  *
  * Both faces move, each toward the same fixed targets, rather than one toward
  * the other: a dark candidate is lifted too, and neither face becomes the
@@ -81,9 +83,12 @@ export function evenOutChoices(stored: Partial<Record<EvenOutChoice, unknown>> |
 
 /*
  * The targets and the caps, all in sRGB-encoded units (0 to 1), the space the
- * pixels are read in and the filter is applied in. Set by eye on face crops
- * in Chromium: a dark crop and a bright one, a warm indoor one and a daylight
- * one, light skin and dark.
+ * pixels are read in and the filter is applied in. The targets are the median
+ * face's, measured on the 253 face crops of the screenshot harness's
+ * Celebrities in Context slice (inner-face median 0.52, spread 0.50), so a
+ * typical face is barely changed (FISWG 4.4's minimum). The caps reach about
+ * the 10th and 90th percentiles of what those crops would need, and were
+ * checked by eye in Chromium.
  */
 
 /** The inner face's median luminance that exposure brings each face to. */
@@ -92,13 +97,20 @@ export const EXPOSURE_TARGET = 0.5;
 export const GAMMA_MIN = 0.55;
 export const GAMMA_MAX = 1.8;
 /** The inner face's spread, 5th to 95th percentile, that contrast brings each face to. */
-export const CONTRAST_TARGET = 0.55;
+export const CONTRAST_TARGET = 0.5;
 /** The contrast stretch about the median is kept in here. */
 export const STRETCH_MIN = 0.75;
 export const STRETCH_MAX = 1.5;
 /** Each channel's white-balance gain is kept in here. */
 export const BALANCE_MIN = 0.82;
 export const BALANCE_MAX = 1.22;
+/**
+ * The share of a picture's pixels, the brightest, whose mean colour is taken
+ * as the light's ({@link lightOf}).
+ */
+export const BRIGHT_SHARE = 0.05;
+/** A pixel with a channel at or over this is clipped: its colour is not the light's. */
+const CLIPPED = 250;
 /**
  * A picture is greyscale when the 99th percentile of its pixels' channel
  * disagreement, max(|R−G|, |G−B|), is at most this many levels of 255: a
@@ -182,35 +194,75 @@ export function measurePixels(
   height: number,
   faceBox: PixelBox | null,
 ): PixelMeasure {
-  const sums = [0, 0, 0];
+  const end = Math.min(data.length, width * height * 4);
   let count = 0;
   const disagreement = new Array<number>(256).fill(0);
-  for (let i = 0; i + 3 < data.length && i < width * height * 4; i += 4) {
+  for (let i = 0; i + 3 < end; i += 4) {
     if (data[i + 3] < MIN_ALPHA) continue;
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    sums[0] += r;
-    sums[1] += g;
-    sums[2] += b;
     count++;
-    disagreement[Math.min(255, Math.max(Math.abs(r - g), Math.abs(g - b)))]++;
+    disagreement[Math.min(255, Math.max(Math.abs(data[i] - data[i + 1]), Math.abs(data[i + 1] - data[i + 2])))]++;
   }
   const grey = count > 0 && percentileOf(disagreement, count, 1 - GREY_OUTLIERS) <= GREY_TOLERANCE;
-  const balance = count > 0 ? greyWorld([sums[0] / count / 255, sums[1] / count / 255, sums[2] / count / 255]) : NO_BALANCE;
+  // A greyscale photo has no cast to take out, and its light reads grey anyway.
+  const light = grey ? null : lightOf(data, end);
+  const balance = light ? balanceFor(light) : NO_BALANCE;
   return { grey, balance, face: faceBox ? faceLevels(data, width, faceBox, balance) : null };
 }
 
 const NO_BALANCE: Rgb = [1, 1, 1];
 
 /**
- * The per-channel gains that make *means* grey at their own luminance (the
- * grey-world estimate of the light), each kept within the caps. A channel
- * with next to nothing in it gets no gain, rather than a huge one.
+ * The colour of the light *data* (RGBA, its first *end* entries) was taken
+ * under, 0 to 1 per channel: the mean of its brightest {@link BRIGHT_SHARE}
+ * of pixels, leaving out clipped ones. Null with no pixel to read.
+ *
+ * Not the mean of every pixel (grey-world), which a face crop biases: it is
+ * mostly skin, so grey-world reads every face as lit warm and turns its skin
+ * grey. On the 253 crops the targets were measured on, grey-world cooled the
+ * median crop by 19% in red; its brightest pixels (highlights, the whites of
+ * the eyes, a shirt) left it within 7%, and still followed a cast laid over
+ * every crop to within 2%. That is the "bright pixels" estimate (Joze, Drew,
+ * Finlayson & Rey 2012, *The role of bright pixels in illumination
+ * estimation*); a clipped pixel says the sensor's limit, not the light.
  */
-export function greyWorld(means: Rgb): Rgb {
-  const luma = LUMA[0] * means[0] + LUMA[1] * means[1] + LUMA[2] * means[2];
-  return means.map((m) => (m > 1e-3 && luma > 1e-3 ? clamp(luma / m, BALANCE_MIN, BALANCE_MAX) : 1)) as unknown as Rgb;
+export function lightOf(data: ArrayLike<number>, end: number = data.length): Rgb | null {
+  const histogram = new Array<number>(256).fill(0);
+  let count = 0;
+  let unclipped = true;
+  const level = (i: number) => Math.round(LUMA[0] * data[i] + LUMA[1] * data[i + 1] + LUMA[2] * data[i + 2]);
+  const counts = (i: number) =>
+    data[i + 3] >= MIN_ALPHA && (!unclipped || Math.max(data[i], data[i + 1], data[i + 2]) < CLIPPED);
+  for (let pass = 0; pass < 2 && count === 0; pass++) {
+    // Every pixel clipped (a blown-out picture): read them all rather than none.
+    unclipped = pass === 0;
+    for (let i = 0; i + 3 < end; i += 4) {
+      if (!counts(i)) continue;
+      histogram[level(i)]++;
+      count++;
+    }
+  }
+  if (!count) return null;
+  const threshold = percentileOf(histogram, count, 1 - BRIGHT_SHARE);
+  const sums = [0, 0, 0];
+  let n = 0;
+  for (let i = 0; i + 3 < end; i += 4) {
+    if (!counts(i) || level(i) < threshold) continue;
+    sums[0] += data[i];
+    sums[1] += data[i + 1];
+    sums[2] += data[i + 2];
+    n++;
+  }
+  return [sums[0] / n / 255, sums[1] / n / 255, sums[2] / n / 255];
+}
+
+/**
+ * The per-channel gains that make *light* grey at its own luminance, each
+ * kept within the caps. A channel with next to nothing in it gets no gain,
+ * rather than a huge one.
+ */
+export function balanceFor(light: Rgb): Rgb {
+  const luma = LUMA[0] * light[0] + LUMA[1] * light[1] + LUMA[2] * light[2];
+  return light.map((m) => (m > 1e-3 && luma > 1e-3 ? clamp(luma / m, BALANCE_MIN, BALANCE_MAX) : 1)) as unknown as Rgb;
 }
 
 /** The inner face's luminance levels, as taken and under *balance*; null when the box holds no pixel. */

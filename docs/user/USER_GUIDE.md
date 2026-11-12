@@ -710,6 +710,30 @@ two part by part instead of trusting your memory of the person.
   be a little off on a turned face; drag to adjust it. The parts can be
   clicked whenever the two faces are matched in size, so not on a face from an
   older dataset, with an example picture as the reference, or under **Wider**.
+- **Even out the photos**, at the foot of the What to compare strip, makes two
+  photos of one person look alike where only the camera or the light differs.
+  Each change is made to the whole picture, the same at every point, and is
+  capped, so neither face is pushed far from how it was taken; the stored
+  pictures never change, and nor does what the detector sees. Each is a
+  checkbox, and the choices are remembered:
+  - **Exposure** brings both faces to the same brightness, and **Contrast** to
+    the same contrast, each measured on the face from the eyes to the mouth, so
+    the hair and the background don't count. A dark face is lifted, which can
+    show a mark the shadow hid.
+  - **White balance** takes each photo's colour cast out (the orange of a lamp,
+    the blue of shade), measured on the whole picture, not the skin, so two
+    people's skin keeps its difference.
+  - **Greyscale when either is** shows both faces in greyscale when either is a
+    black-and-white photo: a colour face beside a grey one makes people more
+    likely to call two different people the same. **Both in greyscale**, the
+    one box not ticked to begin with, greys any pair.
+  - **Reference turned the same way** is the choice of reference above.
+    Unticked, the clearest Good face comes first, whichever way it is turned.
+  - Hold `O` to see both faces as they were taken, and let go to see them
+    evened out again.
+
+  A face from an older dataset, or an example picture, has no eye and mouth
+  points to find its face by, so only its colour cast is taken out.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 

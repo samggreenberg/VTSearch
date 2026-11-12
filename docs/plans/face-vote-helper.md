@@ -212,6 +212,20 @@ exists; this plan adds nothing for it.
   says when the candidate or the reference is a hard view, from each face's
   `face_hard_view` on `POST /api/medias/batch`, or for an example picture
   `GET /api/server-media-files/<f>/face-hard-view`.
+- **The photos evened out.** Each pane is shown through one SVG
+  `feComponentTransfer` filter, a gamma curve per channel, then
+  `grayscale(1)` when either face is a greyscale photo (#5674, #5675). The
+  curve's exposure and contrast are fitted on the inner face, a box placed
+  from the landmarks; its white balance makes the light grey, read from the
+  whole crop's brightest pixels, since grey-world on a crop that is mostly
+  skin reads every face as lit warm. Each face moves toward fixed targets, the
+  median face's, with every gain capped, so each
+  pane's map is its own pixels' alone, and a face is always measured on its
+  crop, so the map applies unchanged under **Wider**
+  (`components/center-panel/face-even-out/even-out.ts`). Each standardization,
+  the turn-matched reference of #5670 included, is a checkbox in the
+  checklist's "Even out the photos" group, the per-user `face_even_out`
+  setting; a held `O` shows both originals (`face-even-out.service.ts`).
 
 ## Design
 
@@ -294,7 +308,8 @@ experiment.
 #4777). Size and position are matched by registration (#5647). Quarter turns
 are by hand (`[` and `]`). Those are all the geometric axes a shape-preserving
 transform can reach. The reference shown first is a Good face turned the same
-way as the candidate (#5670). What is left is how the pixels look, further
+way as the candidate (#5670). Exposure, contrast, colour cast and greyscale
+are evened out per pane (#5674, #5675). What is left is detail, further
 choices of reference, or a geometric change no standard allows.
 
 **The list.** Each row is one axis along which two photos of one person
@@ -302,10 +317,10 @@ differ.
 
 | Axis | Standardization | Standing | Verdict |
 |---|---|---|---|
-| Exposure | Bring each face's median luminance to a common target. Measure it on the inner face, a box placed from the landmarks, eyes to mouth and cheek to cheek, so background and hair don't count. Apply it to the whole image as a levels map, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Do** |
-| Contrast | On the same region, bring the spread (say the 5th to 95th percentile) to a common target. A gamma curve lifts a dark face's shadows without clipping its highlights. | FISWG 5.1.1, 5.1.6 | **Do**, with exposure |
-| Colour cast | White-balance each image against its own scene: estimate the light from the whole crop (or the whole photo under **Wider**), never by matching one face's skin to the other's. | FISWG 5.1.4 | **Do** |
-| Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Do**, first |
+| Exposure | Bring each face's median luminance to a common target. Measure it on the inner face, a box placed from the landmarks, eyes to mouth and cheek to cheek, so background and hair don't count. Apply it to the whole image as a levels map, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Done** (#5675) |
+| Contrast | On the same region, bring the spread (say the 5th to 95th percentile) to a common target. A gamma curve lifts a dark face's shadows without clipping its highlights. | FISWG 5.1.1, 5.1.6 | **Done** (#5675) |
+| Colour cast | White-balance each image against its own scene: estimate the light from the whole crop (or the whole photo under **Wider**), never by matching one face's skin to the other's. | FISWG 5.1.4 | **Done** (#5675) |
+| Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Done** (#5674) |
 | Detail | When the two faces' native pixels between the eyes are far apart, say so in the fitness notice. Later, try softening the sharper face toward the other's level, or showing the pair smaller. | Softening is not on FISWG's list, but it removes detail rather than adding it; Bindemann 2013, Merino 2025 | **Notice now**, softening later |
 | Head turn (yaw, pitch) | No transform: choose the reference instead. The Good faces turned like the candidate come first, the turn read from the five landmarks (`landmarkTurn`). | ENFSI 5.3.2; FSR 5.1.4 | **Done** (#5670) |
 | Lighting, expression | The same choice can weigh exposure, and mouth width against eye distance (a smile widens the mouth), after pose. | ENFSI 5.3.2 | Later, if pose choice works |
@@ -315,34 +330,8 @@ differ.
 | Frontalizing, stretching, warping onto landmarks | None. Frontalizing invents a view the camera never took. A stretch makes the faces' proportions match by construction, which is the morph the request rules out. | ENFSI 5.3.2 ("the aspect ratio ... must be maintained"); OSAC 2022-S-0007 ("tools which preserve shapes") | **Reject** |
 | Lens distortion, compression blocking | Nothing to do. A close phone camera enlarges the nose and blocking hides detail, but undoing either needs depth or invented detail. | ENFSI 5.3.1, Appendix B | Out of reach |
 
-**How it would be built.**
+**How the detail notice would be built.**
 
-- **One filter per pane.** Exposure, contrast, colour cast and greyscale are
-  one global per-channel transfer. That is an SVG `feComponentTransfer` filter
-  (`linear` slope and intercept, or `gamma`, per channel), applied through the
-  `<img>`'s CSS `filter`. Nothing is re-encoded and the stored crop is
-  untouched (FISWG 4.3). Turning the filter off shows the original.
-- **The numbers come from the pane's own pixels.** The image is same-origin
-  (`/api/medias/<id>/image`), so once it loads the viewer can draw it to a
-  small canvas and read the face region's luminance and channel means.
-  - The face region is placed from `face_landmarks`. A face without landmarks
-    gets white balance and the greyscale check, both measured on the whole
-    crop, and no face-based exposure.
-  - A map measured on the crop applies unchanged to the photo under **Wider**,
-    because it is global.
-- **Both faces move**, each toward a common target, rather than one toward the
-  other. A dark candidate is lifted too, which helps its features show, and
-  neither face becomes the template for the other.
-- **Exposure is measured on the face, colour on the scene.** Darkness hides
-  detail (a mole in shadow), so exposure is measured where the features are.
-  A colour cast hides nothing; it only makes two photos look different, so it
-  is corrected from the light and the skin keeps its own colour. Exposure
-  still moves skin lightness. The checklist already says not to weigh that,
-  and the gain cap bounds it.
-- **A checkbox per standardization** in the What to compare strip (the
-  owner's call on #5671). Each is on or off on its own, the turn-matched order
-  of #5670 included, and the choices are remembered per user. A key held
-  down shows both originals: ENFSI's "refer back to the original".
 - **Detail** is the native distance between the eyes: the image's natural
   size times the landmark fractions. Merino 2025 measured on the same scale.
 
@@ -363,15 +352,6 @@ These are the owner's; the recommendation is first in each.
 - **Re-import, or re-detect on demand, for landmarks on existing datasets?**
   Recommended: re-import. Re-detection on demand needs the parent photo and
   the face provider loaded at vote time.
-- **Are the standardizations' checkboxes ticked by default?** Recommended:
-  yes, with both originals one held key away. Every adjustment is global and on
-  FISWG's list, and few users would tick a box they had not seen work. The
-  manual **Both in greyscale** is the exception: it starts unticked.
-- **Do both faces move toward a common target, or only the reference toward
-  the candidate?** Recommended: both. Moving only the reference follows
-  ENFSI's advice to rotate the better image, which keeps the candidate as
-  taken. But it leaves a dark candidate dark, and a dark candidate is where
-  the correction helps most.
 
 ## Open work
 
@@ -417,10 +397,6 @@ zoom only.
 
 <!-- item-sep -->
 
-- [ ] #5674 — Face compare: greyscale both faces when either is, with on/off checkboxes (Sonnet)
-
 <!-- item-sep -->
-
-- [ ] #5675 — Face compare: even out exposure, contrast and white balance, each with a checkbox (Sonnet)
 
 <!-- item-sep -->
