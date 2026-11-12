@@ -17,6 +17,7 @@ import { MediaTypeCapabilityService } from '../../services/media-type-capability
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
+import { ViewLink } from './image-viewer/face-link';
 import { ImageViewControlsComponent } from './image-view-controls/image-view-controls.component';
 import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
@@ -160,6 +161,15 @@ export class CenterPanelComponent implements OnDestroy {
   /** The compare layout's reference pane, while it is on screen. Its own
    *  viewer lives in its template, so {@link imageViewer} stays the candidate's. */
   readonly faceReference = viewChild(FaceReferenceComponent);
+  /**
+   * Ties the reference's viewer to the candidate's in the compare layout
+   * (#5647): the reference is sized and placed to match the candidate's face,
+   * and zooms and pans with it. The candidate leads, so its view is what the
+   * keys and its toolbar have always moved. Only while both faces have
+   * landmarks and are shown as crops; under Wider the photos are not levelled,
+   * so the points measured on the levelled crops do not land on them.
+   */
+  readonly faceLink = new ViewLink();
 
   // These fields are written from non-bound callbacks — the keyboard-shortcut
   // dispatch (`KeyboardService.action$`), HTTP/vote subscriptions, and timers —

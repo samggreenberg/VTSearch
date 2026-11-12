@@ -666,9 +666,22 @@ two part by part instead of trusting your memory of the person.
   one again.
 - **Pin** keeps the reference on screen as the one every candidate starts on,
   until you click **Pinned** or leave the page.
-- Each face has its own rotate, zoom and reset controls under it. Zoom with
-  the mouse wheel and drag to move around; `+` / `-` and `[` / `]` act on the
+- **The two faces are shown the same size and in the same place.** The
+  reference is enlarged or shrunk, and moved, so its eyes sit where the
+  candidate's do and the distance from its eyes to its mouth is the same.
+  Nothing else changes: the face is not stretched or bent to fit.
+- **Zoom and move them together.** Zoom in on one face's ear and the other
+  zooms in on its ear too; drag either to move both. Each face still has its
+  own rotate, zoom and reset controls under it, and both zoom readouts show the
+  same zoom. Turning one face does not turn the other. Reset on either goes
+  back to both whole faces. **Next** keeps the zoom, so you can look at the
+  same part of each reference in turn. `+` / `-` and `[` / `]` act on the
   candidate.
+- A face from an older Face dataset, made before the app kept where each
+  face's eyes and mouth are, has nothing to match by, and nor has a reference
+  that is your example picture. Such a pair is shown at its own sizes, and
+  each face zooms on its own. Re-import an older dataset to have its faces
+  matched.
 - **Wider**, beside **Compare**, shows both faces from the photos they were
   cut from, with twice as much around each as its crop has, so the ears and
   the hairline are in view: a crop often cuts them off, and the ears are among
@@ -676,9 +689,11 @@ two part by part instead of trusting your memory of the person.
   photos is loaded. The photos are shown as they were taken: a crop is turned
   so the eyes are level, but the photo is not, so a tilted head stays tilted.
   A face whose photo can't be found, or a reference that is your example
-  picture, stays as it is. Zoom works as usual, further in than on a crop for
-  a small face in a big photo, and reset returns to the wider view. **Wider**
-  stays on until you turn it off or leave the page.
+  picture, stays as it is. The photos are not matched in size or zoomed
+  together, since a tilted head's eyes and mouth are not where the crop
+  measured them; each zooms as usual, further in than on a crop for a small
+  face in a big photo, and reset returns to the wider view. **Wider** stays on
+  until you turn it off or leave the page.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 

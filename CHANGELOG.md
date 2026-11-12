@@ -22,6 +22,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **The reference face is shown the same size and in the same place as the face you are voting on, and the two
+  zoom together** (issue #5647). In the Face compare layout, one face could fill its crop while the other sat small
+  in a corner. The reference is now enlarged or shrunk, and moved, so its eyes sit where the candidate's do and
+  its eyes-to-mouth distance is the same; it is not stretched or bent. Zooming or dragging either face moves both,
+  so zooming in on one face's ear shows the other's; each still turns on its own, and **Next** keeps the zoom. It
+  needs the eye and mouth points Face datasets now keep (#5644): a face from an older dataset, or a reference that
+  is your example picture, is shown at its own size and zooms on its own, as before. Under **Wider** the photos
+  are not levelled like the crops, so they are not matched either.
 - **See the ears and hairline of both faces while comparing them** (issue #5645). In the Face compare layout,
   **Wider** shows the reference and the face you are voting on from the photos they were cut from, with twice as
   much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is
@@ -44,7 +52,7 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 - **Face datasets keep where each face's eyes, nose and mouth are** (issue #5644). Turning photos into faces now
   saves five points on every face crop (the two eyes, the nose tip and the two corners of the mouth), which the
-  compare view will use to show a reference face at the same size and position as the face you are voting on.
+  compare view uses to show a reference face at the same size and position as the face you are voting on.
   Face datasets made before this keep working; re-import one to give its faces the points. For API users: `POST
   /api/medias/batch` returns them as `face_landmarks`.
 - **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening

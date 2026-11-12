@@ -5,6 +5,7 @@ import { Observable, of } from 'rxjs';
 
 import { FaceReferenceComponent } from './face-reference.component';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
+import { ViewLink } from '../image-viewer/face-link';
 import { FaceReference, FaceReferenceService } from '../../../services/face-reference.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SourceLookup, SourcePhotoService } from '../../../services/source-photo.service';
@@ -30,6 +31,13 @@ describe('FaceReferenceComponent', () => {
   };
 
   const media = (id: number): FaceReference => ({ kind: 'media', id });
+  const LANDMARKS = [
+    [0.4, 0.4],
+    [0.6, 0.4],
+    [0.5, 0.5],
+    [0.45, 0.6],
+    [0.55, 0.6],
+  ];
   let lookup: ReturnType<typeof vi.fn<(id: number) => Observable<SourceLookup>>>;
 
   beforeEach(async () => {
@@ -47,7 +55,8 @@ describe('FaceReferenceComponent', () => {
           provide: MediaMetadataCacheService,
           useValue: {
             version: signal(0),
-            get: (id: number) => (id === 2 ? { id, media_type: 'face', filename: 'two.jpg', custom_metadata: {} } : undefined),
+            get: (id: number) =>
+              id === 2 ? { id, media_type: 'face', filename: 'two.jpg', custom_metadata: {}, face_landmarks: LANDMARKS } : undefined,
           },
         },
       ],
@@ -150,6 +159,25 @@ describe('FaceReferenceComponent', () => {
     expect(button('Next').disabled).toBe(true);
   });
 
+  // #5647: the reference's viewer follows the candidate's, sized and placed by
+  // the two faces' landmarks; the centre panel hands over the link.
+  it('puts its viewer on the candidate\'s link as the follower, with the reference\'s landmarks', async () => {
+    const link = new ViewLink();
+    fixture.componentRef.setInput('link', link);
+    fixture.componentInstance.next();
+    await settleZoneless(fixture);
+    expect(viewer()!.link()).toBe(link);
+    expect(viewer()!.linkAs()).toBe('follow');
+    expect(viewer()!.landmarks()).toBe(LANDMARKS);
+  });
+
+  it('gives an example picture no landmarks, so it is shown on its own', async () => {
+    fixture.componentRef.setInput('link', new ViewLink());
+    pool.set([{ kind: 'example', filename: 'my face.jpg' }]);
+    await settleZoneless(fixture);
+    expect(viewer()!.landmarks()).toBeFalsy();
+  });
+
   it('says so when there is no reference yet', async () => {
     pool.set([]);
     await settleZoneless(fixture);
@@ -200,6 +228,16 @@ describe('FaceReferenceComponent', () => {
       expect(lookup).not.toHaveBeenCalled();
       expect(viewer()!.srcOverride()).toBe('/api/server-media-files/my%20face.jpg/image');
       expect(viewer()!.fitBox()).toBeNull();
+    });
+
+    it('hands over no landmarks for the photo, which is not levelled as the crop is', async () => {
+      fixture.componentInstance.next();
+      await wider(true);
+      expect(viewer()!.media().id).toBe(20);
+      expect(viewer()!.landmarks()).toBeNull();
+
+      await wider(false);
+      expect(viewer()!.landmarks()).toBe(LANDMARKS);
     });
 
     it('keeps a reference whose photo is not loaded on its crop', async () => {

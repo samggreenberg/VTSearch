@@ -122,7 +122,7 @@
          its vote swipe, so a Bad vote does not fly across the reference. -->
     <div class="media-stage" [class.media-stage--compare]="compareOn">
       @if (compareOn) {
-        <vt-face-reference [candidateId]="media()!.id" [wider]="widerOn()" />
+        <vt-face-reference [candidateId]="media()!.id" [wider]="widerOn()" [link]="faceLink" />
       }
       <div class="media-stage__candidate">
         <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">
@@ -144,6 +144,8 @@
                 [pendingBadConfirm]="pendingBadConfirm()"
                 [highlightBox]="wide.kind === 'photo' ? null : highlightBox"
                 [regionDraw]="regionDrawOffered"
+                [link]="compareOn ? faceLink : null"
+                [landmarks]="wide.kind === 'crop' ? media()!.face_landmarks : null"
                 (regionBoxChange)="onRegionBoxChange($event)"
                 (armedConfirmCanceled)="onArmedConfirmCanceled()"
               ></vt-image-viewer>
