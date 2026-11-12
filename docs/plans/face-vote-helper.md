@@ -176,10 +176,11 @@ exists; this plan adds nothing for it.
   once there is one, the detector's example pictures before
   (`face-reference.service.ts`). One can be pinned for the page's lifetime.
   The Compare toggle is the per-user `face_compare` setting.
-- **Five landmarks, used once and dropped.** `image2face` gets two eyes, a
-  nose tip and two mouth corners per face
-  (`imagekit/face/records.py`), uses them to level the crop (`align="roll"`,
-  #4777), and does not keep them. No pose is computed.
+- **Five landmarks on every crop.** `image2face` gets two eyes, a nose tip
+  and two mouth corners per face (`imagekit/face/records.py`), uses them to
+  level the crop (`align="roll"`, #4777), and keeps them on the item as
+  `face_landmarks`, fractions of the crop as stored, served on
+  `POST /api/medias/batch` (#5644). No pose is computed.
 - **Crop padding of 0.25** of the face box on every side by default. Ears and
   hairline are often at or past the crop edge.
 
@@ -201,10 +202,8 @@ midpoints coincide and the eye-to-mouth distances match. That is a resize
 and a shift with the aspect ratio kept, which both standards allow. The two
 faces stay in their own panes.
 
-This needs the landmarks kept. `image2face` would store them on the item as
-five points in crop fractions, beside `source_box`. They are geometry, not an
-embedding, so the no-persisted-vectors rule does not apply. Existing Face
-datasets have none and would show the unregistered layout until re-imported.
+The landmarks are each crop's `face_landmarks`. Existing Face datasets have
+none and show the unregistered layout until re-imported.
 
 ### Wider view
 

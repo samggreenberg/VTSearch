@@ -1419,7 +1419,11 @@ recoverable long after the import job ended:
   cuts its output out of a region of the source also sets the top-level
   `source_box` (normalised `[x0, y0, x1, y1]` of the upright source;
   `image2face` does, per face), which persists beside the clip window and
-  renders as the **Source Box** row.
+  renders as the **Source Box** row.  `image2face` also keeps each face's five
+  landmarks as the top-level `face_landmarks`, in fractions of the crop as
+  stored (after the `align` turn), so the face vote helper can match two
+  faces' size and position; they are geometry, not an embedding, so they
+  persist the same way.
 - **Clipper-chain output**
   (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
   `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus

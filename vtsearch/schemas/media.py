@@ -318,6 +318,19 @@ class MediaEntrySchema(Schema):
             )
         },
     )
+    face_landmarks = fields.List(
+        fields.List(fields.Float()),
+        metadata={
+            "description": (
+                "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served "
+                "(after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its "
+                "bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right "
+                "mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the "
+                "face runs past the crop's edge. Absent when the item has none: not a face, a face "
+                "whose detection gave no landmarks, or one imported before they were kept."
+            )
+        },
+    )
     has_original = fields.Boolean(
         metadata={
             "description": (
