@@ -1,5 +1,5 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
-import { Observable, from } from 'rxjs';
+import { Observable, concat, from, of } from 'rxjs';
 import {
   EvenOutChoice,
   EvenOutChoices,
@@ -60,7 +60,8 @@ export class FaceEvenOutService {
   /** The held key is down: both faces are shown as taken (ENFSI 5.2.3, "refer back to the original"). */
   readonly showOriginals = signal(false);
 
-  private readonly measures = new Map<string, Promise<PixelMeasure | null>>();
+  /** Each picture's read, and its answer once it has one. */
+  private readonly measures = new Map<string, MeasureEntry>();
 
   /** Tick or untick *choice*, now, and remember it. */
   set(choice: EvenOutChoice, on: boolean): void {
@@ -73,29 +74,43 @@ export class FaceEvenOutService {
     this.settingsState.update({ face_even_out: next }).subscribe({ next: settle, error: settle });
   }
 
-  /** What *request*'s picture's pixels say, once it has loaded; null when it cannot be read. */
-  measure(request: MeasureRequest): Observable<PixelMeasure | null> {
+  /**
+   * What *request*'s picture's pixels say: null at once, then the measure
+   * once the picture has loaded, or null again if it cannot be read. A
+   * picture already read answers at once, so stepping back to a face shows
+   * it evened out from its first frame. No request is null.
+   *
+   * A plain observable rather than a resource, so a picture that never loads
+   * (jsdom loads none) holds up nothing that waits for the app to settle.
+   */
+  measured(request: MeasureRequest | undefined): Observable<PixelMeasure | null> {
+    if (!request) return of(null);
     const key = measureKey(request);
-    let promise = this.measures.get(key);
-    if (promise) {
+    let entry = this.measures.get(key);
+    if (entry) {
       // Most recently used last, so the oldest is the one let go.
       this.measures.delete(key);
     } else {
-      promise = readPixels(request);
-      promise.then((measure) => {
+      const promise = readPixels(request);
+      const created: MeasureEntry = { promise, settled: false, value: null };
+      entry = created;
+      void promise.then((value) => {
+        created.settled = true;
+        created.value = value;
         // A failed read is not kept: the next ask tries again.
-        if (measure === null && this.measures.get(key) === promise) this.measures.delete(key);
+        if (value === null && this.measures.get(key) === created) this.measures.delete(key);
       });
     }
-    this.measures.set(key, promise);
+    this.measures.set(key, entry);
     while (this.measures.size > CACHE_SIZE) this.measures.delete(this.measures.keys().next().value!);
-    return from(promise);
+    return entry.settled ? of(entry.value) : concat(of(null), from(entry.promise));
   }
+}
 
-  /** Forget every measure (tests). */
-  clear(): void {
-    this.measures.clear();
-  }
+interface MeasureEntry {
+  readonly promise: Promise<PixelMeasure | null>;
+  settled: boolean;
+  value: PixelMeasure | null;
 }
 
 /** Load *request*'s picture, draw it small and measure it. */

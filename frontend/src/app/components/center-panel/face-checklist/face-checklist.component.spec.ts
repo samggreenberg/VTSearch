@@ -2,8 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { computed, signal } from '@angular/core';
 
-import { FACE_CHECKS, FaceChecklistComponent } from './face-checklist.component';
+import { EVEN_OUT_ROWS, FACE_CHECKS, FaceChecklistComponent } from './face-checklist.component';
 import { FaceRect, FaceShape, FaceView, LinkLead, ViewLink, viewOfRect } from '../image-viewer/face-link';
+import { EVEN_OUT_DEFAULTS, EvenOutChoice, EvenOutChoices } from '../face-even-out/even-out';
+import { FaceEvenOutService } from '../../../services/face-even-out.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -14,9 +16,16 @@ import { settleZoneless } from '../../../testing/settle-resource';
  */
 describe('FaceChecklistComponent', () => {
   let fixture: ComponentFixture<FaceChecklistComponent>;
+  const choices = signal<EvenOutChoices>(EVEN_OUT_DEFAULTS);
+  let setChoice: ReturnType<typeof vi.fn<(choice: EvenOutChoice, on: boolean) => void>>;
 
   beforeEach(async () => {
-    configureZoneless({ imports: [FaceChecklistComponent] });
+    choices.set(EVEN_OUT_DEFAULTS);
+    setChoice = vi.fn((choice, on) => choices.update((all) => ({ ...all, [choice]: on })));
+    configureZoneless({
+      imports: [FaceChecklistComponent],
+      providers: [{ provide: FaceEvenOutService, useValue: { choices: choices.asReadonly(), set: setChoice } }],
+    });
     fixture = TestBed.createComponent(FaceChecklistComponent);
     await settleZoneless(fixture);
   });
@@ -53,12 +62,63 @@ describe('FaceChecklistComponent', () => {
   });
 
   it('is a prompt, not a form: nothing to tick, and nothing to press while the panes are not linked', async () => {
-    expect(fixture.nativeElement.querySelectorAll('input, button, select').length).toBe(0);
+    const controls = () => fixture.nativeElement.querySelectorAll('.checklist-rows :is(input, button, select)').length;
+    expect(controls()).toBe(0);
     // A link whose faces are not matched (no landmarks, or Wider) is the same.
     fixture.componentRef.setInput('link', new ViewLink());
     await settleZoneless(fixture);
-    expect(fixture.nativeElement.querySelectorAll('input, button, select').length).toBe(0);
+    expect(controls()).toBe(0);
     expect(rows().length).toBe(5);
+  });
+
+  describe('Even out the photos (#5674, #5675)', () => {
+    function boxes(): HTMLInputElement[] {
+      return Array.from(fixture.nativeElement.querySelectorAll('.even-out input[type="checkbox"]'));
+    }
+
+    function box(label: string): HTMLInputElement {
+      const found = boxes().find((el) => el.closest('label')!.textContent!.trim() === label);
+      expect(found).toBeDefined();
+      return found!;
+    }
+
+    it('has a checkbox per standardization, each ticked as the choices say', () => {
+      expect(fixture.nativeElement.querySelector('.even-out legend').textContent.trim()).toBe('Even out the photos');
+      expect(boxes().map((el) => el.closest('label')!.textContent!.trim())).toEqual([
+        'Exposure',
+        'Contrast',
+        'White balance',
+        'Greyscale when either is',
+        'Both in greyscale',
+        'Reference turned the same way',
+      ]);
+      expect(EVEN_OUT_ROWS.length).toBe(6);
+      // Ticked by default, but the manual greyscale.
+      expect(boxes().map((el) => el.checked)).toEqual([true, true, true, true, false, true]);
+    });
+
+    it('ticks or unticks one standardization, and leaves the rest', async () => {
+      box('Contrast').click();
+      await settleZoneless(fixture);
+      expect(setChoice).toHaveBeenCalledExactlyOnceWith('contrast', false);
+      expect(box('Contrast').checked).toBe(false);
+      expect(box('Exposure').checked).toBe(true);
+
+      box('Both in greyscale').click();
+      await settleZoneless(fixture);
+      expect(setChoice).toHaveBeenLastCalledWith('greyscale_both', true);
+      expect(box('Both in greyscale').checked).toBe(true);
+    });
+
+    it('follows the choices when they change elsewhere (the setting arriving)', async () => {
+      choices.set({ ...EVEN_OUT_DEFAULTS, white_balance: false });
+      await settleZoneless(fixture);
+      expect(box('White balance').checked).toBe(false);
+    });
+
+    it('names the key that shows both faces as taken', () => {
+      expect(fixture.nativeElement.querySelector('.even-out-hint').textContent).toContain('Hold O to see both as taken.');
+    });
   });
 
   describe('with the two panes linked (#5647)', () => {

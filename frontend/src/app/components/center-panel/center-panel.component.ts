@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { KeyValuePipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService, NavDirection } from '../../services/keyboard.service';
@@ -310,10 +311,10 @@ export class CenterPanelComponent implements OnDestroy {
     { equal: (a, b) => (a && b ? measureKey(a) === measureKey(b) : a === b) },
   );
 
-  private readonly candidateMeasure = rxResource({
-    params: () => this.candidateMeasureRequest(),
-    stream: ({ params }) => this.evenOut.measure(params),
-  });
+  private readonly candidateMeasure = toSignal(
+    toObservable(this.candidateMeasureRequest).pipe(switchMap((request) => this.evenOut.measured(request))),
+    { initialValue: null },
+  );
 
   /** The panes are evened out: the compare layout is on, and the originals key is not held. */
   readonly evenOutShown = computed(() => this.compareOn && !this.evenOut.showOriginals());
@@ -321,14 +322,14 @@ export class CenterPanelComponent implements OnDestroy {
   /** Both panes in greyscale (#5674): the pair rule, over both faces' pictures. */
   readonly paneGreyscale = computed(() => {
     if (!this.evenOutShown()) return false;
-    const candidate = this.candidateMeasure.value()?.grey ?? null;
+    const candidate = this.candidateMeasure()?.grey ?? null;
     const reference = this.faceReference()?.measure()?.grey ?? null;
     return greyPair(candidate, reference, this.evenOut.choices());
   });
 
   /** The candidate's exposure, contrast and white-balance map (#5675), or null for none. */
   readonly candidateToneMap = computed<ToneMap | null>(() => {
-    const measure = this.candidateMeasure.value();
+    const measure = this.candidateMeasure();
     return this.evenOutShown() && measure ? toneMap(measure, this.evenOut.choices()) : null;
   });
 

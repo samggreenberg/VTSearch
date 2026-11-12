@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, Signal, computed, effect, inject, input, signal } from '@angular/core';
+import { rxResource, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs';
 import { Media } from '../../../models/api.models';
 import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import { FaceReference, FaceReferenceService, referenceKey } from '../../../services/face-reference.service';
@@ -186,13 +187,11 @@ export class FaceReferenceComponent {
     { equal: (a, b) => (a && b ? measureKey(a) === measureKey(b) : a === b) },
   );
 
-  private readonly measured = rxResource({
-    params: () => this.measureRequest(),
-    stream: ({ params }) => this.evenOutState.measure(params),
-  });
-
   /** What the reference's pixels say, once read; the centre panel's greyscale rule reads it. */
-  readonly measure = computed<PixelMeasure | null>(() => this.measured.value() ?? null);
+  readonly measure: Signal<PixelMeasure | null> = toSignal(
+    toObservable(this.measureRequest).pipe(switchMap((request) => this.evenOutState.measured(request))),
+    { initialValue: null },
+  );
 
   /** The reference's exposure, contrast and white-balance map, or null for none. */
   readonly toneMap = computed<ToneMap | null>(() => {
