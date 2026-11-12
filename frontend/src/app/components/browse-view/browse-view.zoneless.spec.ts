@@ -901,8 +901,13 @@ describe('BrowseViewComponent (zoneless canary)', () => {
    * gate, and "Loading map…" stayed up for good.
    */
   describe('when the settings load fails (#5658)', () => {
-    beforeAll(() => (realSettingsStore = true));
-    afterAll(() => (realSettingsStore = false));
+    // The returned function runs once this block's tests are done.
+    beforeAll(() => {
+      realSettingsStore = true;
+      return () => {
+        realSettingsStore = false;
+      };
+    });
 
     it('opens the map at the default prefs once a late settings failure lands', async () => {
       const httpMock = TestBed.inject(HttpTestingController);
