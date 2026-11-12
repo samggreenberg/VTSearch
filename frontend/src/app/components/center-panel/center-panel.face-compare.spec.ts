@@ -36,7 +36,21 @@ describe('CenterPanelComponent Face compare', () => {
   /** Each face's answer to the source lookup, by id; none is a 404. */
   let lookups: Record<number, Observable<SourceLookup>>;
 
-  const face: Media = { id: 4, media_type: 'face', filename: 'a.jpg→face_0.jpg', md5: 'm', custom_metadata: {} };
+  const LANDMARKS = [
+    [0.4, 0.4],
+    [0.6, 0.4],
+    [0.5, 0.5],
+    [0.45, 0.6],
+    [0.55, 0.6],
+  ];
+  const face: Media = {
+    id: 4,
+    media_type: 'face',
+    filename: 'a.jpg→face_0.jpg',
+    md5: 'm',
+    custom_metadata: {},
+    face_landmarks: LANDMARKS,
+  };
   const photo: Media = { id: 5, media_type: 'image', filename: 'a.jpg', md5: 'n', custom_metadata: {} };
 
   beforeEach(() => {
@@ -129,6 +143,32 @@ describe('CenterPanelComponent Face compare', () => {
     // Zoom, rotate and the vote's region still address the face being voted on.
     expect(fixture.componentInstance.imageViewer()!.media().id).toBe(4);
     expect(fixture.debugElement.queryAll(By.directive(ImageViewerComponent)).length).toBe(2);
+  });
+
+  // #5647: the two viewers zoom and pan together, the faces matched in size and
+  // place by their landmarks; the candidate's leads.
+  it('links the reference\'s viewer to the candidate\'s, which leads with its landmarks', async () => {
+    await show(face);
+    const panel = fixture.componentInstance;
+    const candidate = panel.imageViewer()!;
+    expect(candidate.link()).toBe(panel.faceLink);
+    expect(candidate.linkAs()).toBe('lead');
+    expect(candidate.landmarks()).toBe(LANDMARKS);
+    expect(panel.faceLink.lead()).toBe(candidate);
+
+    const viewers = fixture.debugElement.queryAll(By.directive(ImageViewerComponent));
+    const ref = viewers.map((v) => v.componentInstance as ImageViewerComponent).find((v) => v !== candidate)!;
+    expect(ref.link()).toBe(panel.faceLink);
+    expect(ref.linkAs()).toBe('follow');
+  });
+
+  it('takes the candidate off the link when the layout is turned off', async () => {
+    await show(face);
+    toggle()!.click();
+    await settleZoneless(fixture);
+    expect(fixture.componentInstance.imageViewer()!.link()).toBeNull();
+    expect(fixture.componentInstance.faceLink.lead()).toBeNull();
+    httpMock.match((r) => r.url === '/api/settings');
   });
 
   it('offers nothing on an image, or on a face with no detector active', async () => {
@@ -264,6 +304,8 @@ describe('CenterPanelComponent Face compare', () => {
       expect(ref.datasetId()).toBe('photos');
       const refBox = ref.fitBox()!;
       [0, 0.1, 0.4, 0.5].forEach((v, i) => expect(refBox[i]).toBeCloseTo(v, 9));
+      // The landmarks were measured on the levelled crop, not on the photo.
+      expect(candidate.landmarks()).toBeNull();
     });
 
     it('goes back to the crops when turned off', async () => {

@@ -77,10 +77,14 @@ export class LabelImporterModalComponent implements OnDestroy {
   private readonly importersResource = rxResource({
     stream: () => this.labelImportersApi.list(),
   });
+  // Behind `hasValue()`: `value()` throws once the read fails (#5661), which
+  // took the "Failed to load" message below down with it.
   readonly importers = computed<LabelImporterEntry[]>(() =>
-    (this.importersResource.value() ?? []).filter((imp) => !imp.hidden_from_picker),
+    (this.importersResource.hasValue() ? this.importersResource.value() : []).filter((imp) => !imp.hidden_from_picker),
   );
   readonly loading = computed(() => this.importersResource.isLoading());
+  /** The list read failed, so an empty list says nothing about what exists. */
+  readonly listFailed = computed(() => this.importersResource.error() != null);
 
   selectedImporter: LabelImporterEntry | null = null;
   formValues: Record<string, string> = {};

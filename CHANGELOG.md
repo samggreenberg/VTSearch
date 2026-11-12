@@ -31,6 +31,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   so, so you know to expect a weaker comparison. For API users: `POST /api/medias/batch` now carries a face's
   `face_hard_view` verdict, and the new `GET /api/server-media-files/{filename}/face-hard-view` gives one for an
   example picture.
+- **The reference face is shown the same size and in the same place as the face you are voting on, and the two
+  zoom together** (issue #5647). In the Face compare layout, one face could fill its crop while the other sat small
+  in a corner. The reference is now enlarged or shrunk, and moved, so its eyes sit where the candidate's do and
+  its eyes-to-mouth distance is the same; it is not stretched or bent. Zooming or dragging either face moves both,
+  so zooming in on one face's ear shows the other's; each still turns on its own, and **Next** keeps the zoom. It
+  needs the eye and mouth points Face datasets now keep (#5644): a face from an older dataset, or a reference that
+  is your example picture, is shown at its own size and zooms on its own, as before. Under **Wider** the photos
+  are not levelled like the crops, so they are not matched either.
 - **See the ears and hairline of both faces while comparing them** (issue #5645). In the Face compare layout,
   **Wider** shows the reference and the face you are voting on from the photos they were cut from, with twice as
   much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is
@@ -53,7 +61,7 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 - **Face datasets keep where each face's eyes, nose and mouth are** (issue #5644). Turning photos into faces now
   saves five points on every face crop (the two eyes, the nose tip and the two corners of the mouth), which the
-  compare view will use to show a reference face at the same size and position as the face you are voting on.
+  compare view uses to show a reference face at the same size and position as the face you are voting on.
   Face datasets made before this keep working; re-import one to give its faces the points. For API users: `POST
   /api/medias/batch` returns them as `face_landmarks`.
 - **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening
@@ -87,6 +95,21 @@ what is on `dev` but not yet on `main`; each release dates that section
   one, but they now do it by filling the browser's cache, so a picture you come back to is not fetched again.
   For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
   max-age=86400`, and answers `304` to a matching `If-None-Match`.
+
+### Fixed
+
+- **The app keeps working when your saved settings fail to load** (issue #5658). When the app could not fetch your
+  settings, every screen that reads them hit an error: Browse could stay on "Loading map…" for good, and thumbnail
+  sizes, panel widths and the other per-media-type preferences stopped working. They now show their defaults until
+  your settings load. If settings that had loaded fail to load again, the app keeps using the ones it has. A
+  per-media-type preference you change while no settings have loaded is not saved: saving it then would have erased
+  that preference for every other media type.
+- **More screens keep working when a request fails** (issue #5661). The fault behind #5658 was in six more places.
+  If the media list could not be fetched, every view that shows it hit an error; they now show an empty grid. The
+  Export dialog worked only while all three of its requests succeeded. Now a failed exporter list still leaves the
+  Clipboard tab, failed labels show an empty preview, and a missing dataset name is left out of the default
+  filename. The Import Settings, Export Settings and Import Labels dialogs now show their "Failed to load …" message
+  when their list cannot be fetched. Before, that message never appeared.
 
 ## 2026-11-10
 

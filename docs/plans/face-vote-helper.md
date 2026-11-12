@@ -188,6 +188,16 @@ exists; this plan adds nothing for it.
   `source-photo.service.ts`), through `vt-image-viewer`'s `fitBox`. The photo
   is shown as taken: the converter does not keep the roll angle it levelled
   the crop by, so the photo cannot be turned to match.
+- **The two faces registered, zoom linked.** When both crops have landmarks,
+  the reference is resized and shifted so the eye midpoints coincide and the
+  eye-to-mouth distances match, and the two panes zoom and pan together
+  through a `ViewLink` the centre panel hands both viewers
+  (`components/center-panel/image-viewer/face-link.ts`). The candidate's
+  viewer leads; a view is a point of *face space* (eye midpoint at the origin,
+  one eye-to-mouth distance per unit) at the pane's centre plus a scale, so
+  zooming both panes to a region is one `FaceView` handed to the lead.
+  Rotation stays per pane. Not under **Wider**, where the photos are not
+  levelled.
 - **The checklist.** Down the right of the compare layout,
   `vt-face-checklist` (`components/center-panel/face-checklist/`) lists five
   rows in diagnostic order, worded from the FISWG list: marks, ears, nose,
@@ -199,28 +209,12 @@ exists; this plan adds nothing for it.
 
 ## Design
 
-### Linked zoom
-
-Zoom and pan are **linked**: zooming to the candidate's left ear zooms the
-reference to the same place. This is what makes part-by-part comparison
-quick, and it depends on the two faces being registered (below). Today each
-pane zooms on its own.
-
-### Registering the two faces
-
-Both crops are already levelled. What is missing is scale and position: one
-face may fill its crop and the other sit small in a corner. With each face's
-five landmarks, the frontend scales and shifts the reference so the two eye
-midpoints coincide and the eye-to-mouth distances match. That is a resize
-and a shift with the aspect ratio kept, which both standards allow. The two
-faces stay in their own panes.
-
-The landmarks are each crop's `face_landmarks`. Existing Face datasets have
-none and show the unregistered layout until re-imported.
+### Registering under Wider
 
 Under **Wider** the panes show the unlevelled photos, so the landmarks, which
-are measured on the levelled crop, do not land on them. Registering there
-needs the crop's roll angle, which the converter does not keep yet.
+are measured on the levelled crop, do not land on them, and the two panes
+zoom on their own. Registering there needs the crop's roll angle, which the
+converter does not keep yet.
 
 ### The checklist's rows zoom
 

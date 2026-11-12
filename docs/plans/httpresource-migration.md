@@ -98,6 +98,12 @@ conversions.
   `error()` from the resource; templates and consumers read the signals.
   Per-service compat shims (a sync getter, a `toObservable` bridge) are **not**
   kept — migrate caller and callee together (repo "no shims" rule).
+- **Read `value()` behind `hasValue()`.** A resource's `value()` throws
+  `ResourceValueError` in the error state, so `resource.value() ?? fallback`
+  throws at every reader once the request fails. Write
+  `resource.hasValue() ? resource.value() : fallback`, and give the conversion a
+  spec that flushes a 500 and asserts nothing throws (see
+  [`docs/FRONTEND.md`](../FRONTEND.md) §5).
 - **Consumer migration.** Every `x$.subscribe(v => …)` becomes a **constructor
   `effect()`** that reads the signal; effects auto-dispose with the component, so
   the matching `takeUntilDestroyed()` / `DestroyRef` / `OnDestroy` plumbing is

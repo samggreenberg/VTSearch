@@ -40,7 +40,7 @@
   [min]="viewer().minZoom"
   [max]="viewer().maxZoom"
   [step]="viewer().zoomStep"
-  [value]="viewer().zoom()"
+  [value]="viewer().shownZoom()"
   (input)="viewer().onZoomInput($event)"
   title="Zoom"
   aria-label="Zoom level"
