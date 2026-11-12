@@ -38,10 +38,14 @@ export class SettingsExporterModalComponent implements OnDestroy {
   private readonly exportersResource = rxResource({
     stream: () => this.settingsIoApi.listExporters(),
   });
+  // Behind `hasValue()`: `value()` throws once the read fails (#5661), which
+  // took the "Failed to load" message below down with it.
   readonly exporters = computed<SettingsExporterEntry[]>(() =>
-    (this.exportersResource.value() ?? []).filter((exp) => !exp.hidden_from_picker),
+    (this.exportersResource.hasValue() ? this.exportersResource.value() : []).filter((exp) => !exp.hidden_from_picker),
   );
   readonly loading = computed(() => this.exportersResource.isLoading());
+  /** The list read failed, so an empty list says nothing about what exists. */
+  readonly listFailed = computed(() => this.exportersResource.error() != null);
 
   selectedExporter: SettingsExporterEntry | null = null;
   formValues: Record<string, string> = {};

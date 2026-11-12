@@ -39,8 +39,22 @@ export class MediaStateService {
     stream: () => this.mediasApi.getMediaIds(),
   });
 
-  /** The dataset-wide media stubs; empty until the first successful load (or after `clear()`). */
-  readonly mediasSignal = computed<MediaIdsListResponse[]>(() => this.resource.value() ?? []);
+  /**
+   * The dataset-wide media stubs; empty until the first successful load (or
+   * after `clear()`). **Never throws.** The resource's `value()` throws
+   * `ResourceValueError` in the error state, so it is read only behind
+   * `hasValue()`, which is `false` there.
+   *
+   * A failed load reads as empty, even when an earlier load succeeded. That is
+   * deliberate, unlike `SettingsStateService.settingsSignal`, which keeps its
+   * last good value: a reload here is nearly always a pair switch (see
+   * {@link loadMedias}), and media ids are per-dataset, so the list kept from
+   * the last good load would be another dataset's ids rendered against this
+   * pair (#3489). The failed request toasts through the interceptor chain.
+   */
+  readonly mediasSignal = computed<MediaIdsListResponse[]>(() =>
+    this.resource.hasValue() ? this.resource.value() : [],
+  );
 
   /** True while ``/api/medias/ids`` is in flight. Drives skeleton loaders in
    *  the media list/grid. */

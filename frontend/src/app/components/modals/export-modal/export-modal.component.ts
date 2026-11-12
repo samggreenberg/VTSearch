@@ -128,7 +128,9 @@ export class ExportModalComponent implements OnInit {
   // labels read is input-derived, so it waits for `ngOnInit` to set
   // `serverFilter` and flip `labelsReady`. All three wrap the generated-client
   // methods so the interceptor chain still applies, replacing the old
-  // `ngOnInit` subscribes + teardown plumbing.
+  // `ngOnInit` subscribes + teardown plumbing. Each is read behind
+  // `hasValue()`: a resource's `value()` throws once its read fails (#5661),
+  // and every read below has a fallback that keeps the modal usable.
   private readonly statusResource = rxResource({
     stream: () => this.datasetsRegistryApi.getStatus(),
   });
@@ -155,7 +157,7 @@ export class ExportModalComponent implements OnInit {
     // is the framework saying "this one cannot read a labelset". Offering an
     // exporter that can't is how a labelset email used to go out empty and
     // still report success (#3219).
-    (this.exportersResource.value() ?? []).filter(
+    (this.exportersResource.hasValue() ? this.exportersResource.value() : []).filter(
       (e) =>
         !e.hidden_from_picker &&
         (e.supported_payloads ?? []).includes('labelset'),
@@ -164,7 +166,7 @@ export class ExportModalComponent implements OnInit {
 
   /** Labels fetched from the server. */
   private readonly labelsList = computed<LabeledElement[]>(
-    () => this.labelsResource.value()?.labels ?? [],
+    () => (this.labelsResource.hasValue() ? this.labelsResource.value().labels : []),
   );
   readonly labelsLoaded = computed(
     () =>
@@ -219,7 +221,7 @@ export class ExportModalComponent implements OnInit {
 
   /** Dataset display name for default filenames. */
   private readonly datasetName = computed(
-    () => this.statusResource.value()?.display_name || '',
+    () => (this.statusResource.hasValue() && this.statusResource.value().display_name) || '',
   );
 
   /** Base columns that are always present. */

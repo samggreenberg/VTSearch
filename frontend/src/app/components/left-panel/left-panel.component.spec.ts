@@ -390,6 +390,23 @@ describe('LeftPanelComponent', () => {
       await settleResource();
       expect(component.mediaTypeName()).toBe('Sound Clips');
     });
+
+    // #5661: the resource's `value()` throws once the read fails, and the
+    // header read it straight through, so a failed media-types read threw at
+    // every header binding instead of keeping the fallback.
+    it('keeps the capitalized fallback when the type metadata fails to load', async () => {
+      const httpMock = TestBed.inject(HttpTestingController);
+      TestBed.tick();
+      setMedias([stub('audio')]);
+      const reqs = httpMock.match((r) => r.url.includes('/api/media-types'));
+      expect(reqs.length).toBeGreaterThan(0);
+      reqs.forEach((r) =>
+        r.flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' }),
+      );
+      await settleResource();
+      expect(component.mediaTypeName()).toBe('Audio');
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Audios (1)');
+    });
   });
 
   /**

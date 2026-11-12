@@ -159,4 +159,22 @@ describe('SettingsExporterModalComponent', () => {
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('bucket listing failed');
   });
+
+  // #5661: an `rxResource`'s `value()` throws once its read fails, and the
+  // exporter list read it straight through. So a failed list read threw from the
+  // template, and the "Failed to load" message beside the list never rendered.
+  it('shows "Failed to load settings exporters" when the list read fails', async () => {
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/settings-exporters')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await settleZoneless(fixture);
+
+    expect(component.exporters()).toEqual([]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.error-text')?.textContent).toContain('Failed to load settings exporters');
+    // An empty list says nothing about what exists when the read failed.
+    expect(el.textContent).not.toContain('No settings exporters available');
+    expect(el.querySelectorAll('.picker-card').length).toBe(0);
+  });
 });

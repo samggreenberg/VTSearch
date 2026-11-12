@@ -3,7 +3,7 @@
     <div class="exporter-picker">
       @if (loading()) {
         <p class="empty-state">Loading exporters…</p>
-      } @else if (exporters().length === 0) {
+      } @else if (exporters().length === 0 && !listFailed()) {
         <p class="empty-state">No settings exporters available.</p>
       } @else {
         @for (exp of exporters(); track exp.name) {

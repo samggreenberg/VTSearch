@@ -119,6 +119,47 @@ describe('MediaStateService', () => {
     expect(service.mediasSignal()).toEqual(mockMedias);
   });
 
+  /**
+   * #5661: an `rxResource`'s `value()` throws once its loader fails, so reading
+   * it straight through left every `mediasSignal()` reader throwing after a
+   * failed `GET /api/medias/ids`, and this store is app-wide.
+   */
+  describe('after a failed load (#5661)', () => {
+    async function failLoad() {
+      service.loadMedias();
+      TestBed.tick();
+      httpMock
+        .expectOne('/api/medias/ids')
+        .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+      await settleResource();
+    }
+
+    it('a failed first load reads as empty, without throwing', async () => {
+      await failLoad();
+      expect(service.isLoading()).toBe(false);
+      expect(service.mediasSignal()).toEqual([]);
+      expect(service.getMedia(1)).toBeNull();
+    });
+
+    // A reload is nearly always a pair switch, so the kept list would be the
+    // last pair's ids rendered against this one (#3489).
+    it('a failed reload reads as empty rather than keeping the last list', async () => {
+      load();
+      await settleResource();
+      expect(service.mediasSignal()).toEqual(mockMedias);
+
+      await failLoad();
+      expect(service.mediasSignal()).toEqual([]);
+    });
+
+    it('a reload after a failed load brings the list in', async () => {
+      await failLoad();
+      load();
+      await settleResource();
+      expect(service.mediasSignal()).toEqual(mockMedias);
+    });
+  });
+
   it('selectedId signal should update on select', () => new Promise<void>((done) => {
     expect(service.selectedId()).toBeNull();
     service.selectMedia(5);
