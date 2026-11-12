@@ -9,7 +9,6 @@ import { catchError, tap, throwError } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
 import { DatasetStateService } from '../services/dataset-state.service';
-import { DetectorSharingFlowsService } from '../services/detector-sharing-flows.service';
 import { PairRecoveryService } from '../services/pair-recovery.service';
 import { ErrorContext, ToastService } from '../services/toast.service';
 
@@ -70,8 +69,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const ctx = inject(ActiveContextService);
   const connection = inject(ConnectionStateService);
   const pairRecovery = inject(PairRecoveryService);
-  // Resolved only when a Fork is clicked: the flows service reaches the
-  // network through `HttpClient`, which this interceptor is part of.
+  // Resolved only when a Fork is clicked (see `forkReadOnly`).
   const injector = inject(Injector);
 
   // Circuit breaker: while offline, suppress every request except the
@@ -166,14 +164,27 @@ function toastReadOnly(toast: ToastService, injector: Injector, parsed: ParsedBo
       ? {
           label: 'Fork',
           title: 'Make a copy of your own that you can edit',
-          onClick: () => {
-            const name = injector.get(DatasetStateService).detectorById().get(id)?.name;
-            void injector.get(DetectorSharingFlowsService).fork({ id, name }, { askName: true });
-          },
+          onClick: () => forkReadOnly(injector, id),
         }
       : undefined,
     dedupKey: `http:409:${DETECTOR_READ_ONLY}:${id}`,
   });
+}
+
+/**
+ * The read-only toast's Fork. The flows service is imported here, at the
+ * click, and never statically: every interceptor is on the eager path, and a
+ * static import put the whole sharing stack there with it (the flows, the
+ * capability probe, the sharing API and its nine endpoints; ~6kB of the
+ * initial bundle, #5657) for a toast few sessions ever raise. It is resolved
+ * from the injector rather than injected for a second reason too: it reaches
+ * the network through `HttpClient`, which this interceptor is part of.
+ * Returns the fork's promise so a caller can await it.
+ */
+async function forkReadOnly(injector: Injector, id: string): Promise<void> {
+  const { DetectorSharingFlowsService } = await import('../services/detector-sharing-flows.service');
+  const name = injector.get(DatasetStateService).detectorById().get(id)?.name;
+  await injector.get(DetectorSharingFlowsService).fork({ id, name }, { askName: true });
 }
 
 interface ParsedBody {

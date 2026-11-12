@@ -309,7 +309,7 @@ describe('errorInterceptor: a read-only detector', () => {
     remote_owner: 'ana',
   };
 
-  it('answers a 409 detector_read_only with a toast whose action forks the detector', () => {
+  it('answers a 409 detector_read_only with a toast whose action forks the detector', async () => {
     let caught: HttpErrorResponse | undefined;
     http.post('/api/votes', {}).subscribe({ error: (e: HttpErrorResponse) => (caught = e) });
     httpMock.expectOne('/api/votes').flush(readOnlyBody, { status: 409, statusText: 'Conflict' });
@@ -322,7 +322,9 @@ describe('errorInterceptor: a read-only detector', () => {
     expect(shown.message).toBe(readOnlyBody.message);
     expect(shown.action.label).toBe('Fork');
 
-    shown.action.onClick();
+    // The flows service is imported at the click (#5657), so the fork lands
+    // once that import resolves; the action returns its promise.
+    await shown.action.onClick();
     expect(fork).toHaveBeenCalledWith(expect.objectContaining({ id: 'd1' }), { askName: true });
   });
 
