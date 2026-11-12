@@ -1,5 +1,5 @@
 import { FaceLandmarks, faceAnchor, faceFrame, faceShape } from '../image-viewer/face-link';
-import { innerFace } from '../face-checklist/face-regions';
+import { skinPatches } from '../face-checklist/face-regions';
 
 /**
  * Evening out how two faces look in the Face compare layout (#5674, #5675;
@@ -19,17 +19,22 @@ import { innerFace } from '../face-checklist/face-regions';
  * the whole picture, measured where it should be and capped so neither face
  * is pushed far from how it was taken.
  *
- * - **Exposure** is measured on the inner face ({@link innerFace}), where the
- *   features are: darkness hides a mole. Its median luminance is brought to
- *   {@link EXPOSURE_TARGET} by a gamma curve, which lifts a dark face without
- *   clipping its highlights.
- * - **Contrast** is the inner face's spread, its 5th to 95th percentile,
- *   brought to {@link CONTRAST_TARGET} by a stretch about the median.
- * - **White balance** is measured on the whole crop, the scene, never on the
- *   skin alone: two people's skin should keep its difference. It is a gain
- *   per channel that makes the light grey, keeping the crop's luminance, with
- *   the light's colour read from the crop's brightest pixels
- *   ({@link lightOf}).
+ * Everything is measured on the face's skin and nowhere else: small patches
+ * on the forehead, the bridge of the nose and each visible cheek, placed from
+ * the landmarks ({@link skinBoxes}). The wall behind a person, white or black,
+ * their hair, and their eyes, brows and lips never count.
+ *
+ * - **Exposure** brings the skin's median luminance to {@link EXPOSURE_TARGET}
+ *   by a gamma curve, which lifts a dark face without clipping its
+ *   highlights: darkness hides a mole.
+ * - **Contrast** brings the skin's spread, its 5th to 95th percentile (how
+ *   unevenly the light falls across the face), to {@link CONTRAST_TARGET} by a
+ *   stretch about the median.
+ * - **White balance** moves the skin's mean colour toward
+ *   {@link TYPICAL_SKIN} at its own luminance ({@link skinBalance}), a gain per
+ *   channel. Read from the skin, it cannot tell a cast from a person's own
+ *   colour, so it draws two people's skin toward one colour as far as its
+ *   caps let it.
  *
  * Both faces move, each toward the same fixed targets, rather than one toward
  * the other: a dark candidate is lifted too, and neither face becomes the
@@ -42,11 +47,11 @@ import { innerFace } from '../face-checklist/face-regions';
 
 /** The on/off choices, one per standardization (the `face_even_out` setting). */
 export interface EvenOutChoices {
-  /** Bring each face's inner-face median luminance to a common target. */
+  /** Bring each face's skin to a common median luminance. */
   readonly exposure: boolean;
-  /** Bring each face's inner-face spread to a common target. */
+  /** Bring each face's skin to a common spread of luminance. */
   readonly contrast: boolean;
-  /** Take each picture's colour cast out, from its own scene. */
+  /** Move each face's skin toward a typical skin colour, taking a cast out. */
   readonly white_balance: boolean;
   /** Show both faces in greyscale when either is a greyscale photo. */
   readonly greyscale_either: boolean;
@@ -84,33 +89,48 @@ export function evenOutChoices(stored: Partial<Record<EvenOutChoice, unknown>> |
 /*
  * The targets and the caps, all in sRGB-encoded units (0 to 1), the space the
  * pixels are read in and the filter is applied in. The targets are the median
- * face's, measured on the 253 face crops of the screenshot harness's
- * Celebrities in Context slice (inner-face median 0.52, spread 0.50), so a
- * typical face is barely changed (FISWG 4.4's minimum). The caps reach about
- * the 10th and 90th percentiles of what those crops would need, and were
+ * face's skin, measured on the 253 face crops of the screenshot harness's
+ * Celebrities in Context slice (skin luminance 0.64, spread 0.21, colour
+ * 1.37 : 1 : 0.85), so a typical face is barely changed (FISWG 4.4's
+ * minimum). The exposure and colour caps reach about the 10th and 90th
+ * percentiles of what those crops would need. The stretch's are tighter: the
+ * skin's spread runs from 0.11 to 0.50 across them, and stretching a flat face
+ * twice over to match would clip its hair and its background. All were
  * checked by eye in Chromium.
  */
 
-/** The inner face's median luminance that exposure brings each face to. */
-export const EXPOSURE_TARGET = 0.5;
+/** The skin's median luminance that exposure brings each face to. */
+export const EXPOSURE_TARGET = 0.64;
 /** The gamma curve's exponent is kept in here: under 1 lifts, over 1 darkens. */
-export const GAMMA_MIN = 0.55;
-export const GAMMA_MAX = 1.8;
-/** The inner face's spread, 5th to 95th percentile, that contrast brings each face to. */
-export const CONTRAST_TARGET = 0.5;
+export const GAMMA_MIN = 0.5;
+export const GAMMA_MAX = 2;
+/** The skin's spread, 5th to 95th percentile, that contrast brings each face to. */
+export const CONTRAST_TARGET = 0.21;
 /** The contrast stretch about the median is kept in here. */
 export const STRETCH_MIN = 0.75;
 export const STRETCH_MAX = 1.5;
 /** Each channel's white-balance gain is kept in here. */
-export const BALANCE_MIN = 0.82;
-export const BALANCE_MAX = 1.22;
+export const BALANCE_MIN = 0.83;
+export const BALANCE_MAX = 1.2;
 /**
- * The share of a picture's pixels, the brightest, whose mean colour is taken
- * as the light's ({@link lightOf}).
+ * The colour white balance moves each face's skin toward, at the skin's own
+ * luminance: the median skin colour of those crops, in proportion only (its
+ * scale does not matter).
  */
-export const BRIGHT_SHARE = 0.05;
-/** A pixel with a channel at or over this is clipped: its colour is not the light's. */
-const CLIPPED = 250;
+export const TYPICAL_SKIN: Rgb = [1.37, 1, 0.85];
+/**
+ * Where a face sits in a face crop, as fractions of it, in `face_landmarks`'
+ * order: the median of those crops' landmarks. A face with none of its own is
+ * read where these place it, since the face converter centres every crop on
+ * its face; an example picture framed otherwise is read in the wrong place.
+ */
+export const TYPICAL_LANDMARKS: FaceLandmarks = [
+  [0.34, 0.43],
+  [0.65, 0.43],
+  [0.5, 0.56],
+  [0.37, 0.66],
+  [0.64, 0.66],
+];
 /**
  * A picture is greyscale when the 99th percentile of its pixels' channel
  * disagreement, max(|R−G|, |G−B|), is at most this many levels of 255: a
@@ -121,9 +141,15 @@ export const GREY_TOLERANCE = 6;
 /** The share of pixels the greyscale test lets disagree by more (see {@link GREY_TOLERANCE}). */
 const GREY_OUTLIERS = 0.01;
 
-/** The percentiles the inner face's luminance is read at. */
+/** The percentiles the skin's luminance is read at. */
 const LOW_PERCENTILE = 0.05;
 const HIGH_PERCENTILE = 0.95;
+/**
+ * The skin's colour is the mean of its pixels between these luminance
+ * percentiles, so a shine, a mole or a stray hair does not tint it.
+ */
+const COLOUR_LOW = 0.1;
+const COLOUR_HIGH = 0.9;
 
 /** Rec. 709 luma weights, on the encoded values. */
 const LUMA: readonly [number, number, number] = [0.2126, 0.7152, 0.0722];
@@ -143,9 +169,9 @@ export interface Levels {
 /**
  * What a picture's pixels say, read once when it loads.
  *
- * `face` is the inner face's luminance as taken and with {@link balance}
- * applied, so the exposure and contrast parts of the map can be fitted with
- * white balance ticked or not; null with no landmarks to place it from.
+ * `face` is the skin's luminance as taken and with {@link balance} applied,
+ * so the exposure and contrast parts of the map can be fitted with white
+ * balance ticked or not; null when no skin patch lands on the picture.
  */
 export interface PixelMeasure {
   readonly grey: boolean;
@@ -162,37 +188,45 @@ export interface PixelBox {
 }
 
 /**
- * The inner face of *landmarks* on a picture *width* × *height* pixels, cut to
- * the picture; null with no usable landmarks, or when the box misses it.
+ * The skin patches of the face on a picture *width* × *height* pixels
+ * ({@link skinPatches}: forehead, nose bridge, each visible cheek), cut to the
+ * picture. Placed from *landmarks*, or from {@link TYPICAL_LANDMARKS} when
+ * they are not five usable points.
  */
-export function innerFaceBox(landmarks: FaceLandmarks | null | undefined, width: number, height: number): PixelBox | null {
-  const anchor = faceAnchor(landmarks);
+export function skinBoxes(landmarks: FaceLandmarks | null | undefined, width: number, height: number): readonly PixelBox[] {
+  const points = faceAnchor(landmarks) ? landmarks : TYPICAL_LANDMARKS;
+  const anchor = faceAnchor(points);
   const frame = anchor && faceFrame(anchor, width, height);
-  const shape = frame && faceShape(landmarks, width, height);
-  if (!frame || !shape) return null;
+  const shape = frame && faceShape(points, width, height);
+  if (!frame || !shape) return [];
   // Face space back to pixels: the inverse of `faceShape`'s placement.
-  const rect = innerFace(shape);
   const px = (x: number) => x * frame.unit + frame.x + width / 2;
   const py = (y: number) => y * frame.unit + frame.y + height / 2;
-  const box = {
-    x0: Math.max(0, Math.floor(px(rect.x0))),
-    y0: Math.max(0, Math.floor(py(rect.y0))),
-    x1: Math.min(width, Math.ceil(px(rect.x1))),
-    y1: Math.min(height, Math.ceil(py(rect.y1))),
-  };
-  return box.x1 > box.x0 && box.y1 > box.y0 ? box : null;
+  const boxes: PixelBox[] = [];
+  for (const patch of skinPatches(shape)) {
+    const box = {
+      x0: Math.max(0, Math.floor(px(patch.x0))),
+      y0: Math.max(0, Math.floor(py(patch.y0))),
+      x1: Math.min(width, Math.ceil(px(patch.x1))),
+      y1: Math.min(height, Math.ceil(py(patch.y1))),
+    };
+    if (box.x1 > box.x0 && box.y1 > box.y0) boxes.push(box);
+  }
+  return boxes;
 }
 
 /**
  * Read *data* (RGBA, *width* × *height*, as `getImageData` gives it): whether
- * it is greyscale, its white-balance gains, and the luminance of the inner
- * face *faceBox* when there is one. Transparent pixels are left out.
+ * it is greyscale, from all of it, and from the *skin* patches alone, the
+ * skin's luminance and the white-balance gains its colour asks for. Nothing
+ * outside the patches, the wall behind the face included, counts toward
+ * either. Transparent pixels are left out.
  */
 export function measurePixels(
   data: ArrayLike<number>,
   width: number,
   height: number,
-  faceBox: PixelBox | null,
+  skin: readonly PixelBox[],
 ): PixelMeasure {
   const end = Math.min(data.length, width * height * 4);
   let count = 0;
@@ -203,50 +237,44 @@ export function measurePixels(
     disagreement[Math.min(255, Math.max(Math.abs(data[i] - data[i + 1]), Math.abs(data[i + 1] - data[i + 2])))]++;
   }
   const grey = count > 0 && percentileOf(disagreement, count, 1 - GREY_OUTLIERS) <= GREY_TOLERANCE;
-  // A greyscale photo has no cast to take out, and its light reads grey anyway.
-  const light = grey ? null : lightOf(data, end);
-  const balance = light ? balanceFor(light) : NO_BALANCE;
-  return { grey, balance, face: faceBox ? faceLevels(data, width, faceBox, balance) : null };
+  const pixels = skinPixels(data, width, skin);
+  if (!pixels.length) return { grey, balance: NO_BALANCE, face: null };
+  // A greyscale photo has no colour to balance.
+  const balance = grey ? NO_BALANCE : skinBalance(skinColour(data, pixels));
+  return { grey, balance, face: skinLevels(data, pixels, balance) };
 }
 
 const NO_BALANCE: Rgb = [1, 1, 1];
 
-/**
- * The colour of the light *data* (RGBA, its first *end* entries) was taken
- * under, 0 to 1 per channel: the mean of its brightest {@link BRIGHT_SHARE}
- * of pixels, leaving out clipped ones. Null with no pixel to read.
- *
- * Not the mean of every pixel (grey-world), which a face crop biases: it is
- * mostly skin, so grey-world reads every face as lit warm and turns its skin
- * grey. On the 253 crops the targets were measured on, grey-world cooled the
- * median crop by 19% in red; its brightest pixels (highlights, the whites of
- * the eyes, a shirt) left it within 7%, and still followed a cast laid over
- * every crop to within 2%. That is the "bright pixels" estimate (Joze, Drew,
- * Finlayson & Rey 2012, *The role of bright pixels in illumination
- * estimation*); a clipped pixel says the sensor's limit, not the light.
- */
-export function lightOf(data: ArrayLike<number>, end: number = data.length): Rgb | null {
-  const histogram = new Array<number>(256).fill(0);
-  let count = 0;
-  let unclipped = true;
-  const level = (i: number) => Math.round(LUMA[0] * data[i] + LUMA[1] * data[i + 1] + LUMA[2] * data[i + 2]);
-  const counts = (i: number) =>
-    data[i + 3] >= MIN_ALPHA && (!unclipped || Math.max(data[i], data[i + 1], data[i + 2]) < CLIPPED);
-  for (let pass = 0; pass < 2 && count === 0; pass++) {
-    // Every pixel clipped (a blown-out picture): read them all rather than none.
-    unclipped = pass === 0;
-    for (let i = 0; i + 3 < end; i += 4) {
-      if (!counts(i)) continue;
-      histogram[level(i)]++;
-      count++;
+/** The offsets into *data* of the opaque pixels inside *boxes*. */
+function skinPixels(data: ArrayLike<number>, width: number, boxes: readonly PixelBox[]): number[] {
+  const offsets: number[] = [];
+  for (const box of boxes) {
+    for (let y = box.y0; y < box.y1; y++) {
+      for (let x = box.x0; x < box.x1; x++) {
+        const i = (y * width + x) * 4;
+        if (i + 3 < data.length && data[i + 3] >= MIN_ALPHA) offsets.push(i);
+      }
     }
   }
-  if (!count) return null;
-  const threshold = percentileOf(histogram, count, 1 - BRIGHT_SHARE);
+  return offsets;
+}
+
+function lumaAt(data: ArrayLike<number>, i: number): number {
+  return Math.round(LUMA[0] * data[i] + LUMA[1] * data[i + 1] + LUMA[2] * data[i + 2]);
+}
+
+/** The skin's colour, 0 to 1 per channel: the mean of its pixels between {@link COLOUR_LOW} and {@link COLOUR_HIGH} in luminance. */
+export function skinColour(data: ArrayLike<number>, pixels: readonly number[]): Rgb {
+  const histogram = new Array<number>(256).fill(0);
+  for (const i of pixels) histogram[lumaAt(data, i)]++;
+  const lo = percentileOf(histogram, pixels.length, COLOUR_LOW);
+  const hi = percentileOf(histogram, pixels.length, COLOUR_HIGH);
   const sums = [0, 0, 0];
   let n = 0;
-  for (let i = 0; i + 3 < end; i += 4) {
-    if (!counts(i) || level(i) < threshold) continue;
+  for (const i of pixels) {
+    const l = lumaAt(data, i);
+    if (l < lo || l > hi) continue;
     sums[0] += data[i];
     sums[1] += data[i + 1];
     sums[2] += data[i + 2];
@@ -256,40 +284,34 @@ export function lightOf(data: ArrayLike<number>, end: number = data.length): Rgb
 }
 
 /**
- * The per-channel gains that make *light* grey at its own luminance, each
- * kept within the caps. A channel with next to nothing in it gets no gain,
- * rather than a huge one.
+ * The per-channel gains that move *skin*'s colour to {@link TYPICAL_SKIN}'s
+ * at *skin*'s own luminance, each kept within the caps. A channel with next to
+ * nothing in it gets no gain, rather than a huge one.
+ *
+ * It reads the light from the skin, so it cannot tell a colour cast from a
+ * person's own colour: two people's skin is drawn toward one colour, as far
+ * as the caps let it. The owner's call (#5675), so that nothing behind the
+ * face, a white wall or a black one, sways it; the checklist says not to
+ * weigh skin tone.
  */
-export function balanceFor(light: Rgb): Rgb {
-  const luma = LUMA[0] * light[0] + LUMA[1] * light[1] + LUMA[2] * light[2];
-  return light.map((m) => (m > 1e-3 && luma > 1e-3 ? clamp(luma / m, BALANCE_MIN, BALANCE_MAX) : 1)) as unknown as Rgb;
+export function skinBalance(skin: Rgb): Rgb {
+  const luma = LUMA[0] * skin[0] + LUMA[1] * skin[1] + LUMA[2] * skin[2];
+  const typicalLuma = LUMA[0] * TYPICAL_SKIN[0] + LUMA[1] * TYPICAL_SKIN[1] + LUMA[2] * TYPICAL_SKIN[2];
+  return skin.map((m, c) =>
+    m > 1e-3 && luma > 1e-3 ? clamp((TYPICAL_SKIN[c] * luma) / (typicalLuma * m), BALANCE_MIN, BALANCE_MAX) : 1,
+  ) as unknown as Rgb;
 }
 
-/** The inner face's luminance levels, as taken and under *balance*; null when the box holds no pixel. */
-function faceLevels(
-  data: ArrayLike<number>,
-  width: number,
-  box: PixelBox,
-  balance: Rgb,
-): { raw: Levels; balanced: Levels } | null {
+/** The skin's luminance levels, as taken and under *balance*. */
+function skinLevels(data: ArrayLike<number>, pixels: readonly number[], balance: Rgb): { raw: Levels; balanced: Levels } {
   const raw = new Array<number>(256).fill(0);
   const balanced = new Array<number>(256).fill(0);
-  let count = 0;
   const [wr, wg, wb] = [LUMA[0] * balance[0], LUMA[1] * balance[1], LUMA[2] * balance[2]];
-  for (let y = box.y0; y < box.y1; y++) {
-    for (let x = box.x0; x < box.x1; x++) {
-      const i = (y * width + x) * 4;
-      if (i + 3 >= data.length || data[i + 3] < MIN_ALPHA) continue;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      raw[Math.round(LUMA[0] * r + LUMA[1] * g + LUMA[2] * b)]++;
-      balanced[Math.min(255, Math.round(wr * r + wg * g + wb * b))]++;
-      count++;
-    }
+  for (const i of pixels) {
+    raw[lumaAt(data, i)]++;
+    balanced[Math.min(255, Math.round(wr * data[i] + wg * data[i + 1] + wb * data[i + 2]))]++;
   }
-  if (!count) return null;
-  return { raw: levelsOf(raw, count), balanced: levelsOf(balanced, count) };
+  return { raw: levelsOf(raw, pixels.length), balanced: levelsOf(balanced, pixels.length) };
 }
 
 function levelsOf(histogram: readonly number[], count: number): Levels {

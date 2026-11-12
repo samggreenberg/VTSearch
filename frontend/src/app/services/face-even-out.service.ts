@@ -5,14 +5,17 @@ import {
   EvenOutChoices,
   PixelMeasure,
   evenOutChoices,
-  innerFaceBox,
   measurePixels,
+  skinBoxes,
 } from '../components/center-panel/face-even-out/even-out';
 import { FaceLandmarks } from '../components/center-panel/image-viewer/face-link';
 import { SettingsStateService } from './settings-state.service';
 
-/** What a picture is measured at: its long side drawn this many pixels. Enough
- *  for an inner face of a few thousand pixels, and quick to read. */
+/**
+ * What a picture is measured at: its long side drawn this many pixels, a
+ * small crop scaled up as a big one is scaled down, so a face's skin patches
+ * hold a few hundred pixels whatever its size, and are quick to read.
+ */
 const MEASURE_SIZE = 192;
 
 /** How many pictures' measures are kept, so stepping back to a face or a
@@ -41,9 +44,10 @@ export function measureKey(request: MeasureRequest): string {
  *
  * A picture is measured from its own URL, drawn small on a canvas: every
  * picture is same-origin (`/api/medias/<id>/image`, or an example's own
- * route), so its pixels can be read. A face is always measured on its crop,
- * even while Wider shows its photo: the map is global, so what the crop says
- * applies unchanged to the photo it was cut from.
+ * route), so its pixels can be read, and only its face's skin patches count
+ * (`even-out.ts`). A face is always measured on its crop, even while Wider
+ * shows its photo: the map is global, so what the crop's face says applies
+ * unchanged to the photo it was cut from.
  */
 @Injectable({ providedIn: 'root' })
 export class FaceEvenOutService {
@@ -129,7 +133,7 @@ function measureImage(img: HTMLImageElement, landmarks: FaceLandmarks | null | u
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   if (!(w > 0 && h > 0)) return null;
-  const scale = Math.min(1, MEASURE_SIZE / Math.max(w, h));
+  const scale = MEASURE_SIZE / Math.max(w, h);
   const width = Math.max(1, Math.round(w * scale));
   const height = Math.max(1, Math.round(h * scale));
   try {
@@ -140,7 +144,7 @@ function measureImage(img: HTMLImageElement, landmarks: FaceLandmarks | null | u
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, width, height);
     const { data } = ctx.getImageData(0, 0, width, height);
-    return measurePixels(data, width, height, innerFaceBox(landmarks, width, height));
+    return measurePixels(data, width, height, skinBoxes(landmarks, width, height));
   } catch {
     // A canvas the browser will not let be read: show the picture as taken.
     return null;

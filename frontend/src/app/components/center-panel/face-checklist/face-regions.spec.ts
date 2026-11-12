@@ -1,5 +1,5 @@
 import { FaceRect, FaceShape, faceShape } from '../image-viewer/face-link';
-import { FaceRegion, landmarkTurn, regionViews, sharedViews } from './face-regions';
+import { FaceRegion, landmarkTurn, regionViews, sharedViews, skinPatches } from './face-regions';
 
 /**
  * Where the checklist's rows zoom to (#5647): each part's rectangle of face
@@ -102,6 +102,39 @@ describe('face-regions', () => {
     // A crop that ends under the mouth has no chin.
     const chinless = face({ x0: -2.5, y0: -2.5, x1: 2.5, y1: 1.1 });
     expect(sharedViews(face(), chinless, 'lower')).toEqual([]);
+  });
+
+  describe('skin patches (#5675)', () => {
+    const inside = (rect: FaceRect, [x, y]: Point) => x > rect.x0 && x < rect.x1 && y > rect.y0 && y < rect.y1;
+
+    it('are the forehead, the nose bridge and both cheeks, none on an eye, the nose tip or the mouth', () => {
+      const frontal = face();
+      const patches = skinPatches(frontal);
+      expect(patches.length).toBe(4);
+      for (const patch of patches) {
+        for (const p of frontal.points) expect(inside(patch, p)).toBe(false);
+      }
+      // Forehead over the brows; the bridge between the eyes and the tip; a cheek under each eye.
+      expect(patches.filter((r) => r.y1 < -0.4).length).toBe(1);
+      expect(patches.some((r) => inside(r, [0, 0.3]))).toBe(true);
+      expect(patches.some((r) => inside(r, [-0.55, 0.5]))).toBe(true);
+      expect(patches.some((r) => inside(r, [0.55, 0.5]))).toBe(true);
+    });
+
+    it('leave out the cheek a turned head turns away', () => {
+      // The nose toward the image's left: the left cheek goes away.
+      const patches = skinPatches(face(ROOMY, -0.2));
+      expect(patches.length).toBe(3);
+      expect(patches.some((r) => inside(r, [-0.55, 0.5]))).toBe(false);
+      expect(patches.some((r) => r.x0 > 0.3)).toBe(true);
+    });
+
+    it('leave out a patch less than half of which is on the image', () => {
+      // An image cut off just under the eyes: no cheeks, nor the nose bridge's lower half.
+      const short = skinPatches(face({ x0: -2.5, y0: -2.5, x1: 2.5, y1: 0.25 }));
+      expect(short.length).toBe(1);
+      expect(short[0].y1).toBeLessThan(0);
+    });
   });
 
   it('shares only the ear both faces show', () => {
