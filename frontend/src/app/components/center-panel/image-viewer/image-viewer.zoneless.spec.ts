@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaPrefetchService } from '../../../services/media-prefetch.service';
+import { imageUrlsWhileImages } from '../../../services/media-prefetch.service';
 import { Media } from '../../../models/api.models';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
@@ -1174,16 +1174,15 @@ describe('ImageViewerComponent Escape guard', () => {
 });
 
 /**
- * The viewer's side of the review prefetch (#3896): paint held bytes at once,
- * and when the vote beat the prefetch, wait for that fetch rather than start a
- * second download of the same image.
+ * The viewer's side of the review prefetch (#3896). The prefetch warms the
+ * browser's HTTP cache (#5648), so the viewer has nothing to coordinate with
+ * it: it points the `<img>` at the very URL the prefetch fetched, and the cache
+ * answers. Pinned because a viewer that rewrote the URL (an object URL, a
+ * cache-busting query) would silently miss every warm.
  */
 describe('ImageViewerComponent with the review prefetch', () => {
   let component: ImageViewerComponent;
   let fixture: ComponentFixture<ImageViewerComponent>;
-  let held: Map<string, string>;
-  let inFlight: Map<string, { promise: Promise<string | null>; settle: (u: string | null) => void }>;
-  let released: string[];
 
   const media = (id: number): Media => ({
     id,
@@ -1194,86 +1193,36 @@ describe('ImageViewerComponent with the review prefetch', () => {
   });
 
   beforeEach(async () => {
-    held = new Map();
-    inFlight = new Map();
-    released = [];
-    const stub = {
-      resolve: (url: string) => {
-        const h = held.get(url);
-        if (h === undefined) return url;
-        held.delete(url);
-        return h;
-      },
-      claim: (url: string) => inFlight.get(url)?.promise ?? null,
-      release: (url: string) => void released.push(url),
-    };
     await configureZoneless({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService, { provide: MediaPrefetchService, useValue: stub }],
+      providers: [ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;
   });
 
-  const inFlightFor = (url: string) => {
-    let settle!: (u: string | null) => void;
-    const promise = new Promise<string | null>((r) => (settle = r));
-    inFlight.set(url, { promise, settle });
-    return settle;
-  };
-
-  it('paints held bytes without touching the network URL', () => {
-    held.set('/api/medias/5/image', 'blob:held/5');
-    fixture.componentRef.setInput('media', media(5));
-    TestBed.tick();
-    expect(component.imageSrc()).toBe('blob:held/5');
+  it('shows each item from the exact URL the prefetch warms', () => {
+    const ctx = TestBed.inject(ActiveContextService);
+    ctx.setActive('d1', 'm1');
+    for (const id of [4, 5]) {
+      fixture.componentRef.setInput('media', media(id));
+      TestBed.tick();
+      const [warmed] = imageUrlsWhileImages([id], () => 'image', (path) => ctx.mediaUrl(path));
+      expect(component.imageSrc()).toBe(warmed);
+    }
   });
 
-  it('waits for an in-flight prefetch instead of fetching again', async () => {
+  it('hides the previous image until the next one loads', () => {
     fixture.componentRef.setInput('media', media(4));
     TestBed.tick();
     component.onImageLoad();
+    expect(component.imageReady()).toBe(true);
 
-    const settle = inFlightFor('/api/medias/5/image');
     fixture.componentRef.setInput('media', media(5));
     TestBed.tick();
-    // Still the previous src, hidden: no second request for 5 was issued.
-    expect(component.imageSrc()).toBe('/api/medias/4/image');
+    expect(component.imageSrc()).toBe('/api/medias/5/image');
     expect(component.imageReady()).toBe(false);
-    // A late load event from the previous src must not unhide it under 5's id.
-    component.onImageLoad();
-    expect(component.imageReady()).toBe(false);
-
-    settle('blob:claimed/5');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(component.imageSrc()).toBe('blob:claimed/5');
     component.onImageLoad();
     expect(component.imageReady()).toBe(true);
-  });
-
-  it('falls back to the network URL when the prefetch fails', async () => {
-    const settle = inFlightFor('/api/medias/5/image');
-    fixture.componentRef.setInput('media', media(5));
-    TestBed.tick();
-    settle(null);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(component.imageSrc()).toBe('/api/medias/5/image');
-  });
-
-  it('releases the claim and ignores its bytes when the viewer moves on first', async () => {
-    const settle = inFlightFor('/api/medias/5/image');
-    fixture.componentRef.setInput('media', media(5));
-    TestBed.tick();
-    fixture.componentRef.setInput('media', media(6));
-    TestBed.tick();
-    expect(released).toEqual(['/api/medias/5/image']);
-    expect(component.imageSrc()).toBe('/api/medias/6/image');
-
-    settle('blob:claimed/5');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(component.imageSrc()).toBe('/api/medias/6/image');
   });
 });

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media, PayloadVariant } from '../../../models/api.models';
-import { MediaPrefetchService } from '../../../services/media-prefetch.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -69,7 +68,6 @@ const OFF_CANVAS_DRAW_EXCLUDED =
 })
 export class ImageViewerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
-  private mediaPrefetch = inject(MediaPrefetchService);
 
   readonly media = input.required<Media>();
   /**
@@ -172,9 +170,6 @@ export class ImageViewerComponent implements OnDestroy {
   private lastDatasetId = '';
   // And for an overriding source, which is the whole identity of what it shows.
   private lastSrcOverride = '';
-  /** The network URL whose in-flight prefetch this viewer is waiting on, or
-   *  `null`. See {@link showImage}. */
-  private claimedSrc: string | null = null;
 
   // Region voting state (UI only; see docs/ARCHITECTURE.md → "Embedder binding and routing").
   // These are signals because they are written from un-patched callbacks (window
@@ -251,7 +246,10 @@ export class ImageViewerComponent implements OnDestroy {
         (datasetId
           ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
           : this.activeContext.mediaUrl(path, { variant }));
-      this.showImage(src);
+      // A review flow may already have warmed this URL into the HTTP cache
+      // (`MediaPrefetchService`, #3896); the `<img>` is then answered from
+      // there, or joins the warm's download if it is still in flight.
+      this.imageSrc.set(src);
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.
       if (sameMedia) return;
@@ -262,62 +260,17 @@ export class ImageViewerComponent implements OnDestroy {
     });
   }
 
-  /**
-   * Point the `<img>` at `src`, preferring bytes the review prefetch (#3896)
-   * already holds.
-   *
-   * Three cases. The bytes are held: show them now, no request at all. They are
-   * still in flight (the vote beat the prefetch): wait for that fetch rather
-   * than starting a second download of the same image, and fall back to the
-   * network if it fails. Nothing is held: the network URL, i.e. the request
-   * this always made.
-   */
-  private showImage(src: string): void {
-    this.releaseClaim();
-    const held = this.mediaPrefetch.resolve(src);
-    if (held !== src) {
-      this.imageSrc.set(held);
-      return;
-    }
-    const pending = this.mediaPrefetch.claim(src);
-    if (!pending) {
-      this.imageSrc.set(src);
-      return;
-    }
-    this.claimedSrc = src;
-    void pending.then((objectUrl) => {
-      // The viewer moved on while the bytes were in the air.
-      if (this.claimedSrc !== src) return;
-      this.claimedSrc = null;
-      this.imageSrc.set(objectUrl ?? src);
-    });
-  }
-
-  /** Drop a pending {@link showImage} claim, so a fetch for an item no longer
-   *  on screen goes back to being an ordinary prefetch. */
-  private releaseClaim(): void {
-    if (this.claimedSrc === null) return;
-    this.mediaPrefetch.release(this.claimedSrc);
-    this.claimedSrc = null;
-  }
-
   onImageLoad(): void {
-    // While a claim is pending the `<img>` still carries the previous item's
-    // src; a load or error from it must not unhide the element under the new
-    // item's id.
-    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
     this.recomputeRenderedSize();
     this.attachWrapResizeObserver();
   }
 
   onImageError(): void {
-    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
   }
 
   ngOnDestroy(): void {
-    this.releaseClaim();
     this.removeWindowMouseListeners();
     this.removeWindowKeyListeners();
     if (this.resizeObserver) {
