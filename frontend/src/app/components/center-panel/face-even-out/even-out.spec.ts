@@ -103,7 +103,7 @@ describe('even-out', () => {
   }
 
   /** The mean colour of *box* on *data*, 0..1. */
-  function meanIn(data: Uint8ClampedArray, box: PixelBox): Rgb {
+  function averageOf(data: Uint8ClampedArray, box: PixelBox): Rgb {
     const sums = [0, 0, 0];
     let n = 0;
     for (let y = box.y0; y < box.y1; y++) {
@@ -274,14 +274,14 @@ describe('even-out', () => {
       const daylight = litCrop(lightSkin);
       const indoor = litCrop(lightSkin, warm);
       const box = daylight.box;
-      const castBefore = ratio(meanIn(indoor.data, box)) / ratio(meanIn(daylight.data, box));
-      const castAfter = ratio(meanIn(shown(indoor), box)) / ratio(meanIn(shown(daylight), box));
+      const castBefore = ratio(averageOf(indoor.data, box)) / ratio(averageOf(daylight.data, box));
+      const castAfter = ratio(averageOf(shown(indoor), box)) / ratio(averageOf(shown(daylight), box));
       expect(castBefore).toBeGreaterThan(1.3);
       expect(Math.abs(castAfter - 1)).toBeLessThan(0.25 * Math.abs(castBefore - 1));
 
       // Two people in the same light: their skins differ as much after as before.
-      const before = ratio(meanIn(litCrop(darkSkin).data, box)) - ratio(meanIn(daylight.data, box));
-      const after = ratio(meanIn(shown(litCrop(darkSkin)), box)) - ratio(meanIn(shown(daylight), box));
+      const before = ratio(averageOf(litCrop(darkSkin).data, box)) - ratio(averageOf(daylight.data, box));
+      const after = ratio(averageOf(shown(litCrop(darkSkin)), box)) - ratio(averageOf(shown(daylight), box));
       expect(after).toBeCloseTo(before, 1);
       expect(after).toBeGreaterThan(0.2);
     });
