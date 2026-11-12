@@ -22,6 +22,21 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **The two faces in the Face compare layout are evened out before you compare them** (issues #5674, #5675). Two
+  photos of one person taken in different light look less alike than the person is, so each face is now shown
+  through one adjustment over its whole picture, measured on the face's skin alone: small patches on the forehead,
+  the bridge of the nose and the cheeks, placed from the eye, nose and mouth points, so the wall behind a person,
+  white or black, and their hair, eyes and lips never count. **Exposure** and **Contrast** bring both faces' skin
+  to the same brightness and contrast, and **White balance** moves each face's skin toward a typical skin colour,
+  which takes a lamp's orange or shade's blue out; read from the skin, it also narrows the difference between two
+  people's skin colour. A face without the points (an example picture, or one from an older dataset) is measured
+  where a face crop's face usually sits. Every change is capped, so neither face is pushed far from how it was
+  taken. When either face is a black-and-white photo, both
+  are shown in greyscale, since a colour face beside a grey one looks more alike than it is. Each is a checkbox
+  under **Even out the photos** at the foot of the What to compare strip, all ticked but **Both in greyscale**,
+  which greys any pair; **Reference turned the same way** there turns off #5670's choice of reference. Hold `O` to
+  see both faces as taken. The stored pictures are never changed, and nothing changes what the detector sees. The
+  choices are saved in a new per-user `face_even_out` setting.
 - **The reference face is one turned the same way as the face you are voting on** (issue #5670). In the Face
   compare layout, the reference was always the clearest face of your Good pile, so a face turned to show its left
   ear could be shown beside one turned to show its right. The app now reads which way each head is turned from its

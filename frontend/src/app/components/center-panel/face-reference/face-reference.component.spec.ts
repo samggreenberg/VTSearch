@@ -12,6 +12,8 @@ import { SourceLookup, SourcePhotoService } from '../../../services/source-photo
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { FaceEvenOutService, MeasureRequest } from '../../../services/face-even-out.service';
+import { EVEN_OUT_DEFAULTS, EvenOutChoices, PixelMeasure, toneMap } from '../face-even-out/even-out';
 
 /**
  * The reference pane of the Face compare layout (#5642): which reference it
@@ -44,8 +46,20 @@ describe('FaceReferenceComponent', () => {
     [0.55, 0.6],
   ];
   let lookup: ReturnType<typeof vi.fn<(id: number) => Observable<SourceLookup>>>;
+  const choices = signal<EvenOutChoices>(EVEN_OUT_DEFAULTS);
+  /** What each picture's pixels say, by URL path; none is not read yet. */
+  let measures: Record<string, PixelMeasure>;
+  let measured: ReturnType<typeof vi.fn<(request: MeasureRequest | undefined) => Observable<PixelMeasure | null>>>;
+  const WARM: PixelMeasure = {
+    grey: false,
+    balance: [0.9, 1, 1.15],
+    face: { raw: { low: 0.1, median: 0.3, high: 0.5 }, balanced: { low: 0.1, median: 0.31, high: 0.52 } },
+  };
 
   beforeEach(async () => {
+    choices.set(EVEN_OUT_DEFAULTS);
+    measures = {};
+    measured = vi.fn((request) => of(request ? (measures[request.src.split('?')[0]] ?? null) : null));
     pool.set([media(1), media(2), media(3)]);
     pinned.set(null);
     hard.set({});
@@ -66,6 +80,7 @@ describe('FaceReferenceComponent', () => {
         ...provideHttpTesting(),
         { provide: FaceReferenceService, useValue: refs },
         { provide: SourcePhotoService, useValue: { lookup } },
+        { provide: FaceEvenOutService, useValue: { choices, measured } },
         {
           provide: MediaMetadataCacheService,
           useValue: {
@@ -137,6 +152,16 @@ describe('FaceReferenceComponent', () => {
     expect(refs.pool).toHaveBeenLastCalledWith(0);
   });
 
+  it('asks for the Face Quality order alone with Reference turned the same way unticked (#5674)', async () => {
+    fixture.componentRef.setInput('candidateLandmarks', [[0.4, 0.4], [0.6, 0.4], [0.42, 0.5], [0.45, 0.6], [0.55, 0.6]]);
+    await settleZoneless(fixture);
+    expect(refs.pool.mock.lastCall![0]).toBeLessThan(-0.5);
+
+    choices.set({ ...EVEN_OUT_DEFAULTS, turn_matched: false });
+    await settleZoneless(fixture);
+    expect(refs.pool).toHaveBeenLastCalledWith(null);
+  });
+
   it('starts the next candidate on the best reference again', async () => {
     fixture.componentInstance.next();
     await candidate(11);
@@ -189,6 +214,58 @@ describe('FaceReferenceComponent', () => {
     expect(viewer()!.imageSrc()).toBe('/api/server-media-files/my%20face.jpg/image');
     expect(text()).toContain('Your example');
     expect(button('Next').disabled).toBe(true);
+  });
+
+  describe('evening out (#5674, #5675)', () => {
+    it('measures the reference on its own crop, with its own landmarks', async () => {
+      pool.set([media(2)]);
+      await settleZoneless(fixture);
+      const request = measured.mock.lastCall![0]!;
+      expect(request.src.split('?')[0]).toBe('/api/medias/2/image');
+      expect(request.landmarks).toBe(LANDMARKS);
+    });
+
+    it('measures an example as it is, with no landmarks to place a face by', async () => {
+      pool.set([{ kind: 'example', filename: 'my face.jpg' }]);
+      await settleZoneless(fixture);
+      expect(measured).toHaveBeenLastCalledWith({ src: '/api/server-media-files/my%20face.jpg/image', landmarks: null });
+    });
+
+    it('shows the reference through its own map while the centre panel says to', async () => {
+      measures['/api/medias/2/image'] = WARM;
+      pool.set([media(2)]);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.measure()).toBe(WARM);
+      expect(viewer()!.toneMap()).toBeNull();
+
+      fixture.componentRef.setInput('evenOut', true);
+      await settleZoneless(fixture);
+      expect(viewer()!.toneMap()).toEqual(toneMap(WARM, EVEN_OUT_DEFAULTS));
+
+      choices.set({ ...EVEN_OUT_DEFAULTS, exposure: false, contrast: false });
+      await settleZoneless(fixture);
+      expect(viewer()!.toneMap()).toEqual(toneMap(WARM, choices()));
+      expect(viewer()!.toneMap()!.r.exponent).toBe(1);
+    });
+
+    it('is greyed when the centre panel says so', async () => {
+      expect(viewer()!.greyscale()).toBe(false);
+      fixture.componentRef.setInput('greyscale', true);
+      await settleZoneless(fixture);
+      expect(viewer()!.greyscale()).toBe(true);
+    });
+
+    it('keeps the map under Wider, measured on the crop it was cut as', async () => {
+      measures['/api/medias/2/image'] = WARM;
+      pool.set([media(2)]);
+      fixture.componentRef.setInput('evenOut', true);
+      fixture.componentRef.setInput('wider', true);
+      await settleZoneless(fixture);
+      // The photo is on screen, and the crop's map with it.
+      expect(viewer()!.media().id).toBe(20);
+      expect(viewer()!.toneMap()).toEqual(toneMap(WARM, EVEN_OUT_DEFAULTS));
+      expect(measured.mock.lastCall![0]!.src.split('?')[0]).toBe('/api/medias/2/image');
+    });
   });
 
   it('says whether the reference on screen is a hard view, and asks for its verdict (#5643)', async () => {

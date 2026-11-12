@@ -22,6 +22,7 @@ import {
   paneViewOf,
   viewOfRect,
 } from './face-link';
+import { ToneMap } from '../face-even-out/even-out';
 
 export type RegionBox = readonly [number, number, number, number];
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
@@ -79,6 +80,9 @@ type DragMode =
   | { kind: 'draw'; anchor: { x: number; y: number }; previousBox: RegionBox | null }
   | { kind: 'move'; startLocal: { x: number; y: number }; startBox: RegionBox }
   | { kind: 'resize'; handle: ResizeHandle; startBox: RegionBox };
+
+/** Numbers each viewer's evening-out filter, whose id must be the page's only one. */
+let nextFilterId = 0;
 
 const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a stray click
 
@@ -197,6 +201,17 @@ export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
    */
   readonly link = input<ViewLink | null>(null);
   readonly linkAs = input<'lead' | 'follow'>('lead');
+  /**
+   * A per-channel curve to show the image through (the Face compare layout's
+   * exposure, contrast and white balance, #5675; `face-even-out/even-out.ts`),
+   * or null to show it as it is. It is one SVG `feComponentTransfer` filter
+   * over the whole image, never part of it, and the image itself is
+   * untouched: the stored bytes, and every overlay drawn over them, are the
+   * same.
+   */
+  readonly toneMap = input<ToneMap | null>(null);
+  /** Show the image in greyscale (#5674), after {@link toneMap}. */
+  readonly greyscale = input(false);
   readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -204,6 +219,16 @@ export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
    * fresh Shift-drag). The parent clears its armed state but keeps the box.
    */
   readonly armedConfirmCanceled = output<void>();
+
+  /** The id of this viewer's {@link toneMap} filter. */
+  readonly toneFilterId = `vt-even-out-${++nextFilterId}`;
+  /** The CSS `filter` the image is drawn through, or null for none. */
+  readonly imageFilter = computed<string | null>(() => {
+    const parts: string[] = [];
+    if (this.toneMap()) parts.push(`url(#${this.toneFilterId})`);
+    if (this.greyscale()) parts.push('grayscale(1)');
+    return parts.length ? parts.join(' ') : null;
+  });
 
   // Public: the coord-transform specs substitute a stub wrap element here.
   readonly wrapRef = viewChild<ElementRef<HTMLDivElement>>('imageWrap');

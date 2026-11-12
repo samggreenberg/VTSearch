@@ -31,4 +31,20 @@
   @if (fitness(); as notice) {
     <p class="checklist-fitness" role="note">{{ notice }}</p>
   }
+  <fieldset class="even-out">
+    <legend class="even-out-heading">Even out the photos</legend>
+    @for (row of evenOutRows; track row.choice) {
+      <label class="even-out-option" [title]="row.title">
+        <input
+          type="checkbox"
+          data-metric="faceEvenOut"
+          [attr.data-choice]="row.choice"
+          [checked]="choices()[row.choice]"
+          (change)="setChoice(row.choice, $event)"
+        />
+        {{ row.label }}
+      </label>
+    }
+    <p class="even-out-hint">Hold <kbd>{{ originalsKey }}</kbd> to see both as taken.</p>
+  </fieldset>
 </aside>

@@ -18,6 +18,8 @@ import { SourceLookup, SourcePhotoService } from '../../services/source-photo.se
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { FaceEvenOutService, MeasureRequest } from '../../services/face-even-out.service';
+import { EVEN_OUT_DEFAULTS, EvenOutChoices, PixelMeasure, toneMap } from './face-even-out/even-out';
 
 /**
  * The Face compare layout in the centre panel (#5642): a reference pane beside
@@ -35,6 +37,11 @@ describe('CenterPanelComponent Face compare', () => {
   const photosLoaded = signal(false);
   /** Each face's answer to the source lookup, by id; none is a 404. */
   let lookups: Record<number, Observable<SourceLookup>>;
+  const choices = signal<EvenOutChoices>(EVEN_OUT_DEFAULTS);
+  const showOriginals = signal(false);
+  /** What each picture's pixels say, by URL path; none is not read yet. */
+  let measures: Record<string, PixelMeasure>;
+  let measured: ReturnType<typeof vi.fn<(request: MeasureRequest | undefined) => Observable<PixelMeasure | null>>>;
 
   const LANDMARKS = [
     [0.4, 0.4],
@@ -62,6 +69,10 @@ describe('CenterPanelComponent Face compare', () => {
     offered.set(false);
     photosLoaded.set(false);
     lookups = {};
+    choices.set(EVEN_OUT_DEFAULTS);
+    showOriginals.set(false);
+    measures = {};
+    measured = vi.fn((request) => of(request ? (measures[request.src.split('?')[0]] ?? null) : null));
     configureZoneless({
       imports: [CenterPanelComponent],
       providers: [
@@ -81,6 +92,7 @@ describe('CenterPanelComponent Face compare', () => {
             toggleWider: () => wider.update((on) => !on),
           },
         },
+        { provide: FaceEvenOutService, useValue: { choices, showOriginals, measured, set: vi.fn() } },
         // A face has no viewer of its own; it is shown as a still.
         { provide: MediaTypeCapabilityService, useValue: { usesThumbnails: () => true, ensureLoaded: vi.fn() } },
         {
@@ -245,6 +257,115 @@ describe('CenterPanelComponent Face compare', () => {
       await show(face);
       expect(checklist()!.candidateHardView()).toBeNull();
       expect(checklist()!.referenceHardView()).toBe(true);
+    });
+  });
+
+  describe('evening out the photos (#5674, #5675)', () => {
+    const DARK: PixelMeasure = {
+      grey: false,
+      balance: [0.9, 1, 1.15],
+      face: { raw: { low: 0.05, median: 0.2, high: 0.4 }, balanced: { low: 0.05, median: 0.21, high: 0.41 } },
+    };
+    const BRIGHT_GREY: PixelMeasure = {
+      grey: true,
+      balance: [1, 1, 1],
+      face: { raw: { low: 0.4, median: 0.75, high: 0.95 }, balanced: { low: 0.4, median: 0.75, high: 0.95 } },
+    };
+
+    function viewers(): { candidate: ImageViewerComponent; reference: ImageViewerComponent } {
+      const all = fixture.debugElement.queryAll(By.directive(ImageViewerComponent));
+      const candidate = fixture.componentInstance.imageViewer()!;
+      const reference = all.map((v) => v.componentInstance as ImageViewerComponent).find((v) => v !== candidate)!;
+      return { candidate, reference };
+    }
+
+    beforeEach(() => {
+      measures['/api/medias/4/image'] = DARK;
+      measures['/api/medias/1/image'] = BRIGHT_GREY;
+    });
+
+    it('measures the candidate on its own crop, with its landmarks', async () => {
+      await show(face);
+      const request = measured.mock.calls.map((c) => c[0]).find((r) => r?.src.startsWith('/api/medias/4/'))!;
+      expect(request.landmarks).toBe(LANDMARKS);
+      expect(request.src).toContain('dataset_id=faces');
+    });
+
+    it('shows each face through its own map', async () => {
+      await show(face);
+      const { candidate, reference } = viewers();
+      expect(candidate.toneMap()).toEqual(toneMap(DARK, EVEN_OUT_DEFAULTS));
+      expect(reference.toneMap()).toEqual(toneMap(BRIGHT_GREY, EVEN_OUT_DEFAULTS));
+      // The dark face is lifted, the bright one taken down.
+      expect(candidate.toneMap()!.g.exponent).toBeLessThan(1);
+      expect(reference.toneMap()!.g.exponent).toBeGreaterThan(1);
+    });
+
+    it('greys both faces when either is greyscale, and neither with the rule unticked', async () => {
+      await show(face);
+      expect(viewers().candidate.greyscale()).toBe(true);
+      expect(viewers().reference.greyscale()).toBe(true);
+
+      choices.set({ ...EVEN_OUT_DEFAULTS, greyscale_either: false });
+      await settleZoneless(fixture);
+      expect(viewers().candidate.greyscale()).toBe(false);
+      expect(viewers().reference.greyscale()).toBe(false);
+    });
+
+    it('greys two colour faces under Both in greyscale', async () => {
+      measures['/api/medias/1/image'] = { ...BRIGHT_GREY, grey: false };
+      await show(face);
+      expect(viewers().candidate.greyscale()).toBe(false);
+
+      choices.set({ ...EVEN_OUT_DEFAULTS, greyscale_both: true });
+      await settleZoneless(fixture);
+      expect(viewers().candidate.greyscale()).toBe(true);
+      expect(viewers().reference.greyscale()).toBe(true);
+    });
+
+    it('shows both faces as taken while the originals key is held', async () => {
+      await init({});
+      await show(face);
+      const keys = TestBed.inject(KeyboardService).action$;
+      keys.next({ type: 'originals', held: true });
+      await settleZoneless(fixture);
+      expect(showOriginals()).toBe(true);
+      for (const viewer of Object.values(viewers())) {
+        expect(viewer.toneMap()).toBeNull();
+        expect(viewer.greyscale()).toBe(false);
+      }
+
+      keys.next({ type: 'originals', held: false });
+      await settleZoneless(fixture);
+      expect(viewers().candidate.toneMap()).toEqual(toneMap(DARK, EVEN_OUT_DEFAULTS));
+      expect(viewers().reference.greyscale()).toBe(true);
+    });
+
+    it('evens out nothing with Compare off, where the face has the panel alone', async () => {
+      await show(face);
+      toggle()!.click();
+      await settleZoneless(fixture);
+      const candidate = fixture.componentInstance.imageViewer()!;
+      expect(candidate.toneMap()).toBeNull();
+      expect(candidate.greyscale()).toBe(false);
+      httpMock.match((r) => r.url === '/api/settings');
+    });
+
+    it('keeps the crop\'s map on the photo under Wider', async () => {
+      offered.set(true);
+      photosLoaded.set(true);
+      lookups = {
+        4: of({ kind: 'found', datasetId: 'photos', mediaId: 40, box: [0.4, 0.4, 0.6, 0.6] }),
+        1: of({ kind: 'found', datasetId: 'photos', mediaId: 10, box: [0.1, 0.2, 0.3, 0.4] }),
+      };
+      await show(face);
+      button('Wider')!.click();
+      await settleZoneless(fixture);
+      const { candidate, reference } = viewers();
+      expect(candidate.media().id).toBe(40);
+      expect(candidate.toneMap()).toEqual(toneMap(DARK, EVEN_OUT_DEFAULTS));
+      expect(reference.media().id).toBe(10);
+      expect(reference.toneMap()).toEqual(toneMap(BRIGHT_GREY, EVEN_OUT_DEFAULTS));
     });
   });
 

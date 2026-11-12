@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, Signal, computed, effect, inject, input, signal } from '@angular/core';
+import { rxResource, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs';
 import { Media } from '../../../models/api.models';
 import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import { FaceReference, FaceReferenceService, referenceKey } from '../../../services/face-reference.service';
@@ -9,6 +10,9 @@ import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
 import { FaceLandmarks, ViewLink } from '../image-viewer/face-link';
 import { landmarkTurn } from '../face-checklist/face-regions';
 import { ImageViewControlsComponent } from '../image-view-controls/image-view-controls.component';
+import { FaceEvenOutService, MeasureRequest, measureKey } from '../../../services/face-even-out.service';
+import { ActiveContextService } from '../../../services/active-context.service';
+import { PixelMeasure, ToneMap, toneMap } from '../face-even-out/even-out';
 
 /**
  * The reference half of the Face compare layout (#5642): a face of the person
@@ -50,6 +54,8 @@ export class FaceReferenceComponent {
   private readonly metadataCache = inject(MediaMetadataCacheService);
   private readonly sourcePhoto = inject(SourcePhotoService);
   private readonly activeDataset = inject(ActiveDatasetService);
+  private readonly activeContext = inject(ActiveContextService);
+  private readonly evenOutState = inject(FaceEvenOutService);
 
   /** The id of the face being voted on, which is never its own reference. */
   readonly candidateId = input.required<number>();
@@ -60,9 +66,20 @@ export class FaceReferenceComponent {
   readonly link = input<ViewLink | null>(null);
   /** The candidate's five landmarks (`face_landmarks`), which say which way its head is turned. */
   readonly candidateLandmarks = input<FaceLandmarks | null | undefined>(null);
+  /** Even out how the reference looks (#5675): the centre panel says when, since it
+   *  owns the layout and the held key that shows both faces as taken. */
+  readonly evenOut = input(false);
+  /** Show the reference in greyscale: the pair rule (#5674), which needs both faces. */
+  readonly greyscale = input(false);
 
-  /** How far the candidate's head is turned, or null with no landmarks to read it from. */
-  private readonly candidateTurn = computed(() => landmarkTurn(this.candidateLandmarks()));
+  /**
+   * How far the candidate's head is turned, or null with no landmarks to read
+   * it from, or with **Reference turned the same way** unticked (#5674), when
+   * the Good pile keeps its Face Quality order alone.
+   */
+  private readonly candidateTurn = computed(() =>
+    this.evenOutState.choices().turn_matched ? landmarkTurn(this.candidateLandmarks()) : null,
+  );
 
   /**
    * The reference stepped to, and the candidate it was stepped to for. Kept
@@ -150,6 +167,36 @@ export class FaceReferenceComponent {
   readonly view = computed<WiderView>(() => {
     if (!this.sourceKey()) return { kind: 'crop' };
     return widerView(this.sourceLookup.value(), this.sourceLookup.isLoading(), this.viewerMedia().filename);
+  });
+
+  /**
+   * The reference's own picture to measure for evening out: a face's crop,
+   * whatever Wider shows, since the map is global, or the example as it is.
+   */
+  private readonly measureRequest = computed<MeasureRequest | undefined>(
+    () => {
+      const ref = this.current();
+      if (!ref) return undefined;
+      if (ref.kind === 'example') return { src: this.exampleSrc(), landmarks: null };
+      this.activeDataset.activeId();
+      return {
+        src: this.activeContext.mediaUrl(`/api/medias/${ref.id}/image`),
+        landmarks: this.viewerMedia().face_landmarks,
+      };
+    },
+    { equal: (a, b) => (a && b ? measureKey(a) === measureKey(b) : a === b) },
+  );
+
+  /** What the reference's pixels say, once read; the centre panel's greyscale rule reads it. */
+  readonly measure: Signal<PixelMeasure | null> = toSignal(
+    toObservable(this.measureRequest).pipe(switchMap((request) => this.evenOutState.measured(request))),
+    { initialValue: null },
+  );
+
+  /** The reference's exposure, contrast and white-balance map, or null for none. */
+  readonly toneMap = computed<ToneMap | null>(() => {
+    const measure = this.measure();
+    return this.evenOut() && measure ? toneMap(measure, this.evenOutState.choices()) : null;
   });
 
   constructor() {

@@ -140,6 +140,58 @@ describe('KeyboardService', () => {
     expect(actions).toEqual([{ type: 'reference' }, { type: 'reference' }]);
   });
 
+  describe('the originals key (#5675)', () => {
+    let actions: KeyboardAction[];
+
+    beforeEach(() => {
+      service.start();
+      actions = [];
+      service.action$.subscribe((a) => actions.push(a));
+    });
+
+    it('is held from O going down until it comes up, whatever the OS repeats between', () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o' }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', repeat: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', repeat: true }));
+      expect(actions).toEqual([{ type: 'originals', held: true }]);
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'o' }));
+      expect(actions).toEqual([
+        { type: 'originals', held: true },
+        { type: 'originals', held: false },
+      ]);
+    });
+
+    it('lets go when the window loses focus with the key down, so it cannot stick', () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'O' }));
+      window.dispatchEvent(new Event('blur'));
+      // The key's own release, long after, changes nothing more.
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'o' }));
+      expect(actions).toEqual([
+        { type: 'originals', held: true },
+        { type: 'originals', held: false },
+      ]);
+    });
+
+    it('lets go when the shortcuts stop with the key down', () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o' }));
+      service.stop();
+      expect(actions.at(-1)).toEqual({ type: 'originals', held: false });
+    });
+
+    it('is not taken while typing in a field', () => {
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      input.focus();
+      try {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'o' }));
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'o' }));
+        expect(actions).toEqual([]);
+      } finally {
+        input.remove();
+      }
+    });
+  });
+
   it('should not emit when modifier keys are held', () => {
     service.start();
     const actions: KeyboardAction[] = [];

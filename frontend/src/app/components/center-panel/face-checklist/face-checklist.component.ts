@@ -1,6 +1,9 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 
+import { FaceEvenOutService } from '../../../services/face-even-out.service';
+import { ORIGINALS_KEY } from '../../../services/keyboard.service';
+import { EvenOutChoice } from '../face-even-out/even-out';
 import { FaceRect, FaceView, ViewLink, sameFaceView } from '../image-viewer/face-link';
 import { FaceRegion, sharedViews } from './face-regions';
 
@@ -46,6 +49,55 @@ export const FACE_CHECKS: readonly FaceCheck[] = [
   { part: 'Mouth, chin, face outline', look: 'The weakest evidence: expression moves them.', region: 'lower' },
 ];
 
+/** One checkbox of the "Even out the photos" group: the choice it ticks, and its words. */
+export interface EvenOutRow {
+  readonly choice: EvenOutChoice;
+  readonly label: string;
+  readonly title: string;
+}
+
+/**
+ * The standardizations, each a checkbox (#5674, #5675; the owner's call on
+ * #5671): what each pane is shown through to move two photos of a person
+ * toward each other, every one global and on FISWG's list. Light first, then
+ * colour, then the choice of reference.
+ */
+export const EVEN_OUT_ROWS: readonly EvenOutRow[] = [
+  {
+    choice: 'exposure',
+    label: 'Exposure',
+    title: "Bring both faces to the same brightness, measured on the face's skin",
+  },
+  {
+    choice: 'contrast',
+    label: 'Contrast',
+    title: "Bring both faces to the same contrast, measured on the face's skin",
+  },
+  {
+    choice: 'white_balance',
+    label: 'White balance',
+    title:
+      "Move each face's skin toward a typical skin colour, which takes a lamp's or shade's colour cast out. Read from the skin, it also narrows the difference between two people's skin",
+  },
+  {
+    choice: 'greyscale_either',
+    label: 'Greyscale when either is',
+    title:
+      'When either face is a black-and-white photo, show both in greyscale: a colour face beside a grey one looks more alike than it is',
+  },
+  {
+    choice: 'greyscale_both',
+    label: 'Both in greyscale',
+    title: 'Show both faces in greyscale, whatever they are',
+  },
+  {
+    choice: 'turn_matched',
+    label: 'Reference turned the same way',
+    title:
+      'Start on a Good face whose head is turned the way this one is, so both show the same ear. Unticked, the clearest Good face comes first.',
+  },
+];
+
 /** The kind of face the fitness notice describes, for its wording. */
 const HARD_VIEW = 'turned, covered or small';
 
@@ -69,6 +121,10 @@ const HARD_VIEW = 'turned, covered or small';
  * (`HARD_VIEW_QUALITY`, #5372), so the user expects a weaker comparison. It
  * offers no way past the vote: a vote is Good or Bad, and the app has no
  * other answer to give.
+ *
+ * At the foot, "Even out the photos" holds a checkbox per standardization
+ * ({@link EVEN_OUT_ROWS}, #5674, #5675), remembered per user, and says which
+ * key shows both faces as taken.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,6 +135,18 @@ const HARD_VIEW = 'turned, covered or small';
   styleUrl: './face-checklist.component.scss',
 })
 export class FaceChecklistComponent {
+  private readonly evenOut = inject(FaceEvenOutService);
+
+  readonly evenOutRows = EVEN_OUT_ROWS;
+  /** The standardizations ticked right now. */
+  readonly choices = this.evenOut.choices;
+  /** The key held to see both originals, as it is printed on the keyboard. */
+  readonly originalsKey = ORIGINALS_KEY.toUpperCase();
+
+  setChoice(choice: EvenOutChoice, event: Event): void {
+    this.evenOut.set(choice, (event.target as HTMLInputElement).checked);
+  }
+
   /** The face being voted on is a hard view; null when there is no verdict. */
   readonly candidateHardView = input<boolean | null>(null);
   /** The reference on screen is a hard view; null when there is no verdict, or no reference. */

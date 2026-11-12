@@ -75,6 +75,20 @@ export function landmarkTurn(landmarks: FaceLandmarks | null | undefined): numbe
 }
 
 /**
+ * How far the head of *face* is turned, as a sine: the nose tip stands out of
+ * the face, so a turn carries it off the line from the eyes to the mouth. The
+ * sign is the side it went to (negative: toward the image's left), and a head
+ * turned toward a side shows less of that side.
+ */
+function faceTurn(face: FaceShape): number {
+  const [, , nose, mouthA, mouthB] = face.points;
+  const mouthX = (mouthA[0] + mouthB[0]) / 2;
+  const mouthY = (mouthA[1] + mouthB[1]) / 2;
+  const offLine = nose[0] - mouthX * (mouthY ? nose[1] / mouthY : 0);
+  return clamp(offLine / NOSE_DEPTH, -MAX_TURN, MAX_TURN);
+}
+
+/**
  * The views of *region* on *face*, in a fixed order so the same index is the
  * same view on any face: one for most parts, the two ears as the image's left
  * and right. An entry is null when the face does not show that view at all (the
@@ -88,14 +102,9 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
   const eyeBottom = Math.max(eyeA[1], eyeB[1]);
   const mouthL = Math.min(mouthA[0], mouthB[0]);
   const mouthR = Math.max(mouthA[0], mouthB[0]);
-  const mouthX = (mouthA[0] + mouthB[0]) / 2;
   const mouthY = (mouthA[1] + mouthB[1]) / 2;
 
-  // How far the head is turned, as a sine: the nose tip stands out of the
-  // face, so a turn carries it off the line from the eyes to the mouth. The
-  // sign is the side it went to (negative: toward the image's left).
-  const offLine = nose[0] - mouthX * (mouthY ? nose[1] / mouthY : 0);
-  const turn = clamp(offLine / NOSE_DEPTH, -MAX_TURN, MAX_TURN);
+  const turn = faceTurn(face);
   // The eyes ride in front of the axis the head turns on, so a turn carries
   // them toward the side the nose points to, and the middle of the head is
   // on the other side of them. The ears are either side of that middle,
@@ -128,6 +137,62 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
       // Mouth and chin, and the jaw under them: the lower outline of the face.
       return [rect(mouthL - 0.45, mouthY - 0.3, mouthR + 0.45, mouthY + 0.95)];
   }
+}
+
+/*
+ * The skin patches, in face units. Each is small, and placed clear of the
+ * features: the brows end about a third of a unit over the eyes, the nose's
+ * wings sit a fifth of a unit either side of its middle, and the lower lids
+ * and the folds from the nose to the mouth are left between the patches.
+ */
+
+/**
+ * The forehead patch's middle, over the eyes, and its half-width and
+ * half-height: low on the forehead, just over the brows, and small, since a
+ * fringe often covers the rest.
+ */
+const FOREHEAD_Y = -0.6;
+const FOREHEAD_HALF_W = 0.15;
+const FOREHEAD_HALF_H = 0.08;
+/** The nose patch's middle, as a share of the way from between the eyes to the tip: the bridge. */
+const NOSE_AT = 0.55;
+const NOSE_HALF = 0.07;
+/** Each cheek patch's middle: this far under its eye, and this far out past it. */
+const CHEEK_BELOW = 0.5;
+const CHEEK_OUT = 0.05;
+const CHEEK_HALF = 0.12;
+/** Past this much turn (its sine: about 17 degrees) the far cheek is too slanted, or too near the face's edge, to read. */
+const CHEEK_HIDDEN_TURN = 0.3;
+
+/**
+ * Where to read the skin of *face* (#5675): small patches on the forehead,
+ * the bridge of the nose and each cheek, placed from the five landmarks, so
+ * the light on the face is measured on the face and nowhere else. The wall
+ * behind a person, white or black, their hair, and their eyes, brows and lips
+ * never count. The cheek on the far side of a turned head is left out, as is
+ * a patch less than half of which is on the image. It is where the compare
+ * layout reads a face's brightness, contrast and colour
+ * (`face-even-out/even-out.ts`); nothing shows it.
+ */
+export function skinPatches(face: FaceShape): readonly FaceRect[] {
+  const [eyeA, eyeB, nose] = face.points;
+  const [eyeL, eyeR] = eyeA[0] <= eyeB[0] ? [eyeA, eyeB] : [eyeB, eyeA];
+  const eyeTop = Math.min(eyeA[1], eyeB[1]);
+  const turn = faceTurn(face);
+  const patches = [
+    rect(-FOREHEAD_HALF_W, eyeTop + FOREHEAD_Y - FOREHEAD_HALF_H, FOREHEAD_HALF_W, eyeTop + FOREHEAD_Y + FOREHEAD_HALF_H),
+    square(nose[0] * NOSE_AT, nose[1] * NOSE_AT, NOSE_HALF),
+  ];
+  for (const [side, eye] of [[-1, eyeL], [1, eyeR]] as const) {
+    // A head turned toward one side shows less of that side.
+    if (side * turn > CHEEK_HIDDEN_TURN) continue;
+    patches.push(square(eye[0] + side * CHEEK_OUT, eye[1] + CHEEK_BELOW, CHEEK_HALF));
+  }
+  return patches.filter((patch) => shareOn(patch, face.bounds) >= MIN_ON_IMAGE);
+}
+
+function square(cx: number, cy: number, half: number): FaceRect {
+  return rect(cx - half, cy - half, cx + half, cy + half);
 }
 
 /**
