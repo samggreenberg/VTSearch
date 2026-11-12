@@ -222,6 +222,130 @@ are measured on the levelled crop, do not land on them, and the two panes
 zoom on their own. Registering there needs the crop's roll angle, which the
 converter does not keep yet.
 
+### Matching how the two faces look
+
+The owner's request (#5671): two photos of one person can differ in
+brightness, contrast, colour, tilt and more, and the pair then looks less alike
+than the person is. List the standardizations that would move the reference
+and the candidate toward each other, correcting for how photos vary without
+turning one face into the other.
+
+This is about what the user sees in the compare layout. Nothing here changes
+what the face embedder sees: that is scoring, and a change there is an
+experiment.
+
+**What the sources allow.**
+
+- FISWG's [*Image Processing Techniques for Facial Image Comparison*
+  v1.0 (2022.06.17)](https://fiswg.org/fiswg_imag_procssng_tchnqs_for_fac_img_comparison_v1.0_20220617.pdf)
+  is the list. It names eight techniques (5.1): "Brightness/Contrast",
+  "Cropping", "Rotation", "Color balance", "Levels", "Curves",
+  "Grayscale/Extract channel" and "Mirroring/Flipping". Its conditions:
+  - "It is imperative to preserve the original image" (4.3).
+  - "use the minimum amount of image processing", since it can "introduce
+    artifacts to the imagery or eliminate/alter facial characteristics" (4.4).
+  - "All image processing techniques shall be made over the whole image and
+    not in localized areas" (4.5).
+  - Sharpening, noise reduction and deblurring are not on the list.
+- The ENFSI manual (5.2.3) allows enhancement that is "better suited for the
+  purpose of comparison", with three conditions: a copy "without the
+  enhancement" stays available, "alterations to the facial appearance of the
+  subject ... should be kept to a minimum", and the examiner "should always
+  refer back to the original un-enhanced image". It warns that "image
+  deconvolution, adaptive filtering and inter-frame processing (e.g. super
+  resolution) should be used with caution, due to the high propensity of these
+  techniques to introduce artefacts".
+- **Matching the pair is the standards' own goal.** The ENFSI manual (5.3.2)
+  says the two images should ideally "be captured at a similar camera angle",
+  "show the subject in a similar pose and expression" and "be captured under
+  similar lighting conditions". It cites "reduced accuracy in facial
+  comparison tasks when these conditions are not met". The UK Forensic Science
+  Regulator's [guidance (Issue 2, 2016, archived
+  2020)](https://assets.publishing.service.gov.uk/media/5f47da99d3bf7f5d7d18a5f0/Image_Comparison_and_Interpretation_Guidance_Issue_2.pdf)
+  says the same of angle: a reference "captured at a matching angle ... may
+  help to improve the reliability of the comparison" (5.1.4).
+- An OSAC [note on generative AI (January
+  2026)](https://www.nist.gov/document/use-generative-ai-image-processing-facial-images-reference-document-jan2026)
+  warns that restored faces "may introduce apparent detail that is not
+  reflective of the subject's facial features". It recalls that "OSAC and
+  ... FISWG standards state to always use the original image as the basis for
+  a final opinion".
+- **Colour.** [Bobak, Mileva & Hancock
+  2019](https://pmc.ncbi.nlm.nih.gov/articles/PMC6646495/) showed pairs both
+  in colour, both in greyscale, or one of each.
+  - Mixed pairs made people "more likely to declare a match". Accuracy on
+    different-person pairs fell about 10 points (Experiment 2: 68.1% mixed
+    against 78.2% colour).
+  - Both-greyscale pairs were not reliably worse than both-colour, but made
+    people more cautious about saying "same".
+  - So a difference in how two photos look does not only cost misses. Here it
+    caused false matches.
+- **Detail.** Two studies on resolution:
+  - [Bindemann et al.
+    2013](https://doi.org/10.1002/acp.2970) matched pixelated faces against
+    sharp ones. Showing both at a quarter of their size raised accuracy by 13
+    points on same-person pairs and 12 on different-person pairs.
+  - [Merino et al. 2025](https://arxiv.org/abs/2503.20108) paired a sharp
+    reference with a low-resolution probe. At 10 and 5 pixels between the
+    pupils, accuracy was 50.7% and 35.9%, at or below chance, while the
+    participants' certainty stayed at 77% and 70.7%.
+
+**What is done.** Roll is levelled when the crop is cut (`align="roll"`,
+#4777). Size and position are matched by registration (#5647). Quarter turns
+are by hand (`[` and `]`). Those are all the geometric axes a shape-preserving
+transform can reach. The reference shown first is a Good face turned the same
+way as the candidate (#5670). What is left is how the pixels look, further
+choices of reference, or a geometric change no standard allows.
+
+**The list.** Each row is one axis along which two photos of one person
+differ.
+
+| Axis | Standardization | Standing | Verdict |
+|---|---|---|---|
+| Exposure | Bring each face's median luminance to a common target. Measure it on the inner face, a box placed from the landmarks, eyes to mouth and cheek to cheek, so background and hair don't count. Apply it to the whole image as a levels map, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Do** |
+| Contrast | On the same region, bring the spread (say the 5th to 95th percentile) to a common target. A gamma curve lifts a dark face's shadows without clipping its highlights. | FISWG 5.1.1, 5.1.6 | **Do**, with exposure |
+| Colour cast | White-balance each image against its own scene: estimate the light from the whole crop (or the whole photo under **Wider**), never by matching one face's skin to the other's. | FISWG 5.1.4 | **Do** |
+| Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Do**, first |
+| Detail | When the two faces' native pixels between the eyes are far apart, say so in the fitness notice. Later, try softening the sharper face toward the other's level, or showing the pair smaller. | Softening is not on FISWG's list, but it removes detail rather than adding it; Bindemann 2013, Merino 2025 | **Notice now**, softening later |
+| Head turn (yaw, pitch) | No transform: choose the reference instead. The Good faces turned like the candidate come first, the turn read from the five landmarks (`landmarkTurn`). | ENFSI 5.3.2; FSR 5.1.4 | **Done** (#5670) |
+| Lighting, expression | The same choice can weigh exposure, and mouth width against eye distance (a smile widens the mouth), after pose. | ENFSI 5.3.2 | Later, if pose choice works |
+| Mirroring | Only for a selfie the phone saved mirrored, and only by hand, with a **Mirrored** badge. Mirroring automatically, to make two turned faces face the same way, compares one face's left ear with the other's right and moves every mark to the other side. | FISWG 5.1.8 | Not now |
+| Sharpening, denoising, deblurring, super-resolution, face restoration | None. These add or invent detail, the direction ENFSI's viewing-order rule guards against. | Not on FISWG's list; ENFSI 5.2.3; OSAC 2026 | **Reject** |
+| One side of the face in shadow | No local equalization (CLAHE), dodging, shadow removal or relighting. The contrast row's global curve is the allowed tool. | FISWG 4.5 | **Reject** |
+| Frontalizing, stretching, warping onto landmarks | None. Frontalizing invents a view the camera never took. A stretch makes the faces' proportions match by construction, which is the morph the request rules out. | ENFSI 5.3.2 ("the aspect ratio ... must be maintained"); OSAC 2022-S-0007 ("tools which preserve shapes") | **Reject** |
+| Lens distortion, compression blocking | Nothing to do. A close phone camera enlarges the nose and blocking hides detail, but undoing either needs depth or invented detail. | ENFSI 5.3.1, Appendix B | Out of reach |
+
+**How it would be built.**
+
+- **One filter per pane.** Exposure, contrast, colour cast and greyscale are
+  one global per-channel transfer. That is an SVG `feComponentTransfer` filter
+  (`linear` slope and intercept, or `gamma`, per channel), applied through the
+  `<img>`'s CSS `filter`. Nothing is re-encoded and the stored crop is
+  untouched (FISWG 4.3). Turning the filter off shows the original.
+- **The numbers come from the pane's own pixels.** The image is same-origin
+  (`/api/medias/<id>/image`), so once it loads the viewer can draw it to a
+  small canvas and read the face region's luminance and channel means.
+  - The face region is placed from `face_landmarks`. A face without landmarks
+    gets white balance and the greyscale check, both measured on the whole
+    crop, and no face-based exposure.
+  - A map measured on the crop applies unchanged to the photo under **Wider**,
+    because it is global.
+- **Both faces move**, each toward a common target, rather than one toward the
+  other. A dark candidate is lifted too, which helps its features show, and
+  neither face becomes the template for the other.
+- **Exposure is measured on the face, colour on the scene.** Darkness hides
+  detail (a mole in shadow), so exposure is measured where the features are.
+  A colour cast hides nothing; it only makes two photos look different, so it
+  is corrected from the light and the skin keeps its own colour. Exposure
+  still moves skin lightness. The checklist already says not to weigh that,
+  and the gain cap bounds it.
+- **A checkbox per standardization** in the What to compare strip (the
+  owner's call on #5671). Each is on or off on its own, the turn-matched order
+  of #5670 included, and the choices are remembered per user. A key held
+  down shows both originals: ENFSI's "refer back to the original".
+- **Detail** is the native distance between the eyes: the image's natural
+  size times the landmark fractions. Merino 2025 measured on the same scale.
+
 ## Open decisions
 
 These are the owner's; the recommendation is first in each.
@@ -239,6 +363,15 @@ These are the owner's; the recommendation is first in each.
 - **Re-import, or re-detect on demand, for landmarks on existing datasets?**
   Recommended: re-import. Re-detection on demand needs the parent photo and
   the face provider loaded at vote time.
+- **Are the standardizations' checkboxes ticked by default?** Recommended:
+  yes, with both originals one held key away. Every adjustment is global and on
+  FISWG's list, and few users would tick a box they had not seen work. The
+  manual **Both in greyscale** is the exception: it starts unticked.
+- **Do both faces move toward a common target, or only the reference toward
+  the candidate?** Recommended: both. Moving only the reference follows
+  ENFSI's advice to rotate the better image, which keeps the candidate as
+  taken. But it leaves a dark candidate dark, and a dark candidate is where
+  the correction helps most.
 
 ## Open work
 
@@ -281,5 +414,13 @@ zoom only.
 <!-- item-sep -->
 
 <!-- item-sep -->
+
+<!-- item-sep -->
+
+- [ ] #5674 — Face compare: greyscale both faces when either is, with on/off checkboxes (Sonnet)
+
+<!-- item-sep -->
+
+- [ ] #5675 — Face compare: even out exposure, contrast and white balance, each with a checkbox (Sonnet)
 
 <!-- item-sep -->
