@@ -22,6 +22,7 @@ Splits by band (``@small`` / ``@medium`` / ``@large``) are in the summary; the p
 ``flip_3688_<stem>_by_class.csv``.
 
     python flip_3688_ab.py --pair NAME=ARM_CELLS::CONTROL_CELLS ... --out <dir> [--stem S] [--record JSON] [--docs D]
+                           [--reseed CONTROL_CELLS]
 """
 
 from __future__ import annotations
@@ -116,6 +117,44 @@ def effect(keys: list, A: dict, C: dict, PA: dict, PC: dict, sd: pd.DataFrame) -
     return row
 
 
+def curves(name: str, keys: list, A: dict, C: dict, out: dict) -> None:
+    """The paired effect at every vote 1-150: mean and class-clustered SE."""
+    D = np.array([A[k]["F"][:HORIZON] - C[k]["F"][:HORIZON] for k in keys], float)
+    for v in range(1, HORIZON + 1):
+        d = D[:, v - 1]
+        out["curves"].append({"set": name, "vote": v, "d_F": float(d.mean()), "se": se_cat(keys, d)})
+
+
+def reseed(name: str, ctl_dir: Path, workers: int, out: dict) -> None:
+    """The yardstick: each control run against the same cell's next seed (cyclic), read exactly as a pair is.
+
+    Two clean runs of one cell differ with SD sqrt(2) x the seed SD, so this row's ``sd_ratio`` is ~1.41 and its
+    ``over_1sd`` ~48%: an arm that matches it moves a run as far as drawing a new seed does.
+    """
+    C, PC = load(str(ctl_dir), None, workers), load_phases(str(ctl_dir), workers)
+    keys = sorted(set(C) & set(PC))
+    sd = seed_sd(keys, C, PC)
+    seeds: dict = {}
+    for k in keys:
+        seeds.setdefault(k[:2], []).append(k[2])
+    nxt = {k: (*k[:2], (s := sorted(seeds[k[:2]]))[(s.index(k[2]) + 1) % len(s)]) for k in keys}
+    pairs = [k for k in keys if nxt[k] != k]
+    A, PA = {k: C[nxt[k]] for k in pairs}, {k: PC[nxt[k]] for k in pairs}
+    out["summary"].append({"set": name, "band": "all", **effect(pairs, A, C, PA, PC, sd)})
+    for b in BANDS:
+        kb = [k for k in pairs if band_of(k) == b]
+        out["summary"].append({"set": name, "band": b, **effect(kb, A, C, PA, PC, sd)})
+    for k in pairs:
+        ra, rc = reads(A[k]["F"], stop_of(PA[k])), reads(C[k]["F"], stop_of(PC[k]))
+        out["per_run"].append(
+            {"set": name, "category": k[1], "seed": k[2], "stop_ctl": stop_of(PC[k]), "stop_arm": stop_of(PA[k]),
+             "F_stop_ctl": rc["F_stop"], "d_F_stop": ra["F_stop"] - rc["F_stop"], "d_F150": ra["F150"] - rc["F150"],
+             "seed_sd_F_stop": sd.loc[[k[:2]]].iloc[0]["F_stop"]}
+        )  # fmt: skip
+    a = out["summary"][-1 - len(BANDS)]
+    print(f"{name}: {a['runs']} seed pairs; |d|>1sd {a['over_1sd_F_stop']:.0%}, sd ratio {a['sd_ratio_F_stop']:.2f}")
+
+
 def compare(name: str, arm_dir: Path, ctl_dir: Path, workers: int, record: dict | None, out: dict) -> None:
     A, C = load(str(arm_dir), None, workers), load(str(ctl_dir), None, workers)
     PA, PC = load_phases(str(arm_dir), workers), load_phases(str(ctl_dir), workers)
@@ -150,6 +189,9 @@ def compare(name: str, arm_dir: Path, ctl_dir: Path, workers: int, record: dict 
         else float("nan"),
     }
     out["summary"].append({**base, "band": "all", **effect(keys, A, C, PA, PC, sd)})
+    # Only the runs whose wrong vote went in before the clean run stopped: a vote after the stop cannot move F there.
+    landed = [k for k in flipped if VA[k]["flip_vote"] <= stop_of(PC[k])]
+    out["summary"].append({"set": name, "band": "landed", **effect(landed, A, C, PA, PC, sd)})
     for b in BANDS:
         kb = [k for k in keys if band_of(k) == b]
         out["summary"].append({"set": name, "band": b, **effect(kb, A, C, PA, PC, sd)})
@@ -180,6 +222,7 @@ def compare(name: str, arm_dir: Path, ctl_dir: Path, workers: int, record: dict 
                 "seed_sd_F_stop": cs["F_stop"],
             }
         )
+    curves(name, keys, A, C, out)
     if record is not None:
         for arm_name, V in (("arm", VA), ("control", VC)):
             served = []
@@ -197,7 +240,7 @@ def compare(name: str, arm_dir: Path, ctl_dir: Path, workers: int, record: dict 
                     **{f"any_by_{v}": float((s[:, i] > 0).mean()) for i, v in enumerate(EXPOSURE_AT)},
                 }
             )
-    a = out["summary"][-1 - len(BANDS)]
+    a = out["summary"][-2 - len(BANDS)]
     print(
         f"{name}: {a['runs']} runs, flip vote median {base['flip_vote_median']:.0f}, parted early {len(early)}; "
         f"F@stop {a['ctl_F_stop']:.3f} {a['d_F_stop']:+.4f}±{a['d_F_stop_se']:.4f}, |d|>1sd {a['over_1sd_F_stop']:.0%} "
@@ -213,14 +256,17 @@ def main() -> int:
     ap.add_argument("--record", type=Path, help="{class: [media ids]}: exposure of the record's images")
     ap.add_argument("--docs", type=Path, help="also write the tables here")
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--reseed", type=Path, help="control cells: add the seed-vs-next-seed yardstick row")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     record = json.loads(args.record.read_text()) if args.record else None
-    out: dict[str, list] = {"summary": [], "by_class": [], "phases": [], "per_run": [], "exposure": []}
+    out: dict[str, list] = {"summary": [], "by_class": [], "phases": [], "per_run": [], "exposure": [], "curves": []}
     for spec in args.pair:
         name, _, rest = spec.partition("=")
         arm_dir, _, ctl_dir = rest.partition("::")
         compare(name, Path(arm_dir), Path(ctl_dir), args.workers, record, out)
+    if args.reseed:
+        reseed("reseed", args.reseed, args.workers, out)
     for name, rows in out.items():
         if not rows:
             continue
