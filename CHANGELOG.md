@@ -79,6 +79,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
   max-age=86400`, and answers `304` to a matching `If-None-Match`.
 
+### Fixed
+
+- **The app keeps working when your saved settings fail to load** (issue #5658). When the app could not fetch your
+  settings, every screen that reads them hit an error: Browse could stay on "Loading map…" for good, and thumbnail
+  sizes, panel widths and the other per-media-type preferences stopped working. They now show their defaults until
+  your settings load. If settings that had loaded fail to load again, the app keeps using the ones it has. A
+  per-media-type preference you change while no settings have loaded is not saved: saving it then would have erased
+  that preference for every other media type.
+
 ## 2026-11-10
 
 ### Changed

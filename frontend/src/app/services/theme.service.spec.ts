@@ -121,6 +121,41 @@ describe('ThemeService', () => {
     expect(service.currentTheme).toBe('highviz');
   });
 
+  /** Answer the settings store's GET with a 500. */
+  async function failSettings(): Promise<void> {
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/settings')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await settleResource();
+    await settleResource();
+  }
+
+  it('loadFromSettings keeps the system theme when the settings load fails', async () => {
+    service.loadFromSettings();
+    await failSettings();
+    expect(service.currentTheme).toBe('system');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  // #5658: a failed refetch keeps the last good settings, so their theme wins
+  // over the error (which is still reported while the retry is in flight).
+  it('loadFromSettings applies the kept theme while a failed refetch is retried', async () => {
+    const settingsState = TestBed.inject(SettingsStateService);
+    settingsState.load();
+    await answerSettings({ theme: 'highviz' });
+    settingsState.load();
+    await failSettings();
+
+    service.loadFromSettings();
+    TestBed.tick();
+    expect(settingsState.error()).toBeTruthy();
+    await settleResource();
+    expect(service.currentTheme).toBe('highviz');
+    httpMock.expectOne('/api/settings').flush({ theme: 'highviz' });
+    await settleResource();
+  });
+
   it('theme$ should emit on change', () => {
     const emitted: string[] = [];
     service.theme$.subscribe((t) => emitted.push(t));
