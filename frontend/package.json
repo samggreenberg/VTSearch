@@ -7,7 +7,7 @@
     "prebuild": "node scripts/openapi-gen-cached.mjs && node scripts/build-stamp.mjs",
     "build": "ng build",
     "prebuild:prod": "node scripts/openapi-gen-cached.mjs && node scripts/build-stamp.mjs",
-    "build:prod": "NG_CLI_ANALYTICS=false ng build --configuration production",
+    "build:prod": "NG_CLI_ANALYTICS=false NG_BUILD_OPTIMIZE_CHUNKS=1 ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "generate-api-client": "node scripts/openapi-gen-cached.mjs --force && node scripts/build-stamp.mjs",
     "regenerate-openapi-snapshot": "cd .. && python scripts/gates/dump_openapi.py > frontend/openapi.json",

@@ -227,21 +227,25 @@ class TestEagerBundleComposition:
     this: #3811 reclaimed ~38kB, so a re-added FormsModule would still fit
     under the number while silently spending the margin that exists so a
     framework bump does not turn the gate red for everyone (#3795).  The same
-    goes for @angular/cdk/a11y, which #5297 took off the eager path, and for
-    the toast stack, which #5505 put behind `@defer`.
+    goes for @angular/cdk/a11y, which #5297 took off the eager path, for
+    the toast stack, which #5505 put behind `@defer`, and for the detector
+    sharing stack, which #5657 moved behind a dynamic import.
     """
 
     @staticmethod
     def _eager_bundle_text() -> str:
         """`main.js` plus every chunk it imports STATICALLY, concatenated.
 
-        `from"./chunk-X.js"` is a static import and keeps that chunk on the
-        eager path.  `import("./chunk-Y.js")` is the `@defer` / lazy-route
-        boundary and is deliberately NOT followed: following it would walk the
-        whole app and make every assertion here vacuous.
+        `from"./chunk-X.js"` (or a bare `import"./chunk-X.js"`) is a static
+        import and keeps that chunk on the eager path.  `import("./chunk-Y.js")`
+        is the `@defer` / lazy-route boundary and is deliberately NOT followed:
+        following it would walk the whole app and make every assertion here
+        vacuous.  With the chunk optimizer on (#5657) the eager path is
+        `main.js` alone, but the walk still covers a build without it: esbuild
+        names chunks `chunk-ABC123.js`, rolldown `chunk-aB_c-12.js`.
         """
         static_dir = pathlib.Path("static")
-        static_import = re.compile(r'from"\./(chunk-[A-Z0-9]+\.js)"')
+        static_import = re.compile(r'(?:from|import)\s*["`]\./(chunk-[\w-]+\.js)["`]')
         seen: set[str] = set()
         queue = ["main.js"]
         parts: list[str] = []
@@ -311,6 +315,21 @@ class TestEagerBundleComposition:
             "budget in frontend/angular.json rather than deleting this."
         )
 
+    def test_detector_sharing_is_not_eager(self):
+        # The sharing endpoints' paths are written only in their generated
+        # functions (`generated/api-client/fn/detectors-sharing/`), which only
+        # DetectorsSharingApiService imports.
+        assert "/api/detectors/sharing" not in self._eager_bundle_text(), (
+            "The detector sharing API is in the EAGER bundle (~6kB with the flows\n"
+            "and capability services it comes with).\n"
+            "Something on the eager path imports it -- most likely the error\n"
+            "interceptor, whose read-only toast offers a Fork: it imports\n"
+            "DetectorSharingFlowsService at the click, with import() (#5657), and a\n"
+            "static import would put the whole sharing stack back on the eager path.\n"
+            "If the eager import is genuinely required, re-audit the budget in\n"
+            "frontend/angular.json rather than deleting this."
+        )
+
     def test_card_menu_is_not_eager(self):
         # The detector card's Browse label is written only in
         # `card-context-menu-items.ts`, which the lazy Dashboard imports.
@@ -322,6 +341,41 @@ class TestEagerBundleComposition:
             "guard needs belongs in a module of its own (utils/people.ts).\n"
             "If the eager import is genuinely required, re-audit the budget in\n"
             "frontend/angular.json rather than deleting this."
+        )
+
+
+class TestChunkOptimizer:
+    """`build:prod` runs Angular's chunk optimizer (#5657).
+
+    Without it the eager path is ~32 files: `main.js`, ten `modulepreload`ed
+    chunks, then 21 more that an HTTP/1.1 browser fetches in four waves, which
+    held Browse's first paint back ~0.5 s at 100 ms of latency.  The optimizer
+    merges them into one `main.js`.  It is switched on by an environment
+    variable only, so nothing fails if the variable is dropped from the script
+    or Angular stops reading it: the build just goes quietly slower.  These
+    read the configuration rather than `static/`, which can predate it.
+    """
+
+    FRONTEND = pathlib.Path("frontend")
+
+    def test_build_prod_turns_the_optimizer_on(self):
+        import json
+
+        scripts = json.loads((self.FRONTEND / "package.json").read_text())["scripts"]
+        assert "NG_BUILD_OPTIMIZE_CHUNKS=1" in scripts["build:prod"].split(), (
+            "frontend/package.json's build:prod no longer sets NG_BUILD_OPTIMIZE_CHUNKS=1.\n"
+            "Without it every page load fetches the eager bundle as ~32 files in waves\n"
+            "(#5657). The Docker images run the same script, so it is the one place to set it."
+        )
+
+    def test_angular_still_reads_the_variable(self):
+        options = self.FRONTEND / "node_modules/@angular/build/src/utils/environment-options.js"
+        if not options.exists():
+            pytest.skip("frontend/node_modules not installed")
+        assert "process.env['NG_BUILD_OPTIMIZE_CHUNKS']" in options.read_text(), (
+            "@angular/build no longer reads NG_BUILD_OPTIMIZE_CHUNKS, so build:prod's setting\n"
+            "does nothing and the eager bundle is back to ~32 files (#5657). Find what\n"
+            "replaced it (likely an `optimization` option in angular.json) and switch to that."
         )
 
 

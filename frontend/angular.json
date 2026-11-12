@@ -88,6 +88,16 @@
                 // shows) cannot follow: it renders exactly when no chunk can be
                 // fetched. TestEagerBundleComposition guards the toast stack.
                 //
+                // #5657 turned on Angular's chunk optimizer (NG_BUILD_OPTIMIZE_CHUNKS
+                // in package.json's build:prod), which merges the eager path's
+                // 32 files into one main.js. That costs ~0.3-1kB raw (rolldown
+                // renames colliding minified names, `a` -> `a$4`) and saves
+                // ~14kB gzipped. To pay for it, the error interceptor's Fork
+                // now imports the detector-sharing flows at the click (-5.70kB:
+                // the flows, the capability probe and the sharing API with its
+                // nine endpoints). Measured initial total: 519.00kB, optimizer
+                // on. TestEagerBundleComposition guards the sharing stack.
+                //
                 // Do not raise without first auditing the eager path for
                 // genuine bloat.
                 {

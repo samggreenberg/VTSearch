@@ -61,6 +61,7 @@ src/app/app.component.ts  persistent chrome + <router-outlet>
 providers: [
   provideZonelessChangeDetection(),
   provideRouter(routes),
+  provideRouteChunkPrefetch(),  // a lazy view's chunk loads during its guard
   provideHttpClient(withInterceptors([
     timezoneInterceptor,        // X-Timezone-Offset
     activeContextInterceptor,   // X-Dataset-Id / X-Detector-Id
@@ -1078,14 +1079,33 @@ waits in `ToastService` (#5505). Chrome that must render when the server is
 unreachable cannot be deferred, because then no chunk can be fetched: that is
 why `vt-offline-banner`, and the `vt-toasty-hint` it shows, stay eager.
 
+**The eager path is one file.** `build:prod` sets `NG_BUILD_OPTIMIZE_CHUNKS=1`,
+Angular's opt-in rolldown pass, which merges every chunk the eager path imports
+into `main.js` (#5657). Without it esbuild leaves ~30 shared-module chunks
+there, and an HTTP/1.1 browser (gunicorn serves HTTP/1.1) fetches them about six
+at a time: ~0.5 s before bootstrap at 100 ms of latency. The variable is the
+only switch, and the Docker images build through the same npm script.
+`TestChunkOptimizer` in `tests/core/test_frontend.py` fails if the script stops
+setting it or `@angular/build` stops reading it. The pass does **not** merge
+lazy chunks. A lazy route still pulls its shared-module chunks (Browse: 16)
+once its own chunk is parsed, in waves.
+
+**A lazy route's chunk is fetched while its guard runs.** The router calls
+`loadComponent` only after the guards and resolvers, so a guard that waits on
+the network (Browse's and People's await the registries, the pair guard may
+load the pair) used to hold the view's code back for that whole wait.
+`provideRouteChunkPrefetch()` (`utils/route-chunk-prefetch.ts`) calls the
+loader at `RoutesRecognized` instead. The router's own call later resolves to
+the same module record.
+
 The production `initial` budget is deliberately tight and the rationale is
 written into `angular.json` next to the number. `./run-tests.sh` treats **any**
 `▲ [WARNING]` from `build:prod` as a hard failure, including the 8 kB
 `anyComponentStyle` budget. Fix the bloat — split the component, extract shared
 styles, delete dead rules. Raising a budget needs the user's explicit approval.
 
-What actually sits in the eager bundle is mostly **framework**: 317 kB of
-Angular against 121 kB of app code when it was last audited (#3811). That is
+What actually sits in the eager bundle is mostly **framework**: about 320 kB of
+Angular and rxjs against 160 kB of app code when it was last audited (#5657). That is
 why the budget carries visible headroom — Angular's own patch releases move the
 number a few kB at a time, and when the margin was under 1 kB a routine
 security bump turned the build gate red for every branch (#3795). Treat the
@@ -1098,7 +1118,12 @@ any more, so one specific trap is covered by a test:
 all ~37 kB of `@angular/forms` for it; both now use plain `[value]` + `(input)`.
 `TestEagerBundleComposition` in `tests/core/test_frontend.py` walks the built
 bundle's *static* imports from `main.js` and fails if the package reappears;
-it guards `@angular/cdk/a11y` (#5297) and the toast stack (#5505) the same way.
+it guards `@angular/cdk/a11y` (#5297), the toast stack (#5505) and the
+detector-sharing stack the same way. The error interceptor's read-only toast
+offers a Fork, and imports the sharing flows only when it is clicked (#5657):
+the static import had put ~6 kB of sharing code on the eager path. Any
+interceptor, guard or always-mounted service is eager, so reach a heavy service
+from one with `import()` at the moment it is needed.
 
 ### Other primitives
 
