@@ -4,7 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { MediaTypeCapabilityService } from './media-type-capability.service';
-import { SourceLookup, SourcePhotoService } from './source-photo.service';
+import { SourceLookup, SourcePhotoService, WIDER_SCALE, widerBox, widerView } from './source-photo.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { provideHttpTesting } from '../testing/test-providers';
 
@@ -17,11 +17,13 @@ describe('SourcePhotoService', () => {
 
   const registry = [
     { id: 'faces', name: 'Photos – Face', media_type: 'face', import_group: 'g1' },
-    { id: 'photos', name: 'Photos – Image', media_type: 'image', import_group: 'g1' },
+    { id: 'photos', name: 'Photos – Image', media_type: 'image', import_group: 'g1', loaded: true },
     { id: 'pages', name: 'Scans – Document', media_type: 'document', import_group: 'g2' },
     { id: 'holiday-pages', name: 'Holiday – Document', media_type: 'document', import_group: 'g3' },
     { id: 'holiday-photos', name: 'Holiday – Image', media_type: 'image', import_group: 'g3' },
     { id: 'birds', name: 'Birds', media_type: 'image' },
+    { id: 'trip-faces', name: 'Trip – Face', media_type: 'face', import_group: 'g4' },
+    { id: 'trip-photos', name: 'Trip – Image', media_type: 'image', import_group: 'g4', loaded: false },
   ];
 
   function flushRegistry(): void {
@@ -80,6 +82,24 @@ describe('SourcePhotoService', () => {
     });
   });
 
+  describe('photosLoaded', () => {
+    it('is on once the Image dataset beside the faces is in memory', () => {
+      activeContext.setActivePair('faces', 'det');
+      expect(service.photosLoaded()).toBe(true);
+    });
+
+    it('is off while that dataset is registered but not loaded', () => {
+      activeContext.setActivePair('trip-faces', 'det');
+      expect(service.offered()).toBe(true);
+      expect(service.photosLoaded()).toBe(false);
+    });
+
+    it('is off wherever Show in photo is, loaded photos or not', () => {
+      activeContext.setActivePair('photos', 'det');
+      expect(service.photosLoaded()).toBe(false);
+    });
+  });
+
   describe('open / close', () => {
     it('records the item and the dataset Back returns to', () => {
       activeContext.setActivePair('faces', 'det');
@@ -133,6 +153,36 @@ describe('SourcePhotoService', () => {
         .expectOne('/api/medias/7/source')
         .flush({ code: 500, message: 'boom' }, { status: 500, statusText: 'Server Error' });
       expect(seen).toEqual([{ kind: 'error', message: 'boom' }]);
+    });
+  });
+
+  describe('the Wider view (#5645)', () => {
+    it('widens a box about its own centre, past the photo\'s edge if it must', () => {
+      expect(WIDER_SCALE).toBe(2);
+      const box = widerBox([0, 0.4, 0.2, 0.6]);
+      [-0.1, 0.3, 0.3, 0.7].forEach((v, i) => expect(box[i]).toBeCloseTo(v, 9));
+    });
+
+    it('is pending while the lookup is out', () => {
+      expect(widerView(undefined, true)).toEqual({ kind: 'pending' });
+    });
+
+    it('is the photo, framed wide on the face, once it is found', () => {
+      const found: SourceLookup = { kind: 'found', datasetId: 'photos', mediaId: 2, box: [0.4, 0.4, 0.6, 0.6] };
+      const view = widerView(found, false, 'a.jpg→face_0.jpg');
+      expect(view.kind).toBe('photo');
+      if (view.kind !== 'photo') return;
+      expect(view.datasetId).toBe('photos');
+      expect(view.media).toEqual({ id: 2, media_type: 'image', filename: 'a.jpg→face_0.jpg' });
+      [0.3, 0.3, 0.7, 0.7].forEach((v, i) => expect(view.fitBox[i]).toBeCloseTo(v, 9));
+    });
+
+    it('stays on the crop when there is no photo, or no box to frame on it', () => {
+      expect(widerView(undefined, false)).toEqual({ kind: 'crop' });
+      expect(widerView({ kind: 'found', datasetId: 'photos', mediaId: 2, box: null }, false)).toEqual({ kind: 'crop' });
+      expect(widerView({ kind: 'not-loaded', datasetId: 'photos' }, false)).toEqual({ kind: 'crop' });
+      expect(widerView({ kind: 'none', message: 'no' }, false)).toEqual({ kind: 'crop' });
+      expect(widerView({ kind: 'error', message: 'boom' }, false)).toEqual({ kind: 'crop' });
     });
   });
 });

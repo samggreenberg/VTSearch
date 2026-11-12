@@ -11,7 +11,8 @@ import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { ActiveDatasetService } from '../../services/active-dataset.service';
 import { ActiveDetectorService } from '../../services/active-detector.service';
-import { SourcePhotoService } from '../../services/source-photo.service';
+import { SourcePhotoService, WiderView, widerView } from '../../services/source-photo.service';
+import { FaceReferenceService } from '../../services/face-reference.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
@@ -69,6 +70,7 @@ export class CenterPanelComponent implements OnDestroy {
   private activeDataset = inject(ActiveDatasetService);
   private activeDetector = inject(ActiveDetectorService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private faceRefs = inject(FaceReferenceService);
   readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
@@ -242,6 +244,32 @@ export class CenterPanelComponent implements OnDestroy {
     if (!this.sourceKey()) return false;
     const kind = this.sourceLookup.value()?.kind;
     return kind !== 'none' && kind !== 'error';
+  });
+
+  /**
+   * Offer the compare layout's Wider toggle (#5645): the layout is on and the
+   * Image dataset with the photos is loaded. A lookup answering 409 overrules
+   * a registry that has not heard of an unload yet. Not per face: a face whose
+   * own photo cannot be found keeps the toggle and stays on its crop.
+   */
+  readonly widerOffered = computed(
+    () => this.compareOn && this.sourcePhoto.photosLoaded() && this.sourceLookup.value()?.kind !== 'not-loaded',
+  );
+
+  /** The user's Wider choice, which holds for the page's lifetime. */
+  readonly wider = this.faceRefs.wider;
+
+  /** Both faces are shown from their photos: offered, and turned on. */
+  readonly widerOn = computed(() => this.widerOffered() && this.wider());
+
+  /**
+   * What the candidate's viewer shows (see {@link WiderView}): the crop, or
+   * under Wider its photo framed wide on it, out of the same lookup Show in
+   * photo asks.
+   */
+  readonly candidateView = computed<WiderView>(() => {
+    if (!this.widerOn()) return { kind: 'crop' };
+    return widerView(this.sourceLookup.value(), this.sourceLookup.isLoading(), this.media()?.filename);
   });
 
   constructor() {
@@ -451,6 +479,10 @@ export class CenterPanelComponent implements OnDestroy {
   toggleFaceCompare(): void {
     this.faceCompare.set(!this.faceCompare());
     this.settingsState.update({ face_compare: this.faceCompare() }).subscribe();
+  }
+
+  toggleWider(): void {
+    this.faceRefs.toggleWider();
   }
 
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the

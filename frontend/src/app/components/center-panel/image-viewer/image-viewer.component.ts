@@ -46,6 +46,9 @@ type DragMode =
 
 const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a stray click
 
+/** How far past the opening view the user can zoom in (see `maxZoom`). */
+const MAX_ZOOM = 5;
+
 // What a region draw started from outside the canvas does NOT claim (see
 // `tryStartOffCanvasDraw`). Two different reasons:
 //
@@ -125,6 +128,20 @@ export class ImageViewerComponent implements OnDestroy {
    */
   readonly srcOverride = input('');
   /**
+   * A normalised `[x0, y0, x1, y1]` box to open the image on, zoomed and
+   * panned so the box fills the pane, instead of the whole image fitted to it
+   * (`null`, the default). The Face compare layout's Wider view (#5645) shows a
+   * face in its photo this way. The box may run past the image's edges; the
+   * pan stops at them as it always does. It is the view's home: Reset view, and
+   * a double-click at the zoom cap, come back to it. The cap grows with it
+   * ({@link maxZoom}), so a small face in a big photo can still be looked at
+   * as closely as its crop.
+   */
+  readonly fitBox = input<RegionBox | null>(null);
+  /** {@link fitBox} by value: a parent recomputing the same box (a metadata
+   *  batch landing re-reads its item) must not re-frame under the user's zoom. */
+  private readonly fitTarget = computed(() => this.fitBox(), { equal: sameBox });
+  /**
    * Whether a Shift- or Marquee-drag draws a region box. Off where a box would
    * mean nothing, so a drag only pans: the Show in photo overlay, where there
    * is nothing to vote on, and a face, whose embedder reads the whole crop.
@@ -175,6 +192,9 @@ export class ImageViewerComponent implements OnDestroy {
   /** The network URL whose in-flight prefetch this viewer is waiting on, or
    *  `null`. See {@link showImage}. */
   private claimedSrc: string | null = null;
+  /** A {@link fitBox} framing is owed: set for a new image or a new box, paid
+   *  once the image is laid out, so later resizes leave the user's zoom alone. */
+  private fitOwed = false;
 
   // Region voting state (UI only; see docs/ARCHITECTURE.md → "Embedder binding and routing").
   // These are signals because they are written from un-patched callbacks (window
@@ -219,7 +239,13 @@ export class ImageViewerComponent implements OnDestroy {
   private shakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly minZoom = 1;
-  readonly maxZoom = 5;
+  /** The zoom the {@link fitBox} framing landed on, or 1 with no box. */
+  private readonly fitZoom = signal(1);
+  /** As far as the user can zoom in: five times the view the image opened
+   *  on, which is the whole image unless {@link fitBox} framed a part of it. */
+  get maxZoom(): number {
+    return MAX_ZOOM * Math.max(1, this.fitZoom());
+  }
   readonly zoomStep = 0.05;
   /** How hard a double-click zooms in about the cursor. Matches the Browse
    *  canvas's own `DOUBLE_CLICK_ZOOM`, and is deliberately larger than a wheel
@@ -258,6 +284,25 @@ export class ImageViewerComponent implements OnDestroy {
       untracked(() => {
         this.resetView();
         this.clearRegionBox({ emit: true });
+        // Framed once the new image is laid out (`onImageLoad`).
+        this.fitOwed = this.fitTarget() !== null;
+      });
+    });
+
+    // A new box on the image already on screen (the next face out of the same
+    // photo) is framed now; on an image still loading, once it has. No box is
+    // the plain view, and the zoom cap goes back to its own.
+    effect(() => {
+      const box = this.fitTarget();
+      untracked(() => {
+        this.fitOwed = box !== null;
+        if (box === null) {
+          this.fitZoom.set(1);
+          this.zoom.update((z) => this.clampZoom(z));
+          this.applyTransform();
+          return;
+        }
+        if (this.imageReady()) this.payFit();
       });
     });
   }
@@ -352,12 +397,58 @@ export class ImageViewerComponent implements OnDestroy {
     this.applyTransform();
   }
 
+  /** Back to the view the image opened on: upright, and the whole image, or
+   *  framed on {@link fitBox} when there is one and the image is on screen. */
   resetView(): void {
     this.zoom.set(1);
     this.rotation.set(0);
     this.panX.set(0);
     this.panY.set(0);
+    if (this.imageReady() && this.fitTarget()) this.fitToBox();
     this.applyTransform();
+  }
+
+  /** Frame {@link fitBox} if a framing is owed and the image can be measured. */
+  private payFit(): void {
+    if (this.fitOwed && this.fitToBox()) this.fitOwed = false;
+  }
+
+  /**
+   * Zoom and pan so {@link fitBox} fills the pane, its centre on the pane's
+   * where the image's edges allow. Keeps the rotation, which only ever turns
+   * a quarter at a time, so a box on its side swaps width for height. Returns
+   * false, changing nothing, when there is no box or nothing is laid out yet.
+   */
+  private fitToBox(): boolean {
+    const box = this.fitTarget();
+    const wrap = this.wrapRef()?.nativeElement;
+    const renderedW = this.renderedW();
+    const renderedH = this.renderedH();
+    if (!box || !wrap || !renderedW || !renderedH) return false;
+    const [x0, y0, x1, y1] = box;
+    const boxW = (x1 - x0) * renderedW;
+    const boxH = (y1 - y0) * renderedH;
+    if (!(boxW > 0 && boxH > 0) || !wrap.clientWidth || !wrap.clientHeight) return false;
+    const rot = ((this.rotation() % 360) + 360) % 360;
+    const swapped = rot === 90 || rot === 270;
+    const onScreenW = swapped ? boxH : boxW;
+    const onScreenH = swapped ? boxW : boxH;
+    const fit = Math.min(wrap.clientWidth / onScreenW, wrap.clientHeight / onScreenH);
+    this.fitZoom.set(fit);
+    const zoom = this.clampZoom(fit);
+    this.zoom.set(zoom);
+    // The box centre's offset from the image centre, turned and scaled as the
+    // transform turns and scales the image; panning by its opposite puts it
+    // in the middle of the pane.
+    const dx = ((x0 + x1) / 2 - 0.5) * renderedW;
+    const dy = ((y0 + y1) / 2 - 0.5) * renderedH;
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.round(Math.cos(rad));
+    const sin = Math.round(Math.sin(rad));
+    this.panX.set(-zoom * (dx * cos - dy * sin));
+    this.panY.set(-zoom * (dx * sin + dy * cos));
+    this.applyTransform();
+    return true;
   }
 
   onWheel(event: WheelEvent): void {
@@ -393,6 +484,8 @@ export class ImageViewerComponent implements OnDestroy {
       this.zoom.set(this.minZoom);
       this.panX.set(0);
       this.panY.set(0);
+      // Framed on its box, the view the image opened on is that framing.
+      if (this.fitTarget()) this.fitToBox();
       this.applyTransform();
       return;
     }
@@ -635,6 +728,9 @@ export class ImageViewerComponent implements OnDestroy {
       this.renderedH.set(wrapH);
       this.renderedW.set(wrapH * imgAspect);
     }
+    // The first measurement of a new image is when its framing can be paid;
+    // a framing paid already is not redone on a resize.
+    this.payFit();
   }
 
   private attachWrapResizeObserver(): void {
@@ -877,6 +973,13 @@ function clamp(v: number, lo: number, hi: number): number {
 
 function clamp01(v: number): number {
   return clamp(v, 0, 1);
+}
+
+/** Two boxes with the same corners, or both none. */
+function sameBox(a: RegionBox | null, b: RegionBox | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 }
 
 function pct(v: number): string {

@@ -79,6 +79,20 @@
             >Compare</button>
           }
 
+          @if (widerOffered()) {
+            <button
+              type="button"
+              class="btn btn--toolbar compare-toggle"
+              data-metric="faceWider"
+              [class.active]="wider()"
+              [attr.aria-pressed]="wider()"
+              (click)="toggleWider()"
+              [title]="wider()
+                ? 'Back to the face crops'
+                : 'Show both faces from the photos they were cut from, with more around them (ears, hairline). The photos are shown as taken, not levelled.'"
+            >Wider</button>
+          }
+
           @if (showInPhotoOffered()) {
             <button
               type="button"
@@ -108,7 +122,7 @@
          its vote swipe, so a Bad vote does not fly across the reference. -->
     <div class="media-stage" [class.media-stage--compare]="compareOn">
       @if (compareOn) {
-        <vt-face-reference [candidateId]="media()!.id" />
+        <vt-face-reference [candidateId]="media()!.id" [wider]="widerOn()" />
       }
       <div class="media-stage__candidate">
         <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">
@@ -117,11 +131,18 @@
               <vt-audio-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
             }
             @case ('image') {
+              <!-- Under the compare layout's Wider (#5645) the candidate is
+                   shown from its photo, framed wide on it; nothing shows while
+                   its lookup is out, rather than the crop for a moment. -->
+              @let wide = candidateView();
               <vt-image-viewer
-                [media]="media()!"
-                [variant]="payloadVariant()"
+                [class.wider-pending]="wide.kind === 'pending'"
+                [media]="wide.kind === 'photo' ? wide.media : media()!"
+                [datasetId]="wide.kind === 'photo' ? wide.datasetId : ''"
+                [fitBox]="wide.kind === 'photo' ? wide.fitBox : null"
+                [variant]="wide.kind === 'photo' ? '' : payloadVariant()"
                 [pendingBadConfirm]="pendingBadConfirm()"
-                [highlightBox]="highlightBox"
+                [highlightBox]="wide.kind === 'photo' ? null : highlightBox"
                 [regionDraw]="regionDrawOffered"
                 (regionBoxChange)="onRegionBoxChange($event)"
                 (armedConfirmCanceled)="onArmedConfirmCanceled()"

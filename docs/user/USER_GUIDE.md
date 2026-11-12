@@ -669,6 +669,16 @@ two part by part instead of trusting your memory of the person.
 - Each face has its own rotate, zoom and reset controls under it. Zoom with
   the mouse wheel and drag to move around; `+` / `-` and `[` / `]` act on the
   candidate.
+- **Wider**, beside **Compare**, shows both faces from the photos they were
+  cut from, with twice as much around each as its crop has, so the ears and
+  the hairline are in view: a crop often cuts them off, and the ears are among
+  the best things to compare. It is there when the Image dataset with the
+  photos is loaded. The photos are shown as they were taken: a crop is turned
+  so the eyes are level, but the photo is not, so a tilted head stays tilted.
+  A face whose photo can't be found, or a reference that is your example
+  picture, stays as it is. Zoom works as usual, further in than on a crop for
+  a small face in a big photo, and reset returns to the wider view. **Wider**
+  stays on until you turn it off or leave the page.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 

@@ -1083,6 +1083,127 @@ describe('ImageViewerComponent', () => {
     });
   });
 
+  // The Face compare layout's Wider view (#5645): a face shown in its photo,
+  // the photo opened zoomed and panned onto a box wider than the face's crop.
+  describe('framed on a box (fitBox)', () => {
+    /** A 100×100 pane holding a square image, which fills it. */
+    function stubLayout(): void {
+      const rect = { left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) };
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () =>
+        ({
+          nativeElement: { clientWidth: 100, clientHeight: 100, getBoundingClientRect: () => rect } as unknown as HTMLDivElement,
+        }) as ElementRef<HTMLDivElement>;
+      (component as unknown as { imageRef: () => ElementRef<HTMLImageElement> }).imageRef = () =>
+        ({ nativeElement: { naturalWidth: 400, naturalHeight: 400 } as HTMLImageElement }) as ElementRef<HTMLImageElement>;
+    }
+
+    /** Which image point sits under the pane point (*x*, *y*). */
+    function under(x: number, y: number): { x: number; y: number } {
+      return component.screenToImageNormalized({ clientX: x, clientY: y } as MouseEvent)!;
+    }
+
+    /** Show the image framed on *box*, as far as its load. */
+    function open(box: RegionBox | null): void {
+      stubLayout();
+      fixture.componentRef.setInput('media', mockMedia);
+      fixture.componentRef.setInput('fitBox', box);
+      TestBed.tick();
+      component.onImageLoad();
+    }
+
+    it('opens on the box, its centre in the middle of the pane', () => {
+      open([0.6, 0.1, 0.8, 0.3]);
+      expect(component.zoom()).toBeCloseTo(5, 6);
+      expect(under(50, 50).x).toBeCloseTo(0.7, 6);
+      expect(under(50, 50).y).toBeCloseTo(0.2, 6);
+      // The box's corners are the pane's.
+      expect(under(0, 0).x).toBeCloseTo(0.6, 6);
+      expect(under(100, 100).y).toBeCloseTo(0.3, 6);
+    });
+
+    it('waits for the image to be laid out, rather than framing the last one', () => {
+      stubLayout();
+      fixture.componentRef.setInput('media', mockMedia);
+      fixture.componentRef.setInput('fitBox', [0.6, 0.1, 0.8, 0.3]);
+      TestBed.tick();
+      expect(component.zoom()).toBe(1);
+
+      component.onImageLoad();
+      expect(component.zoom()).toBeCloseTo(5, 6);
+    });
+
+    it('lets a small face be looked at as closely as its crop', () => {
+      open([0.45, 0.45, 0.5, 0.5]);
+      expect(component.zoom()).toBeCloseTo(20, 6);
+      expect(component.maxZoom).toBeCloseTo(100, 6);
+    });
+
+    it('shows the whole image when the box is bigger than it', () => {
+      open([-0.5, -0.5, 1.5, 1.5]);
+      expect(component.zoom()).toBe(1);
+      expect(component.maxZoom).toBe(5);
+    });
+
+    it('stops at the image edge for a box that runs past it', () => {
+      open([-0.1, -0.1, 0.3, 0.3]);
+      // Sized for the whole box, so a face at the edge is as big as one in the middle...
+      expect(component.zoom()).toBeCloseTo(2.5, 6);
+      // ...but the image's corner is the pane's, with no empty margin.
+      expect(under(0, 0).x).toBeCloseTo(0, 6);
+      expect(under(0, 0).y).toBeCloseTo(0, 6);
+    });
+
+    it('frames a box on its side with the image turned a quarter', () => {
+      open([0.6, 0.1, 0.8, 0.3]);
+      component.rotateRight();
+      fixture.componentRef.setInput('fitBox', [0.6, 0.1, 0.8, 0.4]);
+      TestBed.tick();
+      // 0.2 wide and 0.3 tall on the image is 0.3 wide and 0.2 tall on screen.
+      expect(component.zoom()).toBeCloseTo(100 / 30, 6);
+      expect(under(50, 50).x).toBeCloseTo(0.7, 6);
+      expect(under(50, 50).y).toBeCloseTo(0.25, 6);
+    });
+
+    it('comes back to the framing on Reset view, and on a double-click at the cap', () => {
+      open([0.6, 0.1, 0.8, 0.3]);
+      component.zoom.set(1);
+      component.panX.set(0);
+      component.resetView();
+      expect(component.zoom()).toBeCloseTo(5, 6);
+      expect(under(50, 50).x).toBeCloseTo(0.7, 6);
+
+      component.zoom.set(component.maxZoom);
+      component.onDoubleClick({ button: 0, clientX: 10, clientY: 10, preventDefault: () => {} } as unknown as MouseEvent);
+      expect(component.zoom()).toBeCloseTo(5, 6);
+      expect(under(50, 50).y).toBeCloseTo(0.2, 6);
+    });
+
+    it('keeps the user\'s zoom when the same box is handed again, and frames a new one', () => {
+      open([0.6, 0.1, 0.8, 0.3]);
+      component.zoomIn();
+      const zoomed = component.zoom();
+
+      // A parent recomputing its view (a metadata batch landing) hands a new array.
+      fixture.componentRef.setInput('fitBox', [0.6, 0.1, 0.8, 0.3]);
+      TestBed.tick();
+      expect(component.zoom()).toBe(zoomed);
+
+      // The next face out of the same photo is framed on the image already shown.
+      fixture.componentRef.setInput('fitBox', [0.1, 0.5, 0.2, 0.6]);
+      TestBed.tick();
+      expect(component.zoom()).toBeCloseTo(10, 6);
+      expect(under(50, 50).x).toBeCloseTo(0.15, 6);
+    });
+
+    it('goes back to the plain cap with no box', () => {
+      open([0.45, 0.45, 0.5, 0.5]);
+      fixture.componentRef.setInput('fitBox', null);
+      TestBed.tick();
+      expect(component.maxZoom).toBe(5);
+      expect(component.zoom()).toBe(5);
+    });
+  });
+
   describe('another dataset (datasetId)', () => {
     it('loads the image out of that dataset, naming no detector', () => {
       TestBed.inject(ActiveContextService).setActive('faces', 'face-det');

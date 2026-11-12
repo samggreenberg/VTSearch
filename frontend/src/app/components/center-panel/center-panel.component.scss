@@ -165,7 +165,7 @@
   gap: var(--space-xs);
 }
 
-// Compare and Show in photo, side by side so the pair costs the image one row.
+// Compare, Wider and Show in photo, side by side so they cost the image one row.
 .item-actions {
   display: flex;
   align-items: center;
@@ -173,12 +173,19 @@
   flex-shrink: 0;
 }
 
-// The Compare toggle, lit while the reference pane is on.
+// The compare layout's toggles, Compare and Wider, each lit while it is on.
 .compare-toggle.active,
 .compare-toggle.active:hover {
   color: var(--btn-filled-text);
   background: var(--accent);
   border-color: var(--accent);
+}
+
+// Under Wider (#5645), the candidate while its photo is being looked up: an
+// empty pane rather than its crop for a moment. `visibility` keeps the
+// viewer's size, so the layout does not jump when the photo arrives.
+vt-image-viewer.wider-pending {
+  visibility: hidden;
 }
 
 // Swipe animation wrapper

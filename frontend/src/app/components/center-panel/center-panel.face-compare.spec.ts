@@ -3,7 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
-import { of } from 'rxjs';
+import { Observable, Subject, of } from 'rxjs';
 
 import { CenterPanelComponent } from './center-panel.component';
 import { FaceReferenceComponent } from './face-reference/face-reference.component';
@@ -13,21 +13,27 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { FaceReference, FaceReferenceService } from '../../services/face-reference.service';
 import { KeyboardService } from '../../services/keyboard.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { SourcePhotoService } from '../../services/source-photo.service';
+import { SourceLookup, SourcePhotoService } from '../../services/source-photo.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { settleZoneless } from '../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * The Face compare layout in the centre panel (#5642): a reference pane beside
  * a face while a detector is active, the toggle that turns it off, and the key
- * that steps the reference.
+ * that steps the reference. And its Wider toggle (#5645), which shows both
+ * faces from their photos.
  */
 describe('CenterPanelComponent Face compare', () => {
   let fixture: ComponentFixture<CenterPanelComponent>;
   let httpMock: HttpTestingController;
   let activeContext: ActiveContextService;
   const pool = signal<FaceReference[]>([]);
+  const wider = signal(false);
+  const offered = signal(false);
+  const photosLoaded = signal(false);
+  /** Each face's answer to the source lookup, by id; none is a 404. */
+  let lookups: Record<number, Observable<SourceLookup>>;
 
   const face: Media = { id: 4, media_type: 'face', filename: 'a.jpg→face_0.jpg', md5: 'm', custom_metadata: {} };
   const photo: Media = { id: 5, media_type: 'image', filename: 'a.jpg', md5: 'n', custom_metadata: {} };
@@ -37,6 +43,10 @@ describe('CenterPanelComponent Face compare', () => {
       { kind: 'media', id: 1 },
       { kind: 'media', id: 2 },
     ]);
+    wider.set(false);
+    offered.set(false);
+    photosLoaded.set(false);
+    lookups = {};
     configureZoneless({
       imports: [CenterPanelComponent],
       providers: [
@@ -44,13 +54,28 @@ describe('CenterPanelComponent Face compare', () => {
         provideRouter([]),
         {
           provide: FaceReferenceService,
-          useValue: { pool, pinned: signal(null), pin: vi.fn(), unpin: vi.fn(), loadQualities: vi.fn() },
+          useValue: {
+            pool,
+            pinned: signal(null),
+            pin: vi.fn(),
+            unpin: vi.fn(),
+            loadQualities: vi.fn(),
+            wider,
+            toggleWider: () => wider.update((on) => !on),
+          },
         },
         // A face has no viewer of its own; it is shown as a still.
         { provide: MediaTypeCapabilityService, useValue: { usesThumbnails: () => true, ensureLoaded: vi.fn() } },
         {
           provide: SourcePhotoService,
-          useValue: { offered: signal(false), request: signal(null), lookup: () => of(null), open: vi.fn(), close: vi.fn() },
+          useValue: {
+            offered,
+            photosLoaded,
+            request: signal(null),
+            lookup: (id: number) => lookups[id] ?? of({ kind: 'none', message: 'No photo' }),
+            open: vi.fn(),
+            close: vi.fn(),
+          },
         },
       ],
     });
@@ -85,9 +110,13 @@ describe('CenterPanelComponent Face compare', () => {
     return found ? (found.componentInstance as FaceReferenceComponent) : null;
   }
 
-  function toggle(): HTMLButtonElement | null {
+  function button(label: string): HTMLButtonElement | null {
     const all = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-    return all.find((b) => b.textContent?.trim() === 'Compare') ?? null;
+    return all.find((b) => b.textContent?.trim() === label) ?? null;
+  }
+
+  function toggle(): HTMLButtonElement | null {
+    return button('Compare');
   }
 
   it('puts a reference beside a face, and leaves the candidate the panel\'s own viewer', async () => {
@@ -144,5 +173,111 @@ describe('CenterPanelComponent Face compare', () => {
     await settleZoneless(fixture);
     expect(reference()!.current()).toEqual({ kind: 'media', id: 2 });
     expect(fixture.componentInstance.imageViewer()!.media().id).toBe(4);
+  });
+
+  describe('Wider', () => {
+    const found = (mediaId: number, box: [number, number, number, number]): Observable<SourceLookup> =>
+      of({ kind: 'found', datasetId: 'photos', mediaId, box });
+
+    beforeEach(() => {
+      offered.set(true);
+      photosLoaded.set(true);
+      lookups = { 4: found(40, [0.4, 0.4, 0.6, 0.6]), 1: found(10, [0.1, 0.2, 0.3, 0.4]) };
+    });
+
+    function referenceViewer(): ImageViewerComponent {
+      const viewers = fixture.debugElement.queryAll(By.directive(ImageViewerComponent));
+      const candidate = fixture.componentInstance.imageViewer();
+      return viewers.map((v) => v.componentInstance as ImageViewerComponent).find((v) => v !== candidate)!;
+    }
+
+    async function turnOn(): Promise<void> {
+      button('Wider')!.click();
+      await settleZoneless(fixture);
+    }
+
+    it('is offered beside Compare once the photos are loaded, and only in the layout', async () => {
+      photosLoaded.set(false);
+      await show(face);
+      expect(button('Wider')).toBeNull();
+
+      photosLoaded.set(true);
+      await settleZoneless(fixture);
+      expect(button('Wider')!.getAttribute('aria-pressed')).toBe('false');
+
+      toggle()!.click();
+      await settleZoneless(fixture);
+      expect(button('Wider')).toBeNull();
+      httpMock.match((r) => r.url === '/api/settings');
+    });
+
+    it('is not offered when the lookup says the photos are not loaded after all', async () => {
+      lookups[4] = of({ kind: 'not-loaded', datasetId: 'photos' });
+      await show(face);
+      expect(button('Wider')).toBeNull();
+    });
+
+    it('shows both faces from their photos, framed twice as wide as their crops', async () => {
+      await show(face);
+      await turnOn();
+      expect(button('Wider')!.getAttribute('aria-pressed')).toBe('true');
+
+      const candidate = fixture.componentInstance.imageViewer()!;
+      expect(candidate.media().id).toBe(40);
+      expect(candidate.datasetId()).toBe('photos');
+      const box = candidate.fitBox()!;
+      [0.3, 0.3, 0.7, 0.7].forEach((v, i) => expect(box[i]).toBeCloseTo(v, 9));
+
+      const ref = referenceViewer();
+      expect(ref.media().id).toBe(10);
+      expect(ref.datasetId()).toBe('photos');
+      const refBox = ref.fitBox()!;
+      [0, 0.1, 0.4, 0.5].forEach((v, i) => expect(refBox[i]).toBeCloseTo(v, 9));
+    });
+
+    it('goes back to the crops when turned off', async () => {
+      await show(face);
+      await turnOn();
+      await turnOn();
+      const candidate = fixture.componentInstance.imageViewer()!;
+      expect(candidate.media().id).toBe(4);
+      expect(candidate.datasetId()).toBe('');
+      expect(candidate.fitBox()).toBeNull();
+      expect(referenceViewer().media().id).toBe(1);
+    });
+
+    it('keeps a face whose photo cannot be found on its crop, and the toggle with it', async () => {
+      delete lookups[4];
+      await show(face);
+      await turnOn();
+      const candidate = fixture.componentInstance.imageViewer()!;
+      expect(candidate.media().id).toBe(4);
+      expect(candidate.fitBox()).toBeNull();
+      expect(button('Wider')).not.toBeNull();
+      // The reference's photo is found, so it still goes wider.
+      expect(referenceViewer().media().id).toBe(10);
+    });
+
+    it('shows nothing for the next face until its photo is found, rather than its crop', async () => {
+      await show(face);
+      await turnOn();
+      const pending = new Subject<SourceLookup>();
+      lookups[6] = pending;
+      // Not `show`: `whenStable` would wait out the lookup this means to catch.
+      fixture.componentRef.setInput('media', { ...face, id: 6 });
+      await settleResource();
+
+      const host = (): HTMLElement =>
+        fixture.debugElement
+          .queryAll(By.directive(ImageViewerComponent))
+          .find((v) => v.componentInstance === fixture.componentInstance.imageViewer())!.nativeElement;
+      expect(host().classList.contains('wider-pending')).toBe(true);
+
+      pending.next({ kind: 'found', datasetId: 'photos', mediaId: 60, box: [0, 0, 0.5, 0.5] });
+      pending.complete();
+      await settleZoneless(fixture);
+      expect(host().classList.contains('wider-pending')).toBe(false);
+      expect(fixture.componentInstance.imageViewer()!.media().id).toBe(60);
+    });
   });
 });

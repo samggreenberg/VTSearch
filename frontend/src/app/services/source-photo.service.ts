@@ -4,6 +4,7 @@ import { Observable, catchError, map, of } from 'rxjs';
 
 import type { OutlineBox, RegionBox } from '../components/center-panel/image-viewer/image-viewer.component';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { Media } from '../models/api.models';
 import { importSiblingsOfType } from '../utils/import-siblings';
 import { ActiveDatasetService } from './active-dataset.service';
 import { DatasetStateService } from './dataset-state.service';
@@ -25,6 +26,62 @@ export type SourceLookup =
   | { kind: 'not-loaded'; datasetId: string }
   | { kind: 'none'; message: string }
   | { kind: 'error'; message: string };
+
+/**
+ * How much wider than its crop the Face compare layout's **Wider** view shows
+ * a face (#5645): this many times the crop's width and height, about the same
+ * centre. With the converter's default padding of 0.25 a crop is 1.5 times the
+ * face box, so this is three times the face box: the whole head, ears and hair
+ * included, and the top of the shoulders.
+ */
+export const WIDER_SCALE = 2;
+
+/** *box* scaled by *scale* about its own centre. Not clamped to the photo: a
+ *  face at the photo's edge is shown at the same size as one in the middle,
+ *  and the viewer's pan keeps the photo's edge at the pane's. */
+export function widerBox(box: RegionBox, scale = WIDER_SCALE): RegionBox {
+  const [x0, y0, x1, y1] = box;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const hw = ((x1 - x0) * scale) / 2;
+  const hh = ((y1 - y0) * scale) / 2;
+  return [cx - hw, cy - hh, cx + hw, cy + hh];
+}
+
+/**
+ * What one pane of the Face compare layout shows while **Wider** is on
+ * (#5645).
+ *
+ * - `crop`: the face as stored. Wider is off, or this face's photo cannot be
+ *   shown: an example picture, a face with no photo or no recorded box, a
+ *   sibling not loaded, a failed lookup.
+ * - `pending`: the lookup is out. The pane shows nothing yet, rather than the
+ *   crop for a moment and then the photo.
+ * - `photo`: the photo, framed on {@link widerBox} of the face's box in it.
+ */
+export type WiderView =
+  | { readonly kind: 'crop' }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'photo'; readonly datasetId: string; readonly media: Media; readonly fitBox: RegionBox };
+
+const CROP: WiderView = { kind: 'crop' };
+
+/**
+ * Resolve one pane's {@link WiderView} from its source lookup: *loading* while
+ * the lookup is out, *lookup* once it is back (undefined before it was asked).
+ * *name* is the face's file name, which the photo's viewer is given as its
+ * alt text.
+ */
+export function widerView(lookup: SourceLookup | undefined, loading: boolean, name?: string): WiderView {
+  if (loading) return { kind: 'pending' };
+  if (lookup?.kind !== 'found' || !lookup.box) return CROP;
+  return {
+    kind: 'photo',
+    datasetId: lookup.datasetId,
+    media: { id: lookup.mediaId, media_type: 'image', ...(name ? { filename: name } : {}) },
+    fitBox: widerBox(lookup.box),
+  };
+}
 
 /** The Show in photo overlay the user asked for. */
 export interface SourcePhotoRequest {
@@ -79,6 +136,20 @@ export class SourcePhotoService {
     const dataset = this.activeDataset.dataset();
     if (!dataset || !this.mediaTypes.isConvertIn(dataset.media_type)) return false;
     return importSiblingsOfType(dataset, this.datasetState.datasets, 'image').length > 0;
+  });
+
+  /**
+   * {@link offered}, and the Image dataset with the photos is in memory, so a
+   * lookup can find a photo rather than answer 409. The Face compare layout's
+   * Wider toggle (#5645) shows only then: it is the dataset's state, so the
+   * toggle does not come and go with each face's lookup. The registry is
+   * re-read when a load finishes (`DashboardLoadingTasksService`), which turns
+   * this on after Show in photo's Load button.
+   */
+  readonly photosLoaded = computed(() => {
+    if (!this.offered()) return false;
+    const siblings = importSiblingsOfType(this.activeDataset.dataset(), this.datasetState.datasets, 'image');
+    return siblings.some((d) => d.loaded === true);
   });
 
   private readonly _request = signal<SourcePhotoRequest | null>(null);
