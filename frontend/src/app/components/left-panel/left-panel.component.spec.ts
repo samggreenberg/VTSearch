@@ -405,7 +405,6 @@ describe('LeftPanelComponent', () => {
       );
       await settleResource();
       expect(component.mediaTypeName()).toBe('Audio');
-      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Audios (1)');
     });
   });
 

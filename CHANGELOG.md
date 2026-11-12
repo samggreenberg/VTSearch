@@ -87,6 +87,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   your settings load. If settings that had loaded fail to load again, the app keeps using the ones it has. A
   per-media-type preference you change while no settings have loaded is not saved: saving it then would have erased
   that preference for every other media type.
+- **More screens keep working when a request fails** (issue #5661). The fault behind #5658 was in six more places.
+  If the media list could not be fetched, every view that shows it hit an error; they now show an empty grid. The
+  Export dialog worked only while all three of its requests succeeded. Now a failed exporter list still leaves the
+  Clipboard tab, failed labels show an empty preview, and a missing dataset name is left out of the default
+  filename. The Import Settings, Export Settings and Import Labels dialogs now show their "Failed to load …" message
+  when their list cannot be fetched. Before, that message never appeared.
 
 ## 2026-11-10
 

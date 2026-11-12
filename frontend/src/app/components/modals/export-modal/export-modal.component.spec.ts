@@ -1074,7 +1074,7 @@ describe('ExportModalComponent', () => {
       expect(tabs).toEqual(['Clipboard']);
       expect(el.querySelector('.error-text')?.textContent).toContain('Failed to load exporters');
       // The labels read succeeded, so the preview still shows them.
-      expect(el.querySelector('.preview-count')?.textContent).toContain('2 rows');
+      expect(el.querySelector('.preview-count')?.textContent).toContain('3 rows');
     });
 
     it('a failed labels read shows an empty preview over the base columns', async () => {

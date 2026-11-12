@@ -566,7 +566,10 @@ this codebase, and it is silent.
   failed request into a throw at every reader: each template binding, `computed`
   and `effect` downstream of it. Read it behind `resource.hasValue()`, as
   `SettingsStateService` does (it also keeps the last good value across a failed
-  refetch, so a merge-write never sees an empty store). The remaining
+  refetch, so a merge-write never sees an empty store). Whether a failed refetch
+  keeps the last good value is decided per store: `MediaStateService` falls back
+  to an empty list instead, because its refetch is a pair switch and the kept
+  list would be another dataset's ids. The remaining
   conversion recipe and the list of still-open call sites live in
   [`docs/plans/httpresource-migration.md`](plans/httpresource-migration.md).
 - **Mutations, SSE and pollers stay imperative** — POST/PUT/DELETE remain
