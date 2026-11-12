@@ -71,6 +71,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   names the media type), and asks for the settings once when you open it from the Dashboard (twice on a full page
   load, counting the app's own). Opening an 8,000-image map from the Dashboard with 100 ms of latency, the map
   appeared in 0.64 s instead of 0.73 s; on a fresh page load it appeared in 1.87 s instead of 1.96 s.
+- **Every page starts sooner when you open it in a new tab** (issue #5657). The app's startup code used to arrive
+  as 32 files, and a browser talking plain HTTP to the server fetches only about six at a time, so a fresh page
+  load spent four extra round trips on them before showing anything. It is now one file. A page that checks
+  something with the server before it opens (Train, Tune, Browse and People) also fetches its own code during that
+  check now, not after it. Opening an 8,000-image Browse map in a new tab with 100 ms of latency, the map appeared
+  in 1.22 s instead of 1.87 s.
 - **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
   downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
   originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,
