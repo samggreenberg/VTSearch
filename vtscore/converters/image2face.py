@@ -25,9 +25,10 @@ by the angle of the least-squares similarity fit of the face's five landmarks
 onto the ArcFace template (:data:`imagekit.face.face_align.ARCFACE_TEMPLATE`,
 the shape the provider's own embedder aligns to).  ``none`` is the plain box
 crop.  Which faces are found and kept, and the ``source_box`` each records, do
-not depend on it.  ``roll`` is the default: an upright crop is what a person
-looks at, and it is what the ``face`` embedder re-detects on when a crop
-arrives without a vector.
+not depend on it; the five landmarks each crop keeps (``face_landmarks``,
+#5644) are measured on the stored crop, so they turn with it.  ``roll`` is the
+default: an upright crop is what a person looks at, and it is what the
+``face`` embedder re-detects on when a crop arrives without a vector.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ from typing import Any, NamedTuple, Optional
 import numpy as np
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
-from vtscore.media.provenance import SOURCE_BOX_FIELD
+from vtscore.media.provenance import FACE_LANDMARKS_FIELD, SOURCE_BOX_FIELD
 from vtscore.plugins import PluginField
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,29 @@ def _usable_landmarks(points: Any) -> Optional[np.ndarray]:
     return arr if np.isfinite(arr).all() else None
 
 
+def _roll_angle(det: FaceDetection, align: str) -> float:
+    """How far *align* turns *det*'s crop, in radians clockwise with y down; ``0.0`` for no turn.
+
+    ``none``, or a detection without landmarks, turns nothing.  ``roll`` turns
+    by the angle of the fit of the ArcFace template to the landmarks.
+    """
+    if align not in ALIGN_MODES:
+        raise ValueError(f"unknown align mode {align!r}; expected one of {ALIGN_MODES}")
+    if align == "none" or det.landmarks is None:
+        return 0.0
+    from imagekit.face.face_align import ARCFACE_TEMPLATE  # noqa: PLC0415
+
+    # Template point (u, v) -> photo pixel (a*u - b*v + tx, b*u + a*v + ty).
+    a, b, _tx, _ty = fit_similarity(ARCFACE_TEMPLATE, det.landmarks)
+    return math.atan2(b, a)
+
+
+def _turn_centre(det: FaceDetection) -> tuple[float, float]:
+    """The photo point ``roll`` turns *det*'s crop about: the centre of the provider's own box."""
+    fx1, fy1, fx2, fy2 = det.raw
+    return (fx1 + fx2) / 2, (fy1 + fy2) / 2
+
+
 def crop_face(img: Any, det: FaceDetection, align: str, padding: float) -> Any:
     """The crop *det* yields from *img*, turned as *align* says (:data:`ALIGN_MODES`).
 
@@ -107,21 +131,11 @@ def crop_face(img: Any, det: FaceDetection, align: str, padding: float) -> Any:
     from PIL import Image  # noqa: PLC0415
 
     x1, y1, x2, y2 = det.box
-    pts = det.landmarks
-    if align not in ALIGN_MODES:
-        raise ValueError(f"unknown align mode {align!r}; expected one of {ALIGN_MODES}")
-    if align == "none" or pts is None:
-        return img.crop((x1, y1, x2, y2))
-    from imagekit.face.face_align import ARCFACE_TEMPLATE  # noqa: PLC0415
-
-    # Template point (u, v) -> photo pixel (a*u - b*v + tx, b*u + a*v + ty).
-    a, b, _tx, _ty = fit_similarity(ARCFACE_TEMPLATE, pts)
-    angle = math.atan2(b, a)
+    angle = _roll_angle(det, align)
     if angle == 0.0:
         return img.crop((x1, y1, x2, y2))
     c, s = math.cos(angle), math.sin(angle)
-    fx1, fy1, fx2, fy2 = det.raw
-    cx, cy = (fx1 + fx2) / 2, (fy1 + fy2) / 2
+    cx, cy = _turn_centre(det)
     # Output pixel (u, v) is the turned photo's (x1 + u, y1 + v): the photo's
     # point at that offset from the centre, turned back by the angle.
     qx, qy = x1 - cx, y1 - cy
@@ -129,6 +143,36 @@ def crop_face(img: Any, det: FaceDetection, align: str, padding: float) -> Any:
     return img.transform(
         (x2 - x1, y2 - y1), Image.Transform.AFFINE, coeffs, Image.Resampling.BICUBIC, fillcolor=(0, 0, 0)
     )
+
+
+def crop_landmarks(det: FaceDetection, align: str) -> Optional[list[list[float]]]:
+    """*det*'s five landmarks as fractions of the crop :func:`crop_face` stores for it, or ``None``.
+
+    The points go through the same turn as the crop's pixels, so a landmark
+    lands on the crop pixel showing that feature: with no turn it is its photo
+    pixel less the box's corner, and under ``roll`` it is turned the other way
+    about the same centre first.  Each coordinate is then divided by the crop's
+    width or height and rounded to four places, a ten-thousandth of the crop.
+    ``None`` when the detection had no usable landmarks.  What the result means,
+    and why a point may fall outside ``[0, 1]``, is
+    :data:`~vtscore.media.provenance.FACE_LANDMARKS_FIELD`'s.
+    """
+    pts = det.landmarks
+    if pts is None:
+        return None
+    x1, y1, x2, y2 = det.box
+    width, height = x2 - x1, y2 - y1
+    if width <= 0 or height <= 0:
+        return None
+    angle = _roll_angle(det, align)
+    c, s = math.cos(angle), math.sin(angle)
+    cx, cy = _turn_centre(det)
+    # crop_face samples photo point centre + R(angle) * (u + x1 - cx, v + y1 - cy)
+    # for crop pixel (u, v); this is that map run backwards.
+    dx, dy = pts[:, 0] - cx, pts[:, 1] - cy
+    us = c * dx + s * dy + (cx - x1)
+    vs = -s * dx + c * dy + (cy - y1)
+    return [[round(float(u) / width, 4), round(float(v) / height, 4)] for u, v in zip(us, vs)]
 
 
 class Image2FaceMediaConverter(MediaConverter):
@@ -144,7 +188,10 @@ class Image2FaceMediaConverter(MediaConverter):
     crop box normalised to the upright source frame, so the face can be
     outlined on the photo it came from, and carries its grid thumbnail as
     ``thumbnail_bytes``, so a gallery of faces streams small tiles instead of
-    decoding and resizing every crop on request (#5465).
+    decoding and resizing every crop on request (#5465).  A crop whose
+    detection had usable landmarks also keeps them, as ``face_landmarks``:
+    five points in fractions of the crop as stored (:func:`crop_landmarks`),
+    which is what lets two faces be matched in size and position.
     """
 
     display_name = "Images → Faces"
@@ -342,25 +389,29 @@ class Image2FaceMediaConverter(MediaConverter):
             # The same helper the thumbnail route falls back to, so this tile is
             # the one a request would have generated, built once here instead.
             thumb = make_image_thumbnail(crop_bytes)
-            outputs.append(
-                {
-                    "filename": f"{stem}_face_{idx + 1}.{out_ext}",
-                    "media_bytes": crop_bytes,
-                    "duration": 0,
-                    "width": cropped.width,
-                    "height": cropped.height,
-                    "thumbnail_bytes": thumb[0] if thumb is not None else None,
-                    # Where the face sat in the photo, as a fraction of the
-                    # frame: the padded box, however the crop was turned. The
-                    # bounded decode may be a downsample, so pixels here are not
-                    # the original's (see SOURCE_BOX_FIELD).
-                    SOURCE_BOX_FIELD: [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h],
-                    "custom_metadata": {"Detection Confidence": round(face.conf, 4), **extra["custom_metadata"]},
-                    # The provider embedded the face; its vector rides with the crop.
-                    "embeddings": extra["embeddings"],
-                    "embedder": extra["embedder"],
-                }
-            )
+            output: dict[str, Any] = {
+                "filename": f"{stem}_face_{idx + 1}.{out_ext}",
+                "media_bytes": crop_bytes,
+                "duration": 0,
+                "width": cropped.width,
+                "height": cropped.height,
+                "thumbnail_bytes": thumb[0] if thumb is not None else None,
+                # Where the face sat in the photo, as a fraction of the
+                # frame: the padded box, however the crop was turned. The
+                # bounded decode may be a downsample, so pixels here are not
+                # the original's (see SOURCE_BOX_FIELD).
+                SOURCE_BOX_FIELD: [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h],
+                "custom_metadata": {"Detection Confidence": round(face.conf, 4), **extra["custom_metadata"]},
+                # The provider embedded the face; its vector rides with the crop.
+                "embeddings": extra["embeddings"],
+                "embedder": extra["embedder"],
+            }
+            # The five landmarks on the crop as stored, turn and all, so two
+            # faces can be matched in size and position (FACE_LANDMARKS_FIELD).
+            landmarks = crop_landmarks(face, p.align)
+            if landmarks is not None:
+                output[FACE_LANDMARKS_FIELD] = landmarks
+            outputs.append(output)
         return outputs
 
 

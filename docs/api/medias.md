@@ -99,6 +99,15 @@ time, whose pre-clean payload was kept alongside the canonical (cleaned) one.
 Those items accept `?variant=original` on every payload route below, and the
 detail viewer offers a Clean/Original toggle. The key is absent otherwise.
 
+`face_landmarks` is a face crop's five landmarks, as `[[x, y], ...]` fractions
+of the crop as served: left eye, right eye, nose tip, left mouth corner, right
+mouth corner, where left is the image's left. They are measured after the
+crop's `align` turn, so `[0, 0]` is the top-left corner of the image the
+`/image` route returns. A point may lie outside `[0, 1]` when the face runs
+past the crop's edge. The key is absent on anything that is not a face, on a
+face whose detection gave no landmarks, and on a Face dataset imported before
+they were kept (re-import it to get them).
+
 The `custom_metadata` dict is the media type's display fields — e.g.
 `duration`/`frequency` for audio, `width`/`height` for images, `word_count`
 for text — with any importer-supplied `custom_metadata` layered on top.

@@ -7,6 +7,7 @@ import {
   THUMB_SETTLE_MS,
 } from './dataset-example-picker.component';
 import { ActiveContextService } from '../../../../services/active-context.service';
+import { SettingsStateService } from '../../../../services/settings-state.service';
 import { activeContextInterceptor } from '../../../../interceptors/active-context.interceptor';
 import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../testing/test-providers';
@@ -34,8 +35,10 @@ describe('DatasetExamplePickerComponent', () => {
     return httpMock.expectOne((req) => req.url === '/api/medias/picker');
   }
 
-  /** The size buttons load the settings when the toolbar renders. */
+  /** Load the settings, as the New Detector modal around the picker does. */
   async function answerSettings(sizes: Record<string, string> = {}): Promise<void> {
+    TestBed.inject(SettingsStateService).load();
+    TestBed.tick();
     httpMock.expectOne('/api/settings').flush({ grid_icon_size_picker: sizes });
     await settleResource();
   }
