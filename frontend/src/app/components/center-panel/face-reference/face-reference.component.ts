@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { Media } from '../../../models/api.models';
+import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import { FaceReference, FaceReferenceService, referenceKey } from '../../../services/face-reference.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
+import { SourcePhotoService, WiderView, widerView } from '../../../services/source-photo.service';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
 import { ImageViewControlsComponent } from '../image-view-controls/image-view-controls.component';
 
@@ -20,6 +23,11 @@ import { ImageViewControlsComponent } from '../image-view-controls/image-view-co
  * manuals disagree on overlays, and the stricter one (ENFSI-BPM-DI-01) cites
  * studies in which they lowered matching accuracy, so this pane has its own
  * viewer and its own zoom.
+ *
+ * Under the layout's Wider toggle (#5645) a reference that is a face of the
+ * dataset is shown from its photo, framed wide on it, as the candidate is. An
+ * example picture is a file of the user's with no photo behind it, so it stays
+ * as it is.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,9 +40,14 @@ import { ImageViewControlsComponent } from '../image-view-controls/image-view-co
 export class FaceReferenceComponent {
   private readonly refs = inject(FaceReferenceService);
   private readonly metadataCache = inject(MediaMetadataCacheService);
+  private readonly sourcePhoto = inject(SourcePhotoService);
+  private readonly activeDataset = inject(ActiveDatasetService);
 
   /** The id of the face being voted on, which is never its own reference. */
   readonly candidateId = input.required<number>();
+  /** Show the reference from its photo, wider (#5645); the centre panel says
+   *  when, since it owns the toggle and knows whether the photos are loaded. */
+  readonly wider = input(false);
 
   /**
    * The reference stepped to, and the candidate it was stepped to for. Kept
@@ -91,6 +104,31 @@ export class FaceReferenceComponent {
     if (!ref) return '';
     if (ref.kind === 'example') return 'Your example';
     return this.viewerMedia().filename || `Face #${ref.id}`;
+  });
+
+  /**
+   * The reference to look up a photo for under Wider: a face of the dataset,
+   * keyed on the dataset too, since media ids are per dataset. Compared by
+   * value, so a new candidate starting on the same reference asks nothing new.
+   */
+  private readonly sourceKey = computed(
+    () => {
+      const ref = this.current();
+      if (!this.wider() || ref?.kind !== 'media') return undefined;
+      return { datasetId: this.activeDataset.activeId(), mediaId: ref.id };
+    },
+    { equal: (a, b) => a?.datasetId === b?.datasetId && a?.mediaId === b?.mediaId },
+  );
+
+  private readonly sourceLookup = rxResource({
+    params: () => this.sourceKey(),
+    stream: ({ params }) => this.sourcePhoto.lookup(params.mediaId),
+  });
+
+  /** What the viewer shows: the reference as it is, or its photo (see {@link WiderView}). */
+  readonly view = computed<WiderView>(() => {
+    if (!this.sourceKey()) return { kind: 'crop' };
+    return widerView(this.sourceLookup.value(), this.sourceLookup.isLoading(), this.viewerMedia().filename);
   });
 
   constructor() {

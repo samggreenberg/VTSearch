@@ -1,7 +1,11 @@
 @if (current(); as ref) {
+  @let wide = view();
   <vt-image-viewer
     #referenceViewer
-    [media]="viewerMedia()"
+    [class.wider-pending]="wide.kind === 'pending'"
+    [media]="wide.kind === 'photo' ? wide.media : viewerMedia()"
+    [datasetId]="wide.kind === 'photo' ? wide.datasetId : ''"
+    [fitBox]="wide.kind === 'photo' ? wide.fitBox : null"
     [srcOverride]="exampleSrc()"
     [regionDraw]="false"
   />

@@ -11,6 +11,12 @@ vt-image-viewer {
   grid-column: 1;
   grid-row: 1;
   min-width: 0;
+
+  // Under Wider (#5645), while the reference's photo is being looked up: an
+  // empty pane rather than the crop for a moment, at the viewer's own size.
+  &.wider-pending {
+    visibility: hidden;
+  }
 }
 
 .reference-bar {

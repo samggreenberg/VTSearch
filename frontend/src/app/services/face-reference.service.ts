@@ -51,6 +51,10 @@ export function orderByQuality(ids: Iterable<number>, quality: (id: number) => u
  * The pin is kept here, in memory, for as long as the page lives. It is not
  * written to the detector (the issue's decision): a pin is a convenience of
  * one sitting, and saving it would add a field to detector JSON for that.
+ *
+ * So is the layout's **Wider** choice (#5645), for the same reason: it is a
+ * closer look at a few faces, and left on it fetches a whole photo for every
+ * face voted on.
  */
 @Injectable({ providedIn: 'root' })
 export class FaceReferenceService {
@@ -61,6 +65,13 @@ export class FaceReferenceService {
 
   /** The pinned reference per `<dataset>::<detector>`. */
   private readonly pins = signal<Readonly<Record<string, FaceReference>>>({});
+
+  /**
+   * The user turned Wider on: both faces of the compare layout shown from
+   * their photos, with more around them (#5645). Whether it shows is the
+   * centre panel's `widerOn`, since it needs the photos loaded.
+   */
+  readonly wider = signal(false);
 
   private readonly contextKey = computed(() => `${this.activeDataset.activeId()}::${this.activeDetector.activeId()}`);
 
@@ -113,6 +124,10 @@ export class FaceReferenceService {
   loadQualities(): void {
     const ids = [...this.voteState.goodVotes];
     if (ids.length) this.metadataCache.ensureLoaded(ids);
+  }
+
+  toggleWider(): void {
+    this.wider.update((on) => !on);
   }
 
   pin(ref: FaceReference): void {

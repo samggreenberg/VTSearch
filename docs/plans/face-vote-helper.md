@@ -183,6 +183,11 @@ exists; this plan adds nothing for it.
   `POST /api/medias/batch` (#5644). No pose is computed.
 - **Crop padding of 0.25** of the face box on every side by default. Ears and
   hairline are often at or past the crop edge.
+- **A wider view.** The compare layout's **Wider** toggle shows both faces
+  from their parent photos, framed on twice the crop's box (`WIDER_SCALE`,
+  `source-photo.service.ts`), through `vt-image-viewer`'s `fitBox`. The photo
+  is shown as taken: the converter does not keep the roll angle it levelled
+  the crop by, so the photo cannot be turned to match.
 
 ## Design
 
@@ -205,11 +210,9 @@ faces stay in their own panes.
 The landmarks are each crop's `face_landmarks`. Existing Face datasets have
 none and show the unregistered layout until re-imported.
 
-### Wider view
-
-Ears and hairline are the parts most likely to be cut off. A **Wider** toggle
-re-renders each side from its parent photo with a larger box around the same
-face. It needs the sibling Image dataset loaded and is hidden otherwise.
+Under **Wider** the panes show the unlevelled photos, so the landmarks, which
+are measured on the levelled crop, do not land on them. Registering there
+needs the crop's roll angle, which the converter does not keep yet.
 
 ### The checklist
 
