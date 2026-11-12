@@ -201,6 +201,20 @@ class TestVariantServing:
         assert client.get(f"/api/medias/{media_id}/image").data == canonical
         assert client.get(f"/api/medias/{media_id}/image?variant=original").data == original
 
+    def test_image_route_etags_each_variant_by_its_own_bytes(self, client, cleaned_image_media):
+        """The two variants are two cache entries, and a validator from one
+        must never answer a 304 for the other (#5648)."""
+        media_id, _canonical, _original = cleaned_image_media
+        clean = client.get(f"/api/medias/{media_id}/image")
+        original = client.get(f"/api/medias/{media_id}/image?variant=original")
+        assert clean.headers["ETag"] != original.headers["ETag"]
+        crossed = client.get(
+            f"/api/medias/{media_id}/image?variant=original",
+            headers={"If-None-Match": clean.headers["ETag"]},
+        )
+        assert crossed.status_code == 200
+        assert crossed.data == original.data
+
     def test_generic_media_route_serves_each_variant(self, client, cleaned_image_media):
         media_id, canonical, original = cleaned_image_media
         assert client.get(f"/api/medias/{media_id}/media").data == canonical

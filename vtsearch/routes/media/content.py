@@ -24,7 +24,7 @@ from flask_smorest import abort
 from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.utils.hashing import content_md5
 from vtsearch.routes._media_response import (
-    cached_thumbnail_response,
+    cached_image_response,
     image_thumbnail_response,
     sniff_image_mimetype,
 )
@@ -253,9 +253,16 @@ def media_image(query: dict, media_id: int):
     the route delegates to the type's ``image_response`` hook (audio
     waveforms, video frames), which returns ``None`` for a type with no
     paintable form.
+
+    The response is cacheable like the thumbnail's: an ``ETag`` over the bytes
+    served (for audio and video, the hook's picture, not the media's own
+    bytes), a 304 on a matching ``If-None-Match``, and a day's ``max-age``
+    (#5648). The Browse canvas paints its largest cells from here, and the
+    reviewers' prefetch (``MediaPrefetchService``) warms the browser's HTTP
+    cache with these URLs rather than holding the bytes itself.
     """
     data, mimetype, download_name = _resolve_display_image(media_id)
-    return send_file(io.BytesIO(data), mimetype=mimetype, download_name=download_name)
+    return cached_image_response(data, download_name, mimetype)
 
 
 @medias_bp.route("/api/medias/<int:media_id>/thumbnail")
@@ -299,7 +306,7 @@ def media_thumbnail(query: dict, media_id: int):
     if isinstance(found, _NoImage):
         _abort_no_image(found)
     thumb, mimetype = found
-    return cached_thumbnail_response(thumb, f"thumb_{media_id}", mimetype)
+    return cached_image_response(thumb, f"thumb_{media_id}", mimetype)
 
 
 def _full_frame_thumbnail(media_id: int, media: dict) -> tuple[bytes, str] | _NoImage:

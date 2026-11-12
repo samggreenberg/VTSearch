@@ -16313,7 +16313,7 @@
     },
     "/api/medias/{media_id}/image": {
       "get": {
-        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.",
+        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.\n\nThe response is cacheable like the thumbnail's: an ``ETag`` over the bytes\nserved (for audio and video, the hook's picture, not the media's own\nbytes), a 304 on a matching ``If-None-Match``, and a day's ``max-age``\n(#5648). The Browse canvas paints its largest cells from here, and the\nreviewers' prefetch (``MediaPrefetchService``) warms the browser's HTTP\ncache with these URLs rather than holding the bytes itself.",
         "operationId": "media_image",
         "parameters": [
           {

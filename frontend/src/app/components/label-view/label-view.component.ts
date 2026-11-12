@@ -479,9 +479,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // well, so the effect re-runs whenever the prediction can change with the
     // same item still on screen: most often a learned re-sort landing after the
     // previous vote, which reorders the queue the warm was computed from. The
-    // store then drops the stale picks and fetches the new ones. A prediction
-    // that is still wrong at vote time costs one unused fetch, never a wrong
-    // image: the store hands bytes back only for the URL they were fetched from.
+    // prefetch then aborts the stale picks and fetches the new ones. A
+    // prediction that is still wrong at vote time costs one unused fetch, never
+    // a wrong image: a warm only fills the HTTP cache entry for its own URL.
     //
     // While the Spot Check step runs, the next items are its picks.
     effect(() => {
@@ -1454,7 +1454,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * Prefetch the images the auto-advance would land on next (#3896).
    *
    * Only `image` media: the other types paint through their own viewers
-   * (audio waveform, video frame), which this store does not feed. The queue
+   * (audio waveform, video frame), which this prefetch does not warm. The queue
    * stops at the first non-image pick rather than skipping it, since the order
    * of the fetches is the order the reviewer will need them in.
    */

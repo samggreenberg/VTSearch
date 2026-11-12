@@ -1,21 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  MediaPrefetchService,
-  PREFETCH_CAPACITY,
-  imageUrlsWhileImages,
-} from './media-prefetch.service';
+import { MediaPrefetchService, imageUrlsWhileImages } from './media-prefetch.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 
 /**
- * Specs for the review-image prefetch store (#3896).
+ * Specs for the review-image prefetch (#3896), which warms the browser's HTTP
+ * cache now that `/api/medias/<id>/image` is cacheable (#5648).
  *
- * The behaviours pinned here are the ones that make prefetching *safe* rather
- * than merely fast: an entry is only ever handed back for the URL it was
- * fetched from, it is handed back once, and every failure path degrades to the
- * network URL instead of to a blank panel or a wrong image.
+ * jsdom has no HTTP cache, so what is pinned here is the scheduling: which URL
+ * is fetched, in what order, how many at once, what a retarget aborts, and that
+ * a failing URL is not hammered. That the browser then answers the viewer's
+ * `<img>` from the cache was measured in Chromium (see the service's doc).
  *
- * jsdom implements neither `fetch`'s blob path nor `URL.createObjectURL`, so
- * both are stubbed; `svc.canStore` reads them per call for exactly this reason.
+ * `fetch` is stubbed so each request can be settled or aborted by hand.
  */
 describe('MediaPrefetchService', () => {
   const A = '/api/medias/1/image?dataset_id=d';
@@ -23,37 +19,38 @@ describe('MediaPrefetchService', () => {
   const C = '/api/medias/3/image?dataset_id=d';
 
   let svc: MediaPrefetchService;
-  let created: string[];
-  let revoked: string[];
   let pending: Map<string, { resolve: (ok: boolean) => void; aborted: boolean }>;
+  /** Every url fetched, in order, including repeats. */
+  let requested: string[];
+  /** Urls whose body was read to the end, i.e. would be in the cache. */
+  let bodiesRead: string[];
+  let credentials: (string | undefined)[];
 
-  /** Settle the microtasks the fetch chain queues (`.then` x2). */
+  /** Settle the microtasks the fetch chain queues. */
   const flush = async (): Promise<void> => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
   };
 
   beforeEach(() => {
     configureZoneless();
-    created = [];
-    revoked = [];
     pending = new Map();
+    requested = [];
+    bodiesRead = [];
+    credentials = [];
 
-    let seq = 0;
-    vi.stubGlobal('URL', {
-      createObjectURL: (_blob: unknown) => {
-        const url = `blob:mock/${++seq}`;
-        created.push(url);
-        return url;
-      },
-      revokeObjectURL: (url: string) => void revoked.push(url),
-    });
-    vi.stubGlobal('fetch', (url: string, init?: { signal?: AbortSignal }) => {
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      requested.push(url);
+      credentials.push(init?.credentials);
       return new Promise((resolvePromise, rejectPromise) => {
         const entry = {
           resolve: (ok: boolean) =>
-            resolvePromise({ ok, blob: () => Promise.resolve({ size: 1 }) }),
+            resolvePromise({
+              ok,
+              blob: () => {
+                bodiesRead.push(url);
+                return Promise.resolve({ size: 1 });
+              },
+            }),
           aborted: false,
         };
         pending.set(url, entry);
@@ -71,112 +68,92 @@ describe('MediaPrefetchService', () => {
     vi.unstubAllGlobals();
   });
 
-  /** Warm `url` and let its fetch succeed. */
-  const warmed = async (url: string): Promise<void> => {
-    svc.warm(url);
-    pending.get(url)?.resolve(true);
-    await flush();
-  };
-
-  it('resolves to the network URL when nothing is warm', () => {
-    expect(svc.resolve(A)).toBe(A);
-  });
-
-  it('hands back the warmed bytes for that exact URL', async () => {
-    await warmed(A);
-    expect(svc.resolve(A)).toBe(created[0]);
-  });
-
-  it('never hands a warmed entry to a different URL', async () => {
-    await warmed(A);
-    expect(svc.resolve(B)).toBe(B);
-  });
-
-  it('hands an entry out once, then falls back', async () => {
-    await warmed(A);
-    expect(svc.resolve(A)).toBe(created[0]);
-    expect(svc.resolve(A)).toBe(A);
-  });
-
-  it('keeps the displayed object URL alive and revokes it on the next hand-out', async () => {
-    await warmed(A);
-    await warmed(B);
-    const first = svc.resolve(A);
-    expect(revoked).not.toContain(first);
-    const second = svc.resolve(B);
-    expect(revoked).toContain(first);
-    expect(revoked).not.toContain(second);
-  });
-
-  it('fetches a URL once while it is in flight or held', async () => {
+  it('fetches the exact URL with same-origin credentials, and reads the body so it is cached', async () => {
     svc.warm(A);
-    svc.warm(A);
-    expect(pending.size).toBe(1);
+    expect(requested).toEqual([A]);
+    // The viewer's `<img>` sends cookies too; matching it keeps one cache entry.
+    expect(credentials).toEqual(['same-origin']);
     pending.get(A)?.resolve(true);
     await flush();
-    svc.warm(A);
-    expect(created.length).toBe(1);
+    expect(bodiesRead).toEqual([A]);
   });
 
-  it('drops the oldest entry past capacity and revokes it', async () => {
-    const urls = Array.from({ length: PREFETCH_CAPACITY + 1 }, (_, i) => `/api/medias/${i + 10}/image`);
-    for (const url of urls) await warmed(url);
-    expect(created.length).toBe(PREFETCH_CAPACITY + 1);
-    expect(revoked).toContain(created[0]);
-    expect(svc.resolve(urls[0])).toBe(urls[0]);
-    expect(svc.resolve(urls[PREFETCH_CAPACITY])).toBe(created[PREFETCH_CAPACITY]);
-  });
-
-  it('falls back when the fetch fails, and can be retried', async () => {
+  it('does not read the body of a failed response', async () => {
     svc.warm(A);
     pending.get(A)?.resolve(false);
     await flush();
-    expect(svc.resolve(A)).toBe(A);
-    expect(created.length).toBe(0);
-    pending.clear();
-    svc.warm(A);
-    expect(pending.has(A)).toBe(true);
+    expect(bodiesRead).toEqual([]);
   });
 
-  it('clear() aborts what is in flight and revokes what is held', async () => {
-    await warmed(A);
-    svc.warm(B);
+  it('fetches a URL once while it is in flight or warm', async () => {
+    svc.warm(A);
+    svc.warm(A);
+    expect(requested).toEqual([A]);
+    pending.get(A)?.resolve(true);
+    await flush();
+    svc.warm(A);
+    expect(requested).toEqual([A]);
+  });
+
+  it('clear() aborts what is in flight', () => {
+    svc.warm(A);
     svc.clear();
-    expect(pending.get(B)?.aborted).toBe(true);
-    expect(revoked).toContain(created[0]);
-    expect(svc.resolve(A)).toBe(A);
+    expect(pending.get(A)?.aborted).toBe(true);
   });
 
-  it('ignores bytes that land after a clear', async () => {
-    svc.warm(A);
+  it('forgets what was warm on clear(), so the next prediction fetches it again', async () => {
+    svc.prefetch([A]);
+    pending.get(A)?.resolve(true);
+    await flush();
+    svc.clear();
+    svc.prefetch([A]);
+    expect(requested).toEqual([A, A]);
+  });
+
+  it('ignores a fetch that lands after a clear', async () => {
+    svc.prefetch([A, B]);
     svc.clear();
     pending.get(A)?.resolve(true);
     await flush();
-    expect(svc.resolve(A)).toBe(A);
+    // Nothing moved on to B: the cleared prediction is gone.
+    expect(requested).toEqual([A]);
   });
 
-  it('is inert where object URLs are unavailable', async () => {
-    vi.stubGlobal('URL', {});
-    svc.warm(A);
-    await flush();
-    expect(pending.size).toBe(0);
-    expect(svc.resolve(A)).toBe(A);
+  it('is inert where fetch is unavailable', () => {
+    vi.stubGlobal('fetch', undefined);
+    expect(() => svc.prefetch([A, B])).not.toThrow();
   });
+
+  it('treats a fetch that throws synchronously as a failure', async () => {
+    vi.stubGlobal('fetch', () => {
+      throw new TypeError('bad url');
+    });
+    svc.prefetch([A, B]);
+    await flush();
+    let retried = 0;
+    vi.stubGlobal('fetch', () => {
+      retried++;
+      return new Promise(() => undefined);
+    });
+    svc.prefetch([A, B]);
+    await flush();
+    // Both failed once and stay failed while wanted; nothing is retried.
+    expect(retried).toBe(0);
+  });
+
   // --- prefetch(): the review flows' entry point -----------------------------
 
   describe('prefetch()', () => {
     it('fetches targets one at a time, in order', async () => {
       svc.prefetch([A, B]);
       // B waits: two parallel fetches would split the link and land A later.
-      expect([...pending.keys()]).toEqual([A]);
+      expect(requested).toEqual([A]);
       pending.get(A)?.resolve(true);
       await flush();
-      await flush();
-      expect([...pending.keys()]).toEqual([A, B]);
+      expect(requested).toEqual([A, B]);
       pending.get(B)?.resolve(true);
       await flush();
-      expect(svc.resolve(A)).toBe(created[0]);
-      expect(svc.resolve(B)).toBe(created[1]);
+      expect(bodiesRead).toEqual([A, B]);
     });
 
     it('aborts a stale in-flight target when the prediction changes', async () => {
@@ -184,91 +161,74 @@ describe('MediaPrefetchService', () => {
       // A re-sort lands with the same item on screen: the queue is now C, B.
       svc.prefetch([C, B]);
       expect(pending.get(A)?.aborted).toBe(true);
-      expect(pending.has(C)).toBe(true);
+      expect(requested).toEqual([A, C]);
       pending.get(C)?.resolve(true);
       await flush();
-      await flush();
-      expect(pending.has(B)).toBe(true);
-    });
-
-    it('keeps held bytes a retarget drops, and hands them out if wanted back', async () => {
-      svc.prefetch([A]);
-      pending.get(A)?.resolve(true);
-      await flush();
-      // A re-rank moves the pick off A, then back onto it: the bytes are
-      // already paid for, so no second download.
-      svc.prefetch([B]);
-      expect(revoked).not.toContain(created[0]);
-      svc.prefetch([A]);
-      expect(svc.resolve(A)).toBe(created[0]);
-    });
-
-    it('evicts what the prediction no longer wants before what it does', async () => {
-      const urls = Array.from({ length: PREFETCH_CAPACITY }, (_, i) => `/api/medias/${i + 20}/image`);
-      for (const url of urls) await warmed(url);
-      // Everything held is stale except the oldest entry, which is wanted again.
-      svc.prefetch([urls[0], C]);
-      pending.get(C)?.resolve(true);
-      await flush();
-      expect(svc.resolve(urls[0])).toBe(created[0]);
-      expect(revoked).toContain(created[1]);
-      expect(svc.resolve(C)).toBe(created[PREFETCH_CAPACITY]);
-    });
-
-    it('keeps the on-screen item held until the viewer takes it', async () => {
-      svc.prefetch([A, B]);
-      pending.get(A)?.resolve(true);
-      await flush();
-      // The vote advanced onto A. The selection effect retargets past it
-      // *before* the viewer has resolved it — the two run in the same flush.
-      svc.prefetch([B, C], [A]);
-      expect(revoked).not.toContain(created[0]);
-      expect(svc.resolve(A)).toBe(created[0]);
+      expect(requested).toEqual([A, C, B]);
     });
 
     it('keeps the on-screen item in flight across a retarget', () => {
+      // The vote advanced onto A while its warm was still downloading; the
+      // viewer's `<img>` is riding on that download, so it must not be cut.
       svc.prefetch([A, B]);
       svc.prefetch([B, C], [A]);
       expect(pending.get(A)?.aborted).toBe(false);
+      // And the next target waits for it: still one fetch at a time.
+      expect(requested).toEqual([A]);
     });
 
-    it('does not refetch what it already holds', async () => {
+    it('does not refetch what it already warmed', async () => {
       svc.prefetch([A]);
       pending.get(A)?.resolve(true);
       await flush();
-      pending.clear();
+      svc.prefetch([A, B]);
+      expect(requested).toEqual([A, B]);
+    });
+
+    it('does not refetch the on-screen item once it has moved from target to keep', async () => {
+      svc.prefetch([A, B]);
+      pending.get(A)?.resolve(true);
+      await flush();
+      svc.prefetch([B, C], [A]);
+      pending.get(B)?.resolve(true);
+      await flush();
+      expect(requested).toEqual([A, B, C]);
+    });
+
+    it('warms again an image a retarget dropped and then wants back', async () => {
+      // The HTTP cache still holds it, so the repeat fetch is a cache read;
+      // forgetting it keeps this service's bookkeeping bounded by the prediction.
       svc.prefetch([A]);
-      expect(pending.size).toBe(0);
+      pending.get(A)?.resolve(true);
+      await flush();
+      svc.prefetch([B]);
+      pending.get(B)?.resolve(true);
+      await flush();
+      svc.prefetch([A]);
+      expect(requested).toEqual([A, B, A]);
     });
 
     it('does not fetch a failed target again while the prediction holds it (#5099)', async () => {
       svc.prefetch([A, B]);
       pending.get(A)?.resolve(false);
       await flush();
-      await flush();
       // On to B, not back to A: a url that fails would otherwise be fetched
       // back to back for as long as it stays a target.
-      expect(pending.has(B)).toBe(true);
-      pending.delete(A);
+      expect(requested).toEqual([A, B]);
       // A retarget that still wants A leaves it alone too.
       svc.prefetch([A, B, C]);
       pending.get(B)?.resolve(true);
       await flush();
-      await flush();
-      expect(pending.has(C)).toBe(true);
-      expect(pending.has(A)).toBe(false);
-      expect(svc.resolve(A)).toBe(A);
+      expect(requested).toEqual([A, B, C]);
     });
 
     it('tries a failed target again once a retarget has dropped it', async () => {
       svc.prefetch([A]);
       pending.get(A)?.resolve(false);
       await flush();
-      await flush();
-      pending.clear();
       svc.prefetch([B]);
       svc.prefetch([A]);
-      expect(pending.has(A)).toBe(true);
+      expect(requested).toEqual([A, B, A]);
     });
 
     it('does not count a target a retarget aborted as failed', async () => {
@@ -278,81 +238,17 @@ describe('MediaPrefetchService', () => {
       await flush();
       pending.get(B)?.resolve(true);
       await flush();
-      await flush();
-      pending.delete(A);
       svc.prefetch([A]);
-      expect(pending.has(A)).toBe(true);
+      expect(requested).toEqual([A, B, A]);
     });
 
     it('an empty prediction aborts what is in flight', async () => {
       svc.prefetch([A, B]);
       pending.get(A)?.resolve(true);
       await flush();
-      await flush();
-      expect(pending.has(B)).toBe(true);
+      expect(requested).toEqual([A, B]);
       svc.prefetch([]);
       expect(pending.get(B)?.aborted).toBe(true);
-    });
-  });
-
-  // --- claim(): the vote beat the prefetch -----------------------------------
-
-  describe('claim()', () => {
-    it('is null when nothing is in flight for the url', () => {
-      expect(svc.claim(A)).toBeNull();
-    });
-
-    it('hands the in-flight bytes to the viewer instead of fetching twice', async () => {
-      svc.prefetch([A, B]);
-      const claimed = svc.claim(A);
-      expect(claimed).not.toBeNull();
-      pending.get(A)?.resolve(true);
-      await flush();
-      expect(await claimed).toBe(created[0]);
-      // Handed out, so not also parked for a second resolve.
-      expect(svc.resolve(A)).toBe(A);
-      expect(pending.size).toBeLessThanOrEqual(2);
-    });
-
-    it('survives a retarget that no longer lists it', () => {
-      svc.prefetch([A, B]);
-      void svc.claim(A);
-      svc.prefetch([B, C]);
-      expect(pending.get(A)?.aborted).toBe(false);
-    });
-
-    it('resolves null when the fetch fails, so the viewer falls back', async () => {
-      svc.prefetch([A]);
-      const claimed = svc.claim(A);
-      pending.get(A)?.resolve(false);
-      await flush();
-      expect(await claimed).toBeNull();
-    });
-
-    it('resolves null on clear()', async () => {
-      svc.prefetch([A]);
-      const claimed = svc.claim(A);
-      svc.clear();
-      expect(await claimed).toBeNull();
-    });
-
-    it('revokes the previously displayed object URL when claimed bytes arrive', async () => {
-      await warmed(B);
-      const shown = svc.resolve(B);
-      svc.prefetch([A]);
-      const claimed = svc.claim(A);
-      pending.get(A)?.resolve(true);
-      expect(await claimed).toBe(created[1]);
-      expect(revoked).toContain(shown);
-    });
-
-    it('after release(), landed bytes are an ordinary warm again', async () => {
-      svc.prefetch([A]);
-      const claimed = svc.claim(A);
-      svc.release(A);
-      pending.get(A)?.resolve(true);
-      expect(await claimed).toBeNull();
-      expect(svc.resolve(A)).toBe(created[0]);
     });
   });
 });
