@@ -116,13 +116,18 @@
     </ng-template>
 
     <!-- The stage holds the item alone, except in the Face compare layout
-         (#5642): there it is a two-column grid, a reference face and its bar on
-         the left, the item and its toolbar on the right, so the two faces get
-         the same height whatever their bars wrap to. The candidate's cell clips
-         its vote swipe, so a Bad vote does not fly across the reference. -->
+         (#5642): there it is a grid, a reference face and its bar on the left,
+         the item and its toolbar in the middle, so the two faces get the same
+         height whatever their bars wrap to, and the checklist of what to
+         compare down the right (#5643). The candidate's cell clips its vote
+         swipe, so a Bad vote does not fly across the reference. -->
     <div class="media-stage" [class.media-stage--compare]="compareOn">
       @if (compareOn) {
-        <vt-face-reference [candidateId]="media()!.id" [wider]="widerOn()" [link]="faceLink" />
+        <vt-face-reference #faceRef [candidateId]="media()!.id" [wider]="widerOn()" [link]="faceLink" />
+        <vt-face-checklist
+          [candidateHardView]="media()!.face_hard_view ?? null"
+          [referenceHardView]="faceRef.currentHardView()"
+        />
       }
       <div class="media-stage__candidate">
         <div class="media-swipe-wrapper" [class]="viewer === 'audio' ? '' : swipeClass()">

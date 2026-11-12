@@ -6,7 +6,7 @@ import { Observable, of } from 'rxjs';
 import { FaceReferenceComponent } from './face-reference.component';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
 import { ViewLink } from '../image-viewer/face-link';
-import { FaceReference, FaceReferenceService } from '../../../services/face-reference.service';
+import { FaceReference, FaceReferenceService, referenceKey } from '../../../services/face-reference.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SourceLookup, SourcePhotoService } from '../../../services/source-photo.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
@@ -28,7 +28,11 @@ describe('FaceReferenceComponent', () => {
     pin: ReturnType<typeof vi.fn<(ref: FaceReference) => void>>;
     unpin: ReturnType<typeof vi.fn<() => void>>;
     loadQualities: ReturnType<typeof vi.fn<() => void>>;
+    hardView: (ref: FaceReference) => boolean | null;
+    loadHardView: ReturnType<typeof vi.fn<(ref: FaceReference) => void>>;
   };
+  /** Each reference's hard-view verdict, by key; none is no verdict. */
+  const hard = signal<Record<string, boolean>>({});
 
   const media = (id: number): FaceReference => ({ kind: 'media', id });
   const LANDMARKS = [
@@ -43,7 +47,16 @@ describe('FaceReferenceComponent', () => {
   beforeEach(async () => {
     pool.set([media(1), media(2), media(3)]);
     pinned.set(null);
-    refs = { pool, pinned, pin: vi.fn((ref) => pinned.set(ref)), unpin: vi.fn(() => pinned.set(null)), loadQualities: vi.fn() };
+    hard.set({});
+    refs = {
+      pool,
+      pinned,
+      pin: vi.fn((ref) => pinned.set(ref)),
+      unpin: vi.fn(() => pinned.set(null)),
+      loadQualities: vi.fn(),
+      hardView: (ref) => hard()[referenceKey(ref)] ?? null,
+      loadHardView: vi.fn(),
+    };
     lookup = vi.fn((id: number) => of<SourceLookup>({ kind: 'found', datasetId: 'photos', mediaId: id * 10, box: [0.2, 0.2, 0.4, 0.4] }));
     configureZoneless({
       imports: [FaceReferenceComponent],
@@ -157,6 +170,19 @@ describe('FaceReferenceComponent', () => {
     expect(viewer()!.imageSrc()).toBe('/api/server-media-files/my%20face.jpg/image');
     expect(text()).toContain('Your example');
     expect(button('Next').disabled).toBe(true);
+  });
+
+  it('says whether the reference on screen is a hard view, and asks for its verdict (#5643)', async () => {
+    hard.set({ 'm:2': true });
+    expect(fixture.componentInstance.currentHardView()).toBeNull();
+    expect(refs.loadHardView).toHaveBeenLastCalledWith(media(1));
+    button('Next').click();
+    await settleZoneless(fixture);
+    expect(fixture.componentInstance.currentHardView()).toBe(true);
+    expect(refs.loadHardView).toHaveBeenLastCalledWith(media(2));
+    pool.set([]);
+    await settleZoneless(fixture);
+    expect(fixture.componentInstance.currentHardView()).toBeNull();
   });
 
   // #5647: the reference's viewer follows the candidate's, sized and placed by

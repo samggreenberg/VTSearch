@@ -1,10 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { Observable, Subject } from 'rxjs';
 
 import { FACE_QUALITY_KEY, FaceReferenceService, orderByQuality } from './face-reference.service';
 import { ActiveDatasetService } from './active-dataset.service';
 import { ActiveDetectorService } from './active-detector.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
+import { SortingApiService } from './sorting-api.service';
 import { VoteStateService } from './vote-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 
@@ -38,7 +40,11 @@ describe('FaceReferenceService', () => {
   const detectorId = signal('det');
   const detector = signal<{ examples?: Array<Record<string, unknown>> } | null>(null);
   let quality: Record<number, number>;
+  let hard: Record<number, boolean>;
   let ensureLoaded: ReturnType<typeof vi.fn<(ids: number[]) => void>>;
+  /** The server's answers about each example picture, sent when a test says. */
+  let verdicts: Record<string, Subject<boolean | null>>;
+  let exampleFaceHardView: ReturnType<typeof vi.fn<(filename: string) => Observable<boolean | null>>>;
 
   beforeEach(() => {
     goods.set(new Set());
@@ -55,7 +61,10 @@ describe('FaceReferenceService', () => {
       ],
     });
     quality = {};
+    hard = {};
     ensureLoaded = vi.fn();
+    verdicts = {};
+    exampleFaceHardView = vi.fn((filename: string) => (verdicts[filename] = new Subject<boolean | null>()));
     configureZoneless({
       providers: [
         { provide: VoteStateService, useValue: { get goodVotes() { return goods(); } } },
@@ -64,9 +73,11 @@ describe('FaceReferenceService', () => {
           useValue: {
             version,
             ensureLoaded,
-            get: (id: number) => (id in quality ? { id, custom_metadata: { [FACE_QUALITY_KEY]: quality[id] } } : undefined),
+            get: (id: number) =>
+              id in quality ? { id, custom_metadata: { [FACE_QUALITY_KEY]: quality[id] }, face_hard_view: hard[id] } : undefined,
           },
         },
+        { provide: SortingApiService, useValue: { exampleFaceHardView } },
         { provide: ActiveDatasetService, useValue: { activeId: datasetId } },
         { provide: ActiveDetectorService, useValue: { activeId: detectorId, detector } },
       ],
@@ -128,6 +139,35 @@ describe('FaceReferenceService', () => {
     expect(service.pinned()).toEqual({ kind: 'example', filename: 'a.jpg' });
     detector.set({ examples: [] });
     expect(service.pinned()).toBeNull();
+  });
+
+  describe('hard views (#5643)', () => {
+    it('reads a face of the dataset\'s verdict off its metadata, and asks the server nothing', () => {
+      quality = { 4: 9, 6: 30, 7: 20 };
+      hard = { 4: true, 6: false };
+      expect(service.hardView({ kind: 'media', id: 4 })).toBe(true);
+      expect(service.hardView({ kind: 'media', id: 6 })).toBe(false);
+      // No verdict stamped, and no metadata yet.
+      expect(service.hardView({ kind: 'media', id: 7 })).toBeNull();
+      expect(service.hardView({ kind: 'media', id: 8 })).toBeNull();
+      service.loadHardView({ kind: 'media', id: 4 });
+      expect(exampleFaceHardView).not.toHaveBeenCalled();
+    });
+
+    it('asks the server about an example picture once, and has no verdict until it answers', () => {
+      const ref = { kind: 'example', filename: 'a.jpg' } as const;
+      service.loadHardView(ref);
+      service.loadHardView(ref);
+      expect(exampleFaceHardView).toHaveBeenCalledTimes(1);
+      expect(exampleFaceHardView).toHaveBeenCalledWith('a.jpg');
+      expect(service.hardView(ref)).toBeNull();
+
+      verdicts['a.jpg'].next(true);
+      expect(service.hardView(ref)).toBe(true);
+      expect(service.hardView({ kind: 'example', filename: 'b.jpg' })).toBeNull();
+      service.loadHardView(ref);
+      expect(exampleFaceHardView).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('keeps one pin per dataset and detector', () => {

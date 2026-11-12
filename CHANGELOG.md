@@ -22,6 +22,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **A checklist of what to compare between two faces** (issue #5643). Beside the Face compare layout, a narrow
+  strip lists five things to compare, most telling first: marks (moles, scars, freckles), ears, nose, eyes and
+  brows, then mouth, chin and face outline, the weakest evidence. Under them, a reminder not to weigh hair, beard,
+  makeup or skin tone. The order follows the research on how face examiners compare: ears and marks tell the
+  most, face shape and mouth the least. It is a prompt, not a form: nothing is ticked off or recorded. When the
+  face you are voting on, or the reference beside it, is a hard view (turned, covered or small), the strip says
+  so, so you know to expect a weaker comparison. For API users: `POST /api/medias/batch` now carries a face's
+  `face_hard_view` verdict, and the new `GET /api/server-media-files/{filename}/face-hard-view` gives one for an
+  example picture.
 - **The reference face is shown the same size and in the same place as the face you are voting on, and the two
   zoom together** (issue #5647). In the Face compare layout, one face could fill its crop while the other sat small
   in a corner. The reference is now enlarged or shrunk, and moved, so its eyes sit where the candidate's do and

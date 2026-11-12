@@ -108,6 +108,13 @@ past the crop's edge. The key is absent on anything that is not a face, on a
 face whose detection gave no landmarks, and on a Face dataset imported before
 they were kept (re-import it to get them).
 
+`face_hard_view` is a face's verdict from the Face Quality its converter
+stamped: `true` for a hard view (turned, covered or small), which is harder to
+compare and to search from, `false` otherwise. The Face compare layout's
+checklist says so when either face is one. The key is absent on anything that
+is not a face, and on a face with no stamped quality or from an embedding space
+with no hard-view cut.
+
 The `custom_metadata` dict is the media type's display fields — e.g.
 `duration`/`frequency` for audio, `width`/`height` for images, `word_count`
 for text — with any importer-supplied `custom_metadata` layered on top.
@@ -855,6 +862,24 @@ GET /api/server-media-files/{filename}/image
 The full-size bytes of an image example in the user's `example_media/` dir
 (binary, not JSON). The Face compare layout shows a detector's example beside
 the face being voted on, where the thumbnail is too small to compare by.
+
+400 (filename escapes the media dir), 404 (not found, or not an image).
+
+### Server media file face hard view
+
+```
+GET /api/server-media-files/{filename}/face-hard-view
+```
+
+→ `{"face_hard_view": true | false | null}`
+
+Whether the face in an image example is a hard view (turned, covered or small),
+read by the server's face provider: the first face it finds, as the face
+embedder would embed it. A face of a dataset carries the same verdict on its
+[batch metadata](#batch-fetch-metadata); an example picture has no stamped
+quality, so the Face compare layout asks here when the reference is one.
+`null` when there is no verdict: Face is off, no face is found, the embedding
+space has no hard-view cut, or the provider fails.
 
 400 (filename escapes the media dir), 404 (not found, or not an image).
 

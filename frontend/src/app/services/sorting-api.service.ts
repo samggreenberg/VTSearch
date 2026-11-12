@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
@@ -63,6 +63,7 @@ import { exampleSortOrigin } from '../generated/api-client/fn/media-server/examp
 import { exampleSortServer } from '../generated/api-client/fn/media-server/example-sort-server';
 import { serverMediaFileFromMediaId } from '../generated/api-client/fn/media-server/server-media-file-from-media-id';
 import { listServerMediaFiles } from '../generated/api-client/fn/media-server/list-server-media-files';
+import { serverMediaFileFaceHardView } from '../generated/api-client/fn/media-server/server-media-file-face-hard-view';
 
 /**
  * Label partition used to open the export modal. The first six map directly to
@@ -254,6 +255,19 @@ export class SortingApiService {
 
   getServerMediaFiles(): Observable<ServerMediaListResponse> {
     return listServerMediaFiles(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Whether the face in an image example is a hard view (#5643): true, false,
+   * or null with no verdict. The verdict is advice, so a failed ask is null
+   * and shows no toast.
+   */
+  exampleFaceHardView(filename: string): Observable<boolean | null> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return serverMediaFileFaceHardView(this.http, this.config.rootUrl, { filename }, context).pipe(
+      map((r) => r.body.face_hard_view ?? null),
+      catchError(() => of(null)),
+    );
   }
 
   /** Sort by one or more server-side example files. Multiple filenames

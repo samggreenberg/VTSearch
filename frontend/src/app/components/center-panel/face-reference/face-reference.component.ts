@@ -91,6 +91,12 @@ export class FaceReferenceComponent {
     return !!current && !!pin && referenceKey(current) === referenceKey(pin);
   });
 
+  /** Whether the reference on screen is a hard view, for the checklist's fitness notice (#5643). */
+  readonly currentHardView = computed<boolean | null>(() => {
+    const ref = this.current();
+    return ref ? this.refs.hardView(ref) : null;
+  });
+
   /** What the viewer is handed: the Good pile's item, or a stand-in naming the example. */
   readonly viewerMedia = computed<Media>(() => {
     const ref = this.current();
@@ -142,6 +148,11 @@ export class FaceReferenceComponent {
     // The Good pile's ranking needs each face's quality, which rides on its
     // metadata; ask for whatever the pile has gained.
     effect(() => this.refs.loadQualities());
+    // An example's hard-view verdict is read by the server, once a page.
+    effect(() => {
+      const ref = this.current();
+      if (ref) this.refs.loadHardView(ref);
+    });
   }
 
   /** Step to the next reference, wrapping; the candidate stays where it is. */

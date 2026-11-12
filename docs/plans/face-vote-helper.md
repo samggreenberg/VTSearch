@@ -198,6 +198,14 @@ exists; this plan adds nothing for it.
   zooming both panes to a region is one `FaceView` handed to the lead.
   Rotation stays per pane. Not under **Wider**, where the photos are not
   levelled.
+- **The checklist.** Down the right of the compare layout,
+  `vt-face-checklist` (`components/center-panel/face-checklist/`) lists five
+  rows in diagnostic order, worded from the FISWG list: marks, ears, nose,
+  eyes and brows, then mouth, chin and face outline. Under them is the line
+  on what not to weigh. Nothing is ticked off or recorded. Its fitness notice
+  says when the candidate or the reference is a hard view, from each face's
+  `face_hard_view` on `POST /api/medias/batch`, or for an example picture
+  `GET /api/server-media-files/<f>/face-hard-view`.
 
 ## Design
 
@@ -208,28 +216,10 @@ are measured on the levelled crop, do not land on them, and the two panes
 zoom on their own. Registering there needs the crop's roll angle, which the
 converter does not keep yet.
 
-### The checklist
+### The checklist's rows zoom
 
-A narrow strip beside the pair, in this order:
-
-1. **Marks** — moles, scars, freckles. Same place on both?
-2. **Ears** — lobe attached or free, rim shape, how far they stand out.
-3. **Nose** — tip, nostrils, bridge.
-4. **Eyes and brows** — lid folds, brow shape (not brow grooming).
-5. **Mouth, chin, face outline** — weakest evidence; expression moves them.
-
-Under it, one line: *don't weigh hair, beard, makeup or skin tone.*
-
-Clicking an item zooms both panes to that region, located from the
-landmarks. Items are not ticked off and nothing is recorded: the research
-supports directing attention, and a form would slow every vote. A row is
-greyed when its region falls outside either crop.
-
-### Fitness notice
-
-When the candidate or the reference is a hard view, the strip says so in one
-line. It offers no way out of the vote, because the app has none; it only
-tells the user to expect a weaker comparison.
+Clicking a row of the checklist zooms both panes to that region, located from
+the landmarks. A row is greyed when its region falls outside either crop.
 
 ## Open decisions
 

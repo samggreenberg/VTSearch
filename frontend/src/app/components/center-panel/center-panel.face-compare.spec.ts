@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import { Observable, Subject, of } from 'rxjs';
 
 import { CenterPanelComponent } from './center-panel.component';
+import { FaceChecklistComponent } from './face-checklist/face-checklist.component';
 import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { ImageViewerComponent } from './image-viewer/image-viewer.component';
 import { Media } from '../../models/api.models';
@@ -74,6 +75,8 @@ describe('CenterPanelComponent Face compare', () => {
             pin: vi.fn(),
             unpin: vi.fn(),
             loadQualities: vi.fn(),
+            hardView: (ref: FaceReference) => (ref.kind === 'media' && ref.id === 2) || null,
+            loadHardView: vi.fn(),
             wider,
             toggleWider: () => wider.update((on) => !on),
           },
@@ -213,6 +216,34 @@ describe('CenterPanelComponent Face compare', () => {
     await settleZoneless(fixture);
     expect(reference()!.current()).toEqual({ kind: 'media', id: 2 });
     expect(fixture.componentInstance.imageViewer()!.media().id).toBe(4);
+  });
+
+  describe('checklist (#5643)', () => {
+    function checklist(): FaceChecklistComponent | null {
+      const found = fixture.debugElement.query(By.directive(FaceChecklistComponent));
+      return found ? (found.componentInstance as FaceChecklistComponent) : null;
+    }
+
+    it('sits beside the two faces in the layout, and goes with it', async () => {
+      await init({});
+      await show(face);
+      expect(checklist()).not.toBeNull();
+      toggle()!.click();
+      await settleZoneless(fixture);
+      expect(checklist()).toBeNull();
+    });
+
+    it('is handed whether the candidate and the reference on screen are hard views', async () => {
+      await init({});
+      await show({ ...face, face_hard_view: true });
+      expect(checklist()!.candidateHardView()).toBe(true);
+      expect(checklist()!.referenceHardView()).toBeNull();
+
+      TestBed.inject(KeyboardService).action$.next({ type: 'reference' });
+      await show(face);
+      expect(checklist()!.candidateHardView()).toBeNull();
+      expect(checklist()!.referenceHardView()).toBe(true);
+    });
   });
 
   describe('Wider', () => {

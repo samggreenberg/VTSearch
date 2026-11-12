@@ -331,6 +331,16 @@ class MediaEntrySchema(Schema):
             )
         },
     )
+    face_hard_view = fields.Boolean(
+        metadata={
+            "description": (
+                "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard "
+                "view (turned, covered, small), which is harder to compare and to search from "
+                "(#5372). Absent when there is no verdict: not a face, no stamped quality, or an "
+                "embedding space with no hard-view cut."
+            )
+        },
+    )
     has_original = fields.Boolean(
         metadata={
             "description": (
@@ -669,6 +679,17 @@ class ServerMediaListResponseSchema(Schema):
     """Response for ``GET /api/server-media-files``."""
 
     files = fields.List(fields.Nested(_ServerMediaFileEntrySchema), required=True)
+
+
+class ServerMediaFaceHardViewResponseSchema(Schema):
+    """Response for ``GET /api/server-media-files/<filename>/face-hard-view``.
+
+    ``face_hard_view`` is true when the face in the picture is a hard view
+    (turned, covered, small; #5372), false when it is not, and null when there
+    is no verdict: Face is off, no face is found, or the space has no cut.
+    """
+
+    face_hard_view = fields.Boolean(required=True, allow_none=True)
 
 
 class ServerMediaUploadResponseSchema(Schema):
