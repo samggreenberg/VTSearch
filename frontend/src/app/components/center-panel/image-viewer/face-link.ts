@@ -1,4 +1,4 @@
-import { Signal, signal } from '@angular/core';
+import { Signal, computed, signal } from '@angular/core';
 
 /**
  * Two faces shown the same size and in the same place, zooming and panning
@@ -59,6 +59,24 @@ export interface FaceView {
   readonly scale: number;
 }
 
+/** A rectangle of face space, `x0 < x1` and `y0 < y1`, y pointing down as on screen. */
+export interface FaceRect {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+}
+
+/**
+ * A face in face space: its five landmarks, in the order they are served, and
+ * the rectangle its image covers. What a part of the face is located from, and
+ * what says whether the image holds it (`face-regions.ts`).
+ */
+export interface FaceShape {
+  readonly points: readonly (readonly [number, number])[];
+  readonly bounds: FaceRect;
+}
+
 /** A viewer's own transform: its zoom over the fitted image, and its pan in layout pixels. */
 export interface PaneView {
   readonly zoom: number;
@@ -92,6 +110,49 @@ export function faceFrame(anchor: FaceAnchor, renderedW: number, renderedH: numb
   const unit = Math.hypot((anchor.mouth[0] - anchor.eyes[0]) * renderedW, (anchor.mouth[1] - anchor.eyes[1]) * renderedH);
   if (!(unit > 0)) return null;
   return { x: (anchor.eyes[0] - 0.5) * renderedW, y: (anchor.eyes[1] - 0.5) * renderedH, unit };
+}
+
+/**
+ * The face of *landmarks* in face space, on an image drawn *renderedW* ×
+ * *renderedH* at zoom 1; null when {@link faceAnchor} or {@link faceFrame} is.
+ */
+export function faceShape(
+  landmarks: FaceLandmarks | null | undefined,
+  renderedW: number,
+  renderedH: number,
+): FaceShape | null {
+  const anchor = faceAnchor(landmarks);
+  const frame = anchor && faceFrame(anchor, renderedW, renderedH);
+  if (!frame) return null;
+  const at = (u: number, v: number): Point => [
+    ((u - 0.5) * renderedW - frame.x) / frame.unit,
+    ((v - 0.5) * renderedH - frame.y) / frame.unit,
+  ];
+  const [x0, y0] = at(0, 0);
+  const [x1, y1] = at(1, 1);
+  return { points: landmarks!.map((p) => at(p[0], p[1])), bounds: { x0, y0, x1, y1 } };
+}
+
+/**
+ * The view that fits *rect* in a pane *paneW* × *paneH*, the rectangle's centre
+ * in the middle of it, for a face turned by *rotationDeg* (quarter turns, so a
+ * rectangle on its side swaps width for height). Null when there is nothing to
+ * fit, or nothing to fit it in.
+ */
+export function viewOfRect(rect: FaceRect, paneW: number, paneH: number, rotationDeg: number): FaceView | null {
+  const w = rect.x1 - rect.x0;
+  const h = rect.y1 - rect.y0;
+  if (!(w > 0 && h > 0 && paneW > 0 && paneH > 0)) return null;
+  const quarter = ((Math.round(rotationDeg / 90) % 4) + 4) % 4;
+  const swapped = quarter === 1 || quarter === 3;
+  const scale = Math.min(paneW / (swapped ? h : w), paneH / (swapped ? w : h));
+  return { cx: (rect.x0 + rect.x1) / 2, cy: (rect.y0 + rect.y1) / 2, scale };
+}
+
+/** Two views that draw a face the same, to within what arithmetic leaves over. */
+export function sameFaceView(a: FaceView, b: FaceView): boolean {
+  const near = (x: number, y: number, size: number) => Math.abs(x - y) <= 1e-6 * size;
+  return near(a.cx, b.cx, 1) && near(a.cy, b.cy, 1) && near(a.scale, b.scale, Math.max(a.scale, b.scale));
 }
 
 /*
@@ -131,25 +192,63 @@ export const LEAD_PENDING: LeadState = { kind: 'pending' };
 export interface LinkLead {
   /** The face view it shows, or why there is none. */
   readonly leadState: Signal<LeadState>;
+  /** Its face in face space, once its image is laid out. */
+  readonly faceShape: Signal<FaceShape | null>;
   /** The zoom its toolbar shows, which the follower's shows too. */
   readonly shownZoom: Signal<number>;
   /** Show *view*, kept within its own zoom range and on its own image. */
   showFaceView(view: FaceView): void;
+  /** Show *rect* of its face, as large as its pane and its zoom range allow. */
+  showFaceRect(rect: FaceRect): void;
   /** Back to its whole image, keeping its own turn. */
   homeView(): void;
   /** Whether its image is zoomed far enough to be panned. */
   canPan(): boolean;
 }
 
+/** What a following viewer tells the link about itself. */
+export interface LinkFollower {
+  /** It is drawn from the lead's view right now. */
+  readonly linked: Signal<boolean>;
+  /** Its face in face space, once its image is laid out. */
+  readonly faceShape: Signal<FaceShape | null>;
+}
+
+/** The two faces of a link, while they are matched. */
+export interface LinkedFaces {
+  readonly lead: FaceShape;
+  readonly follower: FaceShape;
+}
+
 /**
- * The tie between two viewers: the leading one registers here, and the one
- * that follows reads it. A plain object rather than a service, made by the
- * component that lays the two panes out and handed to both, so each pair of
- * panes has its own.
+ * The tie between two viewers: both register here, the one that follows reads
+ * the one that leads, and anything else that wants to move the pair (the
+ * checklist's rows) reads {@link faces} and asks the lead. A plain object
+ * rather than a service, made by the component that lays the two panes out and
+ * handed to both, so each pair of panes has its own.
  */
 export class ViewLink {
   private readonly current = signal<LinkLead | null>(null);
+  private readonly following = signal<LinkFollower | null>(null);
   readonly lead = this.current.asReadonly();
+
+  /** Both faces, while the follower is drawn from the lead's view; else null. */
+  readonly faces = computed<LinkedFaces | null>(() => {
+    const lead = this.current();
+    const follower = this.following();
+    if (!lead || !follower?.linked()) return null;
+    const a = lead.faceShape();
+    const b = follower.faceShape();
+    return a && b ? { lead: a, follower: b } : null;
+  });
+
+  attachFollower(follower: LinkFollower): void {
+    this.following.set(follower);
+  }
+
+  detachFollower(follower: LinkFollower): void {
+    if (this.following() === follower) this.following.set(null);
+  }
 
   attach(lead: LinkLead): void {
     this.current.set(lead);

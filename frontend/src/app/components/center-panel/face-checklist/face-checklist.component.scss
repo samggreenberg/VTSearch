@@ -46,6 +46,38 @@
   color: var(--text-muted);
 }
 
+// A row as a button, while the panes are linked (#5647): the same two lines
+// of text, pressable, with nothing added that would move the list when the
+// rows turn back into text for a face without landmarks.
+.checklist-zoom {
+  display: block;
+  width: 100%;
+  margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-sm));
+  padding: var(--space-xs) var(--space-sm);
+  box-sizing: content-box;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+
+  &:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  &.active {
+    background: var(--accent-highlight-bg);
+    cursor: pointer;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: var(--opacity-disabled);
+  }
+}
+
 .checklist-part {
   display: block;
   color: var(--text-primary);
