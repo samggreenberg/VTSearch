@@ -202,7 +202,10 @@ exists; this plan adds nothing for it.
   `vt-face-checklist` (`components/center-panel/face-checklist/`) lists five
   rows in diagnostic order, worded from the FISWG list: marks, ears, nose,
   eyes and brows, then mouth, chin and face outline. Under them is the line
-  on what not to weigh. Nothing is ticked off or recorded. Its fitness notice
+  on what not to weigh. Nothing is ticked off or recorded. While the panes
+  are linked, a row is a button that zooms both to its part, a rectangle of
+  face space placed from the landmarks (`face-checklist/face-regions.ts`); a
+  row whose part is off either crop is greyed. Its fitness notice
   says when the candidate or the reference is a hard view, from each face's
   `face_hard_view` on `POST /api/medias/batch`, or for an example picture
   `GET /api/server-media-files/<f>/face-hard-view`.
@@ -215,11 +218,6 @@ Under **Wider** the panes show the unlevelled photos, so the landmarks, which
 are measured on the levelled crop, do not land on them, and the two panes
 zoom on their own. Registering there needs the crop's roll angle, which the
 converter does not keep yet.
-
-### The checklist's rows zoom
-
-Clicking a row of the checklist zooms both panes to that region, located from
-the landmarks. A row is greyed when its region falls outside either crop.
 
 ## Open decisions
 

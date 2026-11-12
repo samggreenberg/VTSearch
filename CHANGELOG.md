@@ -39,6 +39,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   needs the eye and mouth points Face datasets now keep (#5644): a face from an older dataset, or a reference that
   is your example picture, is shown at its own size and zooms on its own, as before. Under **Wider** the photos
   are not levelled like the crops, so they are not matched either.
+- **Click a part in the What to compare list to zoom both faces to it** (issue #5647). With the two faces matched,
+  each row of the list is a button: **Nose** fills both panes with the two noses, **Ears** shows one ear and then
+  the other, and a second click on a part zooms back out. The app finds each part from the face's eye, nose and
+  mouth points. A part that either picture does not hold (an ear the crop cut off, or the far ear of a turned
+  head) is greyed. Where the faces are not matched (an older dataset, an example picture as the reference, or
+  **Wider**) the list is plain text, as before.
 - **See the ears and hairline of both faces while comparing them** (issue #5645). In the Face compare layout,
   **Wider** shows the reference and the face you are voting on from the photos they were cut from, with twice as
   much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is

@@ -18,19 +18,21 @@ export type FaceRegion = 'marks' | 'ears' | 'nose' | 'eyes' | 'lower';
 
 /*
  * The proportions, in face units (the eye-to-mouth distance, about 65-70 mm on
- * an adult). They are an average head's, good enough to frame a view.
+ * an adult). They are an average head's, good enough to frame a view, and were
+ * set by drawing the rectangles on the face example's crops
+ * (`scripts/screenshots/face-example.mjs`) across the turns it holds.
  */
 
 /** How far the nose tip stands out of the plane of the eyes and mouth. */
 const NOSE_DEPTH = 0.45;
-/** How far that plane is in front of the axis the head turns on, which runs near the ears. */
-const FACE_DEPTH = 1.25;
+/** How far the eyes' midpoint moves across the head as it turns, for a full turn to the side. */
+const FACE_DEPTH = 0.7;
 /** From that axis out to the middle of an ear. */
 const EAR_REACH = 1.1;
 /** Half the width of the view of one ear. */
 const EAR_HALF_WIDTH = 0.45;
-/** Past this much turn (its sine: about 20 degrees) the far ear is behind the face. */
-const EAR_HIDDEN_TURN = 0.35;
+/** Past this much turn (its sine: 30 degrees) the far ear is behind the face. */
+const EAR_HIDDEN_TURN = 0.5;
 /** As far as the turn is trusted: five points are a rough guide to it. */
 const MAX_TURN = 0.9;
 /** How much of a part's rectangle an image must hold for the part to count as on it. */
@@ -60,7 +62,7 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
   const turn = clamp(offLine / NOSE_DEPTH, -MAX_TURN, MAX_TURN);
   // The eyes ride in front of the axis the head turns on, so a turn carries
   // them toward the side the nose points to, and the middle of the head is
-  // behind them on the other. The ears are either side of that middle,
+  // on the other side of them. The ears are either side of that middle,
   // closer in as the head turns.
   const headX = -FACE_DEPTH * turn;
   const earReach = EAR_REACH * Math.sqrt(1 - turn * turn);
@@ -87,8 +89,8 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
     case 'eyes':
       return [rect(eyeL - 0.5, eyeTop - 0.6, eyeR + 0.5, eyeBottom + 0.35)];
     case 'lower':
-      // Mouth, chin and the jaw either side: the lower outline of the face.
-      return [rect(mouthL - 0.75, mouthY - 0.35, mouthR + 0.75, mouthY + 1)];
+      // Mouth and chin, and the jaw under them: the lower outline of the face.
+      return [rect(mouthL - 0.45, mouthY - 0.3, mouthR + 0.45, mouthY + 0.95)];
   }
 }
 
