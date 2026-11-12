@@ -701,6 +701,15 @@ two part by part instead of trusting your memory of the person.
   too easily to go by. Nothing in the list is ticked off or saved; it is there
   to look down while you compare. When the candidate or the reference is a
   hard view, the list says so, since such a pair is harder to judge.
+- **Click a part in the list** to zoom both faces to it: click **Nose** and
+  both noses fill their panes. Click the same part again to zoom back out to
+  the whole faces. **Ears** shows one ear, then the other on the next click,
+  then zooms back out. A part is greyed when either picture does not hold it:
+  an ear the crop cut off, or the one on the far side of a turned head. The
+  app works out where a part is from the eyes, nose and mouth, so the view can
+  be a little off on a turned face; drag to adjust it. The parts can be
+  clicked whenever the two faces are matched in size, so not on a face from an
+  older dataset, with an example picture as the reference, or under **Wider**.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 

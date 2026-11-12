@@ -1,4 +1,15 @@
-import { FaceFrame, FaceLandmarks, PaneView, faceAnchor, faceFrame, faceViewOf, paneViewOf } from './face-link';
+import {
+  FaceFrame,
+  FaceLandmarks,
+  PaneView,
+  faceAnchor,
+  faceFrame,
+  faceShape,
+  faceViewOf,
+  paneViewOf,
+  sameFaceView,
+  viewOfRect,
+} from './face-link';
 
 /**
  * The face-space math behind the Face compare layout's registration (#5647):
@@ -141,5 +152,44 @@ describe('face-link', () => {
       expect(mouth[0] - eyes[0]).toBeCloseTo(-view.scale, 9);
       expect(mouth[1] - eyes[1]).toBeCloseTo(0, 9);
     });
+  });
+
+  it('puts a face and its image in face space', () => {
+    // 200 x 200: eyes 40 px apart round the centre, mouth 40 px under them.
+    const shape = faceShape(centred, 200, 200)!;
+    const expected = [
+      [-0.5, 0],
+      [0.5, 0],
+      [0, 0.5],
+      [-0.25, 1],
+      [0.25, 1],
+    ];
+    shape.points.forEach((p, i) => expectPoint([p[0], p[1]], expected[i] as [number, number]));
+    // The eye midpoint is 100 px from either side, 80 from the top and 120 from the bottom.
+    expect(shape.bounds.x0).toBeCloseTo(-2.5, 9);
+    expect(shape.bounds.y0).toBeCloseTo(-2, 9);
+    expect(shape.bounds.x1).toBeCloseTo(2.5, 9);
+    expect(shape.bounds.y1).toBeCloseTo(3, 9);
+    expect(faceShape(null, 200, 200)).toBeNull();
+    expect(faceShape(centred, 0, 200)).toBeNull();
+  });
+
+  it('fits a rectangle of the face in the pane, its centre in the middle', () => {
+    const rect = { x0: -1, y0: 0, x1: 1, y1: 1 };
+    // Twice as wide as tall in a square pane: the width is what fits.
+    expect(viewOfRect(rect, 100, 100, 0)).toEqual({ cx: 0, cy: 0.5, scale: 50 });
+    // On its side, the rectangle's height runs across the pane.
+    expect(viewOfRect(rect, 100, 300, 90)).toEqual({ cx: 0, cy: 0.5, scale: 100 });
+    expect(viewOfRect(rect, 100, 300, -90)).toEqual({ cx: 0, cy: 0.5, scale: 100 });
+    expect(viewOfRect(rect, 100, 300, 180)).toEqual({ cx: 0, cy: 0.5, scale: 50 });
+    expect(viewOfRect({ x0: 1, y0: 0, x1: 1, y1: 1 }, 100, 100, 0)).toBeNull();
+    expect(viewOfRect(rect, 0, 100, 0)).toBeNull();
+  });
+
+  it('tells a view from one a little off it', () => {
+    const view = { cx: 0.2, cy: -0.4, scale: 80 };
+    expect(sameFaceView(view, { cx: 0.2 + 1e-9, cy: -0.4, scale: 80 * (1 + 1e-9) })).toBe(true);
+    expect(sameFaceView(view, { ...view, cx: 0.21 })).toBe(false);
+    expect(sameFaceView(view, { ...view, scale: 81 })).toBe(false);
   });
 });

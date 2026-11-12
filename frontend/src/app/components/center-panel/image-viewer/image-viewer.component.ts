@@ -5,17 +5,22 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import {
   FaceFrame,
   FaceLandmarks,
+  FaceRect,
+  FaceShape,
   FaceView,
   LEAD_OFF,
   LEAD_PENDING,
   LeadState,
+  LinkFollower,
   LinkLead,
   PaneView,
   ViewLink,
   faceAnchor,
   faceFrame,
+  faceShape,
   faceViewOf,
   paneViewOf,
+  viewOfRect,
 } from './face-link';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -101,7 +106,7 @@ const OFF_CANVAS_DRAW_EXCLUDED =
   templateUrl: './image-viewer.component.html',
   styleUrl: './image-viewer.component.scss',
 })
-export class ImageViewerComponent implements OnDestroy, LinkLead {
+export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
   private activeContext = inject(ActiveContextService);
 
   readonly media = input.required<Media>();
@@ -261,6 +266,11 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     return faceFrame(anchor, this.renderedW(), this.renderedH());
   });
 
+  /** The face in face space, for whatever locates a part of it (the checklist's rows). */
+  readonly faceShape = computed<FaceShape | null>(() =>
+    this.frame() ? faceShape(this.landmarks(), this.renderedW(), this.renderedH()) : null,
+  );
+
   /** As a lead: the face view this viewer shows, for the one that follows it. */
   readonly leadState = computed<LeadState>(() => {
     if (!this.anchor() || this.loadState() === 'failed') return LEAD_OFF;
@@ -351,12 +361,18 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
   constructor() {
     this.setupWindowKeyListeners();
 
-    // A lead puts itself on its link, for as long as both are its.
+    // A viewer puts itself on its link, as what it is there, for as long as
+    // both are its.
     effect((onCleanup) => {
       const link = this.link();
-      if (!link || this.linkAs() !== 'lead') return;
-      link.attach(this);
-      onCleanup(() => link.detach(this));
+      if (!link) return;
+      if (this.linkAs() === 'lead') {
+        link.attach(this);
+        onCleanup(() => link.detach(this));
+      } else {
+        link.attachFollower(this);
+        onCleanup(() => link.detachFollower(this));
+      }
     });
 
     // A follower draws itself from its lead's view whenever that moves, or its
@@ -819,6 +835,13 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     const zoom = this.clampZoom(view.scale / frame.unit);
     this.setPaneView(paneViewOf(frame, { ...view, scale: zoom * frame.unit }, this.rotation()));
     this.applyTransform();
+  }
+
+  /** Show *rect* of the face, as large as this pane and the zoom range allow. */
+  showFaceRect(rect: FaceRect): void {
+    const wrap = this.wrapRef()?.nativeElement;
+    const view = wrap && viewOfRect(rect, wrap.clientWidth, wrap.clientHeight, this.rotation());
+    if (view) this.showFaceView(view);
   }
 
   /** The whole image, keeping the turn. */
