@@ -22,7 +22,7 @@ loss.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
@@ -43,6 +43,8 @@ __all__ = [
     "BrowseColormap",
     "BrowseGraphics",
     "BrowseIconSize",
+    "FACE_EVEN_OUT_DEFAULTS",
+    "FaceEvenOut",
     "FocusMode",
     "GridIconSize",
     "ServerSettings",
@@ -268,6 +270,42 @@ def _default_concurrent_embeddings() -> int:
     from vtscore.embedding.loader import default_concurrent_embeddings
 
     return default_concurrent_embeddings()
+
+
+class FaceEvenOut(TypedDict, total=False):
+    """The Face compare layout's standardizations, each on or off (#5674, #5675).
+
+    Each evens out one way two photos of a person can differ, on the two
+    panes only: exposure, contrast and colour cast (white balance), greyscale
+    for both faces when either is or always, and the reference turned the way
+    the candidate is. A key left out reads as its default
+    (:data:`FACE_EVEN_OUT_DEFAULTS`), on the frontend as here, so a
+    standardization added later starts at its default for everyone.
+    """
+
+    # A key no standardization has is dropped, rather than kept the way
+    # ``UserSettings`` keeps an unknown top-level key.
+    __pydantic_config__ = ConfigDict(extra="ignore")  # type: ignore[misc]
+
+    exposure: bool
+    contrast: bool
+    white_balance: bool
+    greyscale_either: bool
+    greyscale_both: bool
+    turn_matched: bool
+
+
+# Every standardization on but the manual "Both in greyscale"
+# (``docs/plans/face-vote-helper.md``, open decisions). The frontend's
+# ``EVEN_OUT_DEFAULTS`` (``face-even-out/even-out.ts``) mirrors it.
+FACE_EVEN_OUT_DEFAULTS: FaceEvenOut = {
+    "exposure": True,
+    "contrast": True,
+    "white_balance": True,
+    "greyscale_either": True,
+    "greyscale_both": False,
+    "turn_matched": True,
+}
 
 
 class ServerSettings(BaseModel):
@@ -503,6 +541,9 @@ class UserSettings(BaseModel):
     # candidate (#5642). The centre panel's Compare toggle writes it; it only
     # has an effect on a face with a detector active.
     face_compare: bool = True
+    # The compare layout's on/off checkboxes under "Even out the photos"
+    # (#5674, #5675); see :class:`FaceEvenOut`. A PUT replaces the whole dict.
+    face_even_out: FaceEvenOut = Field(default_factory=lambda: FaceEvenOut(**FACE_EVEN_OUT_DEFAULTS))
     # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it

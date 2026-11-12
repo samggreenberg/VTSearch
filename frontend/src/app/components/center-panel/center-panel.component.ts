@@ -13,6 +13,9 @@ import { ActiveDatasetService } from '../../services/active-dataset.service';
 import { ActiveDetectorService } from '../../services/active-detector.service';
 import { SourcePhotoService, WiderView, widerView } from '../../services/source-photo.service';
 import { FaceReferenceService } from '../../services/face-reference.service';
+import { FaceEvenOutService, MeasureRequest, measureKey } from '../../services/face-even-out.service';
+import { ActiveContextService } from '../../services/active-context.service';
+import { ToneMap, greyPair, toneMap } from './face-even-out/even-out';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
@@ -74,6 +77,8 @@ export class CenterPanelComponent implements OnDestroy {
   private activeDetector = inject(ActiveDetectorService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private faceRefs = inject(FaceReferenceService);
+  private evenOut = inject(FaceEvenOutService);
+  private activeContext = inject(ActiveContextService);
   readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
@@ -284,6 +289,49 @@ export class CenterPanelComponent implements OnDestroy {
     return widerView(this.sourceLookup.value(), this.sourceLookup.isLoading(), this.media()?.filename);
   });
 
+  /**
+   * The candidate's crop to measure for evening out (#5674, #5675), while the
+   * compare layout is on: its own picture, in the payload on screen, whatever
+   * Wider shows, since the map is global. Its landmarks were measured on the
+   * clean crop, so the original payload is measured without them.
+   */
+  private readonly candidateMeasureRequest = computed<MeasureRequest | undefined>(
+    () => {
+      const media = this.media();
+      if (!media || !this.compareOn || this.viewer !== 'image') return undefined;
+      // Media ids, and so the URL's meaning, are per dataset.
+      this.activeDataset.activeId();
+      const variant = this.payloadVariant();
+      return {
+        src: this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant }),
+        landmarks: variant === '' ? media.face_landmarks : null,
+      };
+    },
+    { equal: (a, b) => (a && b ? measureKey(a) === measureKey(b) : a === b) },
+  );
+
+  private readonly candidateMeasure = rxResource({
+    params: () => this.candidateMeasureRequest(),
+    stream: ({ params }) => this.evenOut.measure(params),
+  });
+
+  /** The panes are evened out: the compare layout is on, and the originals key is not held. */
+  readonly evenOutShown = computed(() => this.compareOn && !this.evenOut.showOriginals());
+
+  /** Both panes in greyscale (#5674): the pair rule, over both faces' pictures. */
+  readonly paneGreyscale = computed(() => {
+    if (!this.evenOutShown()) return false;
+    const candidate = this.candidateMeasure.value()?.grey ?? null;
+    const reference = this.faceReference()?.measure()?.grey ?? null;
+    return greyPair(candidate, reference, this.evenOut.choices());
+  });
+
+  /** The candidate's exposure, contrast and white-balance map (#5675), or null for none. */
+  readonly candidateToneMap = computed<ToneMap | null>(() => {
+    const measure = this.candidateMeasure.value();
+    return this.evenOutShown() && measure ? toneMap(measure, this.evenOut.choices()) : null;
+  });
+
   constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -338,6 +386,7 @@ export class CenterPanelComponent implements OnDestroy {
     this.sourcePhoto.close();
     this.stopPlayback();
     this.keyboard.stop();
+    this.evenOut.showOriginals.set(false);
     if (this.spinTimer) clearTimeout(this.spinTimer);
     if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
@@ -406,6 +455,9 @@ export class CenterPanelComponent implements OnDestroy {
         }
         case 'reference':
           this.faceReference()?.next();
+          break;
+        case 'originals':
+          this.evenOut.showOriginals.set(action.held === true);
           break;
         case 'navigate':
           // Navigation moves the selection, never the labels, so an exhausted

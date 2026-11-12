@@ -130,6 +130,32 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
   }
 }
 
+/** How far the inner face reaches past the outermost landmark on either side. */
+const INNER_MARGIN_X = 0.2;
+/** How far above the eyes it starts: short of the brows' top, well short of the hair. */
+const INNER_ABOVE_EYES = 0.3;
+/** How far under the mouth it ends: the chin's top, not the neck. */
+const INNER_BELOW_MOUTH = 0.3;
+
+/**
+ * The inner face of *face*: from a little above the eyes to a little below
+ * the mouth, and a little wider than both, so the hair, the ears and the
+ * background round the face are left out. It is where the compare layout
+ * measures how light a face is and how much contrast it has
+ * (`face-even-out/even-out.ts`, #5675), and nothing shows it.
+ */
+export function innerFace(face: FaceShape): FaceRect {
+  const xs = face.points.map((p) => p[0]);
+  const [eyeA, eyeB, , mouthA, mouthB] = face.points;
+  const mouthY = (mouthA[1] + mouthB[1]) / 2;
+  return rect(
+    Math.min(...xs) - INNER_MARGIN_X,
+    Math.min(eyeA[1], eyeB[1]) - INNER_ABOVE_EYES,
+    Math.max(...xs) + INNER_MARGIN_X,
+    mouthY + INNER_BELOW_MOUTH,
+  );
+}
+
 /**
  * The views of *region* both faces can show: each is one rectangle holding the
  * part on either face, so the linked panes, which show the same face-space

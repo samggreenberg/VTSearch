@@ -129,6 +129,8 @@
           [candidateLandmarks]="media()!.face_landmarks"
           [wider]="widerOn()"
           [link]="faceLink"
+          [evenOut]="evenOutShown()"
+          [greyscale]="paneGreyscale()"
         />
         <vt-face-checklist
           [candidateHardView]="media()!.face_hard_view ?? null"
@@ -158,6 +160,8 @@
                 [regionDraw]="regionDrawOffered"
                 [link]="compareOn ? faceLink : null"
                 [landmarks]="wide.kind === 'crop' ? media()!.face_landmarks : null"
+                [toneMap]="candidateToneMap()"
+                [greyscale]="paneGreyscale()"
                 (regionBoxChange)="onRegionBoxChange($event)"
                 (armedConfirmCanceled)="onArmedConfirmCanceled()"
               ></vt-image-viewer>
