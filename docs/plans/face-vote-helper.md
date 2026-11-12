@@ -293,8 +293,9 @@ experiment.
 **What is done.** Roll is levelled when the crop is cut (`align="roll"`,
 #4777). Size and position are matched by registration (#5647). Quarter turns
 are by hand (`[` and `]`). Those are all the geometric axes a shape-preserving
-transform can reach. What is left is how the pixels look, which reference is
-shown, or a geometric change no standard allows.
+transform can reach. The reference shown first is a Good face turned the same
+way as the candidate (#5670). What is left is how the pixels look, further
+choices of reference, or a geometric change no standard allows.
 
 **The list.** Each row is one axis along which two photos of one person
 differ.
@@ -306,7 +307,7 @@ differ.
 | Colour cast | White-balance each image against its own scene: estimate the light from the whole crop (or the whole photo under **Wider**), never by matching one face's skin to the other's. | FISWG 5.1.4 | **Do** |
 | Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Do**, first |
 | Detail | When the two faces' native pixels between the eyes are far apart, say so in the fitness notice. Later, try softening the sharper face toward the other's level, or showing the pair smaller. | Softening is not on FISWG's list, but it removes detail rather than adding it; Bindemann 2013, Merino 2025 | **Notice now**, softening later |
-| Head turn (yaw, pitch) | No transform: choose the reference instead. Among the clear Good faces, prefer the one whose pose is nearest the candidate's. Yaw comes from the five landmarks: the nose tip's sideways offset from the eyes-to-mouth line, over the eye distance. | ENFSI 5.3.2; FSR 5.1.4 | **Do**, by choosing |
+| Head turn (yaw, pitch) | No transform: choose the reference instead. The Good faces turned like the candidate come first, the turn read from the five landmarks (`landmarkTurn`). | ENFSI 5.3.2; FSR 5.1.4 | **Done** (#5670) |
 | Lighting, expression | The same choice can weigh exposure, and mouth width against eye distance (a smile widens the mouth), after pose. | ENFSI 5.3.2 | Later, if pose choice works |
 | Mirroring | Only for a selfie the phone saved mirrored, and only by hand, with a **Mirrored** badge. Mirroring automatically, to make two turned faces face the same way, compares one face's left ear with the other's right and moves every mark to the other side. | FISWG 5.1.8 | Not now |
 | Sharpening, denoising, deblurring, super-resolution, face restoration | None. These add or invent detail, the direction ENFSI's viewing-order rule guards against. | Not on FISWG's list; ENFSI 5.2.3; OSAC 2026 | **Reject** |
@@ -338,18 +339,12 @@ differ.
   is corrected from the light and the skin keeps its own colour. Exposure
   still moves skin lightness. The checklist already says not to weigh that,
   and the gain cap bounds it.
-- **A visible state.** A toggle beside **Compare** and **Wider**, plus a key
-  held to see both originals: ENFSI's "refer back to the original".
-- **Reference choice** lives in `face-reference.service.ts`, which orders the
-  Good pile by Face Quality today. Clear views would still come before hard
-  ones, and within the clear views the nearest pose would come first. A pinned
-  reference is unchanged.
+- **A checkbox per standardization** in the What to compare strip (the
+  owner's call on #5671). Each is on or off on its own, the turn-matched order
+  of #5670 included, and the choices are remembered per user. A key held
+  down shows both originals: ENFSI's "refer back to the original".
 - **Detail** is the native distance between the eyes: the image's natural
   size times the landmark fractions. Merino 2025 measured on the same scale.
-
-Each **Do** row is a separate slice, in this order: greyscale pairing (the
-smallest, and the one with direct evidence), then the exposure, contrast and
-white-balance filter, then reference choice by pose, then the detail notice.
 
 ## Open decisions
 
@@ -368,9 +363,10 @@ These are the owner's; the recommendation is first in each.
 - **Re-import, or re-detect on demand, for landmarks on existing datasets?**
   Recommended: re-import. Re-detection on demand needs the parent photo and
   the face provider loaded at vote time.
-- **Is matching how the faces look on by default?** Recommended: on, with
-  both originals one held key away. Every adjustment it makes is global and on
-  FISWG's list. Off by default, few users would find it.
+- **Are the standardizations' checkboxes ticked by default?** Recommended:
+  yes, with both originals one held key away. Every adjustment is global and on
+  FISWG's list, and few users would tick a box they had not seen work. The
+  manual **Both in greyscale** is the exception: it starts unticked.
 - **Do both faces move toward a common target, or only the reference toward
   the candidate?** Recommended: both. Moving only the reference follows
   ENFSI's advice to rotate the better image, which keeps the candidate as
@@ -418,5 +414,13 @@ zoom only.
 <!-- item-sep -->
 
 <!-- item-sep -->
+
+<!-- item-sep -->
+
+- [ ] #5674 — Face compare: greyscale both faces when either is, with on/off checkboxes (Sonnet)
+
+<!-- item-sep -->
+
+- [ ] #5675 — Face compare: even out exposure, contrast and white balance, each with a checkbox (Sonnet)
 
 <!-- item-sep -->
