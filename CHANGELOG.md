@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **The reference face is one turned the same way as the face you are voting on** (issue #5670). In the Face
+  compare layout, the reference was always the clearest face of your Good pile, so a face turned to show its left
+  ear could be shown beside one turned to show its right. The app now reads which way each head is turned from its
+  eye, nose and mouth points, and starts each face on a Good face turned like it, the clearest of those first;
+  **Next** steps on to faces turned further away. A pinned reference still comes first. Faces from an older dataset
+  without the points, and your example pictures, keep the order they had.
 - **A checklist of what to compare between two faces** (issue #5643). Beside the Face compare layout, a narrow
   strip lists five things to compare, most telling first: marks (moles, scars, freckles), ears, nose, eyes and
   brows, then mouth, chin and face outline, the weakest evidence. Under them, a reminder not to weigh hair, beard,

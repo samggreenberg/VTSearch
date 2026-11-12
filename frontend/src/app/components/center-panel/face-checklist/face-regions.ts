@@ -1,4 +1,4 @@
-import { FaceRect, FaceShape } from '../image-viewer/face-link';
+import { FaceLandmarks, FaceRect, FaceShape, faceAnchor } from '../image-viewer/face-link';
 
 /**
  * Where the parts of a face are, for the checklist's rows to zoom to (#5647).
@@ -37,6 +37,42 @@ const EAR_HIDDEN_TURN = 0.5;
 const MAX_TURN = 0.9;
 /** How much of a part's rectangle an image must hold for the part to count as on it. */
 const MIN_ON_IMAGE = 0.5;
+/** From one eye to the other on a face that looks ahead (about 63 mm). */
+const EYE_SPAN = 0.9;
+
+/**
+ * How far the head of *landmarks* is turned, as the sine {@link regionViews}
+ * reads it, from the five points alone; null when they are not five usable
+ * points (`faceAnchor`'s test).
+ *
+ * The turn {@link regionViews} reads is in face space, which needs the size
+ * the crop is drawn at. A face that is not on screen has no size yet, and the
+ * crops of a dataset are not all one shape (one cut short at its photo's edge
+ * is narrower than the rest), so this reads the same head with a yardstick
+ * that runs across the crop as the nose's step does: the gap between the eyes.
+ * Both are then in crop widths, so the crop's shape drops out. A turn carries
+ * the nose off the line from the eyes to the mouth by `NOSE_DEPTH` times its
+ * sine, and closes the eyes up to `EYE_SPAN` times its cosine; their ratio is
+ * its tangent. It is the reference pane's guide to which faces are seen from
+ * the same side (#5670), not a measurement: nothing shows it.
+ */
+export function landmarkTurn(landmarks: FaceLandmarks | null | undefined): number | null {
+  if (!landmarks || !faceAnchor(landmarks)) return null;
+  const [eyeA, eyeB, nose, mouthA, mouthB] = landmarks;
+  const eyeX = (eyeA[0] + eyeB[0]) / 2;
+  const eyeY = (eyeA[1] + eyeB[1]) / 2;
+  const mouthX = (mouthA[0] + mouthB[0]) / 2 - eyeX;
+  const mouthY = (mouthA[1] + mouthB[1]) / 2 - eyeY;
+  const noseX = nose[0] - eyeX;
+  const noseY = nose[1] - eyeY;
+  // As in regionViews: the nose's step off the eyes-to-mouth line, at its own height.
+  const offLine = noseX - mouthX * (mouthY ? noseY / mouthY : 0);
+  // The eye gap times the tangent, so the sine is this over their hypotenuse;
+  // a gap of nothing (a head seen side on) is a full turn, and no step either is none.
+  const across = (offLine * EYE_SPAN) / NOSE_DEPTH;
+  const sine = across / Math.hypot(across, Math.abs(eyeB[0] - eyeA[0]));
+  return Number.isFinite(sine) ? clamp(sine, -MAX_TURN, MAX_TURN) : 0;
+}
 
 /**
  * The views of *region* on *face*, in a fixed order so the same index is the

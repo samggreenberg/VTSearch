@@ -139,6 +139,8 @@ describe('CenterPanelComponent Face compare', () => {
   it('puts a reference beside a face, and leaves the candidate the panel\'s own viewer', async () => {
     await show(face);
     expect(reference()!.candidateId()).toBe(4);
+    // Its landmarks too, which say which references are turned like it (#5670).
+    expect(reference()!.candidateLandmarks()).toBe(LANDMARKS);
     expect(toggle()!.getAttribute('aria-pressed')).toBe('true');
     // Zoom, rotate and the vote's region still address the face being voted on.
     expect(fixture.componentInstance.imageViewer()!.media().id).toBe(4);

@@ -15,7 +15,8 @@ import { provideHttpTesting } from '../../../testing/test-providers';
 
 /**
  * The reference pane of the Face compare layout (#5642): which reference it
- * shows for a candidate, stepping through the set, and the pin. And, under the
+ * shows for a candidate (ordered for the candidate's turn, #5670), stepping
+ * through the set, and the pin. And, under the
  * layout's Wider toggle (#5645), the reference from its photo.
  */
 describe('FaceReferenceComponent', () => {
@@ -23,7 +24,7 @@ describe('FaceReferenceComponent', () => {
   const pool = signal<FaceReference[]>([]);
   const pinned = signal<FaceReference | null>(null);
   let refs: {
-    pool: typeof pool;
+    pool: ReturnType<typeof vi.fn<(candidateTurn?: number | null) => FaceReference[]>>;
     pinned: typeof pinned;
     pin: ReturnType<typeof vi.fn<(ref: FaceReference) => void>>;
     unpin: ReturnType<typeof vi.fn<() => void>>;
@@ -49,7 +50,8 @@ describe('FaceReferenceComponent', () => {
     pinned.set(null);
     hard.set({});
     refs = {
-      pool,
+      // The set the service hands over for the candidate's turn, which a test sets.
+      pool: vi.fn(() => pool()),
       pinned,
       pin: vi.fn((ref) => pinned.set(ref)),
       unpin: vi.fn(() => pinned.set(null)),
@@ -116,6 +118,23 @@ describe('FaceReferenceComponent', () => {
     fixture.componentInstance.next();
     await settleZoneless(fixture);
     expect(viewer()!.media().id).toBe(1);
+  });
+
+  // #5670: the service orders the pile for the candidate, by which way its head is turned.
+  it('asks for the references ordered for the candidate\'s turn', async () => {
+    expect(refs.pool).toHaveBeenLastCalledWith(null);
+    // The nose off the line from the eyes to the mouth, toward the image's left.
+    fixture.componentRef.setInput('candidateLandmarks', [[0.4, 0.4], [0.6, 0.4], [0.42, 0.5], [0.45, 0.6], [0.55, 0.6]]);
+    await settleZoneless(fixture);
+    const turn = refs.pool.mock.lastCall![0]!;
+    expect(turn).toBeLessThan(-0.5);
+
+    pool.set([media(3), media(1), media(2)]);
+    await settleZoneless(fixture);
+    expect(viewer()!.media().id).toBe(3);
+    fixture.componentRef.setInput('candidateLandmarks', LANDMARKS);
+    await settleZoneless(fixture);
+    expect(refs.pool).toHaveBeenLastCalledWith(0);
   });
 
   it('starts the next candidate on the best reference again', async () => {
