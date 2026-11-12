@@ -236,8 +236,10 @@ export class LeftPanelComponent implements OnInit {
   private readonly mediaTypesResource = rxResource({
     stream: () => this.datasetsListingsApi.getMediaTypes(),
   });
-  private readonly mediaTypeInfos = computed<MediaTypeInfo[]>(
-    () => this.mediaTypesResource.value()?.media_types ?? [],
+  // Read behind `hasValue()`: `value()` throws once the read fails (#5661), and
+  // the grid header falls back to the capitalized media type without it.
+  private readonly mediaTypeInfos = computed<MediaTypeInfo[]>(() =>
+    this.mediaTypesResource.hasValue() ? this.mediaTypesResource.value().media_types : [],
   );
 
   /**

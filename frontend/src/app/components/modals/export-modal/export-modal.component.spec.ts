@@ -1040,4 +1040,65 @@ describe('ExportModalComponent', () => {
     });
   });
 
+  /**
+   * #5661: an `rxResource`'s `value()` throws once its read fails, and the
+   * exporter list, the labels and the dataset name each read theirs straight
+   * through. The `labelsLoaded` gate already counted a failed labels read as
+   * settled, so the preview below it threw in exactly the state it let through.
+   * Each read's failure must leave the rest of the modal working.
+   */
+  describe('when a read fails (#5661)', () => {
+    const fail = { status: 500, statusText: 'Internal Server Error' };
+
+    /** `flushInit`, failing the reads named in *failed*. */
+    async function flushInitFailing(failed: 'status' | 'exporters' | 'labels'): Promise<void> {
+      TestBed.tick();
+      await settleResource();
+      const status = httpMock.expectOne('/api/dataset/status');
+      if (failed === 'status') status.flush({ message: 'boom' }, fail);
+      else status.flush({ display_name: 'My Dataset' });
+      const exporters = httpMock.expectOne('/api/exporters');
+      if (failed === 'exporters') exporters.flush({ message: 'boom' }, fail);
+      else exporters.flush(mockExporters);
+      const labels = httpMock.expectOne((r) => r.url === '/api/labels/export');
+      if (failed === 'labels') labels.flush({ message: 'boom' }, fail);
+      else labels.flush(mockLabels);
+      await settleResource();
+    }
+
+    it('a failed exporter list leaves the clipboard tab, and says why', async () => {
+      await flushInitFailing('exporters');
+      expect(component.exporters()).toEqual([]);
+      const el = fixture.nativeElement as HTMLElement;
+      const tabs = [...el.querySelectorAll('.export-tab')].map((t) => t.textContent?.trim());
+      expect(tabs).toEqual(['Clipboard']);
+      expect(el.querySelector('.error-text')?.textContent).toContain('Failed to load exporters');
+      // The labels read succeeded, so the preview still shows them.
+      expect(el.querySelector('.preview-count')?.textContent).toContain('3 rows');
+    });
+
+    it('a failed labels read shows an empty preview over the base columns', async () => {
+      await flushInitFailing('labels');
+      expect(component.labelsLoaded()).toBe(true);
+      expect(component.hasCorrections).toBe(false);
+      expect(component.columns.map((c) => c.key)).toEqual(['label', 'md5', 'filename', 'category']);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('No labeled items to export.');
+      expect(el.textContent).not.toContain('Loading labels');
+      expect(el.querySelector('.error-text')?.textContent).toContain('Failed to load labels');
+    });
+
+    it('a failed status read leaves the dataset name out of the default filename', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInitFailing('status');
+      component.selectExporterTab({
+        name: 'server_json_file',
+        display_name: 'Server JSON',
+        supported_payloads: ['labelset'],
+        fields: [{ key: 'filepath', field_type: 'text', default: 'data/labels.json' }],
+      } as never);
+      TestBed.tick();
+      expect(component.formValues['filepath']).toBe('data/Sirens.json');
+    });
+  });
 });

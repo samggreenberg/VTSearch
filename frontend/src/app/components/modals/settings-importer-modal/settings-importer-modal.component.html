@@ -3,7 +3,7 @@
     <div class="importer-picker">
       @if (loading()) {
         <p class="empty-state">Loading importers…</p>
-      } @else if (importers().length === 0) {
+      } @else if (importers().length === 0 && !listFailed()) {
         <p class="empty-state">No settings importers available.</p>
       } @else {
         @for (imp of importers(); track imp.name) {
