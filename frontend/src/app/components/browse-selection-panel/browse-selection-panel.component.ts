@@ -158,7 +158,9 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.metadataCache.version$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.sortedEntries.set(this.buildSortedEntries());
     });
-    this.settingsState.load();
+    // No `settingsState.load()`: the panel is part of the Browse view's ready
+    // map, and that view loads the settings before it mounts one. A refetch
+    // here was another `GET /api/settings` beside the map's first tiles (#5649).
   }
 
   ngOnDestroy(): void {

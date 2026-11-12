@@ -57,6 +57,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   Browse map keeps the ones it has decoded when you leave it, so going back to the same dataset's map paints them at
   once. On an 8,000-image map with 347 thumbnails on screen, every thumbnail was in 3.1 s after opening Browse
   instead of 9.4 s with 100 ms of latency, and 1.6 s instead of 4.2 s with 40 ms.
+- **Browse sends fewer requests, side by side, before the map appears** (issue #5649). Before drawing anything,
+  Browse asked for the dataset's status, then waited for it before asking for the map's layout, and asked for your
+  settings up to four times. It now asks for the layout and the settings together, skips the status (the layout
+  names the media type), and asks for the settings once when you open it from the Dashboard (twice on a full page
+  load, counting the app's own). Opening an 8,000-image map from the Dashboard with 100 ms of latency, the map
+  appeared in 0.64 s instead of 0.73 s; on a fresh page load it appeared in 1.87 s instead of 1.96 s.
 
 ## 2026-11-10
 

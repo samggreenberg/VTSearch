@@ -2,7 +2,9 @@ import { TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ThemeService } from './theme.service';
+import { SettingsStateService } from './settings-state.service';
 import { provideHttpTesting } from '../testing/test-providers';
+import { settleResource } from '../testing/settle-resource';
 
 interface StubMediaQueryList {
   matches: boolean;
@@ -95,11 +97,28 @@ describe('ThemeService', () => {
     req.flush({});
   });
 
-  it('loadFromSettings should apply backend theme', () => {
+  /** Answer the settings store's GET (its loader runs in an effect, so tick first). */
+  async function answerSettings(body: object): Promise<void> {
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush(body);
+    await settleResource();
+    await settleResource();
+  }
+
+  it('loadFromSettings should apply backend theme', async () => {
     service.loadFromSettings();
-    httpMock.expectOne('/api/settings').flush({ volume: 1.0, theme: 'light' });
+    await answerSettings({ volume: 1.0, theme: 'light' });
     expect(service.currentTheme).toBe('light');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  // #5649: the theme rides the app's settings load instead of a GET of its own.
+  it('loadFromSettings shares the settings store load rather than sending its own', async () => {
+    TestBed.inject(SettingsStateService).load();
+    service.loadFromSettings();
+    // One GET between them (expectOne fails on two).
+    await answerSettings({ theme: 'highviz' });
+    expect(service.currentTheme).toBe('highviz');
   });
 
   it('theme$ should emit on change', () => {
@@ -125,10 +144,10 @@ describe('ThemeService', () => {
     httpMock.expectOne('/api/settings').flush({});
   });
 
-  it('loadFromSettings defaults to system when backend has no theme', () => {
+  it('loadFromSettings defaults to system when backend has no theme', async () => {
     installStub(true);
     service.loadFromSettings();
-    httpMock.expectOne('/api/settings').flush({ volume: 1.0 });
+    await answerSettings({ volume: 1.0 });
     expect(service.currentTheme).toBe('system');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });

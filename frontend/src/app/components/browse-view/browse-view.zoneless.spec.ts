@@ -11,7 +11,6 @@ import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { PairRecoveryService } from '../../services/pair-recovery.service';
-import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
@@ -103,11 +102,6 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       modelId: '',
       setActive: noop,
     });
-    const datasetsStub: Partial<DatasetsRegistryApiService> = {
-      getStatus: () => of({ display_name: 'Canary DS', media_type: 'audio' }) as ReturnType<
-        DatasetsRegistryApiService['getStatus']
-      >,
-    };
     const detectorsStub: Partial<DetectorsRegistryApiService> = {
       releasePositivesBrowse: () =>
         of(undefined) as unknown as ReturnType<
@@ -148,7 +142,6 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: TileCacheService, useValue: tileCacheStub },
         { provide: ActiveContextService, useValue: activeContextStub },
         { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
-        { provide: DatasetsRegistryApiService, useValue: datasetsStub },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         { provide: SettingsStateService, useValue: settingsStub },
         { provide: BrowseSubsetService, useValue: subsetStub },
@@ -198,6 +191,26 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   afterEach(() => fixture.destroy());
+
+  /**
+   * Open a ready map of audio. The docked/floating choice is kept per media
+   * type, which the meta names, so the toggles only act once a map is up (as
+   * they only exist on one).
+   */
+  async function openAudioMap(): Promise<void> {
+    await settleZoneless(fixture);
+    metaSubject.next({
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+      media_type: 'audio',
+    } as unknown as ProjectionMeta);
+    await settleZoneless(fixture);
+  }
 
   it('repaints to the error state when the projection load subscribe errors, no manual detectChanges', async () => {
     await settleZoneless(fixture);
@@ -293,14 +306,13 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     /** Open an image dataset's map and lift its cover. */
     async function openMap(): Promise<HTMLElement> {
-      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
-        of({ display_name: 'Photos', media_type: 'image' }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
       await settleZoneless(fixture);
-      metaSubject.next(ready);
+      metaSubject.next({ ...ready, media_type: 'image' });
       await settleZoneless(fixture);
       fixture.componentInstance.onCanvasFirstView();
       await settleZoneless(fixture);
@@ -447,7 +459,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   it('un-hides the details panel when a floating window is docked into it', async () => {
-    await settleZoneless(fixture);
+    await openAudioMap();
     const component = fixture.componentInstance;
 
     // Hide the docked panel, then work in the floating presentation instead.
@@ -470,7 +482,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   it('carries the open bin across dock / pop-out toggles', async () => {
-    await settleZoneless(fixture);
+    await openAudioMap();
     const component = fixture.componentInstance;
 
     // Force the floating presentation (docked is the default) before opening a bin.
@@ -678,6 +690,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     beforeEach(() => {
@@ -750,6 +763,125 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
   });
 
+  // #5649: on a remote server every request the view chains before the canvas
+  // mounts is a full round trip. The first meta goes out with the settings,
+  // and only its *apply* (which mounts and fits the canvas) waits for them.
+  describe('before the canvas mounts (#5649)', () => {
+    let metas: Subject<ProjectionMeta>[];
+    let getLabels: ReturnType<typeof vi.fn>;
+    let labels: Subject<{ status: string; projection_id: string; labels: unknown[] }>;
+
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+      media_type: 'audio',
+      has_labels: true,
+    } as unknown as ProjectionMeta;
+
+    beforeEach(() => {
+      metas = [];
+      labels = new Subject();
+      const api = TestBed.inject(ProjectionApiService);
+      api.getMeta = vi.fn(() => {
+        const meta = new Subject<ProjectionMeta>();
+        metas.push(meta);
+        return meta.asObservable();
+      });
+      getLabels = vi.fn(() => labels.asObservable());
+      api.getLabels = getLabels as unknown as ProjectionApiService['getLabels'];
+      // The settings are still on their way when the view starts.
+      settingsValue.set(null);
+    });
+
+    /** Answer meta fetch *n* (0-based). */
+    function answer(n: number, meta: ProjectionMeta): void {
+      metas[n].next(meta);
+      metas[n].complete();
+    }
+
+    it('asks for the meta at once, without waiting for the settings', async () => {
+      await settleZoneless(fixture);
+      expect(metas.length).toBe(1);
+      expect(fixture.componentInstance.status()).toBe('loading');
+    });
+
+    it('holds the canvas until the settings are in, then fits it at the saved size from that same meta', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(0, ready);
+      await settleZoneless(fixture);
+      // The meta is in but the saved cell size is not: no canvas yet.
+      expect(component.status()).toBe('loading');
+      expect(fixture.nativeElement.querySelector('vt-browse-canvas')).toBeNull();
+
+      settingsValue.set({ browse_icon_size: { audio: 'XL' } } as unknown as AppSettings);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.mediaType()).toBe('audio');
+      // The size the canvas mounts at is the saved one, not the default M.
+      expect(BrowseViewComponent.ICON_SIZES[component.hexScaleIndex()]).toBe('XL');
+      // The meta already in hand was applied; it was not asked for again.
+      expect(metas.length).toBe(1);
+    });
+
+    it('opens as soon as the meta lands when the settings came first', async () => {
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      answer(0, ready);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.status()).toBe('ready');
+      expect(metas.length).toBe(1);
+    });
+
+    it('asks for the region labels once the meta names its projection, while the canvas is still held', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(0, ready);
+      await settleZoneless(fixture);
+      expect(getLabels).toHaveBeenCalledTimes(1);
+      expect(component.status()).toBe('loading');
+
+      // Labels that land before the gate opens are kept for the map.
+      labels.next({ status: 'ready', projection_id: 'p1', labels: [{ text: 'owls' }] });
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.labels()).toEqual([{ text: 'owls' }]);
+      // Applying the meta does not ask for them twice.
+      expect(getLabels).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a first meta asked of a pair the view has since moved off', async () => {
+      const pairs = new Subject<{ datasetId: string; modelId: string }>();
+      (TestBed.inject(ActiveContextService) as { pair$: unknown }).pair$ = pairs.asObservable();
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      expect(metas.length).toBe(1);
+
+      // The pair moves while the settings are still out.
+      pairs.next({ datasetId: 'ds2', modelId: '' });
+      answer(0, { ...ready, projection_id: 'old' } as ProjectionMeta);
+      await settleZoneless(fixture);
+      // The old pair's meta asks for no labels, and opens nothing.
+      expect(getLabels).not.toHaveBeenCalled();
+
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      // The gate asks afresh, and applies only that answer.
+      expect(metas.length).toBe(2);
+      expect(component.status()).toBe('loading');
+      answer(1, ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.meta()?.projection_id).toBe('p1');
+    });
+  });
+
   describe('the People button (#5590)', () => {
     const ready = {
       projection_id: 'p1',
@@ -759,13 +891,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     async function openMapOf(mediaType: string): Promise<HTMLElement> {
-      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
-        of({ display_name: 'Photos', media_type: mediaType }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
       await settleZoneless(fixture);
-      metaSubject.next(ready);
+      metaSubject.next({ ...ready, media_type: mediaType });
       await settleZoneless(fixture);
       return fixture.nativeElement as HTMLElement;
     }
@@ -800,6 +931,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     /** Open the map on its freshly fit layout. */
@@ -855,6 +987,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     beforeEach(() => {
@@ -866,10 +999,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       }) as unknown as SettingsStateService['update'];
     });
 
-    /** Open the map and take its cover off, as the canvas's first paint does. */
-    async function openMap(): Promise<BrowseViewComponent> {
+    /** Open a map of *mediaType* and take its cover off, as the canvas's first paint does. */
+    async function openMap(mediaType = 'audio'): Promise<BrowseViewComponent> {
       await settleZoneless(fixture);
-      metaSubject.next(ready);
+      metaSubject.next({ ...ready, media_type: mediaType } as ProjectionMeta);
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       component.onCanvasFirstView();
@@ -962,10 +1095,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
 
     it('skips the thumbnail rung on a map of text, whose tiles show none', async () => {
-      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
-        of({ display_name: 'Lines', media_type: 'text' }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
       settingsValue.set({ used_features: ['browse-pan-zoom'] });
-      await openMap();
+      await openMap('text');
       expect(shownHint()?.id).toBe('browse-tile-details');
     });
 
