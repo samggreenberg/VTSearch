@@ -558,9 +558,15 @@ this codebase, and it is silent.
   `MediaStateService`, several picker modals so far). `rxResource({ params,
   stream })` wraps the *existing* generated-client method, so the typed client
   and interceptor chain are untouched and the service's public surface becomes
-  a value signal (e.g. `settingsSignal`, a `computed` over `resource.value()`)
+  a value signal (e.g. `settingsSignal`, derived from `resource.value()`)
   plus `isLoading()` / `error()`. Prefer it over raw
-  `httpResource`, which would bypass the generated client. The remaining
+  `httpResource`, which would bypass the generated client. **`value()` throws
+  while the resource is in the error state** (`ResourceValueError`); it does not
+  return `undefined`. So `computed(() => resource.value() ?? fallback)` turns one
+  failed request into a throw at every reader: each template binding, `computed`
+  and `effect` downstream of it. Read it behind `resource.hasValue()`, as
+  `SettingsStateService` does (it also keeps the last good value across a failed
+  refetch, so a merge-write never sees an empty store). The remaining
   conversion recipe and the list of still-open call sites live in
   [`docs/plans/httpresource-migration.md`](plans/httpresource-migration.md).
 - **Mutations, SSE and pollers stay imperative** — POST/PUT/DELETE remain

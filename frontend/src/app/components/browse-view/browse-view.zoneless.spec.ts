@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
 import { Component, input, output, signal, type WritableSignal } from '@angular/core';
@@ -28,7 +29,8 @@ import type { AppSettings } from '../../generated/api-client/models/app-settings
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
-import { settleZoneless } from '../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /** Stands in for Show in photo's overlay, whose lookup is its own spec's. */
 @Component({ selector: 'vt-source-photo-modal', standalone: true, template: '' })
@@ -36,6 +38,14 @@ class SourcePhotoModalStub {
   readonly request = input.required<SourcePhotoRequest>();
   readonly closed = output<void>();
 }
+
+/**
+ * When set, the TestBed below provides the real `SettingsStateService` over
+ * `HttpTestingController` instead of the stub, so a spec can fail the real
+ * `GET /api/settings`. A `describe` sets it in `beforeAll`, which runs before
+ * the outer `beforeEach` builds the TestBed.
+ */
+let realSettingsStore = false;
 
 /**
  * Zoneless staleness canary for the VTSBrowse view.
@@ -143,7 +153,9 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: ActiveContextService, useValue: activeContextStub },
         { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
-        { provide: SettingsStateService, useValue: settingsStub },
+        ...(realSettingsStore
+          ? provideHttpTesting()
+          : [{ provide: SettingsStateService, useValue: settingsStub }]),
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: AutoFindService, useValue: { openResults } },
         { provide: DetectorsFindApiService, useValue: { getAutofindRun } },
@@ -879,6 +891,53 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       await settleZoneless(fixture);
       expect(component.status()).toBe('ready');
       expect(component.meta()?.projection_id).toBe('p1');
+    });
+  });
+
+  /**
+   * #5658: after a failed settings load, reading the real store's settings
+   * threw, and the view's settings effect reads them before it checks the
+   * error. So a failure that landed after the view started never reached the
+   * gate, and "Loading map…" stayed up for good.
+   */
+  describe('when the settings load fails (#5658)', () => {
+    // The returned function runs once this block's tests are done.
+    beforeAll(() => {
+      realSettingsStore = true;
+      return () => {
+        realSettingsStore = false;
+      };
+    });
+
+    it('opens the map at the default prefs once a late settings failure lands', async () => {
+      const httpMock = TestBed.inject(HttpTestingController);
+      // Settled by ticking, not `settleZoneless`: the fixture is not stable
+      // while the settings GET is out (the resource holds a pending task).
+      await settleResource();
+      const component = fixture.componentInstance;
+      metaSubject.next({
+        projection_id: 'p1',
+        bounds: [0, 0, 1, 1],
+        base_radius: 1,
+        tile_span: 1,
+        point_count: 12,
+        levels: [0],
+        status: 'ready',
+        media_type: 'audio',
+      } as unknown as ProjectionMeta);
+      await settleResource();
+      // The meta is in, but the view waits for the settings.
+      expect(component.status()).toBe('loading');
+
+      httpMock
+        .expectOne('/api/settings')
+        .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+      await settleZoneless(fixture);
+
+      expect(component.status()).toBe('ready');
+      expect(fixture.nativeElement.querySelector('vt-browse-canvas')).not.toBeNull();
+      expect(BrowseViewComponent.ICON_SIZES[component.hexScaleIndex()]).toBe('M');
+      expect(component.signposts()).toBe(true);
     });
   });
 
