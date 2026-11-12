@@ -94,6 +94,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   something with the server before it opens (Train, Tune, Browse and People) also fetches its own code during that
   check now, not after it. Opening an 8,000-image Browse map in a new tab with 100 ms of latency, the map appeared
   in 1.22 s instead of 1.87 s.
+- **Opening a page from the Dashboard no longer waits for its code** (issue #5663). The code for Train, Tune,
+  Browse and People used to be downloaded when you first opened each, as some 15–20 small files that a browser
+  talking plain HTTP fetches about six at a time. The app now downloads it in the background once the page you are
+  on has finished loading, one page at a time, and only while nothing else is being fetched. Opening an 8,000-image
+  Browse map from the Dashboard with 100 ms of latency, the map appeared in 0.31 s instead of 0.63 s. A page opened
+  in a new tab is unchanged; [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#reverse-proxy) now recommends HTTP/2 at the
+  reverse proxy, which removes that wait.
 - **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
   downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
   originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,

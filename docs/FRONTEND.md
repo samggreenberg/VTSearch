@@ -62,6 +62,7 @@ providers: [
   provideZonelessChangeDetection(),
   provideRouter(routes),
   provideRouteChunkPrefetch(),  // a lazy view's chunk loads during its guard
+  provideIdleRoutePreload(),    // the other views' chunks load while the app is idle
   provideHttpClient(withInterceptors([
     timezoneInterceptor,        // X-Timezone-Offset
     activeContextInterceptor,   // X-Dataset-Id / X-Detector-Id
@@ -1097,6 +1098,20 @@ load the pair) used to hold the view's code back for that whole wait.
 `provideRouteChunkPrefetch()` (`utils/route-chunk-prefetch.ts`) calls the
 loader at `RoutesRecognized` instead. The router's own call later resolves to
 the same module record.
+
+**The other views' chunks are fetched while the app is idle.** Inside the app
+a guard returns at once, so the prefetch above has no wait to overlap, and
+opening Browse from the Dashboard spent 0.3 s of 0.48 s on chunks at 100 ms of
+latency. `provideIdleRoutePreload()` (`utils/idle-route-preload.ts`) calls
+every route's loader after the first navigation, one view at a time (#5663).
+Before each view it waits for `ApplicationRef.whenStable()`, so no
+`HttpClient` request or `resource` load is in flight, and then for
+`requestIdleCallback`. That is what keeps it from taking connections the view
+on screen needs: a new preload must wait the same way, not start on a timer.
+It is the router's `withPreloading()` by hand, because `RouterPreloader` adds
+2.5 kB to the eager bundle. It skips a browser that asks to save data. It does
+nothing for a view opened in a new tab; there the waves remain unless the
+server speaks HTTP/2 (see [`DEPLOYMENT.md`](DEPLOYMENT.md#reverse-proxy)).
 
 The production `initial` budget is deliberately tight and the rationale is
 written into `angular.json` next to the number. `./run-tests.sh` treats **any**
