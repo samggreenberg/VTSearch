@@ -694,6 +694,13 @@ two part by part instead of trusting your memory of the person.
   measured them; each zooms as usual, further in than on a crop for a small
   face in a big photo, and reset returns to the wider view. **Wider** stays on
   until you turn it off or leave the page.
+- **What to compare**, down the right of the panel, lists the parts worth
+  comparing, the most telling first: marks (moles, scars, freckles), the ears,
+  the nose, the eyes and brows, and last the mouth, chin and outline of the
+  face, which expression changes. Hair, beards, makeup and skin tone change
+  too easily to go by. Nothing in the list is ticked off or saved; it is there
+  to look down while you compare. When the candidate or the reference is a
+  hard view, the list says so, since such a pair is harder to judge.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 
