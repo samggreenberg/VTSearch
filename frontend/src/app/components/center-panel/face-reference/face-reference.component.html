@@ -8,6 +8,9 @@
     [fitBox]="wide.kind === 'photo' ? wide.fitBox : null"
     [srcOverride]="exampleSrc()"
     [regionDraw]="false"
+    [link]="link()"
+    linkAs="follow"
+    [landmarks]="wide.kind === 'crop' ? viewerMedia().face_landmarks : null"
   />
   <div class="reference-bar">
     <span class="reference-caption">

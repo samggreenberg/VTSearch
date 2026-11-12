@@ -6,6 +6,7 @@ import { FaceReference, FaceReferenceService, referenceKey } from '../../../serv
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SourcePhotoService, WiderView, widerView } from '../../../services/source-photo.service';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
+import { ViewLink } from '../image-viewer/face-link';
 import { ImageViewControlsComponent } from '../image-view-controls/image-view-controls.component';
 
 /**
@@ -22,7 +23,11 @@ import { ImageViewControlsComponent } from '../image-view-controls/image-view-co
  * The two faces are never laid over each other, blinked or wiped. The practice
  * manuals disagree on overlays, and the stricter one (ENFSI-BPM-DI-01) cites
  * studies in which they lowered matching accuracy, so this pane has its own
- * viewer and its own zoom.
+ * viewer. When both faces have landmarks, that viewer follows the candidate's
+ * through the centre panel's {@link link} (#5647): the reference is sized and
+ * placed so the two faces match, and zooming or panning either moves both.
+ * Its rotation stays its own. A step to the next reference keeps the view, so
+ * the part being looked at stays in view on each.
  *
  * Under the layout's Wider toggle (#5645) a reference that is a face of the
  * dataset is shown from its photo, framed wide on it, as the candidate is. An
@@ -48,6 +53,8 @@ export class FaceReferenceComponent {
   /** Show the reference from its photo, wider (#5645); the centre panel says
    *  when, since it owns the toggle and knows whether the photos are loaded. */
   readonly wider = input(false);
+  /** The candidate's viewer's link, which this pane's viewer follows. */
+  readonly link = input<ViewLink | null>(null);
 
   /**
    * The reference stepped to, and the candidate it was stepped to for. Kept
