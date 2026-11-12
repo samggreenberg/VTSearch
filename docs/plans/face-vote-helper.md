@@ -172,15 +172,18 @@ exists; this plan adds nothing for it.
   center panel is a two-column grid: `vt-face-reference` on the left, the
   candidate on the right, each a `vt-image-viewer` with its own toolbar
   (`components/center-panel/face-reference/`). The reference is a set the
-  user steps through with **Next** or `R`: the Good pile by `Face Quality`
-  once there is one, the detector's example pictures before
+  user steps through with **Next** or `R`: the Good pile once there is one,
+  for each candidate the faces turned its way first and by `Face Quality`
+  among those (#5670), the detector's example pictures before
   (`face-reference.service.ts`). One can be pinned for the page's lifetime.
   The Compare toggle is the per-user `face_compare` setting.
 - **Five landmarks on every crop.** `image2face` gets two eyes, a nose tip
   and two mouth corners per face (`imagekit/face/records.py`), uses them to
   level the crop (`align="roll"`, #4777), and keeps them on the item as
   `face_landmarks`, fractions of the crop as stored, served on
-  `POST /api/medias/batch` (#5644). No pose is computed.
+  `POST /api/medias/batch` (#5644). The converter computes no pose; the
+  compare layout reads a rough turn of the head from the five points
+  (`landmarkTurn`, `face-checklist/face-regions.ts`).
 - **Crop padding of 0.25** of the face box on every side by default. Ears and
   hairline are often at or past the crop edge.
 - **A wider view.** The compare layout's **Wider** toggle shows both faces
