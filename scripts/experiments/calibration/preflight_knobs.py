@@ -312,6 +312,18 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #3688's one wrong vote: a simulated user the app never has.
+    if C.FLIP_VOTE is not None:
+        from vtscore.eval.voting_iterations import parse_flip_vote  # noqa: PLC0415
+
+        try:
+            parse_flip_vote(C.FLIP_VOTE)
+        except ValueError:
+            refuse(
+                "flip_vote", "CALIB_FLIP_VOTE", "must be good:K or bad:K with K >= 1, the served item to answer wrongly"
+            )
+        else:
+            rows.append(("flip_vote", C.FLIP_VOTE, "<unset> = an honest simulated user"))
     # #4664's early check: an arm the app does not take.
     if C.EARLY_CHECK is not None:
         if isinstance(C.EARLY_CHECK, int) and C.EARLY_CHECK >= 1:

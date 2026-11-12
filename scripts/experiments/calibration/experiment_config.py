@@ -1414,6 +1414,12 @@ QUERY_HOLD_PATCH: bool = os.environ.get("CALIB_QUERY_HOLD_PATCH", "").strip() no
 _BAND_SHARE = os.environ.get("CALIB_BAND_SHARE", "").strip()
 BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else (_BAND_SHARE or None)
 
+#: Issue #3688's one wrong vote: ``good:K`` has the simulated user vote the K-th
+#: true positive served Bad, ``bad:K`` the K-th true negative served Good.  Only
+#: that vote is wrong; the withheld scoring reads the truth.  Unset (the
+#: default) is the app's honest user.
+FLIP_VOTE: "str | None" = os.environ.get("CALIB_FLIP_VOTE", "").strip() or None
+
 #: Issue #4668's floor knob: ``absolute`` holds the labels line's spread floor at
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
