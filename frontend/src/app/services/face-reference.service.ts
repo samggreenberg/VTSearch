@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { ActiveDatasetService } from './active-dataset.service';
 import { ActiveDetectorService } from './active-detector.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
+import { SortingApiService } from './sorting-api.service';
 import { VoteStateService } from './vote-state.service';
 
 /**
@@ -62,6 +63,7 @@ export class FaceReferenceService {
   private readonly metadataCache = inject(MediaMetadataCacheService);
   private readonly activeDataset = inject(ActiveDatasetService);
   private readonly activeDetector = inject(ActiveDetectorService);
+  private readonly sortingApi = inject(SortingApiService);
 
   /** The pinned reference per `<dataset>::<detector>`. */
   private readonly pins = signal<Readonly<Record<string, FaceReference>>>({});
@@ -72,6 +74,14 @@ export class FaceReferenceService {
    * centre panel's `widerOn`, since it needs the photos loaded.
    */
   readonly wider = signal(false);
+
+  /**
+   * Each example picture's hard-view verdict (#5643), by file name, once the
+   * server has answered. An example's file never changes under its name, so
+   * one ask a page is enough, and {@link exampleAsked} keeps it to one.
+   */
+  private readonly exampleHardViews = signal<Readonly<Record<string, boolean | null>>>({});
+  private readonly exampleAsked = new Set<string>();
 
   private readonly contextKey = computed(() => `${this.activeDataset.activeId()}::${this.activeDetector.activeId()}`);
 
@@ -124,6 +134,27 @@ export class FaceReferenceService {
   loadQualities(): void {
     const ids = [...this.voteState.goodVotes];
     if (ids.length) this.metadataCache.ensureLoaded(ids);
+  }
+
+  /**
+   * Whether *ref* is a hard view (#5372): true, false, or null with no verdict
+   * (yet). A face of the dataset carries it on its metadata; an example's
+   * comes from {@link loadHardView}.
+   */
+  hardView(ref: FaceReference): boolean | null {
+    if (ref.kind === 'example') return this.exampleHardViews()[ref.filename] ?? null;
+    this.metadataCache.version();
+    return this.metadataCache.get(ref.id)?.face_hard_view ?? null;
+  }
+
+  /** Ask for an example picture's verdict, once a page; a face of the dataset needs no ask. */
+  loadHardView(ref: FaceReference): void {
+    if (ref.kind !== 'example' || this.exampleAsked.has(ref.filename)) return;
+    const filename = ref.filename;
+    this.exampleAsked.add(filename);
+    this.sortingApi
+      .exampleFaceHardView(filename)
+      .subscribe((verdict) => this.exampleHardViews.update((all) => ({ ...all, [filename]: verdict })));
   }
 
   toggleWider(): void {

@@ -1,0 +1,18 @@
+<aside class="face-checklist" aria-labelledby="face-checklist-heading">
+  <header class="checklist-header">
+    <h4 id="face-checklist-heading">What to compare</h4>
+    <p class="checklist-order">Most telling first</p>
+  </header>
+  <ol class="checklist-rows">
+    @for (check of checks; track check.part) {
+      <li class="checklist-row">
+        <span class="checklist-part">{{ check.part }}</span>
+        <span class="checklist-look">{{ check.look }}</span>
+      </li>
+    }
+  </ol>
+  <p class="checklist-ignore">Don't weigh hair, beard, makeup or skin tone.</p>
+  @if (fitness(); as notice) {
+    <p class="checklist-fitness" role="note">{{ notice }}</p>
+  }
+</aside>

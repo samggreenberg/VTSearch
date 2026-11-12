@@ -18,6 +18,7 @@ import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-p
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { ImageViewControlsComponent } from './image-view-controls/image-view-controls.component';
+import { FaceChecklistComponent } from './face-checklist/face-checklist.component';
 import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
@@ -47,6 +48,7 @@ const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'i
     ImageViewerComponent,
     ImageViewControlsComponent,
     FaceReferenceComponent,
+    FaceChecklistComponent,
     VideoPlayerComponent,
     TextViewerComponent,
     DocumentViewerComponent,

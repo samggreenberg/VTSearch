@@ -123,25 +123,29 @@
   flex-direction: column;
 }
 
-// The compare layout: two equal columns, the viewers in one row and their
-// bars in the next. A shared row is what keeps the two faces the same height
+// The compare layout: two equal columns for the faces, the viewers in one row
+// and their bars in the next, and a narrow third for the checklist (#5643),
+// down both rows. A shared row is what keeps the two faces the same height
 // when one bar wraps and the other does not. The reference pane's host is
 // `display: contents`, so its viewer and bar are cells of this grid.
 .media-stage--compare {
+  --face-checklist-width: 26ch;
+
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--face-checklist-width);
   grid-template-rows: minmax(0, 1fr) auto;
   column-gap: var(--space-md);
   row-gap: var(--space-2xs);
 
-  // The one line between the two faces, down the middle of the gap.
+  // The one line between the two faces, down the middle of the gap between
+  // their columns: half of what the checklist and its gap leave.
   &::before {
     content: '';
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 50%;
+    left: calc((100% - var(--face-checklist-width) - var(--space-md)) / 2);
     width: 1px;
     background: var(--border);
     pointer-events: none;

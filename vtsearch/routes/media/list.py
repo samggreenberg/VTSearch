@@ -65,9 +65,12 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     Clean/Original toggle and the byte routes' ``?variant=original``.
     ``face_landmarks`` is a face crop's five landmarks on the crop, for
     matching two faces' size and position (#5644); a malformed stored value is
-    left out rather than served.
+    left out rather than served.  ``face_hard_view`` is a face's verdict from
+    its stamped Face Quality (#5372), for the compare layout's fitness notice
+    (#5643); it is left out when there is no verdict.
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+    from vtscore.media.face.imagekit_bridge import media_hard_view  # noqa: PLC0415
 
     if has_original_payload(media):
         out["has_original"] = True
@@ -78,6 +81,10 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     landmarks = face_landmarks_of(media)
     if landmarks is not None:
         out[FACE_LANDMARKS_FIELD] = landmarks
+    if media.get("media_type") == "face":
+        hard_view = media_hard_view(media)
+        if hard_view is not None:
+            out["face_hard_view"] = hard_view
     _attach_embedder_fields(out, media)
 
 

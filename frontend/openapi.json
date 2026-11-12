@@ -6590,6 +6590,10 @@
             },
             "type": "array"
           },
+          "face_hard_view": {
+            "description": "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard view (turned, covered, small), which is harder to compare and to search from (#5372). Absent when there is no verdict: not a face, no stamped quality, or an embedding space with no hard-view cut.",
+            "type": "boolean"
+          },
           "face_landmarks": {
             "description": "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served (after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the face runs past the crop's edge. Absent when the item has none: not a face, a face whose detection gave no landmarks, or one imported before they were kept.",
             "items": {
@@ -8094,6 +8098,19 @@
         ],
         "type": "object"
       },
+      "ServerMediaFaceHardViewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "face_hard_view": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "face_hard_view"
+        ],
+        "type": "object"
+      },
       "ServerMediaFromMediaIdRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9573,6 +9590,10 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "face_hard_view": {
+            "description": "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard view (turned, covered, small), which is harder to compare and to search from (#5372). Absent when there is no verdict: not a face, no stamped quality, or an embedding space with no hard-view cut.",
+            "type": "boolean"
           },
           "face_landmarks": {
             "description": "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served (after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the face runs past the crop's edge. Absent when the item has none: not a face, a face whose detection gave no landmarks, or one imported before they were kept.",
@@ -17656,6 +17677,47 @@
           "media_server"
         ]
       }
+    },
+    "/api/server-media-files/{filename}/face-hard-view": {
+      "get": {
+        "description": "The Face compare layout's checklist (#5643) tells the user when either face\nis a hard view, so they expect a weaker comparison.  A face of the dataset\ncarries its verdict on its batch metadata; a detector's example picture is\na file of the user's with no stamped quality, so the server's face provider\nreads it here.  The verdict is advice: ``null`` when Face is off, no face is\nfound, or the provider fails.",
+        "operationId": "server_media_file_face_hard_view",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerMediaFaceHardViewResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Filename escapes the example_media directory."
+          },
+          "404": {
+            "description": "File not found, or not an image."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Say whether the face in an image example is a hard view (#5372).",
+        "tags": [
+          "media_server"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "filename",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/server-media-files/{filename}/image": {
       "get": {

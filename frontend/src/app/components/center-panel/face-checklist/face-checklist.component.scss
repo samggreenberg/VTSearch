@@ -1,0 +1,76 @@
+// The strip is the compare grid's third column (`.media-stage--compare`,
+// whose `--face-checklist-width` sizes it), beside the candidate, the height
+// of both the faces and their bars.
+:host {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  min-height: 0;
+  display: flex;
+}
+
+.face-checklist {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}
+
+.checklist-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.checklist-order {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.checklist-rows {
+  margin: 0;
+  padding-left: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.checklist-row::marker {
+  color: var(--text-muted);
+}
+
+.checklist-part {
+  display: block;
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.checklist-look {
+  display: block;
+  color: var(--text-secondary);
+}
+
+.checklist-ignore {
+  margin: 0;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+// The fitness notice (#5372's hard view): advice in the warning colours, as
+// New Detector's hard-view note is, and never a block on the vote.
+.checklist-fitness {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--text-warning);
+}
