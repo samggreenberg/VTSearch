@@ -459,7 +459,9 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
   }
 
   onZoomInput(event: Event): void {
-    // The slider moves the zoom it shows (`shownZoom`).
+    // The slider moves the zoom it shows (`shownZoom`); `zoomAboutCentre` brings
+    // a follower up to its lead first, so the unit is read after.
+    this.followLead();
     this.zoomAboutCentre(parseFloat((event.target as HTMLInputElement).value) * this.zoomUnit());
   }
 
@@ -487,6 +489,7 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
 
   /** Turn by a quarter (*deg* is ±90), turning the pan with the image. */
   private rotateAboutCentre(deg: 90 | -90): void {
+    this.followLead();
     this.rotation.update((r) => r + deg);
     // Clockwise on screen, y pointing down: (x, y) -> (-y, x).
     const [x, y] = [this.panX(), this.panY()];
@@ -497,6 +500,7 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
 
   /** Zoom to *newZoom* (clamped), scaling the pan with it. */
   private zoomAboutCentre(newZoom: number): void {
+    this.followLead();
     const oldZoom = this.zoom();
     this.zoom.set(this.clampZoom(newZoom));
     const ratio = this.zoom() / oldZoom;
@@ -570,6 +574,7 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
 
   onWheel(event: WheelEvent): void {
     event.preventDefault();
+    this.followLead();
     const oldZoom = this.zoom();
     const delta = event.deltaY > 0 ? -0.15 : 0.15;
     this.zoomAbout(oldZoom + delta * oldZoom, event.clientX, event.clientY);
@@ -597,6 +602,7 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     if (this.regionDrawActive) return;
     // Without this a double-click paints a native selection over the canvas.
     event.preventDefault();
+    this.followLead();
     if (this.shownZoom() >= this.maxZoom - AT_CAP) {
       const following = this.following();
       if (following.kind === 'on') {
@@ -694,6 +700,7 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
 
     // Default: pan-when-zoomed.
     if (!this.panRoom()) return;
+    this.followLead();
     this.drag = {
       kind: 'pan',
       startX: event.clientX,
@@ -844,7 +851,12 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     this.panY.set(pane.panY);
   }
 
-  /** As a follower: show the lead's view as it now stands. */
+  /**
+   * As a follower: show the lead's view as it now stands. The effect that keeps
+   * a follower drawn from its lead runs on the next change detection, so each
+   * gesture calls this first: one begun on a view the lead has since left would
+   * hand the old view back and undo the lead's move. A no-op on any other viewer.
+   */
   private followLead(): void {
     const following = this.following();
     if (following.kind === 'on') this.setPaneView(paneViewOf(following.frame, following.view, this.rotation()));
