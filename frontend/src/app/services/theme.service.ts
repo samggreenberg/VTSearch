@@ -44,11 +44,11 @@ export class ThemeService implements OnDestroy {
   loadFromSettings(): void {
     this.settingsState.load();
     const stored = computed<Theme | null>(() => {
-      // Settings unavailable; keep the default 'system' theme. Asked first:
-      // after a failed load, reading the settings themselves throws.
-      if (this.settingsState.error() != null) return 'system';
       const settings = this.settingsState.settingsSignal();
-      return settings ? ((settings.theme as Theme | null | undefined) ?? 'system') : null;
+      if (settings) return (settings.theme as Theme | null | undefined) ?? 'system';
+      // Settings unavailable: keep the default 'system' theme. (A failed
+      // refetch keeps the last good settings, so it lands above instead.)
+      return this.settingsState.error() != null ? 'system' : null;
     });
     toObservable(stored, { injector: this.injector })
       .pipe(
