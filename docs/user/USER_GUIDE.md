@@ -714,15 +714,20 @@ two part by part instead of trusting your memory of the person.
   photos of one person look alike where only the camera or the light differs.
   Each change is made to the whole picture, the same at every point, and is
   capped, so neither face is pushed far from how it was taken; the stored
-  pictures never change, and nor does what the detector sees. Each is a
-  checkbox, and the choices are remembered:
-  - **Exposure** brings both faces to the same brightness, and **Contrast** to
-    the same contrast, each measured on the face from the eyes to the mouth, so
-    the hair and the background don't count. A dark face is lifted, which can
-    show a mark the shadow hid.
-  - **White balance** takes each photo's colour cast out (the orange of a lamp,
-    the blue of shade), measured on the whole picture, not the skin, so two
-    people's skin keeps its difference.
+  pictures never change, and nor does what the detector sees. Everything is
+  measured on the face's skin alone: small patches on the forehead, the bridge
+  of the nose and each cheek, found from the eyes, nose and mouth, so the wall
+  behind a person, white or black, and their hair, eyes and lips don't count.
+  The cheek on the far side of a turned head is left out. Each is a checkbox,
+  and the choices are remembered:
+  - **Exposure** brings both faces' skin to the same brightness, and
+    **Contrast** to the same contrast. A dark face is lifted, which can show a
+    mark the shadow hid.
+  - **White balance** moves each face's skin toward a typical skin colour,
+    which takes a colour cast out (the orange of a lamp, the blue of shade).
+    Read from the skin, it can't tell a cast from a person's own colouring, so
+    it also narrows the difference between two people's skin, as far as its
+    limit allows: one more reason not to weigh skin tone.
   - **Greyscale when either is** shows both faces in greyscale when either is a
     black-and-white photo: a colour face beside a grey one makes people more
     likely to call two different people the same. **Both in greyscale**, the
@@ -733,7 +738,9 @@ two part by part instead of trusting your memory of the person.
     evened out again.
 
   A face from an older dataset, or an example picture, has no eye and mouth
-  points to find its face by, so only its colour cast is taken out.
+  points to find its skin by, so it is measured where a face sits in a face
+  crop; an example picture whose face is elsewhere is measured in the wrong
+  place.
 - **Compare**, under the candidate, turns the reference off and gives the
   candidate the whole panel. The choice is remembered.
 

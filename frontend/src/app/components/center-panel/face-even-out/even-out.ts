@@ -90,25 +90,30 @@ export function evenOutChoices(stored: Partial<Record<EvenOutChoice, unknown>> |
  * The targets and the caps, all in sRGB-encoded units (0 to 1), the space the
  * pixels are read in and the filter is applied in. The targets are the median
  * face's skin, measured on the 253 face crops of the screenshot harness's
- * Celebrities in Context slice (skin luminance 0.64, spread 0.21, colour
- * 1.37 : 1 : 0.85), so a typical face is barely changed (FISWG 4.4's
- * minimum). The exposure and colour caps reach about the 10th and 90th
- * percentiles of what those crops would need. The stretch's are tighter: the
- * skin's spread runs from 0.11 to 0.50 across them, and stretching a flat face
- * twice over to match would clip its hair and its background. All were
- * checked by eye in Chromium.
+ * Celebrities in Context slice (skin luminance 0.64, spread 0.20, colour
+ * 1.38 : 1 : 0.85), so a typical face is barely changed (FISWG 4.4's
+ * minimum).
+ *
+ * The caps were set by eye in Chromium on those crops, and hold every face
+ * near how it was taken. The colour caps reach about the 10th and 90th
+ * percentiles of what the crops would need. Exposure's bind on about the
+ * outer 15% at each end: a gamma of 2 that darkens a washed-out face to the
+ * target also crushes its hair and its background. The stretch's bind on most
+ * faces, since the skin's spread (0.11 to 0.46 across the crops) says more
+ * about how evenly the light falls than about the camera, and stretching a
+ * flat-lit face by half again blacks out its hair and oversaturates its skin.
  */
 
 /** The skin's median luminance that exposure brings each face to. */
 export const EXPOSURE_TARGET = 0.64;
 /** The gamma curve's exponent is kept in here: under 1 lifts, over 1 darkens. */
-export const GAMMA_MIN = 0.5;
-export const GAMMA_MAX = 2;
+export const GAMMA_MIN = 0.6;
+export const GAMMA_MAX = 1.7;
 /** The skin's spread, 5th to 95th percentile, that contrast brings each face to. */
-export const CONTRAST_TARGET = 0.21;
+export const CONTRAST_TARGET = 0.2;
 /** The contrast stretch about the median is kept in here. */
-export const STRETCH_MIN = 0.75;
-export const STRETCH_MAX = 1.5;
+export const STRETCH_MIN = 0.8;
+export const STRETCH_MAX = 1.25;
 /** Each channel's white-balance gain is kept in here. */
 export const BALANCE_MIN = 0.83;
 export const BALANCE_MAX = 1.2;
@@ -117,7 +122,7 @@ export const BALANCE_MAX = 1.2;
  * luminance: the median skin colour of those crops, in proportion only (its
  * scale does not matter).
  */
-export const TYPICAL_SKIN: Rgb = [1.37, 1, 0.85];
+export const TYPICAL_SKIN: Rgb = [1.38, 1, 0.85];
 /**
  * Where a face sits in a face crop, as fractions of it, in `face_landmarks`'
  * order: the median of those crops' landmarks. A face with none of its own is

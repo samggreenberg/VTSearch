@@ -126,7 +126,8 @@ describe('FaceEvenOutService', () => {
       await Promise.resolve();
       expect(seen.length).toBe(2);
       expect(seen[1]!.grey).toBe(true);
-      expect(seen[1]!.face).toBeNull();
+      // No landmarks: read where a crop's face sits, here a flat mid-grey.
+      expect(seen[1]!.face!.raw.median).toBeCloseTo(128 / 255, 2);
     });
 
     it('reads a picture once, and answers again at once', async () => {

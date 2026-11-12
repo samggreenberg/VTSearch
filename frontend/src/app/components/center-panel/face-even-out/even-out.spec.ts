@@ -370,14 +370,14 @@ describe('even-out', () => {
     const grey: Rgb = [128, 128, 128];
 
     it('brings a dark face and a bright one to medians close together', () => {
-      const darkCrop = faceCrop([105, 105, 105], grey);
-      const brightCrop = faceCrop([190, 190, 190], grey);
+      const darkCrop = faceCrop([115, 115, 115], grey);
+      const brightCrop = faceCrop([180, 180, 180], grey);
       const exposure = ALL_OFF_BUT('exposure');
       const dark = through(mapOf(darkCrop, exposure), darkCrop);
       const bright = through(mapOf(brightCrop, exposure), brightCrop);
       const gapBefore = skinMedian(brightCrop) - skinMedian(darkCrop);
       const gapAfter = Math.abs(skinMedian(bright) - skinMedian(dark));
-      expect(gapBefore).toBeGreaterThan(0.3);
+      expect(gapBefore).toBeGreaterThan(0.25);
       expect(gapAfter).toBeLessThan(0.05);
       expect(skinMedian(bright)).toBeCloseTo(EXPOSURE_TARGET, 1);
     });

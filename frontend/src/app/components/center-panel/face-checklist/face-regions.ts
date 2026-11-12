@@ -146,10 +146,14 @@ export function regionViews(face: FaceShape, region: FaceRegion): readonly (Face
  * and the folds from the nose to the mouth are left between the patches.
  */
 
-/** The forehead patch's middle, over the eyes, and its half-width and half-height. */
-const FOREHEAD_Y = -0.65;
-const FOREHEAD_HALF_W = 0.2;
-const FOREHEAD_HALF_H = 0.1;
+/**
+ * The forehead patch's middle, over the eyes, and its half-width and
+ * half-height: low on the forehead, just over the brows, and small, since a
+ * fringe often covers the rest.
+ */
+const FOREHEAD_Y = -0.6;
+const FOREHEAD_HALF_W = 0.15;
+const FOREHEAD_HALF_H = 0.08;
 /** The nose patch's middle, as a share of the way from between the eyes to the tip: the bridge. */
 const NOSE_AT = 0.55;
 const NOSE_HALF = 0.07;

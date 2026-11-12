@@ -214,14 +214,17 @@ exists; this plan adds nothing for it.
   `GET /api/server-media-files/<f>/face-hard-view`.
 - **The photos evened out.** Each pane is shown through one SVG
   `feComponentTransfer` filter, a gamma curve per channel, then
-  `grayscale(1)` when either face is a greyscale photo (#5674, #5675). The
-  curve's exposure and contrast are fitted on the inner face, a box placed
-  from the landmarks; its white balance makes the light grey, read from the
-  whole crop's brightest pixels, since grey-world on a crop that is mostly
-  skin reads every face as lit warm. Each face moves toward fixed targets, the
-  median face's, with every gain capped, so each
-  pane's map is its own pixels' alone, and a face is always measured on its
-  crop, so the map applies unchanged under **Wider**
+  `grayscale(1)` when either face is a greyscale photo (#5674, #5675).
+  Everything is measured on the face's skin alone: patches on the forehead,
+  the nose bridge and each visible cheek, placed from the landmarks
+  (`skinPatches`, `face-checklist/face-regions.ts`), so nothing behind the face
+  counts (the owner's call). Exposure and contrast are fitted on the skin's
+  luminance, and white balance moves the skin's mean colour toward a typical
+  skin colour, which also narrows two people's skin difference within its
+  caps. Each face moves toward fixed targets, the median face's, with every
+  gain capped, so each pane's map is its own pixels' alone; a face is always
+  measured on its crop, so the map applies unchanged under **Wider**, and a
+  face without landmarks is measured where a crop's face usually sits
   (`components/center-panel/face-even-out/even-out.ts`). Each standardization,
   the turn-matched reference of #5670 included, is a checkbox in the
   checklist's "Even out the photos" group, the per-user `face_even_out`
@@ -317,9 +320,9 @@ differ.
 
 | Axis | Standardization | Standing | Verdict |
 |---|---|---|---|
-| Exposure | Bring each face's median luminance to a common target. Measure it on the inner face, a box placed from the landmarks, eyes to mouth and cheek to cheek, so background and hair don't count. Apply it to the whole image as a levels map, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Done** (#5675) |
-| Contrast | On the same region, bring the spread (say the 5th to 95th percentile) to a common target. A gamma curve lifts a dark face's shadows without clipping its highlights. | FISWG 5.1.1, 5.1.6 | **Done** (#5675) |
-| Colour cast | White-balance each image against its own scene: estimate the light from the whole crop (or the whole photo under **Wider**), never by matching one face's skin to the other's. | FISWG 5.1.4 | **Done** (#5675) |
+| Exposure | Bring each face's median skin luminance to a common target. Measure it on skin patches placed from the landmarks (forehead, nose bridge, the visible cheeks), so background, hair, eyes and lips don't count. Apply it to the whole image as a gamma curve, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Done** (#5675) |
+| Contrast | On the same patches, bring the spread (the 5th to 95th percentile) to a common target, by a gentle, capped stretch about the median: on skin alone the spread mostly says how evenly the light falls. | FISWG 5.1.1, 5.1.6 | **Done** (#5675) |
+| Colour cast | White-balance each face from its own skin, toward a typical skin colour, capped, so nothing behind the face sways it. It narrows two people's skin difference within the caps (the owner's call over measuring the scene). | FISWG 5.1.4 | **Done** (#5675) |
 | Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Done** (#5674) |
 | Detail | When the two faces' native pixels between the eyes are far apart, say so in the fitness notice. Later, try softening the sharper face toward the other's level, or showing the pair smaller. | Softening is not on FISWG's list, but it removes detail rather than adding it; Bindemann 2013, Merino 2025 | **Notice now**, softening later |
 | Head turn (yaw, pitch) | No transform: choose the reference instead. The Good faces turned like the candidate come first, the turn read from the five landmarks (`landmarkTurn`). | ENFSI 5.3.2; FSR 5.1.4 | **Done** (#5670) |

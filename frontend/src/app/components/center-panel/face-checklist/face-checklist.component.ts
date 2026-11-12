@@ -66,17 +66,18 @@ export const EVEN_OUT_ROWS: readonly EvenOutRow[] = [
   {
     choice: 'exposure',
     label: 'Exposure',
-    title: 'Bring both faces to the same brightness, measured on the face itself',
+    title: "Bring both faces to the same brightness, measured on the face's skin",
   },
   {
     choice: 'contrast',
     label: 'Contrast',
-    title: 'Bring both faces to the same contrast, measured on the face itself',
+    title: "Bring both faces to the same contrast, measured on the face's skin",
   },
   {
     choice: 'white_balance',
     label: 'White balance',
-    title: "Take each photo's colour cast out, measured on its whole picture so the skin keeps its own colour",
+    title:
+      "Move each face's skin toward a typical skin colour, which takes a lamp's or shade's colour cast out. Read from the skin, it also narrows the difference between two people's skin",
   },
   {
     choice: 'greyscale_either',
