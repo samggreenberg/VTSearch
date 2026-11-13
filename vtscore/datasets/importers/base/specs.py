@@ -118,7 +118,9 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
     return specs
 
 
-def with_default_conversions(field_values: dict[str, Any], specs: list[SourceSpec], output_type: str) -> list[SourceSpec]:
+def with_default_conversions(
+    field_values: dict[str, Any], specs: list[SourceSpec], output_type: str
+) -> list[SourceSpec]:
     """*specs* for a folder scan, with the half types that become *output_type* by default.
 
     A request that names its own ``source_specs`` rows is taken at its word:

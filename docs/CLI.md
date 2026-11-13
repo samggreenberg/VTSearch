@@ -295,7 +295,7 @@ What a resumed run guarantees:
   the file, so the files already done are not hashed or thumbnailed again.
   That covers the folder's own files and those of an archive (`--path` an
   archive, or `--dig-archives`), whose members are checked by the archive's
-  own size and time. Its PDF-page and converter chunks, and every other
+  own size and time. Its converter chunks (a PDF's pages among them), and every other
   importer's or dataset's chunks, are re-read to be checked. The first chunk
   is the exception throughout: the detectors are retrained on it, as the
   first run's were, so it is read and embedded again.

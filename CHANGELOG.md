@@ -20,6 +20,28 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Fixed
+
+- **Importing a folder of PDFs gives each page once** (issue #5680). Adding a dataset from a folder of PDFs made
+  every page twice. Pages now come from one place, the Document → Images converter, and each one remembers which
+  page of which file it is. Page names change with it: `report.pdf→report_page_1.png`, where they were
+  `report.pdf-1`. An Image import you set up by hand with only the image row no longer pulls the folder's PDFs
+  in; tick Document as well to get them.
+
+- **Documents handed to the app unconverted are turned into pages before embedding** (issue #5680). A dataset
+  importer plugin that lists PDFs, or an import asked for the Document type with no conversion named, used to end
+  with nothing loaded, because no embedder reads a document. The load now converts them first (each page an
+  image, or the text when the dataset is a text one).
+
+- **Labels on converted pages show their thumbnails** (issue #5680). Browse Positives, and a label's thumbnail and
+  preview when its dataset is not loaded, showed nothing for a page rendered from a PDF: the app was handing the
+  whole PDF over as the picture. They now render the page the label is on.
+
+- **The UCSF Documents demo says why it could not load** (issue #5680). When the library's PDFs could not be
+  downloaded the import ended with "Import produced no medias". It now reports what failed, for example the
+  HTTP status the download was refused with. For API users: `POST /api/dataset/load-demo` with no `converter`
+  loads this demo as page images, where it loaded nothing.
+
 ## 2026-11-13
 
 ### Changed

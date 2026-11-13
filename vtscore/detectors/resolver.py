@@ -618,6 +618,23 @@ def _needs_clip_replay(params: dict[str, Any]) -> bool:
     return bool(params.get("clipper") or params.get("clipper_chain") or params.get("converter"))
 
 
+def _converter_led_steps(params: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """The steps that rebuild a unit a converter made, from its ``origin.params``.
+
+    ``None`` when no converter is recorded: the unit is its file, or a same-type
+    cut of it.  An empty list when one is recorded but its recipe cannot be
+    replayed (a flat converter origin with no sub-output disambiguator).
+    """
+    from vtscore.datasets.clipper_chain import parse_trail  # noqa: PLC0415
+
+    if params.get("converter"):
+        return _converter_origin_to_chain(params) or []
+    trail = parse_trail(params.get("clipper_chain")) if params.get("clipper_chain") else None
+    if trail and any(step.get("kind") == "converter" for step in trail):
+        return trail
+    return None
+
+
 def resolve_unit_payload(file_path: Path, origin: dict[str, Any] | None) -> tuple[bytes, str] | None:
     """Return ``(bytes, suffix)`` of the unit *origin* names, given the file it resolved to.
 
@@ -639,26 +656,17 @@ def resolve_unit_payload(file_path: Path, origin: dict[str, Any] | None) -> tupl
         _FINAL_EXT_BY_TYPE,
         _load_source_as_media,
         _step_io_types,
-        parse_trail,
         replay_chain_on_media,
     )
 
-    params = (origin or {}).get("params", {}) or {}
-    steps: list[dict[str, Any]] | None = None
-    if params.get("converter"):
-        steps = _converter_origin_to_chain(params)
-        if steps is None:
-            return None
-    elif params.get("clipper_chain"):
-        trail = parse_trail(params.get("clipper_chain"))
-        if trail and any(step.get("kind") == "converter" for step in trail):
-            steps = trail
-
+    steps = _converter_led_steps((origin or {}).get("params", {}) or {})
     if steps is None:
         try:
             return file_path.read_bytes(), file_path.suffix.lower()
         except OSError:
             return None
+    if not steps:
+        return None
 
     first, last = _step_io_types(steps[0]), _step_io_types(steps[-1])
     if first is None or last is None:

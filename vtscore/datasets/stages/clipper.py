@@ -186,7 +186,9 @@ def default_conversion_step(source_type: str, preferred_target: str = "") -> dic
     return {"kind": "converter", "name": converter.name, "params": {}}
 
 
-def _conversion_chain(step: dict, clipper_name: str, clipper_params: dict | None, chain_steps: list[dict]) -> list[dict]:
+def _conversion_chain(
+    step: dict, clipper_name: str, clipper_params: dict | None, chain_steps: list[dict]
+) -> list[dict]:
     """*step* leading the load's own clipper choice and cleanup gates.
 
     The clipper and the gates were picked for the dataset's type, which is what
@@ -769,6 +771,46 @@ def _resolve_clip_embedder(media_type: str):
     return avail[0]
 
 
+def _convert_then_clip(
+    medias: dict,
+    clipper: str,
+    clipper_params: dict | None,
+    chain_steps: list[dict] | None,
+    media_type: str,
+    on_progress: Callable[[int, int, str], None],
+) -> None:
+    """Convert the half-type media in *medias*, then run the load's clipper / chain on the rest.
+
+    The converted media ran the load's clipper and gates behind their converter
+    (:func:`convert_unembeddable_medias`), so only what the importer handed
+    over embeddable still owes them.  With nothing to convert this is the
+    plain clipper / chain run.
+    """
+    converted = convert_unembeddable_medias(
+        medias,
+        media_type,
+        clipper_name=clipper,
+        clipper_params=clipper_params,
+        chain_steps=chain_steps,
+        on_progress=on_progress,
+    )
+    if not (clipper or chain_steps):
+        return
+    if not converted:
+        _apply_clipper(medias, clipper, clipper_params, on_progress=on_progress, chain_steps=chain_steps)
+        return
+    rest = {mid: m for mid, m in medias.items() if mid not in converted}
+    if not rest:
+        return
+    done = [medias[mid] for mid in sorted(converted)]
+    _apply_clipper(rest, clipper, clipper_params, on_progress=on_progress, chain_steps=chain_steps)
+    medias.clear()
+    medias.update(rest)
+    for new_id, media in enumerate(done, max(rest, default=0) + 1):
+        media["id"] = new_id
+        medias[new_id] = media
+
+
 def _apply_clipper_stage(
     ctx: DatasetContext,
     tracker,
@@ -824,30 +866,7 @@ def _apply_clipper_stage(
         )
 
     _clipper_progress(0, 0, "converting" if needs_conversion else "clipping")
-    converted: set[int] = set()
-    if needs_conversion:
-        converted = convert_unembeddable_medias(
-            ctx.medias,
-            media_type,
-            clipper_name=clipper,
-            clipper_params=clipper_params,
-            chain_steps=chain_steps,
-            on_progress=_clipper_progress,
-        )
-    if converted and (clipper or chain_steps):
-        # The converted media ran the load's clipper and gates behind their
-        # converter; only what the importer handed over embeddable still owes them.
-        rest = {mid: m for mid, m in ctx.medias.items() if mid not in converted}
-        if rest:
-            done = [ctx.medias[mid] for mid in sorted(converted)]
-            _apply_clipper(rest, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
-            ctx.medias.clear()
-            ctx.medias.update(rest)
-            for new_id, media in enumerate(done, max(rest, default=0) + 1):
-                media["id"] = new_id
-                ctx.medias[new_id] = media
-    elif clipper or chain_steps:
-        _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
+    _convert_then_clip(ctx.medias, clipper, clipper_params, chain_steps, media_type, _clipper_progress)
     # Clipping reassigns media IDs starting from 1 and rewrites embeddings
     # in place; the cached matrix's id list can collide with the new one
     # while pointing at stale rows. Drop the cache so the next reader
