@@ -615,6 +615,51 @@ class TestBatchMetadataBranches:
         assert item["clip_start"] == 4.0
         assert item["clip_end"] == 9.0
 
+    def test_face_landmarks_reach_the_client(self, client):
+        # A face crop's five landmarks on the crop, for matching two faces (#5644).
+        points = [[0.35, 0.45], [0.65, 0.45], [0.5, 0.6], [0.38, 0.78], [0.62, 0.78]]
+        mid = _inject(media_type="face", filename="group_face_1.png", face_landmarks=points)
+        resp = client.post("/api/medias/batch", json={"ids": [mid]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert item["face_landmarks"] == points
+
+    def test_media_without_landmarks_gets_no_field(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [_inject()]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert "face_landmarks" not in item
+
+    def test_a_face_carries_its_hard_view_verdict(self, client):
+        # The compare layout's fitness notice reads it (#5643); the verdict is
+        # the face's stamped Face Quality against its space's cut (#5372).
+        from vtscore.media.face.imagekit_bridge import COMPAT_METADATA_KEY, QUALITY_METADATA_KEY
+
+        def face(quality):
+            meta = {QUALITY_METADATA_KEY: quality, COMPAT_METADATA_KEY: "oss-arcface-mbf:1"}
+            return _inject(media_type="face", filename="f.png", custom_metadata=meta)
+
+        hard, clear = face(9.0), face(25.0)
+        unknown = _inject(media_type="face", filename="g.png", custom_metadata={QUALITY_METADATA_KEY: 9.0})
+        other = _inject(custom_metadata={QUALITY_METADATA_KEY: 9.0, COMPAT_METADATA_KEY: "oss-arcface-mbf:1"})
+        resp = client.post("/api/medias/batch", json={"ids": [hard, clear, unknown, other]})
+        assert resp.status_code == 200
+        by_id = {item["id"]: item for item in resp.get_json()}
+        assert by_id[hard]["face_hard_view"] is True
+        assert by_id[clear]["face_hard_view"] is False
+        # No space to judge the quality in, and not a face: no field at all.
+        assert "face_hard_view" not in by_id[unknown]
+        assert "face_hard_view" not in by_id[other]
+
+    def test_malformed_landmarks_are_left_out(self, client):
+        # The field rides in a pickle; a value that is not five finite pairs is
+        # dropped rather than served or allowed to fail the whole batch.
+        mid = _inject(media_type="face", filename="f.png", face_landmarks=[[0.1, 0.2]] * 4)
+        bad = _inject(media_type="face", filename="g.png", face_landmarks=[[0.1, float("nan")]] * 5)
+        resp = client.post("/api/medias/batch", json={"ids": [mid, bad]})
+        assert resp.status_code == 200
+        assert all("face_landmarks" not in item for item in resp.get_json())
+
 
 # ---------------------------------------------------------------------------
 # Vote route edge branches

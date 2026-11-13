@@ -13,14 +13,21 @@ helpers behind them live in :mod:`vtsearch.routes.media._serving`.
 from __future__ import annotations
 
 import io
+import struct
+from enum import Enum
 from pathlib import Path
+from typing import NoReturn
 
 from flask import Response, make_response, request, send_file
 from flask_smorest import abort
 
 from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.utils.hashing import content_md5
-from vtsearch.routes._media_response import cached_thumbnail_response, image_thumbnail_response
+from vtsearch.routes._media_response import (
+    cached_image_response,
+    image_thumbnail_response,
+    sniff_image_mimetype,
+)
 from vtsearch.routes.media._serving import (
     _BROWSER_VIDEO_EXTS,
     _MIMETYPE_BY_EXT,
@@ -35,7 +42,11 @@ from vtsearch.routes.media._serving import (
     _transcode_to_mp4,
 )
 from vtsearch.routes.media.list import medias_bp
-from vtsearch.schemas.media import MediaParagraphResponseSchema, MediaVariantQuerySchema
+from vtsearch.schemas.media import (
+    MediaParagraphResponseSchema,
+    MediaVariantQuerySchema,
+    ThumbnailBatchQuerySchema,
+)
 
 
 @medias_bp.route("/api/medias/<int:media_id>/audio")
@@ -159,25 +170,28 @@ def _serve_transcoded_video(c: dict, media_id: int, ext: str, filename: str) -> 
     )
 
 
-def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
-    """Resolve the displayable image for a media item.
+class _NoImage(Enum):
+    """Why a media has no displayable image, as the status the routes answer."""
 
-    Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
-    ``/image`` route would serve, ``abort``-ing with the matching error when
-    no image is available.  For non-image types it delegates to the media
-    type's ``image_response`` hook (audio waveforms, video frames); for image
-    types it streams the source bytes with a mimetype derived from the
-    filename extension.  Shared by the full-image and thumbnail routes, so
-    ``?variant=original`` reaches both.
+    #: A media type with no paintable form (its ``image_response`` gave none).
+    NO_PICTURE = 400
+    #: The media's bytes are unavailable.
+    NO_BYTES = 404
+
+
+def _display_image(media_id: int, media: dict) -> tuple[bytes, str, str] | _NoImage:
+    """The displayable image of a loaded media, or why it has none.
+
+    ``(image_bytes, mimetype, download_name)`` for the bytes the ``/image``
+    route would serve.  For non-image types it delegates to the media type's
+    ``image_response`` hook (audio waveforms, video frames); for image types it
+    is the source bytes with a mimetype derived from the filename extension.
+    Never aborts, so a batch can skip a media without a picture and go on.
     """
-    c = _get_media_variant(media_id)
-    if not c:
-        abort(404, message="not found")
-
-    media_type = c.get("media_type")
+    media_type = media.get("media_type")
 
     # For non-image types, delegate to the media type's ``image_response``
-    # hook; a type with no paintable form returns None and we 400.
+    # hook; a type with no paintable form returns None.
     if media_type and media_type != "image":
         from vtscore.media import get as get_media_type  # noqa: PLC0415
 
@@ -185,26 +199,46 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
             mt = get_media_type(media_type)
         except KeyError:
             mt = None
-        resp = mt.image_response(c) if mt else None
+        resp = mt.image_response(media) if mt else None
         # ``MediaResponse.data`` is ``bytes | dict`` (text types serve JSON),
         # but an image is always bytes.  A hook handing back a dict is a
         # broken plugin, not an image: treat it as "no picture" rather than
         # letting it reach ``send_file``.
         if resp is not None and isinstance(resp.data, (bytes, bytearray)):
             return bytes(resp.data), resp.mimetype, resp.download_name
-        abort(400, message="no image available")
+        return _NoImage.NO_PICTURE
 
-    media_bytes = _resolve_bytes(c)
+    media_bytes = _resolve_bytes(media)
     if media_bytes is None:
-        abort(404, message="media not available")
+        return _NoImage.NO_BYTES
 
     # Determine mimetype based on filename extension
-    filename = c.get("filename", "")
+    filename = media.get("filename", "")
     suffix = Path(filename).suffix if filename and Path(filename).suffix else ""
     mimetype = _MIMETYPE_BY_EXT.get(suffix, "image/jpeg")
 
     suffix = suffix or ".jpg"
     return media_bytes, mimetype, f"media_{media_id}{suffix}"
+
+
+def _abort_no_image(reason: _NoImage) -> NoReturn:
+    """Answer a single-media route's request for a picture there isn't."""
+    if reason is _NoImage.NO_PICTURE:
+        abort(400, message="no image available")
+    abort(404, message="media not available")
+
+
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
+    """:func:`_display_image` for a single-media route, ``abort``-ing when
+    there is none.  Shared by the full-image and thumbnail routes, so
+    ``?variant=original`` reaches both."""
+    c = _get_media_variant(media_id)
+    if not c:
+        abort(404, message="not found")
+    found = _display_image(media_id, c)
+    if isinstance(found, _NoImage):
+        _abort_no_image(found)
+    return found
 
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
@@ -219,9 +253,16 @@ def media_image(query: dict, media_id: int):
     the route delegates to the type's ``image_response`` hook (audio
     waveforms, video frames), which returns ``None`` for a type with no
     paintable form.
+
+    The response is cacheable like the thumbnail's: an ``ETag`` over the bytes
+    served (for audio and video, the hook's picture, not the media's own
+    bytes), a 304 on a matching ``If-None-Match``, and a day's ``max-age``
+    (#5648). The Browse canvas paints its largest cells from here, and the
+    reviewers' prefetch (``MediaPrefetchService``) warms the browser's HTTP
+    cache with these URLs rather than holding the bytes itself.
     """
     data, mimetype, download_name = _resolve_display_image(media_id)
-    return send_file(io.BytesIO(data), mimetype=mimetype, download_name=download_name)
+    return cached_image_response(data, download_name, mimetype)
 
 
 @medias_bp.route("/api/medias/<int:media_id>/thumbnail")
@@ -261,25 +302,91 @@ def media_thumbnail(query: dict, media_id: int):
     if region is not None:
         data, src_mimetype, _ = _resolve_display_image(media_id)
         return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}", crop=region)
-    thumb = c.get("thumbnail_bytes")
+    found = _full_frame_thumbnail(media_id, c)
+    if isinstance(found, _NoImage):
+        _abort_no_image(found)
+    thumb, mimetype = found
+    return cached_image_response(thumb, f"thumb_{media_id}", mimetype)
+
+
+def _full_frame_thumbnail(media_id: int, media: dict) -> tuple[bytes, str] | _NoImage:
+    """The whole-frame thumbnail of *media* and its mimetype.
+
+    The precomputed ``thumbnail_bytes`` when the media has them; otherwise one
+    is generated from the display image and memoised onto the in-memory media,
+    so later cold fetches (each fresh browse-canvas zoom/pan) stream the bytes
+    instead of re-decoding the full-resolution original every time. Datasets
+    backed by an external media dir lose their ingest-time ``thumbnail_bytes``
+    on save and never regenerate them on load, so without this every tile pays
+    a request-time decode+resize forever. In-memory only -- the bytes ride in
+    the existing dataset context and are never written to disk unless the user
+    explicitly exports. A source the thumbnailer cannot decode (an SVG, say) is
+    answered as itself, for the browser to draw. Without a picture at all, the
+    reason (see :func:`_display_image`).
+    """
+    thumb = media.get("thumbnail_bytes")
     if thumb:
-        return cached_thumbnail_response(thumb, f"thumb_{media_id}")
-    data, src_mimetype, _ = _resolve_display_image(media_id)
-    # Memoise the generated full-frame thumbnail onto the in-memory media so
-    # subsequent cold fetches (each fresh browse-canvas zoom/pan) stream the
-    # bytes instead of re-decoding the full-resolution original every time.
-    # Datasets backed by an external media dir lose their ingest-time
-    # ``thumbnail_bytes`` on save and never regenerate them on load, so without
-    # this every tile pays a request-time decode+resize forever.  In-memory
-    # only -- the bytes ride in the existing dataset context and are never
-    # written to disk unless the user explicitly exports.
+        return thumb, sniff_image_mimetype(thumb)
+    found = _display_image(media_id, media)
+    if isinstance(found, _NoImage):
+        return found
+    data, src_mimetype, _ = found
     from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
     result = make_image_thumbnail(data)
-    if result is not None:
-        c["thumbnail_bytes"] = result[0]
-        return cached_thumbnail_response(result[0], f"thumb_{media_id}")
-    return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
+    if result is None:
+        return data, src_mimetype
+    media["thumbnail_bytes"] = result[0]
+    return result
+
+
+@medias_bp.route("/api/medias/thumbnails")
+@medias_bp.arguments(ThumbnailBatchQuerySchema, location="query")
+def media_thumbnails(query: dict):
+    """Stream several media's whole-frame thumbnails in one response.
+
+    The Browse map paints a thumbnail per bin, a few hundred at a time, and
+    over HTTP/1.1 a browser fetches only about six URLs at a time per host, so
+    from a remote server one request per thumbnail spent most of the wait on
+    round trips (#5637). The canvas asks for each frame's missing thumbnails
+    here instead, in sorted batches, so the same view asks for the same URLs
+    and the browser cache answers a revisit.
+
+    The body is ``application/octet-stream``: one entry per requested id, in
+    request order, each a big-endian ``uint32`` byte length, a ``uint8``
+    mimetype length, the ASCII mimetype, then the image bytes. An id with no
+    thumbnail (not loaded, or a media type with no picture) has a zero length
+    and an empty mimetype. Each image is exactly what
+    ``GET /api/medias/<id>/thumbnail`` would serve.
+    """
+    body = io.BytesIO()
+    for media_id in query["ids"]:
+        image, mimetype = _batch_thumbnail(media_id)
+        mime = mimetype.encode("ascii")
+        body.write(struct.pack(">IB", len(image), len(mime)))
+        body.write(mime)
+        body.write(image)
+    payload = body.getvalue()
+
+    etag = content_md5(payload)
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+    else:
+        resp = make_response(payload)
+        resp.mimetype = "application/octet-stream"
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
+
+
+def _batch_thumbnail(media_id: int) -> tuple[bytes, str]:
+    """One entry of a thumbnail batch: ``(b"", "")`` where the single route
+    would have answered an error, so one missing picture never fails the rest."""
+    media = _get_media_variant(media_id)
+    if not media:
+        return b"", ""
+    found = _full_frame_thumbnail(media_id, media)
+    return (b"", "") if isinstance(found, _NoImage) else found
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")

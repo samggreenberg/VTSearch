@@ -316,6 +316,12 @@
           "enrich_descriptions": {
             "type": "boolean"
           },
+          "face_compare": {
+            "type": "boolean"
+          },
+          "face_even_out": {
+            "$ref": "#/components/schemas/FaceEvenOut"
+          },
           "focus_mode_left": {
             "additionalProperties": {
               "type": "string"
@@ -4442,6 +4448,29 @@
         ],
         "type": "object"
       },
+      "FaceEvenOut": {
+        "properties": {
+          "contrast": {
+            "type": "boolean"
+          },
+          "exposure": {
+            "type": "boolean"
+          },
+          "greyscale_both": {
+            "type": "boolean"
+          },
+          "greyscale_either": {
+            "type": "boolean"
+          },
+          "turn_matched": {
+            "type": "boolean"
+          },
+          "white_balance": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "FieldOptions": {
         "additionalProperties": false,
         "properties": {
@@ -6587,6 +6616,20 @@
             },
             "type": "array"
           },
+          "face_hard_view": {
+            "description": "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard view (turned, covered, small), which is harder to compare and to search from (#5372). Absent when there is no verdict: not a face, no stamped quality, or an embedding space with no hard-view cut.",
+            "type": "boolean"
+          },
+          "face_landmarks": {
+            "description": "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served (after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the face runs past the crop's edge. Absent when the item has none: not a face, a face whose detection gave no landmarks, or one imported before they were kept.",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
           "filename": {
             "type": "string"
           },
@@ -8081,6 +8124,19 @@
         ],
         "type": "object"
       },
+      "ServerMediaFaceHardViewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "face_hard_view": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "face_hard_view"
+        ],
+        "type": "object"
+      },
       "ServerMediaFromMediaIdRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8305,6 +8361,12 @@
           },
           "enrich_descriptions": {
             "type": "boolean"
+          },
+          "face_compare": {
+            "type": "boolean"
+          },
+          "face_even_out": {
+            "$ref": "#/components/schemas/FaceEvenOut"
           },
           "focus_mode_left": {},
           "focus_mode_right": {},
@@ -8847,6 +8909,22 @@
         },
         "required": [
           "suggestions"
+        ],
+        "type": "object"
+      },
+      "TileBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tiles": {
+            "description": "One entry per requested tile, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/TileResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tiles"
         ],
         "type": "object"
       },
@@ -9539,6 +9617,20 @@
           "embedders": {
             "items": {
               "type": "string"
+            },
+            "type": "array"
+          },
+          "face_hard_view": {
+            "description": "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard view (turned, covered, small), which is harder to compare and to search from (#5372). Absent when there is no verdict: not a face, no stamped quality, or an embedding space with no hard-view cut.",
+            "type": "boolean"
+          },
+          "face_landmarks": {
+            "description": "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served (after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the face runs past the crop's edge. Absent when the item has none: not a face, a face whose detection gave no landmarks, or one imported before they were kept.",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
             },
             "type": "array"
           },
@@ -16145,6 +16237,35 @@
         ]
       }
     },
+    "/api/medias/thumbnails": {
+      "get": {
+        "description": "The Browse map paints a thumbnail per bin, a few hundred at a time, and\nover HTTP/1.1 a browser fetches only about six URLs at a time per host, so\nfrom a remote server one request per thumbnail spent most of the wait on\nround trips (#5637). The canvas asks for each frame's missing thumbnails\nhere instead, in sorted batches, so the same view asks for the same URLs\nand the browser cache answers a revisit.\n\nThe body is ``application/octet-stream``: one entry per requested id, in\nrequest order, each a big-endian ``uint32`` byte length, a ``uint8``\nmimetype length, the ASCII mimetype, then the image bytes. An id with no\nthumbnail (not loaded, or a media type with no picture) has a zero length\nand an empty mimetype. Each image is exactly what\n``GET /api/medias/<id>/thumbnail`` would serve.",
+        "operationId": "media_thumbnails",
+        "parameters": [
+          {
+            "description": "The media whose thumbnails to return, as ids separated by commas, at most 256. Answered in this order.",
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stream several media's whole-frame thumbnails in one response.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/vote-bulk": {
       "post": {
         "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
@@ -16242,7 +16363,7 @@
     },
     "/api/medias/{media_id}/image": {
       "get": {
-        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.",
+        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.\n\nThe response is cacheable like the thumbnail's: an ``ETag`` over the bytes\nserved (for audio and video, the hook's picture, not the media's own\nbytes), a 304 on a matching ``If-None-Match``, and a day's ``max-age``\n(#5648). The Browse canvas paints its largest cells from here, and the\nreviewers' prefetch (``MediaPrefetchService``) warms the browser's HTTP\ncache with these URLs rather than holding the bytes itself.",
         "operationId": "media_image",
         "parameters": [
           {
@@ -17206,6 +17327,79 @@
         ]
       }
     },
+    "/api/projection/tiles": {
+      "get": {
+        "description": "The canvas needs a few dozen tiles to paint a view, and over HTTP/1.1 a\nbrowser fetches only about six URLs at a time per host, so on a remote\nserver one request per tile spends most of the wait on round trips (#5637).\nThe client asks for each level's tiles in sorted batches, so a revisit\nthat frames the same view asks for the same URLs and the browser cache\nanswers them, as it did per tile.\n\nA tile outside the pyramid answers an empty cell list, exactly as\n``GET /api/projection/tiles/<level>/<tx>/<ty>`` does.",
+        "operationId": "get_tiles",
+        "parameters": [
+          {
+            "description": "Read the ephemeral subset layout rather than the full-dataset one.",
+            "in": "query",
+            "name": "subset",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Cache token (``<projection_id>:<content_version>``) the client appends so each layout's immutable tiles get their own URL. The server ignores it.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": null,
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Pyramid level every requested tile is at.",
+            "in": "query",
+            "name": "level",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The tiles to return, as ``tx:ty`` pairs separated by commas (``0:0,1:0,-1:2``), at most 128. Answered in this order, repeats dropped.",
+            "in": "query",
+            "name": "tiles",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileBatchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Projection not ready."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return several tiles of one pyramid level in one response.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
     "/api/projection/tiles/{level}/{tx}/{ty}": {
       "get": {
         "description": "The bin shape is derived from the dataset's media type.  Because the\nprojection is frozen at ingest, tiles are immutable for the life of the\ndataset and can be cached aggressively by the client.",
@@ -17512,6 +17706,78 @@
           "media_server"
         ]
       }
+    },
+    "/api/server-media-files/{filename}/face-hard-view": {
+      "get": {
+        "description": "The Face compare layout's checklist (#5643) tells the user when either face\nis a hard view, so they expect a weaker comparison.  A face of the dataset\ncarries its verdict on its batch metadata; a detector's example picture is\na file of the user's with no stamped quality, so the server's face provider\nreads it here.  The verdict is advice: ``null`` when Face is off, no face is\nfound, or the provider fails.",
+        "operationId": "server_media_file_face_hard_view",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerMediaFaceHardViewResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Filename escapes the example_media directory."
+          },
+          "404": {
+            "description": "File not found, or not an image."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Say whether the face in an image example is a hard view (#5372).",
+        "tags": [
+          "media_server"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "filename",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/server-media-files/{filename}/image": {
+      "get": {
+        "description": "The thumbnail above is bounded for a row of tiles.  The Face compare layout\n(#5642) puts an example beside the face being voted on, to be compared part\nby part, which needs every pixel the user uploaded.",
+        "operationId": "server_media_file_image",
+        "responses": {
+          "400": {
+            "description": "Filename escapes the example_media directory."
+          },
+          "404": {
+            "description": "File not found, or not an image."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the full-size bytes of an image example.",
+        "tags": [
+          "media_server"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "filename",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/server-media-files/{filename}/thumbnail": {
       "get": {

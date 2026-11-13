@@ -2,7 +2,9 @@ import { TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ThemeService } from './theme.service';
+import { SettingsStateService } from './settings-state.service';
 import { provideHttpTesting } from '../testing/test-providers';
+import { settleResource } from '../testing/settle-resource';
 
 interface StubMediaQueryList {
   matches: boolean;
@@ -95,11 +97,63 @@ describe('ThemeService', () => {
     req.flush({});
   });
 
-  it('loadFromSettings should apply backend theme', () => {
+  /** Answer the settings store's GET (its loader runs in an effect, so tick first). */
+  async function answerSettings(body: object): Promise<void> {
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush(body);
+    await settleResource();
+    await settleResource();
+  }
+
+  it('loadFromSettings should apply backend theme', async () => {
     service.loadFromSettings();
-    httpMock.expectOne('/api/settings').flush({ volume: 1.0, theme: 'light' });
+    await answerSettings({ volume: 1.0, theme: 'light' });
     expect(service.currentTheme).toBe('light');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  // #5649: the theme rides the app's settings load instead of a GET of its own.
+  it('loadFromSettings shares the settings store load rather than sending its own', async () => {
+    TestBed.inject(SettingsStateService).load();
+    service.loadFromSettings();
+    // One GET between them (expectOne fails on two).
+    await answerSettings({ theme: 'highviz' });
+    expect(service.currentTheme).toBe('highviz');
+  });
+
+  /** Answer the settings store's GET with a 500. */
+  async function failSettings(): Promise<void> {
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/settings')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await settleResource();
+    await settleResource();
+  }
+
+  it('loadFromSettings keeps the system theme when the settings load fails', async () => {
+    service.loadFromSettings();
+    await failSettings();
+    expect(service.currentTheme).toBe('system');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  // #5658: a failed refetch keeps the last good settings, so their theme wins
+  // over the error (which is still reported while the retry is in flight).
+  it('loadFromSettings applies the kept theme while a failed refetch is retried', async () => {
+    const settingsState = TestBed.inject(SettingsStateService);
+    settingsState.load();
+    await answerSettings({ theme: 'highviz' });
+    settingsState.load();
+    await failSettings();
+
+    service.loadFromSettings();
+    TestBed.tick();
+    expect(settingsState.error()).toBeTruthy();
+    await settleResource();
+    expect(service.currentTheme).toBe('highviz');
+    httpMock.expectOne('/api/settings').flush({ theme: 'highviz' });
+    await settleResource();
   });
 
   it('theme$ should emit on change', () => {
@@ -125,10 +179,10 @@ describe('ThemeService', () => {
     httpMock.expectOne('/api/settings').flush({});
   });
 
-  it('loadFromSettings defaults to system when backend has no theme', () => {
+  it('loadFromSettings defaults to system when backend has no theme', async () => {
     installStub(true);
     service.loadFromSettings();
-    httpMock.expectOne('/api/settings').flush({ volume: 1.0 });
+    await answerSettings({ volume: 1.0 });
     expect(service.currentTheme).toBe('system');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });

@@ -9,13 +9,22 @@ export type RotateDirection = 'left' | 'right';
 export type NavDirection = 'back' | 'forward';
 
 export interface KeyboardAction {
-  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo' | 'navigate';
+  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo' | 'navigate' | 'reference' | 'originals';
   direction?: VoteDirection;
   volumeDelta?: number;
   zoomDirection?: ZoomDirection;
   rotateDirection?: RotateDirection;
   navDirection?: NavDirection;
+  /** `originals`: the key went down (true) or came up (false). */
+  held?: boolean;
 }
+
+/**
+ * The key held to see the Face compare layout's two faces as taken, without
+ * evening out (#5675; ENFSI 5.2.3, "refer back to the original un-enhanced
+ * image"). O for originals.
+ */
+export const ORIGINALS_KEY = 'o';
 
 /**
  * A claim on the vote keys, held by a pane that has no centre panel to start
@@ -43,6 +52,10 @@ export class KeyboardService implements OnDestroy {
   readonly action$ = new Subject<KeyboardAction>();
 
   private listener: ((e: KeyboardEvent) => void) | null = null;
+  private upListener: ((e: KeyboardEvent) => void) | null = null;
+  private blurListener: (() => void) | null = null;
+  /** The originals key is down, so its release, or the window losing focus, lets it go. */
+  private originalsHeld = false;
 
   /** Held claims on the vote keys, newest last; only the newest is served. */
   private readonly captures: KeyCapture[] = [];
@@ -101,13 +114,34 @@ export class KeyboardService implements OnDestroy {
     const want = this.started || this.captures.length > 0;
     if (want && !this.listener) {
       this.listener = (e: KeyboardEvent) => this.handleKeydown(e);
+      this.upListener = (e: KeyboardEvent) => this.handleKeyup(e);
+      this.blurListener = () => this.releaseOriginals();
       this.zone.runOutsideAngular(() => {
         document.addEventListener('keydown', this.listener!);
+        document.addEventListener('keyup', this.upListener!);
+        window.addEventListener('blur', this.blurListener!);
       });
     } else if (!want && this.listener) {
       document.removeEventListener('keydown', this.listener);
+      document.removeEventListener('keyup', this.upListener!);
+      window.removeEventListener('blur', this.blurListener!);
       this.listener = null;
+      this.upListener = null;
+      this.blurListener = null;
+      this.releaseOriginals();
     }
+  }
+
+  /** The originals key coming up lets go of it, wherever focus is by then. */
+  private handleKeyup(e: KeyboardEvent): void {
+    if (e.key.toLowerCase() === ORIGINALS_KEY) this.releaseOriginals();
+  }
+
+  /** Let go of the originals key, if it is held: its key came up, or the window lost focus with it down. */
+  private releaseOriginals(): void {
+    if (!this.originalsHeld) return;
+    this.originalsHeld = false;
+    this.action$.next({ type: 'originals', held: false });
   }
 
   private handleKeydown(e: KeyboardEvent): void {
@@ -209,6 +243,24 @@ export class KeyboardService implements OnDestroy {
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
         this.action$.next({ type: 'rotate', rotateDirection: 'right' });
+        break;
+      // The Face compare layout's next reference (#5642). A discrete press, as
+      // a held key would spin through the set too fast to see any of it.
+      case 'r':
+      case 'R':
+        if (e.repeat) break;
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.action$.next({ type: 'reference' });
+        break;
+      // Held, not pressed: both faces as taken while it is down (#5675). The
+      // OS repeats a held key, which changes nothing.
+      case 'o':
+      case 'O':
+        e.preventDefault();
+        if (this.originalsHeld) break;
+        this.originalsHeld = true;
+        this.action$.next({ type: 'originals', held: true });
         break;
     }
   }

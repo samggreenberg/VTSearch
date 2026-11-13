@@ -175,8 +175,9 @@ export class DatasetExamplePickerComponent {
   readonly isAudioWaveform = computed(() => this.mediaType() === 'audio');
 
   constructor() {
-    // No settingsState.load() here: the size buttons' own init loads the
-    // settings, and until they land the size reads as its M fallback.
+    // No settingsState.load() here: the New Detector modal around the picker
+    // loads the settings, and until they land the size reads as its M
+    // fallback.
     this.mediaTypeCaps.ensureLoaded();
     // The viewport lives behind the template's `@if`s, so a search with no
     // match destroys it and the next one makes a new one: re-wire on each.

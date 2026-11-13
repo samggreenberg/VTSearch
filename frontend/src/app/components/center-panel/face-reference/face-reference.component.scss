@@ -1,0 +1,74 @@
+// `.btn--toolbar` and `.empty-state` come from `_components.scss`.
+
+// The pane has no box of its own: its viewer and its bar are cells of the
+// centre panel's compare grid (`.media-stage--compare`), left column, so they
+// share their rows with the candidate's viewer and toolbar.
+:host {
+  display: contents;
+}
+
+vt-image-viewer {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+
+  // Under Wider (#5645), while the reference's photo is being looked up: an
+  // empty pane rather than the crop for a moment, at the viewer's own size.
+  &.wider-pending {
+    visibility: hidden;
+  }
+}
+
+.reference-bar {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.empty-state {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.reference-caption {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 20ch;
+  font-size: var(--font-sm);
+}
+
+.reference-count {
+  color: var(--text-primary);
+}
+
+.reference-source {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-pin.active,
+.reference-pin.active:hover {
+  color: var(--btn-filled-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.reference-empty-heading {
+  margin: 0;
+  font-size: var(--font-lg);
+}
+
+.reference-empty-hint {
+  margin: 0;
+  max-width: 32ch;
+  font-size: var(--font-sm);
+}

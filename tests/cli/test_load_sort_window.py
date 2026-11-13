@@ -211,6 +211,29 @@ class TestServerMediaFileThumbnail:
         resp = client.get("/api/server-media-files/nope.wav/thumbnail")
         assert resp.status_code == 404
 
+    def test_image_route_returns_the_full_size_bytes(self, client):
+        from PIL import Image
+
+        path = self._media_dir / "example.png"
+        # Larger than the thumbnail cap: the compare layout needs every pixel (#5642).
+        Image.new("RGB", (1000, 800), color=(123, 45, 67)).save(path)
+
+        resp = client.get("/api/server-media-files/example.png/image")
+        assert resp.status_code == 200
+        assert resp.mimetype == "image/png"
+        assert resp.data == path.read_bytes()
+
+    def test_image_route_refuses_a_non_image(self, client):
+        self._make_wav("example.wav")
+        assert client.get("/api/server-media-files/example.wav/image").status_code == 404
+
+    def test_image_route_missing_file_returns_404(self, client):
+        assert client.get("/api/server-media-files/nope.png/image").status_code == 404
+
+    def test_image_route_path_traversal_rejected(self, client):
+        resp = client.get("/api/server-media-files/..%2F..%2Fetc%2Fpasswd/image")
+        assert resp.status_code in (400, 404)
+
     def test_path_traversal_rejected(self, client):
         resp = client.get("/api/server-media-files/..%2F..%2Fetc%2Fpasswd/thumbnail")
         # 400 (rejected by validation) or 404 (path doesn't resolve to a file)

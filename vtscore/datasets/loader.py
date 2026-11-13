@@ -118,18 +118,23 @@ def _copy_clip_window(entry: dict[str, Any], media: dict[str, Any]) -> None:
             entry[field] = media[field]
 
 
-def _copy_source_box(entry: dict[str, Any], media: dict[str, Any]) -> None:
-    """Copy a converter output's ``source_box`` into its pickle entry.
+def _copy_source_geometry(entry: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a converter output's ``source_box`` and ``face_landmarks`` into its pickle entry.
 
-    Where the item sat in its source (a face crop's box in its photo, #4748).
-    Nothing re-derives it on load: lazy replay reproduces the crop's *bytes*
-    from the converter recipe, not this metadata.  Written only when present,
-    so media without one keep the same entry shape.
+    Where the item sat in its source (a face crop's box in its photo, #4748),
+    and a face crop's five landmarks on the crop (#5644).  Nothing re-derives
+    either on load: lazy replay reproduces the crop's *bytes* from the
+    converter recipe, not this metadata.  Each is written only when present
+    (malformed landmarks count as absent), so media without them keep the
+    same entry shape.
     """
-    from vtscore.media.provenance import SOURCE_BOX_FIELD  # noqa: PLC0415
+    from vtscore.media.provenance import FACE_LANDMARKS_FIELD, SOURCE_BOX_FIELD, face_landmarks_of  # noqa: PLC0415
 
     if media.get(SOURCE_BOX_FIELD) is not None:
         entry[SOURCE_BOX_FIELD] = list(media[SOURCE_BOX_FIELD])
+    landmarks = face_landmarks_of(media)
+    if landmarks is not None:
+        entry[FACE_LANDMARKS_FIELD] = landmarks
 
 
 def _copy_ground_truth(entry: dict[str, Any], media: dict[str, Any]) -> None:
@@ -241,7 +246,7 @@ def export_dataset_to_file(
             if media.get(field):
                 entry[field] = media[field]
         _copy_clip_window(entry, media)
-        _copy_source_box(entry, media)
+        _copy_source_geometry(entry, media)
         _copy_ground_truth(entry, media)
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile

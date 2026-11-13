@@ -1,4 +1,13 @@
-import { Injectable, Signal, computed, effect, inject, isSignal, signal } from '@angular/core';
+import {
+  Injectable,
+  Signal,
+  computed,
+  effect,
+  inject,
+  isSignal,
+  linkedSignal,
+  signal,
+} from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -90,7 +99,9 @@ export interface PerMediaTypePref<T> {
   readonly dict: Signal<Record<string, T>>;
   /**
    * Persist `next` for the active media type, preserving every other type's
-   * entry. No-op when the media type is empty (nothing to key the write on).
+   * entry. Returns `null` and sends nothing when the media type is empty
+   * (nothing to key the write on), or when no settings have loaded (nothing to
+   * merge into: before the first load lands, or after it failed).
    *
    * The merge is taken from the live dict, so it depends on the settings signal
    * never reading as empty while the values are merely in flight — see
@@ -131,8 +142,33 @@ export class SettingsStateService {
     stream: () => this.settingsApi.getSettings(),
   });
 
-  /** Canonical settings signal: `null` until first successful load (or after `clear()`). */
-  readonly settingsSignal = computed<AppSettings | null>(() => this.resource.value() ?? null);
+  /**
+   * What the resource reports, read so that it can never throw. An
+   * `rxResource`'s `value()` **throws** `ResourceValueError` while the resource
+   * is in the error state rather than returning `undefined`, so it is read only
+   * behind `hasValue()`, which is `false` there. `failed` tracks the error
+   * separately: while it is set, `value` is `null` because the fetch failed,
+   * not because settings are known to be empty.
+   */
+  private readonly reported = computed(() => ({
+    value: this.resource.hasValue() ? this.resource.value() : null,
+    failed: this.resource.error() != null,
+  }));
+
+  /**
+   * Canonical settings signal: `null` until the first successful load (or after
+   * `clear()`). **Never throws.** A failed fetch leaves it where it was: `null`
+   * if nothing has ever loaded, otherwise the last good value, as a refetch in
+   * flight does (see {@link load}). That holds through a retry of the failed
+   * fetch too. {@link error} says the fetch failed.
+   */
+  readonly settingsSignal: Signal<AppSettings | null> = linkedSignal<
+    { value: AppSettings | null; failed: boolean },
+    AppSettings | null
+  >({
+    source: this.reported,
+    computation: (now, previous) => (now.failed ? (previous?.value ?? null) : now.value),
+  }).asReadonly();
 
   /** True while a settings fetch is in flight. */
   readonly isLoading = this.resource.isLoading;
@@ -179,7 +215,9 @@ export class SettingsStateService {
    *   merges into the dict it can see; against a null that merge yields
    *   `{[mediaType]: value}` alone, and `PUT /api/settings` *replaces* the
    *   stored dict — so every other media type's entry is silently dropped.
-   *   {@link perMediaType} is exactly this shape.
+   *   {@link perMediaType} is exactly this shape, which is why its `set()` also
+   *   refuses to write while the signal is `null` (a first load in flight, or
+   *   one that failed).
    *
    * The first load still bumps the counter: there is nothing to reload yet.
    */
@@ -268,7 +306,11 @@ export class SettingsStateService {
         const mt = mediaType();
         if (!mt) return null;
         // Merge, never replace: dropping the other media types' entries here is
-        // the one way this helper could silently destroy user data.
+        // the one way this helper could silently destroy user data. So with no
+        // settings to merge into (nothing has loaded yet, or the load failed)
+        // there is nothing safe to send: `dict()` reads `{}` there, and the PUT
+        // would replace the stored dict with this one entry.
+        if (this.settingsSignal() === null) return null;
         const merged = { ...dict(), [mt]: next };
         return this.update({ [keySignal()]: merged } as unknown as SettingsUpdate);
       },

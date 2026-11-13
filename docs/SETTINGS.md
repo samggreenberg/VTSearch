@@ -220,6 +220,15 @@ An abridged example; the full field list is `UserSettings` in
   "autopilot_enabled": true,
   "hide_left_panel": true,
   "hide_right_panel": true,
+  "face_compare": true,
+  "face_even_out": {
+    "exposure": true,
+    "contrast": true,
+    "white_balance": true,
+    "greyscale_either": true,
+    "greyscale_both": false,
+    "turn_matched": true
+  },
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,

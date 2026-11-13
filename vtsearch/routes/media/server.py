@@ -26,6 +26,7 @@ from vtsearch.schemas.media import (
     ExampleSortOriginRequestSchema,
     ExampleSortResponseSchema,
     ExampleSortServerRequestSchema,
+    ServerMediaFaceHardViewResponseSchema,
     ServerMediaFromMediaIdRequestSchema,
     ServerMediaListResponseSchema,
     ServerMediaUploadResponseSchema,
@@ -220,6 +221,71 @@ def server_media_file_thumbnail(filename: str):
         )
 
     abort(404, message=f"No thumbnail available for {suffix}")
+
+
+@media_server_bp.route("/api/server-media-files/<path:filename>/image", methods=["GET"])
+@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(404, description="File not found, or not an image.")
+def server_media_file_image(filename: str):
+    """Return the full-size bytes of an image example.
+
+    The thumbnail above is bounded for a row of tiles.  The Face compare layout
+    (#5642) puts an example beside the face being voted on, to be compared part
+    by part, which needs every pixel the user uploaded.
+    """
+    media_dir = _get_server_media_dir()
+    file_path = media_dir / filename
+
+    try:
+        file_path.resolve().relative_to(media_dir.resolve())
+    except ValueError:
+        abort(400, message="Invalid filename")
+
+    if not file_path.is_file():
+        abort(404, message=f"File not found: {filename}")
+
+    suffix = file_path.suffix.lower()
+    if _media_type_from_ext(suffix) != "image":
+        abort(404, message=f"Not an image: {suffix}")
+
+    return send_file(
+        io.BytesIO(file_path.read_bytes()),
+        mimetype=_IMAGE_MIMETYPES.get(suffix, "image/jpeg"),
+        download_name=file_path.name,
+    )
+
+
+@media_server_bp.route("/api/server-media-files/<path:filename>/face-hard-view", methods=["GET"])
+@media_server_bp.response(200, ServerMediaFaceHardViewResponseSchema)
+@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(404, description="File not found, or not an image.")
+def server_media_file_face_hard_view(filename: str):
+    """Say whether the face in an image example is a hard view (#5372).
+
+    The Face compare layout's checklist (#5643) tells the user when either face
+    is a hard view, so they expect a weaker comparison.  A face of the dataset
+    carries its verdict on its batch metadata; a detector's example picture is
+    a file of the user's with no stamped quality, so the server's face provider
+    reads it here.  The verdict is advice: ``null`` when Face is off, no face is
+    found, or the provider fails.
+    """
+    from vtscore.media.face import imagekit_bridge
+
+    media_dir = _get_server_media_dir()
+    file_path = media_dir / filename
+
+    try:
+        file_path.resolve().relative_to(media_dir.resolve())
+    except ValueError:
+        abort(400, message="Invalid filename")
+
+    if not file_path.is_file():
+        abort(404, message=f"File not found: {filename}")
+
+    if _media_type_from_ext(file_path.suffix) != "image":
+        abort(404, message=f"Not an image: {file_path.suffix.lower()}")
+
+    return {"face_hard_view": imagekit_bridge.hard_view_of_file(file_path)}
 
 
 @media_server_bp.route("/api/server-media-files", methods=["GET"])

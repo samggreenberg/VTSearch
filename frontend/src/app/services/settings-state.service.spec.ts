@@ -336,6 +336,155 @@ describe('SettingsStateService', () => {
     });
   });
 
+  /**
+   * #5658: an `rxResource`'s `value()` throws once its loader fails, so reading
+   * it straight through left every `settingsSignal()` read throwing after a
+   * failed `GET /api/settings`: the store's own Show Animations effect, every
+   * per-media pref, every template binding over them. The store must answer
+   * instead, and answer something a merge-write cannot destroy data with.
+   */
+  describe('after a failed load', () => {
+    const withDicts = {
+      ...mockSettings,
+      show_animations: 'hide' as const,
+      grid_icon_size_right: { audio: 'L', image: 'S' },
+    };
+
+    /** Answer the pending `GET /api/settings` with a 500. */
+    async function failLoad() {
+      httpMock
+        .expectOne('/api/settings')
+        .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+      await settleResource();
+    }
+
+    async function loadDicts() {
+      service.load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush(withDicts);
+      await settleResource();
+    }
+
+    afterEach(() => document.documentElement.classList.remove('animations-off', 'animations-on'));
+
+    it('a failed first load reads as null, without throwing anywhere', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      service.load();
+      TestBed.tick();
+      // `settleResource()` ticks, which runs the store's own effect: it reads
+      // the settings first, so before the fix this is where it threw.
+      await failLoad();
+
+      expect(service.error()).toBeTruthy();
+      expect(service.settingsSignal()).toBeNull();
+      expect(pref.value()).toBe('M');
+      expect(pref.dict()).toEqual({});
+    });
+
+    it('a failed reload keeps the last good settings, through the retry too', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      service.load();
+      TestBed.tick();
+      await failLoad();
+      expect(service.error()).toBeTruthy();
+      expect(service.settingsSignal()).toEqual(withDicts);
+      expect(pref.value()).toBe('L');
+      expect(document.documentElement.classList.contains('animations-off')).toBe(true);
+
+      // Retrying from the error state: the resource reports no value while the
+      // retry is in flight, and the store keeps holding the last good one.
+      service.load();
+      TestBed.tick();
+      expect(service.isLoading()).toBe(true);
+      expect(service.settingsSignal()).toEqual(withDicts);
+
+      const fresh = { ...withDicts, grid_icon_size_right: { audio: 'XL', image: 'S' } };
+      httpMock.expectOne('/api/settings').flush(fresh);
+      await settleResource();
+      expect(service.error()).toBeFalsy();
+      expect(pref.value()).toBe('XL');
+    });
+
+    it('a retry that succeeds after a failed first load brings the settings in', async () => {
+      service.load();
+      TestBed.tick();
+      await failLoad();
+
+      service.load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush(withDicts);
+      await settleResource();
+      expect(service.settingsSignal()).toEqual(withDicts);
+    });
+
+    it('clear() still drops a kept value', async () => {
+      await loadDicts();
+      service.load();
+      TestBed.tick();
+      await failLoad();
+      expect(service.settingsSignal()).not.toBeNull();
+
+      service.clear();
+      TestBed.tick();
+      expect(service.settingsSignal()).toBeNull();
+    });
+
+    it('a write after a failed first load adopts the server answer', async () => {
+      service.load();
+      TestBed.tick();
+      await failLoad();
+
+      service.update({ volume: 0.4 }).subscribe();
+      httpMock.expectOne((r) => r.method === 'PUT').flush({ ...withDicts, volume: 0.4 });
+      TestBed.tick();
+      expect(service.settingsSignal()).toEqual({ ...withDicts, volume: 0.4 });
+    });
+
+    /**
+     * With nothing loaded, `dict()` reads `{}`, so a merge-write would send a
+     * one-entry dict that `PUT /api/settings` stores *in place of* the whole
+     * dict, wiping every other media type's entry. Refusing is the safe answer.
+     */
+    it('perMediaType set() refuses to write when nothing has loaded', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      // Before any load,
+      expect(pref.set('XL')).toBeNull();
+      // while the first load is in flight,
+      service.load();
+      TestBed.tick();
+      expect(pref.set('XL')).toBeNull();
+      // and once it has failed.
+      await failLoad();
+      expect(pref.set('XL')).toBeNull();
+      httpMock.expectNone((r) => r.method === 'PUT');
+    });
+
+    it('perMediaType set() still merges into the kept value after a failed reload', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+      service.load();
+      TestBed.tick();
+      await failLoad();
+
+      pref.set('XL')?.subscribe();
+      const put = httpMock.expectOne((r) => r.method === 'PUT');
+      expect(put.request.body).toEqual({ grid_icon_size_right: { audio: 'XL', image: 'S' } });
+      put.flush({ ...withDicts, grid_icon_size_right: { audio: 'XL', image: 'S' } });
+      TestBed.tick();
+      expect(pref.value()).toBe('XL');
+    });
+  });
+
   describe('Show Animations -> <html> class mirroring', () => {
     afterEach(() => {
       document.documentElement.classList.remove('animations-off', 'animations-on');

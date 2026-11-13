@@ -1,8 +1,28 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, Signal, signal, untracked, viewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media, PayloadVariant } from '../../../models/api.models';
-import { MediaPrefetchService } from '../../../services/media-prefetch.service';
 import { ActiveContextService } from '../../../services/active-context.service';
+import {
+  FaceFrame,
+  FaceLandmarks,
+  FaceRect,
+  FaceShape,
+  FaceView,
+  LEAD_OFF,
+  LEAD_PENDING,
+  LeadState,
+  LinkFollower,
+  LinkLead,
+  PaneView,
+  ViewLink,
+  faceAnchor,
+  faceFrame,
+  faceShape,
+  faceViewOf,
+  paneViewOf,
+  viewOfRect,
+} from './face-link';
+import { ToneMap } from '../face-even-out/even-out';
 
 export type RegionBox = readonly [number, number, number, number];
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
@@ -38,13 +58,36 @@ export interface DrawnOutlineBox {
   readonly style: { [k: string]: string };
 }
 
+/**
+ * Where a viewer that follows a {@link ViewLink} stands: not following (its
+ * own zoom and pan, as any viewer), holding still while it or its lead lays out
+ * a new image, or drawn from the lead's view. `unit` is its zoom for each of the
+ * lead's, the two faces' sizes on screen being matched.
+ */
+type Following =
+  | { readonly kind: 'off' }
+  | { readonly kind: 'hold'; readonly lead: LinkLead }
+  | { readonly kind: 'on'; readonly lead: LinkLead; readonly view: FaceView; readonly frame: FaceFrame; readonly unit: number };
+
+const NOT_FOLLOWING: Following = { kind: 'off' };
+
+/** How far a zoom may fall short of the cap and still count as at it: a
+ *  following viewer's zoom is the lead's times a ratio, so it lands a hair off. */
+const AT_CAP = 1e-9;
+
 type DragMode =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
   | { kind: 'draw'; anchor: { x: number; y: number }; previousBox: RegionBox | null }
   | { kind: 'move'; startLocal: { x: number; y: number }; startBox: RegionBox }
   | { kind: 'resize'; handle: ResizeHandle; startBox: RegionBox };
 
+/** Numbers each viewer's evening-out filter, whose id must be the page's only one. */
+let nextFilterId = 0;
+
 const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a stray click
+
+/** How far past the opening view the user can zoom in (see `maxZoom`). */
+const MAX_ZOOM = 5;
 
 // What a region draw started from outside the canvas does NOT claim (see
 // `tryStartOffCanvasDraw`). Two different reasons:
@@ -67,9 +110,8 @@ const OFF_CANVAS_DRAW_EXCLUDED =
   templateUrl: './image-viewer.component.html',
   styleUrl: './image-viewer.component.scss',
 })
-export class ImageViewerComponent implements OnDestroy {
+export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
   private activeContext = inject(ActiveContextService);
-  private mediaPrefetch = inject(MediaPrefetchService);
 
   readonly media = input.required<Media>();
   /**
@@ -118,11 +160,58 @@ export class ImageViewerComponent implements OnDestroy {
    */
   readonly datasetId = input('');
   /**
+   * Show the picture at this URL instead of {@link media}'s own (`''`, the
+   * default, is the item's). A detector's example is a file of the user's,
+   * not an item of any dataset, and the Face compare layout shows one as the
+   * reference (#5642); `media` then only names it.
+   */
+  readonly srcOverride = input('');
+  /**
+   * A normalised `[x0, y0, x1, y1]` box to open the image on, zoomed and
+   * panned so the box fills the pane, instead of the whole image fitted to it
+   * (`null`, the default). The Face compare layout's Wider view (#5645) shows a
+   * face in its photo this way. The box may run past the image's edges; the
+   * pan stops at them as it always does. It is the view's home: Reset view, and
+   * a double-click at the zoom cap, come back to it. The cap grows with it
+   * ({@link maxZoom}), so a small face in a big photo can still be looked at
+   * as closely as its crop.
+   */
+  readonly fitBox = input<RegionBox | null>(null);
+  /** {@link fitBox} by value: a parent recomputing the same box (a metadata
+   *  batch landing re-reads its item) must not re-frame under the user's zoom. */
+  private readonly fitTarget = computed(() => this.fitBox(), { equal: sameBox });
+  /**
    * Whether a Shift- or Marquee-drag draws a region box. Off where a box would
    * mean nothing, so a drag only pans: the Show in photo overlay, where there
    * is nothing to vote on, and a face, whose embedder reads the whole crop.
    */
   readonly regionDraw = input(true);
+  /**
+   * The face's five landmarks (`face_landmarks`), which place it for a
+   * {@link link}. Ignored while the viewer is framed on a {@link fitBox} or
+   * shows the `original` payload, which the points were not measured on.
+   */
+  readonly landmarks = input<FaceLandmarks | null | undefined>(null);
+  /**
+   * Tie this viewer's zoom and pan to another's, with the two faces matched in
+   * size and position (the Face compare layout, #5647; see `face-link.ts`).
+   * The one marked `lead` keeps its own view; the one marked `follow` is drawn
+   * from it, and hands its gestures to it. They are linked while both show a
+   * face with {@link landmarks}; otherwise each is on its own, as with no link.
+   */
+  readonly link = input<ViewLink | null>(null);
+  readonly linkAs = input<'lead' | 'follow'>('lead');
+  /**
+   * A per-channel curve to show the image through (the Face compare layout's
+   * exposure, contrast and white balance, #5675; `face-even-out/even-out.ts`),
+   * or null to show it as it is. It is one SVG `feComponentTransfer` filter
+   * over the whole image, never part of it, and the image itself is
+   * untouched: the stored bytes, and every overlay drawn over them, are the
+   * same.
+   */
+  readonly toneMap = input<ToneMap | null>(null);
+  /** Show the image in greyscale (#5674), after {@link toneMap}. */
+  readonly greyscale = input(false);
   readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -130,6 +219,16 @@ export class ImageViewerComponent implements OnDestroy {
    * fresh Shift-drag). The parent clears its armed state but keeps the box.
    */
   readonly armedConfirmCanceled = output<void>();
+
+  /** The id of this viewer's {@link toneMap} filter. */
+  readonly toneFilterId = `vt-even-out-${++nextFilterId}`;
+  /** The CSS `filter` the image is drawn through, or null for none. */
+  readonly imageFilter = computed<string | null>(() => {
+    const parts: string[] = [];
+    if (this.toneMap()) parts.push(`url(#${this.toneFilterId})`);
+    if (this.greyscale()) parts.push('grayscale(1)');
+    return parts.length ? parts.join(' ') : null;
+  });
 
   // Public: the coord-transform specs substitute a stub wrap element here.
   readonly wrapRef = viewChild<ElementRef<HTMLDivElement>>('imageWrap');
@@ -146,8 +245,15 @@ export class ImageViewerComponent implements OnDestroy {
   // transform binding silently went stale until some unrelated CD repainted it.
   readonly zoom = signal(1);
   readonly rotation = signal(0);
+  /** The zoom the toolbar shows and its slider moves: {@link zoom}, except
+   *  that a following viewer shows its lead's, the faces being the same size,
+   *  and goes on showing it while either lays out its next image. */
+  readonly shownZoom: Signal<number> = computed(() => {
+    const following = this.following();
+    return following.kind === 'off' ? this.zoom() : following.lead.shownZoom();
+  });
   readonly zoomLabel = computed(() => {
-    const z = this.zoom();
+    const z = this.shownZoom();
     return (z === Math.floor(z) ? z.toFixed(0) : z.toFixed(1)) + '×';
   });
   // Track the id of the media we last reset for. The `media` input reference
@@ -163,9 +269,63 @@ export class ImageViewerComponent implements OnDestroy {
   // And for the dataset: media ids are per dataset, so the same id out of
   // another one is another image.
   private lastDatasetId = '';
-  /** The network URL whose in-flight prefetch this viewer is waiting on, or
-   *  `null`. See {@link showImage}. */
-  private claimedSrc: string | null = null;
+  // And for an overriding source, which is the whole identity of what it shows.
+  private lastSrcOverride = '';
+  /** A {@link fitBox} framing is owed: set for a new image or a new box, paid
+   *  once the image is laid out, so later resizes leave the user's zoom alone. */
+  private fitOwed = false;
+  /** Whether the image on screen has loaded, is loading, or failed: what a
+   *  {@link link} waits for before it lines a face up. */
+  private readonly loadState = signal<'loading' | 'loaded' | 'failed'>('loading');
+  /** Last seen following a lead, so leaving the link resets the view it left. */
+  private wasFollowing = false;
+
+  /** Where the face is on its image, while there is one to line up. */
+  private readonly anchor = computed(() =>
+    this.variant() === '' && !this.fitTarget() ? faceAnchor(this.landmarks()) : null,
+  );
+  /** The face as laid out in this pane, once its image has loaded. */
+  private readonly frame = computed<FaceFrame | null>(() => {
+    const anchor = this.anchor();
+    if (!anchor || this.loadState() !== 'loaded') return null;
+    return faceFrame(anchor, this.renderedW(), this.renderedH());
+  });
+
+  /** The face in face space, for whatever locates a part of it (the checklist's rows). */
+  readonly faceShape = computed<FaceShape | null>(() =>
+    this.frame() ? faceShape(this.landmarks(), this.renderedW(), this.renderedH()) : null,
+  );
+
+  /** As a lead: the face view this viewer shows, for the one that follows it. */
+  readonly leadState = computed<LeadState>(() => {
+    if (!this.anchor() || this.loadState() === 'failed') return LEAD_OFF;
+    const frame = this.frame();
+    if (!frame) return LEAD_PENDING;
+    return { kind: 'on', frame, view: faceViewOf(frame, this.paneView(), this.rotation()) };
+  });
+
+  /** As a follower: what it follows (see {@link Following}). */
+  private readonly following = computed<Following>(() => {
+    const link = this.link();
+    if (!link || this.linkAs() !== 'follow') return NOT_FOLLOWING;
+    const lead = link.lead();
+    const state = lead?.leadState();
+    if (!lead || !state || state.kind === 'off' || !this.anchor() || this.loadState() === 'failed') {
+      return NOT_FOLLOWING;
+    }
+    const frame = this.frame();
+    if (state.kind === 'pending' || !frame) return { kind: 'hold', lead };
+    return { kind: 'on', lead, view: state.view, frame, unit: state.frame.unit / frame.unit };
+  });
+
+  /** This viewer follows a lead's view right now. */
+  readonly linked = computed(() => this.following().kind === 'on');
+
+  /** This viewer's zoom for each of its lead's (1 when it leads or is alone). */
+  private readonly zoomUnit = computed(() => {
+    const following = this.following();
+    return following.kind === 'on' ? following.unit : 1;
+  });
 
   // Region voting state (UI only; see docs/ARCHITECTURE.md → "Embedder binding and routing").
   // These are signals because they are written from un-patched callbacks (window
@@ -210,7 +370,13 @@ export class ImageViewerComponent implements OnDestroy {
   private shakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly minZoom = 1;
-  readonly maxZoom = 5;
+  /** The zoom the {@link fitBox} framing landed on, or 1 with no box. */
+  private readonly fitZoom = signal(1);
+  /** As far as the user can zoom in: five times the view the image opened
+   *  on, which is the whole image unless {@link fitBox} framed a part of it. */
+  get maxZoom(): number {
+    return MAX_ZOOM * Math.max(1, this.fitZoom());
+  }
   readonly zoomStep = 0.05;
   /** How hard a double-click zooms in about the cursor. Matches the Browse
    *  canvas's own `DOUBLE_CLICK_ZOOM`, and is deliberately larger than a wheel
@@ -220,6 +386,41 @@ export class ImageViewerComponent implements OnDestroy {
   constructor() {
     this.setupWindowKeyListeners();
 
+    // A viewer puts itself on its link, as what it is there, for as long as
+    // both are its.
+    effect((onCleanup) => {
+      const link = this.link();
+      if (!link) return;
+      if (this.linkAs() === 'lead') {
+        link.attach(this);
+        onCleanup(() => link.detach(this));
+      } else {
+        link.attachFollower(this);
+        onCleanup(() => link.detachFollower(this));
+      }
+    });
+
+    // A follower draws itself from its lead's view whenever that moves, or its
+    // own face is laid out anew or turned. Leaving the link (the lead's next
+    // face has no landmarks, say) resets it, since the view it was left on
+    // was the lead's and need not even fit its image.
+    effect(() => {
+      const following = this.following();
+      const rotation = this.rotation();
+      untracked(() => {
+        if (following.kind === 'hold') return;
+        if (following.kind === 'off') {
+          if (this.wasFollowing) {
+            this.wasFollowing = false;
+            this.resetView();
+          }
+          return;
+        }
+        this.wasFollowing = true;
+        this.setPaneView(paneViewOf(following.frame, following.view, rotation));
+      });
+    });
+
     // Reset the viewport for a new image when the media id changes. The id
     // guard skips same-id metadata-enrichment reference changes (see
     // lastMediaId above); zoom/rotation/marquee state intentionally persists.
@@ -227,83 +428,68 @@ export class ImageViewerComponent implements OnDestroy {
       const media = this.media();
       const variant = this.variant();
       const datasetId = this.datasetId();
-      if (media.id === this.lastMediaId && variant === this.lastVariant && datasetId === this.lastDatasetId) return;
-      const sameMedia = media.id === this.lastMediaId && datasetId === this.lastDatasetId;
+      const srcOverride = this.srcOverride();
+      const sameSource = datasetId === this.lastDatasetId && srcOverride === this.lastSrcOverride;
+      if (media.id === this.lastMediaId && variant === this.lastVariant && sameSource) return;
+      const sameMedia = media.id === this.lastMediaId && sameSource;
       this.lastMediaId = media.id;
       this.lastVariant = variant;
       this.lastDatasetId = datasetId;
+      this.lastSrcOverride = srcOverride;
       this.imageReady.set(false);
+      this.loadState.set('loading');
       const path = `/api/medias/${media.id}/image`;
-      const src = datasetId
-        ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
-        : this.activeContext.mediaUrl(path, { variant });
-      this.showImage(src);
+      const src =
+        srcOverride ||
+        (datasetId
+          ? this.activeContext.mediaUrlIn(datasetId, path, { variant })
+          : this.activeContext.mediaUrl(path, { variant }));
+      // A review flow may already have warmed this URL into the HTTP cache
+      // (`MediaPrefetchService`, #3896); the `<img>` is then answered from
+      // there, or joins the warm's download if it is still in flight.
+      this.imageSrc.set(src);
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.
       if (sameMedia) return;
       untracked(() => {
         this.resetView();
         this.clearRegionBox({ emit: true });
+        // Framed once the new image is laid out (`onImageLoad`).
+        this.fitOwed = this.fitTarget() !== null;
+      });
+    });
+
+    // A new box on the image already on screen (the next face out of the same
+    // photo) is framed now; on an image still loading, once it has. No box is
+    // the plain view, and the zoom cap goes back to its own.
+    effect(() => {
+      const box = this.fitTarget();
+      untracked(() => {
+        this.fitOwed = box !== null;
+        if (box === null) {
+          this.fitZoom.set(1);
+          this.zoom.update((z) => this.clampZoom(z));
+          this.applyTransform();
+          return;
+        }
+        if (this.imageReady()) this.payFit();
       });
     });
   }
 
-  /**
-   * Point the `<img>` at `src`, preferring bytes the review prefetch (#3896)
-   * already holds.
-   *
-   * Three cases. The bytes are held: show them now, no request at all. They are
-   * still in flight (the vote beat the prefetch): wait for that fetch rather
-   * than starting a second download of the same image, and fall back to the
-   * network if it fails. Nothing is held: the network URL, i.e. the request
-   * this always made.
-   */
-  private showImage(src: string): void {
-    this.releaseClaim();
-    const held = this.mediaPrefetch.resolve(src);
-    if (held !== src) {
-      this.imageSrc.set(held);
-      return;
-    }
-    const pending = this.mediaPrefetch.claim(src);
-    if (!pending) {
-      this.imageSrc.set(src);
-      return;
-    }
-    this.claimedSrc = src;
-    void pending.then((objectUrl) => {
-      // The viewer moved on while the bytes were in the air.
-      if (this.claimedSrc !== src) return;
-      this.claimedSrc = null;
-      this.imageSrc.set(objectUrl ?? src);
-    });
-  }
-
-  /** Drop a pending {@link showImage} claim, so a fetch for an item no longer
-   *  on screen goes back to being an ordinary prefetch. */
-  private releaseClaim(): void {
-    if (this.claimedSrc === null) return;
-    this.mediaPrefetch.release(this.claimedSrc);
-    this.claimedSrc = null;
-  }
-
   onImageLoad(): void {
-    // While a claim is pending the `<img>` still carries the previous item's
-    // src; a load or error from it must not unhide the element under the new
-    // item's id.
-    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
     this.recomputeRenderedSize();
     this.attachWrapResizeObserver();
+    this.loadState.set('loaded');
   }
 
   onImageError(): void {
-    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
+    this.loadState.set('failed');
   }
 
   ngOnDestroy(): void {
-    this.releaseClaim();
     this.removeWindowMouseListeners();
     this.removeWindowKeyListeners();
     if (this.resizeObserver) {
@@ -314,40 +500,122 @@ export class ImageViewerComponent implements OnDestroy {
   }
 
   onZoomInput(event: Event): void {
-    this.zoom.set(parseFloat((event.target as HTMLInputElement).value));
-    this.applyTransform();
+    // The slider moves the zoom it shows (`shownZoom`); `zoomAboutCentre` brings
+    // a follower up to its lead first, so the unit is read after.
+    this.followLead();
+    this.zoomAboutCentre(parseFloat((event.target as HTMLInputElement).value) * this.zoomUnit());
   }
 
+  // The toolbar's and the keys' rotate and zoom keep whatever is in the middle
+  // of the pane there, which matters once the view is panned: a face framed by
+  // `fitBox` stays in view through a turn or a zoom rather than swinging off
+  // round the image's own centre. With no pan, the only view there was before
+  // `fitBox`, it is the same transform as turning or zooming the image alone.
+
   rotateLeft(): void {
-    this.rotation.update((r) => r - 90);
-    this.applyTransform();
+    this.rotateAboutCentre(-90);
   }
 
   rotateRight(): void {
-    this.rotation.update((r) => r + 90);
-    this.applyTransform();
+    this.rotateAboutCentre(90);
   }
 
   zoomIn(): void {
-    this.zoom.update((z) => this.clampZoom(z + 0.15 * z));
-    this.applyTransform();
+    this.zoomAboutCentre(this.zoom() * 1.15);
   }
 
   zoomOut(): void {
-    this.zoom.update((z) => this.clampZoom(z - 0.15 * z));
+    this.zoomAboutCentre(this.zoom() * 0.85);
+  }
+
+  /** Turn by a quarter (*deg* is ±90), turning the pan with the image. */
+  private rotateAboutCentre(deg: 90 | -90): void {
+    this.followLead();
+    this.rotation.update((r) => r + deg);
+    // Clockwise on screen, y pointing down: (x, y) -> (-y, x).
+    const [x, y] = [this.panX(), this.panY()];
+    this.panX.set(deg === 90 ? -y : y);
+    this.panY.set(deg === 90 ? x : -x);
     this.applyTransform();
   }
 
+  /** Zoom to *newZoom* (clamped), scaling the pan with it. */
+  private zoomAboutCentre(newZoom: number): void {
+    this.followLead();
+    const oldZoom = this.zoom();
+    this.zoom.set(this.clampZoom(newZoom));
+    const ratio = this.zoom() / oldZoom;
+    this.panX.update((p) => p * ratio);
+    this.panY.update((p) => p * ratio);
+    this.applyTransform();
+  }
+
+  /** Back to the view the image opened on: upright, and the whole image, or
+   *  framed on {@link fitBox} when there is one and the image is on screen.
+   *  A follower turns upright and takes both panes back to the lead's whole
+   *  image, which keeps its own turn. */
   resetView(): void {
+    const following = this.following();
+    if (following.kind === 'on') {
+      this.rotation.set(0);
+      following.lead.homeView();
+      this.followLead();
+      return;
+    }
     this.zoom.set(1);
     this.rotation.set(0);
     this.panX.set(0);
     this.panY.set(0);
+    if (this.imageReady() && this.fitTarget()) this.fitToBox();
     this.applyTransform();
+  }
+
+  /** Frame {@link fitBox} if a framing is owed and the image can be measured. */
+  private payFit(): void {
+    if (this.fitOwed && this.fitToBox()) this.fitOwed = false;
+  }
+
+  /**
+   * Zoom and pan so {@link fitBox} fills the pane, its centre on the pane's
+   * where the image's edges allow. Keeps the rotation, which only ever turns
+   * a quarter at a time, so a box on its side swaps width for height. Returns
+   * false, changing nothing, when there is no box or nothing is laid out yet.
+   */
+  private fitToBox(): boolean {
+    const box = this.fitTarget();
+    const wrap = this.wrapRef()?.nativeElement;
+    const renderedW = this.renderedW();
+    const renderedH = this.renderedH();
+    if (!box || !wrap || !renderedW || !renderedH) return false;
+    const [x0, y0, x1, y1] = box;
+    const boxW = (x1 - x0) * renderedW;
+    const boxH = (y1 - y0) * renderedH;
+    if (!(boxW > 0 && boxH > 0) || !wrap.clientWidth || !wrap.clientHeight) return false;
+    const rot = ((this.rotation() % 360) + 360) % 360;
+    const swapped = rot === 90 || rot === 270;
+    const onScreenW = swapped ? boxH : boxW;
+    const onScreenH = swapped ? boxW : boxH;
+    const fit = Math.min(wrap.clientWidth / onScreenW, wrap.clientHeight / onScreenH);
+    this.fitZoom.set(fit);
+    const zoom = this.clampZoom(fit);
+    this.zoom.set(zoom);
+    // The box centre's offset from the image centre, turned and scaled as the
+    // transform turns and scales the image; panning by its opposite puts it
+    // in the middle of the pane.
+    const dx = ((x0 + x1) / 2 - 0.5) * renderedW;
+    const dy = ((y0 + y1) / 2 - 0.5) * renderedH;
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.round(Math.cos(rad));
+    const sin = Math.round(Math.sin(rad));
+    this.panX.set(-zoom * (dx * cos - dy * sin));
+    this.panY.set(-zoom * (dx * sin + dy * cos));
+    this.applyTransform();
+    return true;
   }
 
   onWheel(event: WheelEvent): void {
     event.preventDefault();
+    this.followLead();
     const oldZoom = this.zoom();
     const delta = event.deltaY > 0 ? -0.15 : 0.15;
     this.zoomAbout(oldZoom + delta * oldZoom, event.clientX, event.clientY);
@@ -375,10 +643,19 @@ export class ImageViewerComponent implements OnDestroy {
     if (this.regionDrawActive) return;
     // Without this a double-click paints a native selection over the canvas.
     event.preventDefault();
-    if (this.zoom() >= this.maxZoom) {
+    this.followLead();
+    if (this.shownZoom() >= this.maxZoom - AT_CAP) {
+      const following = this.following();
+      if (following.kind === 'on') {
+        following.lead.homeView();
+        this.followLead();
+        return;
+      }
       this.zoom.set(this.minZoom);
       this.panX.set(0);
       this.panY.set(0);
+      // Framed on its box, the view the image opened on is that framing.
+      if (this.fitTarget()) this.fitToBox();
       this.applyTransform();
       return;
     }
@@ -463,8 +740,8 @@ export class ImageViewerComponent implements OnDestroy {
     if (this.beginDraw(event)) return;
 
     // Default: pan-when-zoomed.
-    const max = this.getMaxPan();
-    if (max.x <= 0 && max.y <= 0) return;
+    if (!this.panRoom()) return;
+    this.followLead();
     this.drag = {
       kind: 'pan',
       startX: event.clientX,
@@ -571,8 +848,66 @@ export class ImageViewerComponent implements OnDestroy {
 
   get wrapCursor(): string {
     if (this.regionDrawActive) return 'crosshair';
+    return this.panRoom() ? 'grab' : '';
+  }
+
+  // --- As the lead of a link (`LinkLead`) ---
+
+  /** Show *view* of the face, zoom and pan kept as any gesture's are. */
+  showFaceView(view: FaceView): void {
+    const frame = this.frame();
+    if (!frame) return;
+    const zoom = this.clampZoom(view.scale / frame.unit);
+    this.setPaneView(paneViewOf(frame, { ...view, scale: zoom * frame.unit }, this.rotation()));
+    this.applyTransform();
+  }
+
+  /** Show *rect* of the face, as large as this pane and the zoom range allow. */
+  showFaceRect(rect: FaceRect): void {
+    const wrap = this.wrapRef()?.nativeElement;
+    const view = wrap && viewOfRect(rect, wrap.clientWidth, wrap.clientHeight, this.rotation());
+    if (view) this.showFaceView(view);
+  }
+
+  /** The whole image, keeping the turn. */
+  homeView(): void {
+    this.zoom.set(1);
+    this.panX.set(0);
+    this.panY.set(0);
+    if (this.imageReady() && this.fitTarget()) this.fitToBox();
+    this.applyTransform();
+  }
+
+  canPan(): boolean {
     const max = this.getMaxPan();
-    return max.x > 0 || max.y > 0 ? 'grab' : '';
+    return max.x > 0 || max.y > 0;
+  }
+
+  /** Whether a drag pans: this image is zoomed past the pane, or, following, the lead's is. */
+  private panRoom(): boolean {
+    const following = this.following();
+    return following.kind === 'on' ? following.lead.canPan() : this.canPan();
+  }
+
+  private paneView(): PaneView {
+    return { zoom: this.zoom(), panX: this.panX(), panY: this.panY() };
+  }
+
+  private setPaneView(pane: PaneView): void {
+    this.zoom.set(pane.zoom);
+    this.panX.set(pane.panX);
+    this.panY.set(pane.panY);
+  }
+
+  /**
+   * As a follower: show the lead's view as it now stands. The effect that keeps
+   * a follower drawn from its lead runs on the next change detection, so each
+   * gesture calls this first: one begun on a view the lead has since left would
+   * hand the old view back and undo the lead's move. A no-op on any other viewer.
+   */
+  private followLead(): void {
+    const following = this.following();
+    if (following.kind === 'on') this.setPaneView(paneViewOf(following.frame, following.view, this.rotation()));
   }
 
   get regionBoxStyle(): { [k: string]: string } | null {
@@ -588,15 +923,26 @@ export class ImageViewerComponent implements OnDestroy {
   }
 
   // Clamp the pan back into range for the current zoom/rotation; call after
-  // any zoom/rotation change. (zoomLabel is a computed off `zoom` now.)
+  // any zoom/rotation change. (zoomLabel is a computed off `zoom` now.) A
+  // follower hands its new view to its lead instead, which keeps it on the
+  // lead's image, and shows what the lead settled on: its own image may be
+  // smaller or larger than its face's match, so it has no range of its own.
   private applyTransform(): void {
+    const following = this.following();
+    if (following.kind === 'on') {
+      following.lead.showFaceView(faceViewOf(following.frame, this.paneView(), this.rotation()));
+      this.followLead();
+      return;
+    }
     const max = this.getMaxPan();
     this.panX.set(Math.max(-max.x, Math.min(max.x, this.panX())));
     this.panY.set(Math.max(-max.y, Math.min(max.y, this.panY())));
   }
 
+  /** Keep *val* within the zoom range, which a follower reads in its lead's zoom. */
   private clampZoom(val: number): number {
-    return Math.min(this.maxZoom, Math.max(this.minZoom, val));
+    const unit = this.zoomUnit();
+    return unit * Math.min(this.maxZoom, Math.max(this.minZoom, val / unit));
   }
 
   private recomputeRenderedSize(): void {
@@ -621,6 +967,9 @@ export class ImageViewerComponent implements OnDestroy {
       this.renderedH.set(wrapH);
       this.renderedW.set(wrapH * imgAspect);
     }
+    // The first measurement of a new image is when its framing can be paid;
+    // a framing paid already is not redone on a resize.
+    this.payFit();
   }
 
   private attachWrapResizeObserver(): void {
@@ -863,6 +1212,13 @@ function clamp(v: number, lo: number, hi: number): number {
 
 function clamp01(v: number): number {
   return clamp(v, 0, 1);
+}
+
+/** Two boxes with the same corners, or both none. */
+function sameBox(a: RegionBox | null, b: RegionBox | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 }
 
 function pct(v: number): string {

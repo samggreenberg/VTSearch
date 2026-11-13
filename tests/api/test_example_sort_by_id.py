@@ -176,3 +176,37 @@ class TestUploadedFaceHardView:
         assert "face_hard_view" not in upload() and "face_hard_view" not in upload(media_type="image")
         assert upload(media_type="face")["face_hard_view"] is True
         assert len(seen) == 1 and seen[0].name.endswith(".png")
+
+
+class TestExampleFaceHardView:
+    """``GET /api/server-media-files/<filename>/face-hard-view`` (#5643)."""
+
+    @pytest.fixture
+    def example_dir(self, tmp_path, monkeypatch):
+        import vtscore.security.path_validation as paths_mod
+
+        root = tmp_path / "example_media"
+        root.mkdir()
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: root)
+        return root
+
+    def test_an_example_picture_is_read_for_its_verdict(self, client, example_dir, monkeypatch):
+        from vtscore.media.face import imagekit_bridge
+
+        (example_dir / "a.png").write_bytes(b"\x89PNG fake")
+        seen = []
+        for verdict in (True, False, None):
+            monkeypatch.setattr(imagekit_bridge, "hard_view_of_file", lambda path, v=verdict: seen.append(path) or v)
+            resp = client.get("/api/server-media-files/a.png/face-hard-view")
+            assert resp.status_code == 200, resp.get_json()
+            assert resp.get_json() == {"face_hard_view": verdict}
+        assert [p.name for p in seen] == ["a.png"] * 3
+
+    def test_a_missing_or_escaping_or_non_image_file_is_refused(self, client, example_dir, monkeypatch):
+        from vtscore.media.face import imagekit_bridge
+
+        monkeypatch.setattr(imagekit_bridge, "hard_view_of_file", lambda path: pytest.fail("the provider ran"))
+        (example_dir / "clip.wav").write_bytes(b"RIFF")
+        assert client.get("/api/server-media-files/nope.png/face-hard-view").status_code == 404
+        assert client.get("/api/server-media-files/clip.wav/face-hard-view").status_code == 404
+        assert client.get("/api/server-media-files/..%2F..%2Fx.png/face-hard-view").status_code == 400

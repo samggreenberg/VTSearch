@@ -226,7 +226,8 @@ contract:
   validation still goes through `validate_plugin_args`, so a missing required
   field or an invalid `select` value still returns 422 with the standard
   `errors` envelope.
-- **Binary responses.** Audio/video/image/media/thumbnail/preview routes, the
+- **Binary responses.** Audio/video/image/media/thumbnail/preview routes (the
+  thumbnail batch `GET /api/medias/thumbnails` among them), the
   dataset and portable-bundle downloads, and `GET
   /api/achievements/docs/{doc_id}/raw` (`text/plain`).
 - **Dual-mode dispatchers.** `POST /api/embed` accepts either

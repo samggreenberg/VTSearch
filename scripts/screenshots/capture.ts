@@ -528,11 +528,15 @@ function makeHelpers(page: Page, timing?: Timing): Helpers {
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});
       // First visit builds the UMAP projection (progress bar); wait it out.
       await page.waitForSelector('.browse-content, canvas', { timeout: 180000 });
-      // The canvas mounts under an opaque cover that only lifts once the opening
-      // view's tiles + thumbnails have painted; wait for it to detach so the shot
-      // frames the finished map, not the "Loading thumbnails…" cover.
+      // The canvas mounts under an opaque cover that lifts once the opening
+      // view's bins are in; its thumbnails fill in after that (#5636). Wait for
+      // both, so the shot frames the finished map rather than the "Loading
+      // map…" cover or grey bins under the loading bar.
       await page
         .waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 })
+        .catch(() => {});
+      await page
+        .waitForSelector('.browse-main[data-thumbs="settled"]', { timeout: 180000 })
         .catch(() => {});
       await wait(3000);
     },
@@ -735,6 +739,13 @@ async function captureShot(
     // Holds only while the app's Show Animations defers to it; see
     // warnIfMotionForced.
     reducedMotion: 'reduce',
+    // The app buckets a vote's calendar day by the browser's clock (the
+    // `X-Timezone-Offset` header), and the fixtures' own votes, cast through
+    // `app-client.mjs` with no header, by UTC. In any other zone a run taken
+    // in the hours when the two dates differ counts two days, and Your Days
+    // are Numbered reads Bronze (#5630). UTC is also the container's zone, the
+    // one the baselines were drawn in.
+    timezoneId: 'UTC',
   });
   const page = await ctx.newPage();
   const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, loud: 0, capture: 0 };

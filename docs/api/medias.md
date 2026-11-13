@@ -99,6 +99,22 @@ time, whose pre-clean payload was kept alongside the canonical (cleaned) one.
 Those items accept `?variant=original` on every payload route below, and the
 detail viewer offers a Clean/Original toggle. The key is absent otherwise.
 
+`face_landmarks` is a face crop's five landmarks, as `[[x, y], ...]` fractions
+of the crop as served: left eye, right eye, nose tip, left mouth corner, right
+mouth corner, where left is the image's left. They are measured after the
+crop's `align` turn, so `[0, 0]` is the top-left corner of the image the
+`/image` route returns. A point may lie outside `[0, 1]` when the face runs
+past the crop's edge. The key is absent on anything that is not a face, on a
+face whose detection gave no landmarks, and on a Face dataset imported before
+they were kept (re-import it to get them).
+
+`face_hard_view` is a face's verdict from the Face Quality its converter
+stamped: `true` for a hard view (turned, covered or small), which is harder to
+compare and to search from, `false` otherwise. The Face compare layout's
+checklist says so when either face is one. The key is absent on anything that
+is not a face, and on a face with no stamped quality or from an embedding space
+with no hard-view cut.
+
 The `custom_metadata` dict is the media type's display fields — e.g.
 `duration`/`frequency` for audio, `width`/`height` for images, `word_count`
 for text — with any importer-supplied `custom_metadata` layered on top.
@@ -236,6 +252,11 @@ GET /api/medias/{media_id}/image
 For a non-image media type the route delegates to that type's
 `image_response` hook, so audio serves its waveform PNG, video its
 mid-frame, and a PDF document its first page.
+Cached like `/thumbnail`: an `ETag` over the bytes served (for audio and
+video, the picture rather than the media's own bytes), a `304` on a matching
+`If-None-Match`, and `private, max-age=86400`. So the Browse map's largest
+cells, which paint from this route, come from the browser cache on a revisit,
+and the reviewers' prefetch warms the next items by fetching these URLs.
 400 if the media is not an image and its `image_response` hook yielded
 nothing. 404 if not found.
 
@@ -390,6 +411,34 @@ of high-resolution items doesn't decode every full-size bitmap at once.
 400 if the media is not an image and its `image_response` hook yielded
 nothing. 404 if
 not found or bytes unavailable.
+
+### Thumbnails in a batch
+
+```
+GET /api/medias/thumbnails?ids=3,17,42
+```
+
+The whole-frame thumbnails of up to 256 media in one response, each exactly
+what [`/thumbnail`](#thumbnail) serves for that id. The Browse map asks for its
+missing thumbnails here, sorted and 32 at a time, rather than one request per
+bin: over HTTP/1.1 a browser runs only about six requests at a time per host,
+so on a remote server per-thumbnail requests spent most of the wait on round
+trips. Cached like `/thumbnail` (`ETag`, `private, max-age=86400`), so the
+same view's batches come from the browser cache on a revisit.
+
+The body is `application/octet-stream`, one entry per requested id in request
+order:
+
+| Field | Size | Content |
+|---|---|---|
+| length | 4 bytes, big-endian | byte length of the image, `0` when the id has no thumbnail |
+| mimetype length | 1 byte | `0` when the id has no thumbnail |
+| mimetype | as given | ASCII, e.g. `image/jpeg` |
+| image | `length` bytes | the thumbnail |
+
+An id that is not loaded, or whose media type has no picture, is an empty
+entry rather than an error, so one missing picture never fails the batch.
+422 on a malformed `ids` or more than 256 of them.
 
 ---
 
@@ -803,6 +852,36 @@ image bytes, an audio waveform PNG, or a video mid-frame PNG (binary, not JSON).
 
 400 (filename escapes the media dir), 404 (not found / no thumbnail for the
 type), 500 (generation failed).
+
+### Server media file image
+
+```
+GET /api/server-media-files/{filename}/image
+```
+
+The full-size bytes of an image example in the user's `example_media/` dir
+(binary, not JSON). The Face compare layout shows a detector's example beside
+the face being voted on, where the thumbnail is too small to compare by.
+
+400 (filename escapes the media dir), 404 (not found, or not an image).
+
+### Server media file face hard view
+
+```
+GET /api/server-media-files/{filename}/face-hard-view
+```
+
+→ `{"face_hard_view": true | false | null}`
+
+Whether the face in an image example is a hard view (turned, covered or small),
+read by the server's face provider: the first face it finds, as the face
+embedder would embed it. A face of a dataset carries the same verdict on its
+[batch metadata](#batch-fetch-metadata); an example picture has no stamped
+quality, so the Face compare layout asks here when the reference is one.
+`null` when there is no verdict: Face is off, no face is found, the embedding
+space has no hard-view cut, or the provider fails.
+
+400 (filename escapes the media dir), 404 (not found, or not an image).
 
 ### Seed importers
 

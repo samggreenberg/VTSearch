@@ -653,6 +653,100 @@ isn't in the Image dataset (you left that image out, say) has no button.
   <img src="assets/show-in-photo.light.webp" alt="Show in photo from Train: the photo a face was cut from, opened over the ranking with that face outlined, and ← Back to return to the face" width="720" />
 </picture>
 
+**Compare with a reference.** While you vote on a face, a second face of the
+person you are looking for stays on screen beside it: the **reference** on the
+left, the face you are voting on (the *candidate*) on the right. Compare the
+two part by part instead of trusting your memory of the person.
+
+- **Which face is the reference.** Before your first vote it is the example
+  you made the detector from. After that it is your **Good** pile, the
+  clearest face first; hard views (turned away, covered or small) come last.
+- **Next** (or `R`) shows another reference without moving the candidate, so
+  you can find one at the same angle. Each new candidate starts on the best
+  one again.
+- **Pin** keeps the reference on screen as the one every candidate starts on,
+  until you click **Pinned** or leave the page.
+- **The two faces are shown the same size and in the same place.** The
+  reference is enlarged or shrunk, and moved, so its eyes sit where the
+  candidate's do and the distance from its eyes to its mouth is the same.
+  Nothing else changes: the face is not stretched or bent to fit.
+- **Zoom and move them together.** Zoom in on one face's ear and the other
+  zooms in on its ear too; drag either to move both. Each face still has its
+  own rotate, zoom and reset controls under it, and both zoom readouts show the
+  same zoom. Turning one face does not turn the other. Reset on either goes
+  back to both whole faces. **Next** keeps the zoom, so you can look at the
+  same part of each reference in turn. `+` / `-` and `[` / `]` act on the
+  candidate.
+- A face from an older Face dataset, made before the app kept where each
+  face's eyes and mouth are, has nothing to match by, and nor has a reference
+  that is your example picture. Such a pair is shown at its own sizes, and
+  each face zooms on its own. Re-import an older dataset to have its faces
+  matched.
+- **Wider**, beside **Compare**, shows both faces from the photos they were
+  cut from, with twice as much around each as its crop has, so the ears and
+  the hairline are in view: a crop often cuts them off, and the ears are among
+  the best things to compare. It is there when the Image dataset with the
+  photos is loaded. The photos are shown as they were taken: a crop is turned
+  so the eyes are level, but the photo is not, so a tilted head stays tilted.
+  A face whose photo can't be found, or a reference that is your example
+  picture, stays as it is. The photos are not matched in size or zoomed
+  together, since a tilted head's eyes and mouth are not where the crop
+  measured them; each zooms as usual, further in than on a crop for a small
+  face in a big photo, and reset returns to the wider view. **Wider** stays on
+  until you turn it off or leave the page.
+- **What to compare**, down the right of the panel, lists the parts worth
+  comparing, the most telling first: marks (moles, scars, freckles), the ears,
+  the nose, the eyes and brows, and last the mouth, chin and outline of the
+  face, which expression changes. Hair, beards, makeup and skin tone change
+  too easily to go by. Nothing in the list is ticked off or saved; it is there
+  to look down while you compare. When the candidate or the reference is a
+  hard view, the list says so, since such a pair is harder to judge.
+- **Click a part in the list** to zoom both faces to it: click **Nose** and
+  both noses fill their panes. Click the same part again to zoom back out to
+  the whole faces. **Ears** shows one ear, then the other on the next click,
+  then zooms back out. A part is greyed when either picture does not hold it:
+  an ear the crop cut off, or the one on the far side of a turned head. The
+  app works out where a part is from the eyes, nose and mouth, so the view can
+  be a little off on a turned face; drag to adjust it. The parts can be
+  clicked whenever the two faces are matched in size, so not on a face from an
+  older dataset, with an example picture as the reference, or under **Wider**.
+- **Even out the photos**, at the foot of the What to compare strip, makes two
+  photos of one person look alike where only the camera or the light differs.
+  Each change is made to the whole picture, the same at every point, and is
+  capped, so neither face is pushed far from how it was taken; the stored
+  pictures never change, and nor does what the detector sees. Everything is
+  measured on the face's skin alone: small patches on the forehead, the bridge
+  of the nose and each cheek, found from the eyes, nose and mouth, so the wall
+  behind a person, white or black, and their hair, eyes and lips don't count.
+  The cheek on the far side of a turned head is left out. Each is a checkbox,
+  and the choices are remembered:
+  - **Exposure** brings both faces' skin to the same brightness, and
+    **Contrast** to the same contrast. A dark face is lifted, which can show a
+    mark the shadow hid.
+  - **White balance** moves each face's skin toward a typical skin colour,
+    which takes a colour cast out (the orange of a lamp, the blue of shade).
+    Read from the skin, it can't tell a cast from a person's own colouring, so
+    it also narrows the difference between two people's skin, as far as its
+    limit allows: one more reason not to weigh skin tone.
+  - **Greyscale when either is** shows both faces in greyscale when either is a
+    black-and-white photo: a colour face beside a grey one makes people more
+    likely to call two different people the same. **Both in greyscale**, the
+    one box not ticked to begin with, greys any pair.
+  - **Reference turned the same way** is the choice of reference above.
+    Unticked, the clearest Good face comes first, whichever way it is turned.
+  - Hold `O` to see both faces as they were taken, and let go to see them
+    evened out again.
+
+  A face from an older dataset, or an example picture, has no eye and mouth
+  points to find its skin by, so it is measured where a face sits in a face
+  crop; an example picture whose face is elsewhere is measured in the wrong
+  place.
+- **Compare**, under the candidate, turns the reference off and gives the
+  candidate the whole panel. The choice is remembered.
+
+The two faces are always side by side, never laid over one another: overlays
+have been found to make people worse at telling two faces apart.
+
 **Collapse to photos.** On the same kind of Face dataset, the list in Train's
 **Manual** tab and Tune's **Review** tab has a **Show: Faces | Photos** switch
 under its header. **Photos** shows the ranking as the photos the faces came
@@ -2087,7 +2181,9 @@ scores; it's a pure explorer.
 
 The first time you browse a dataset, VTSearch builds the map (a
 progress bar shows the work). The layout is cached on the dataset, so
-later visits open instantly.
+later visits skip that step. Once the map is up, the tiles' thumbnails
+load in: each tile shows as grey until its picture arrives, and a bar
+at the bottom of the map counts them in.
 
 ### Reading the map
 

@@ -12,7 +12,7 @@ the schema is flat to match what the frontend sends and receives.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import EXCLUDE, Schema, fields, validate
 
 from vtsearch.settings.models import (
     VALID_ANIMATION_MODES,
@@ -66,6 +66,24 @@ class DocsLinkSchema(Schema):
     url = fields.String(required=True)
 
 
+class FaceEvenOutSchema(Schema):
+    """The Face compare layout's standardizations, each on or off (``face_even_out``).
+
+    A key left out reads as its default (``FACE_EVEN_OUT_DEFAULTS`` in
+    ``vtsearch/settings/models.py``); an unknown one is dropped.
+    """
+
+    class Meta:
+        unknown = EXCLUDE
+
+    exposure = fields.Boolean()
+    contrast = fields.Boolean()
+    white_balance = fields.Boolean()
+    greyscale_either = fields.Boolean()
+    greyscale_both = fields.Boolean()
+    turn_matched = fields.Boolean()
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -94,6 +112,8 @@ class AppSettingsSchema(Schema):
     autopilot_enabled = fields.Boolean()
     hide_left_panel = fields.Boolean()
     hide_right_panel = fields.Boolean()
+    face_compare = fields.Boolean()
+    face_even_out = fields.Nested(FaceEvenOutSchema)
     autopilot_top_greens = fields.Integer()
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
@@ -330,6 +350,8 @@ class SettingsUpdateSchema(Schema):
     autopilot_enabled = fields.Boolean()
     hide_left_panel = fields.Boolean()
     hide_right_panel = fields.Boolean()
+    face_compare = fields.Boolean()
+    face_even_out = fields.Nested(FaceEvenOutSchema)
     autopilot_top_greens = fields.Integer()
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()

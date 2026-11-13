@@ -539,8 +539,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         // Re-place when the settings-driven size actually changed, OR when the popup
         // has mounted but not yet revealed (`placed` still false). The `!this.placed`
         // clause fixes the "first right-click shows nothing, second opens it" bug:
-        // {@link ngAfterViewInit} calls `settingsState.load()`, and until the very
-        // first response lands `settingsSignal()` is null. If `nudgeOnScreen`'s
+        // until the very first settings response lands `settingsSignal()` is
+        // null. If `nudgeOnScreen`'s
         // reveal gate (`settingsReady`) runs in that window it holds `placed`
         // false, and nothing else re-runs `place()` when settings land (the size
         // didn't change) — so the popup strands hidden until the next summon.
@@ -559,7 +559,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    this.settingsState.load();
+    // No `settingsState.load()`: the popup only ever opens on the Browse view's
+    // ready map, and that view loads the settings before it mounts one. A
+    // refetch here was another `GET /api/settings` on each open, the first of
+    // them in the burst of requests a map's opening sends (#5649).
     this.prefetchMembers();
     setTimeout(() => this.place());
   }

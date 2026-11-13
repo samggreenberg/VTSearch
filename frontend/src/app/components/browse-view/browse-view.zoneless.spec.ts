@@ -1,16 +1,17 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
 import { Component, input, output, signal, type WritableSignal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 
 import { BrowseViewComponent } from './browse-view.component';
+import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { PairRecoveryService } from '../../services/pair-recovery.service';
-import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
@@ -28,7 +29,8 @@ import type { AppSettings } from '../../generated/api-client/models/app-settings
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
-import { settleZoneless } from '../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /** Stands in for Show in photo's overlay, whose lookup is its own spec's. */
 @Component({ selector: 'vt-source-photo-modal', standalone: true, template: '' })
@@ -36,6 +38,14 @@ class SourcePhotoModalStub {
   readonly request = input.required<SourcePhotoRequest>();
   readonly closed = output<void>();
 }
+
+/**
+ * When set, the TestBed below provides the real `SettingsStateService` over
+ * `HttpTestingController` instead of the stub, so a spec can fail the real
+ * `GET /api/settings`. A `describe` sets it in `beforeAll`, which runs before
+ * the outer `beforeEach` builds the TestBed.
+ */
+let realSettingsStore = false;
 
 /**
  * Zoneless staleness canary for the VTSBrowse view.
@@ -102,11 +112,6 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       modelId: '',
       setActive: noop,
     });
-    const datasetsStub: Partial<DatasetsRegistryApiService> = {
-      getStatus: () => of({ display_name: 'Canary DS', media_type: 'audio' }) as ReturnType<
-        DatasetsRegistryApiService['getStatus']
-      >,
-    };
     const detectorsStub: Partial<DetectorsRegistryApiService> = {
       releasePositivesBrowse: () =>
         of(undefined) as unknown as ReturnType<
@@ -147,9 +152,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: TileCacheService, useValue: tileCacheStub },
         { provide: ActiveContextService, useValue: activeContextStub },
         { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
-        { provide: DatasetsRegistryApiService, useValue: datasetsStub },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
-        { provide: SettingsStateService, useValue: settingsStub },
+        ...(realSettingsStore
+          ? provideHttpTesting()
+          : [{ provide: SettingsStateService, useValue: settingsStub }]),
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: AutoFindService, useValue: { openResults } },
         { provide: DetectorsFindApiService, useValue: { getAutofindRun } },
@@ -197,6 +203,26 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   afterEach(() => fixture.destroy());
+
+  /**
+   * Open a ready map of audio. The docked/floating choice is kept per media
+   * type, which the meta names, so the toggles only act once a map is up (as
+   * they only exist on one).
+   */
+  async function openAudioMap(): Promise<void> {
+    await settleZoneless(fixture);
+    metaSubject.next({
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+      media_type: 'audio',
+    } as unknown as ProjectionMeta);
+    await settleZoneless(fixture);
+  }
 
   it('repaints to the error state when the projection load subscribe errors, no manual detectChanges', async () => {
     await settleZoneless(fixture);
@@ -270,20 +296,94 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(fixture.nativeElement.querySelector('.browse-status-eta')).toBeNull();
   });
 
-  it('covers the canvas until it reports its opening view is painted', async () => {
+  it('covers the canvas until it reports its opening layout is painted', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;
 
-    // On entry the canvas is covered so the user never sees a half-loaded grid.
+    // On entry the canvas is covered so the user never sees the framing jump.
     expect(component.revealed()).toBe(false);
-    // The cover names what it's loading. The canary DS is audio, which now
-    // tiles as waveform-thumbnail squares, so the cover reads "Loading
-    // thumbnails…"; a pure-density type (text) would read "Loading map…".
-    expect(component.preloadMessage).toBe('Loading thumbnails…');
 
-    // The canvas signals its opening view is fully painted → uncover it.
+    // The canvas signals its bins are on screen → uncover it. Thumbnails are
+    // not waited for (#5636): they fill in under the loading bar.
     component.onCanvasFirstView();
     expect(component.revealed()).toBe(true);
+  });
+
+  describe('while the thumbnails on screen load (#5636)', () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+      media_type: 'audio',
+    } as unknown as ProjectionMeta;
+
+    /** Open an image dataset's map and lift its cover. */
+    async function openMap(): Promise<HTMLElement> {
+      await settleZoneless(fixture);
+      metaSubject.next({ ...ready, media_type: 'image' });
+      await settleZoneless(fixture);
+      fixture.componentInstance.onCanvasFirstView();
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    /** Let real time pass (the bar's show-delay is a plain timeout). */
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    it('shows the map under a bar that counts them in, after a beat', async () => {
+      const el = await openMap();
+      const component = fixture.componentInstance;
+      expect(el.querySelector('.browse-preload-cover')).toBeNull();
+
+      component.onThumbProgress({ loaded: 3, total: 10 });
+      await settleZoneless(fixture);
+      // Not straight away: a load that lands within the beat never shows it.
+      expect(el.querySelector('.browse-thumb-progress')).toBeNull();
+      await wait(350);
+      await settleZoneless(fixture);
+
+      const bar = el.querySelector('.browse-thumb-progress');
+      expect(bar).not.toBeNull();
+      expect(bar!.querySelector('.browse-thumb-progress-count')!.textContent).toContain('3 / 10');
+
+      component.onThumbProgress({ loaded: 7, total: 10 });
+      await settleZoneless(fixture);
+      expect(el.querySelector('.browse-thumb-progress-count')!.textContent).toContain('7 / 10');
+
+      // The last one lands: the bar goes at once.
+      component.onThumbProgress({ loaded: 10, total: 10 });
+      await settleZoneless(fixture);
+      expect(el.querySelector('.browse-thumb-progress')).toBeNull();
+    });
+
+    it('never flashes the bar for thumbnails that land within the beat', async () => {
+      await openMap();
+      const component = fixture.componentInstance;
+
+      component.onThumbProgress({ loaded: 0, total: 4 });
+      await settleZoneless(fixture);
+      component.onThumbProgress({ loaded: 4, total: 4 });
+      await settleZoneless(fixture);
+      await wait(400);
+      await settleZoneless(fixture);
+      expect(component.thumbBarShown()).toBe(false);
+      expect(fixture.nativeElement.querySelector('.browse-thumb-progress')).toBeNull();
+    });
+
+    it('holds the minimap tile fetch until the opening load settles', async () => {
+      await openMap();
+      const minimap = fixture.debugElement.query(By.directive(BrowseMinimapComponent))
+        .componentInstance as BrowseMinimapComponent;
+      expect(minimap.fetchTiles()).toBe(false);
+
+      fixture.componentInstance.onOpeningViewSettled();
+      await settleZoneless(fixture);
+      expect(minimap.fetchTiles()).toBe(true);
+    });
   });
 
   it('engages region-draw while Shift is held, releasing on keyup and blur', async () => {
@@ -371,7 +471,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   it('un-hides the details panel when a floating window is docked into it', async () => {
-    await settleZoneless(fixture);
+    await openAudioMap();
     const component = fixture.componentInstance;
 
     // Hide the docked panel, then work in the floating presentation instead.
@@ -394,7 +494,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   });
 
   it('carries the open bin across dock / pop-out toggles', async () => {
-    await settleZoneless(fixture);
+    await openAudioMap();
     const component = fixture.componentInstance;
 
     // Force the floating presentation (docked is the default) before opening a bin.
@@ -602,6 +702,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     beforeEach(() => {
@@ -674,6 +775,172 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
   });
 
+  // #5649: on a remote server every request the view chains before the canvas
+  // mounts is a full round trip. The first meta goes out with the settings,
+  // and only its *apply* (which mounts and fits the canvas) waits for them.
+  describe('before the canvas mounts (#5649)', () => {
+    let metas: Subject<ProjectionMeta>[];
+    let getLabels: ReturnType<typeof vi.fn>;
+    let labels: Subject<{ status: string; projection_id: string; labels: unknown[] }>;
+
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+      media_type: 'audio',
+      has_labels: true,
+    } as unknown as ProjectionMeta;
+
+    beforeEach(() => {
+      metas = [];
+      labels = new Subject();
+      const api = TestBed.inject(ProjectionApiService);
+      api.getMeta = vi.fn(() => {
+        const meta = new Subject<ProjectionMeta>();
+        metas.push(meta);
+        return meta.asObservable();
+      });
+      getLabels = vi.fn(() => labels.asObservable());
+      api.getLabels = getLabels as unknown as ProjectionApiService['getLabels'];
+      // The settings are still on their way when the view starts.
+      settingsValue.set(null);
+    });
+
+    /** Answer meta fetch *n* (0-based). */
+    function answer(n: number, meta: ProjectionMeta): void {
+      metas[n].next(meta);
+      metas[n].complete();
+    }
+
+    it('asks for the meta at once, without waiting for the settings', async () => {
+      await settleZoneless(fixture);
+      expect(metas.length).toBe(1);
+      expect(fixture.componentInstance.status()).toBe('loading');
+    });
+
+    it('holds the canvas until the settings are in, then fits it at the saved size from that same meta', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(0, ready);
+      await settleZoneless(fixture);
+      // The meta is in but the saved cell size is not: no canvas yet.
+      expect(component.status()).toBe('loading');
+      expect(fixture.nativeElement.querySelector('vt-browse-canvas')).toBeNull();
+
+      settingsValue.set({ browse_icon_size: { audio: 'XL' } } as unknown as AppSettings);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.mediaType()).toBe('audio');
+      // The size the canvas mounts at is the saved one, not the default M.
+      expect(BrowseViewComponent.ICON_SIZES[component.hexScaleIndex()]).toBe('XL');
+      // The meta already in hand was applied; it was not asked for again.
+      expect(metas.length).toBe(1);
+    });
+
+    it('opens as soon as the meta lands when the settings came first', async () => {
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      answer(0, ready);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.status()).toBe('ready');
+      expect(metas.length).toBe(1);
+    });
+
+    it('asks for the region labels once the meta names its projection, while the canvas is still held', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(0, ready);
+      await settleZoneless(fixture);
+      expect(getLabels).toHaveBeenCalledTimes(1);
+      expect(component.status()).toBe('loading');
+
+      // Labels that land before the gate opens are kept for the map.
+      labels.next({ status: 'ready', projection_id: 'p1', labels: [{ text: 'owls' }] });
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.labels()).toEqual([{ text: 'owls' }]);
+      // Applying the meta does not ask for them twice.
+      expect(getLabels).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a first meta asked of a pair the view has since moved off', async () => {
+      const pairs = new Subject<{ datasetId: string; modelId: string }>();
+      (TestBed.inject(ActiveContextService) as { pair$: unknown }).pair$ = pairs.asObservable();
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      expect(metas.length).toBe(1);
+
+      // The pair moves while the settings are still out.
+      pairs.next({ datasetId: 'ds2', modelId: '' });
+      answer(0, { ...ready, projection_id: 'old' } as ProjectionMeta);
+      await settleZoneless(fixture);
+      // The old pair's meta asks for no labels, and opens nothing.
+      expect(getLabels).not.toHaveBeenCalled();
+
+      settingsValue.set({});
+      await settleZoneless(fixture);
+      // The gate asks afresh, and applies only that answer.
+      expect(metas.length).toBe(2);
+      expect(component.status()).toBe('loading');
+      answer(1, ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.meta()?.projection_id).toBe('p1');
+    });
+  });
+
+  /**
+   * #5658: after a failed settings load, reading the real store's settings
+   * threw, and the view's settings effect reads them before it checks the
+   * error. So a failure that landed after the view started never reached the
+   * gate, and "Loading map…" stayed up for good.
+   */
+  describe('when the settings load fails (#5658)', () => {
+    // The returned function runs once this block's tests are done.
+    beforeAll(() => {
+      realSettingsStore = true;
+      return () => {
+        realSettingsStore = false;
+      };
+    });
+
+    it('opens the map at the default prefs once a late settings failure lands', async () => {
+      const httpMock = TestBed.inject(HttpTestingController);
+      // Settled by ticking, not `settleZoneless`: the fixture is not stable
+      // while the settings GET is out (the resource holds a pending task).
+      await settleResource();
+      const component = fixture.componentInstance;
+      metaSubject.next({
+        projection_id: 'p1',
+        bounds: [0, 0, 1, 1],
+        base_radius: 1,
+        tile_span: 1,
+        point_count: 12,
+        levels: [0],
+        status: 'ready',
+        media_type: 'audio',
+      } as unknown as ProjectionMeta);
+      await settleResource();
+      // The meta is in, but the view waits for the settings.
+      expect(component.status()).toBe('loading');
+
+      httpMock
+        .expectOne('/api/settings')
+        .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+      await settleZoneless(fixture);
+
+      expect(component.status()).toBe('ready');
+      expect(fixture.nativeElement.querySelector('vt-browse-canvas')).not.toBeNull();
+      expect(BrowseViewComponent.ICON_SIZES[component.hexScaleIndex()]).toBe('M');
+      expect(component.signposts()).toBe(true);
+    });
+  });
+
   describe('the People button (#5590)', () => {
     const ready = {
       projection_id: 'p1',
@@ -683,13 +950,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     async function openMapOf(mediaType: string): Promise<HTMLElement> {
-      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
-        of({ display_name: 'Photos', media_type: mediaType }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
       await settleZoneless(fixture);
-      metaSubject.next(ready);
+      metaSubject.next({ ...ready, media_type: mediaType });
       await settleZoneless(fixture);
       return fixture.nativeElement as HTMLElement;
     }
@@ -724,6 +990,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     /** Open the map on its freshly fit layout. */
@@ -779,6 +1046,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       point_count: 12,
       levels: [0],
       status: 'ready',
+      media_type: 'audio',
     } as unknown as ProjectionMeta;
 
     beforeEach(() => {
@@ -790,10 +1058,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       }) as unknown as SettingsStateService['update'];
     });
 
-    /** Open the map and take its cover off, as the canvas's first paint does. */
-    async function openMap(): Promise<BrowseViewComponent> {
+    /** Open a map of *mediaType* and take its cover off, as the canvas's first paint does. */
+    async function openMap(mediaType = 'audio'): Promise<BrowseViewComponent> {
       await settleZoneless(fixture);
-      metaSubject.next(ready);
+      metaSubject.next({ ...ready, media_type: mediaType } as ProjectionMeta);
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       component.onCanvasFirstView();
@@ -886,10 +1154,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     });
 
     it('skips the thumbnail rung on a map of text, whose tiles show none', async () => {
-      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
-        of({ display_name: 'Lines', media_type: 'text' }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
       settingsValue.set({ used_features: ['browse-pan-zoom'] });
-      await openMap();
+      await openMap('text');
       expect(shownHint()?.id).toBe('browse-tile-details');
     });
 

@@ -719,12 +719,19 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     expect(lastCall()).toEqual([[url(2)], [url(4)]]);
   });
 
-  it("shows the next round's first pick from bytes already held (#5116)", async () => {
-    // jsdom has neither fetch's blob path nor object URLs; stub both, as the store's own spec does.
-    let seq = 0;
-    vi.stubGlobal('fetch', () => Promise.resolve({ ok: true, blob: () => Promise.resolve({ size: 1 }) }));
-    Object.assign(URL, { createObjectURL: () => `blob:mock/${++seq}`, revokeObjectURL: () => undefined });
-    const resolve = vi.spyOn(TestBed.inject(MediaPrefetchService), 'resolve');
+  it("has the next round's first pick warmed before the round is dealt (#5116)", async () => {
+    // jsdom has no HTTP cache: a warm whose body was read to the end stands in
+    // for an image the browser now holds.
+    const warmed: string[] = [];
+    vi.stubGlobal('fetch', (target: string) =>
+      Promise.resolve({
+        ok: true,
+        blob: () => {
+          warmed.push(target);
+          return Promise.resolve({ size: 1 });
+        },
+      }),
+    );
     const settle = async () => {
       for (let i = 0; i < 12; i++) await Promise.resolve();
     };
@@ -739,6 +746,8 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
         .flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead, votes: wireVotes([3, 'good']) })));
       await settleWithPanel(fixture, httpMock);
       await settle();
+      // On the round's last pick, before the vote that deals the next round.
+      expect(warmed).toContain(url(2));
 
       lineTest.vote('good');
       httpMock
@@ -746,13 +755,13 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
         .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2, votes: wireVotes([3, 'good'], [1, 'good']) })));
       await settleWithPanel(fixture, httpMock);
       expect(lineTest.currentId()).toBe(2);
-      const shown = resolve.mock.calls.findIndex(([src]) => src === url(2));
-      expect(shown).toBeGreaterThanOrEqual(0);
-      expect(resolve.mock.results[shown].value).toMatch(/^blob:mock\//);
+      // And the viewer shows it from that same URL, so the cache answers it.
+      const srcs = [...(fixture.nativeElement as HTMLElement).querySelectorAll('img')].map((img) =>
+        img.getAttribute('src'),
+      );
+      expect(srcs).toContain(url(2));
     } finally {
       vi.unstubAllGlobals();
-      delete (URL as { createObjectURL?: unknown }).createObjectURL;
-      delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
     }
   });
 

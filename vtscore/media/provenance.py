@@ -46,6 +46,7 @@ is the point.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 #: Display label for the file a derived media came from.
@@ -77,6 +78,26 @@ SOURCE_BOX_LABEL = "Source Box"
 #: like the clip window (``vtscore.datasets.loader`` / ``loader_pickle``), and
 #: generic: any converter may set it.
 SOURCE_BOX_FIELD = "source_box"
+
+#: Top-level media key holding a face crop's five landmarks (#5644): two eyes, the
+#: nose tip and two mouth corners, as ``[[x, y], ...]`` in that order (the face
+#: provider's, ``imagekit.face.records.LANDMARK_NAMES``: ``left_eye``,
+#: ``right_eye``, ``nose``, ``mouth_left``, ``mouth_right``, where left is the
+#: image's left).  Each point is a **fraction of the stored crop**, after any
+#: ``align`` turn, so ``(0, 0)`` is the crop's top-left corner and ``(1, 1)`` its
+#: bottom-right: what the viewer shows is what the points are measured on.  A
+#: point may lie outside ``[0, 1]`` when the face runs past the crop's edge; it
+#: is kept where the detector put it rather than clamped, so the geometry stays
+#: true.  ``image2face`` sets it on every crop whose detection had usable
+#: landmarks and leaves it off otherwise.
+#:
+#: Geometry, not an embedding: a pure function of the photo and the detector, so
+#: it persists top-level beside :data:`SOURCE_BOX_FIELD`.  Read it through
+#: :func:`face_landmarks_of`, which drops a malformed value.
+FACE_LANDMARKS_FIELD = "face_landmarks"
+
+#: How many points :data:`FACE_LANDMARKS_FIELD` holds.
+N_FACE_LANDMARKS = 5
 
 #: Top-level media keys describing a clipped / windowed item's playback window.
 #: Every reader of a clip window reads these *top-level* fields, not
@@ -277,6 +298,32 @@ def describe_source_box(media: dict[str, Any]) -> str:
         return ",".join(f"{float(v):.3f}" for v in box)
     except (TypeError, ValueError):
         return ""
+
+
+def face_landmarks_of(media: dict[str, Any]) -> list[list[float]] | None:
+    """*media*'s :data:`FACE_LANDMARKS_FIELD` as five ``[x, y]`` float pairs, or ``None``.
+
+    ``None`` when the media has none, and when the value is malformed (not
+    :data:`N_FACE_LANDMARKS` pairs of finite numbers): the field rides in a
+    pickle that may predate or postdate this code, so a bad value is dropped
+    rather than served or raised on.  The result is a fresh list, safe to
+    store or serialise.
+    """
+    raw = media.get(FACE_LANDMARKS_FIELD)
+    if not isinstance(raw, (list, tuple)) or len(raw) != N_FACE_LANDMARKS:
+        return None
+    points: list[list[float]] = []
+    for point in raw:
+        if not isinstance(point, (list, tuple)) or len(point) != 2:
+            return None
+        try:
+            x, y = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            return None
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return None
+        points.append([x, y])
+    return points
 
 
 def provenance_metadata(media: dict[str, Any]) -> dict[str, str]:

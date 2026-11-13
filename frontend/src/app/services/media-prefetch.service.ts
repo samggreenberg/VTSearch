@@ -1,41 +1,37 @@
 import { Injectable, OnDestroy } from '@angular/core';
 
 /**
- * Holds the next few review images in memory so a vote swaps in bytes that are
- * already fetched and decoded (#3896).
+ * Warms the browser's HTTP cache with the next few review images, so a vote
+ * swaps in an image the browser already holds (#3896).
  *
- * **Why this cannot be a plain `<link rel=prefetch>` or a throwaway `Image()`.**
- * `/api/medias/<id>/image` answers `Cache-Control: no-cache` **with no `ETag`
- * and no `Last-Modified`** (measured; pinned by `TestMediaImage` in
- * `tests/core/test_medias.py`). `no-cache` lets the browser keep the bytes but
- * forbids reusing them without revalidating first, and a response carrying no
- * validator cannot be revalidated conditionally — so the revalidation is a
- * fresh download of the whole body. Warming the HTTP cache therefore buys
- * nothing reliable, and this store holds the bytes itself, as an object URL the
- * `<img>` can be pointed at.
+ * **Why the HTTP cache is enough.** `/api/medias/<id>/image` answers
+ * `Cache-Control: private, max-age=86400` with an `ETag` (#5648; pinned by
+ * `TestMediaImage` in `tests/core/test_medias.py`). A warm is an ordinary
+ * `fetch` of the exact URL the viewer's `<img>` will ask for, its body read to
+ * the end so it lands in the cache, and the `<img>` is then answered from the
+ * cache without a request. Measured in Chromium against a slow server sending
+ * those headers, the `<img>` made no second request whether the warm had
+ * finished or was still in flight when it mounted (the browser joins the
+ * download already under way), so nothing here has to hand bytes to the viewer.
  *
- * That header is not an oversight to be optimised away: an item's bytes change
- * under a stable URL when it is cropped or cleaned, which is what makes a
- * long-lived cache entry wrong here. This store keeps the same property by
- * holding bytes only across a single advance (see below).
+ * Before #5648 the route answered `no-cache` with no validator, so a warmed
+ * cache entry could not be reused, and this service held the bytes itself as
+ * object URLs, handed them out once, and let the viewer claim a fetch still in
+ * flight. A cacheable route makes all of that the browser's job.
  *
- * **What it is scoped to.** Entries are keyed by the exact URL string, which
+ * **What it is scoped to.** A warm is keyed by the exact URL string, which
  * `ActiveContextService.mediaUrl()` builds with `dataset_id` / `detector_id` /
- * `variant` in the query. A cached blob can only ever be handed back for the
- * URL it was fetched from, so a prefetch can never paint another dataset's item
- * — the failure that would be much worse than the pause being fixed.
+ * `variant` in the query, so the cache entry it fills is the one the viewer
+ * reads for that item of that dataset, and no other.
  *
- * **Entries are single-use.** `resolve()` hands an entry out once and forgets
- * it. That is what keeps `no-store`'s reason intact: the bytes live for the few
- * seconds between "the reviewer is looking at item N" and "item N+1 is on
- * screen", never across a second visit to the same id, so an item edited in
- * between is re-fetched like any other. The previous consumed object URL is
- * revoked when the next one is handed out rather than at hand-out time, because
- * the `<img>` showing it is still using it.
+ * **What is left here** is choosing what to fetch and when: the review flows
+ * hand over their prediction of the next items, this fetches them one at a
+ * time in that order, and it aborts a fetch the prediction has dropped so it
+ * does not compete for bandwidth with the image the reviewer needs next.
  *
- * Everything here degrades to "no prefetch": a failed fetch, an aborted one, or
- * an environment without `URL.createObjectURL` all leave {@link resolve}
- * returning the network URL it was given.
+ * Everything degrades to "no prefetch": a failed or aborted fetch, or an
+ * environment without `fetch`, leaves the viewer fetching the image itself,
+ * which is what it did before this service existed.
  */
 
 /**
@@ -50,68 +46,37 @@ import { Injectable, OnDestroy } from '@angular/core';
  */
 export const PREFETCH_DEPTH = 2;
 
-/** How many warmed images to retain: the {@link PREFETCH_DEPTH} upcoming items,
- *  the one on screen (whose bytes must survive a retarget that lands before the
- *  viewer has claimed them), and one more.
- *
- *  The spare is for a prediction that flip-flops. Under a learned sort every
- *  vote re-ranks, and measured on a live instance the pick for "next" moved
- *  back to an item it had just moved off often enough that dropping held bytes
- *  on every retarget re-downloaded ~1 image in 3. Bytes already paid for are
- *  kept until something wanted needs the room. */
-export const PREFETCH_CAPACITY = PREFETCH_DEPTH + 2;
-
-interface InFlight {
-  controller: AbortController;
-  /** Resolves to the object URL once the bytes land, or `null` on any failure. */
-  done: Promise<string | null>;
-  /** Set by {@link MediaPrefetchService.claim}: the viewer is waiting on these
-   *  bytes, so they go straight to it instead of into the ready map, and no
-   *  retarget may abort the fetch. */
-  claimed: boolean;
-}
-
 @Injectable({ providedIn: 'root' })
 export class MediaPrefetchService implements OnDestroy {
-  /** url -> object URL, insertion-ordered so the oldest evicts first. */
-  private readonly ready = new Map<string, string>();
-  private readonly inFlight = new Map<string, InFlight>();
-  /** Handed out by the last {@link resolve}/{@link claim}; revoked when the
-   *  next one is handed out. */
-  private lastConsumed: string | null = null;
-  /** The urls {@link prefetch} was last asked for, in priority order. Fetched
-   *  one at a time, see {@link pump}. */
-  private targets: string[] = [];
-  /** {@link targets} plus the caller's `keep`: what eviction spares first. */
-  private wanted = new Set<string>();
+  /** url -> the controller of its fetch, while the fetch is in the air. */
+  private readonly inFlight = new Map<string, AbortController>();
+  /** Wanted urls whose fetch completed, so the cache holds them and
+   *  {@link pump} moves past them. */
+  private readonly warmed = new Set<string>();
   /** Wanted urls whose fetch failed, which {@link pump} does not try again
    *  until a retarget drops them (#5099). */
   private readonly failed = new Set<string>();
-
-  /** True when this environment can hold bytes for us (jsdom, by default,
-   *  cannot). Read once per call rather than cached, so a test that stubs
-   *  `createObjectURL` after construction still gets the real path. */
-  private get canStore(): boolean {
-    return typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
-  }
+  /** The urls {@link prefetch} was last asked for, in priority order. Fetched
+   *  one at a time, see {@link pump}. */
+  private targets: string[] = [];
 
   /**
    * Make `targets` the set of images being warmed, in priority order (the item
    * the next vote lands on first), and forget everything else except `keep`.
    *
    * This is what a review flow calls whenever its *prediction* of the next
-   * items changes — a new selection, but equally a learned re-sort landing, a
+   * items changes: a new selection, but equally a learned re-sort landing, a
    * vote reconciling, or the select mode or cut moving while the same item
-   * stays on screen. A stale prediction's *fetch* is aborted rather than left
-   * to finish, because on an ~11 Mbps tunnel it would otherwise compete for
-   * bandwidth with the image the reviewer is about to need. Its *held* bytes
-   * are kept, first in line for eviction ({@link PREFETCH_CAPACITY}): they cost
-   * nothing more, and a re-ranking often wants them back.
+   * stays on screen. A stale prediction's fetch is aborted rather than left to
+   * finish, because on an ~11 Mbps tunnel it would otherwise compete for
+   * bandwidth with the image the reviewer is about to need. An image whose
+   * fetch already completed stays in the HTTP cache, so a re-ranking that wants
+   * it back costs a cache read, not a download.
    *
-   * `keep` is the item on screen. Its bytes may still be held or in flight when
-   * this runs — the selection effect that calls this and the viewer's effect
-   * that consumes them run in the same flush, in either order — and dropping
-   * them there would turn a hit into a fresh download.
+   * `keep` is the item on screen. Its fetch may still be in the air, with the
+   * viewer's `<img>` riding on it (the selection effect that calls this and the
+   * viewer's effect that sets the `<img>` run in the same flush, in either
+   * order), and aborting it there would turn a hit into a fresh download.
    *
    * Targets are fetched **one at a time**, in order. Two parallel fetches split
    * the link, so N+1 would land later than it does alone, and N+1 is the one a
@@ -119,135 +84,66 @@ export class MediaPrefetchService implements OnDestroy {
    */
   prefetch(targets: readonly string[], keep: readonly string[] = []): void {
     const wanted = new Set<string>([...targets, ...keep].filter(Boolean));
-    for (const [url, entry] of this.inFlight) {
-      if (wanted.has(url) || entry.claimed) continue;
-      entry.controller.abort();
+    for (const [url, controller] of this.inFlight) {
+      if (wanted.has(url)) continue;
+      controller.abort();
       this.inFlight.delete(url);
     }
-    this.wanted = wanted;
     this.targets = targets.filter(Boolean);
+    for (const url of this.warmed) if (!wanted.has(url)) this.warmed.delete(url);
     for (const url of this.failed) if (!wanted.has(url)) this.failed.delete(url);
-    this.evict();
     this.pump();
   }
 
   /**
-   * Start fetching `url` if it is not already held or in flight.
+   * Fetch `url` into the HTTP cache, unless it is already warm or in flight.
    *
    * Fire-and-forget by design: nothing awaits this, and a failure is silent.
-   * The caller's next {@link resolve} simply falls back to the network URL,
-   * which is exactly the behaviour that existed before this service. Review
-   * flows go through {@link prefetch}, which also orders and retires targets;
-   * this is the unordered primitive underneath it.
+   * The viewer requests the image itself either way, and the cache answers it
+   * when this got there first. Review flows go through {@link prefetch}, which
+   * also orders and retires targets; this is the unordered primitive under it.
    */
   warm(url: string): void {
-    if (!url || !this.canStore) return;
-    if (this.ready.has(url) || this.inFlight.has(url)) return;
+    if (!url || typeof fetch !== 'function') return;
+    if (this.warmed.has(url) || this.inFlight.has(url)) return;
     this.failed.delete(url);
     const controller = new AbortController();
-    const entry: InFlight = { controller, claimed: false, done: Promise.resolve(null) };
-    this.inFlight.set(url, entry);
-    entry.done = fetch(url, { signal: controller.signal, credentials: 'same-origin' })
-      .then((response) => (response.ok ? response.blob() : null))
-      .then((blob) => {
-        // `clear()` or a retarget may have run while the bytes were in the air;
-        // its abort does not reliably beat a resolved fetch. Leave that case
-        // entirely alone: the entry in the map (if any) is somebody else's, and
-        // forgetting it would strand their fetch.
-        if (this.inFlight.get(url) !== entry) return null;
-        // Ours, so retire it whatever the outcome. Forgetting to do so on the
-        // failure path leaves the url permanently "in flight" and silently
-        // unprefetchable for the rest of the session.
+    this.inFlight.set(url, controller);
+    let response: Promise<Response>;
+    try {
+      // `same-origin` credentials, like the `<img>`'s own request, so the two
+      // share one cache entry.
+      response = fetch(url, { signal: controller.signal, credentials: 'same-origin' });
+    } catch (err) {
+      response = Promise.reject(err);
+    }
+    void response
+      // Read the body to the end: a response nobody reads is not cached whole.
+      .then((r) => (r.ok ? r.blob().then(() => true) : false))
+      .catch(() => false)
+      .then((ok) => {
+        // A retarget or `clear()` retired this fetch while it was in the air.
+        // Its abort does not reliably beat a resolved fetch, so leave that case
+        // alone: the entry under `url`, if any, is somebody else's.
+        if (this.inFlight.get(url) !== controller) return;
         this.inFlight.delete(url);
-        if (!blob) {
+        if (!ok) {
           this.failed.add(url);
-          return null;
+          return;
         }
-        const objectUrl = URL.createObjectURL(blob);
-        if (entry.claimed) return objectUrl;
-        this.ready.set(url, objectUrl);
-        this.predecode(objectUrl);
-        this.evict();
-        return objectUrl;
-      })
-      .catch(() => {
-        // Ours still, so not an abort from a retarget or a clear: a failure.
-        if (this.inFlight.get(url) === entry) {
-          this.inFlight.delete(url);
-          this.failed.add(url);
-        }
-        return null;
+        this.warmed.add(url);
+        this.predecode(url);
       })
       .finally(() => this.pump());
   }
 
-  /**
-   * The source an `<img>` should use for `url`: the warmed object URL when one
-   * is held, otherwise `url` itself.
-   */
-  resolve(url: string): string {
-    const held = this.ready.get(url);
-    if (held === undefined) return url;
-    this.ready.delete(url);
-    this.handOut(held);
-    return held;
-  }
-
-  /**
-   * When `url` is still being prefetched, take over that fetch: the returned
-   * promise resolves to its object URL (handed out exactly as {@link resolve}
-   * would), or to `null` if it fails or is cleared, in which case the caller
-   * should fall back to the network URL. Returns `null` when nothing is in
-   * flight for `url`.
-   *
-   * This is the fast-voter case: the vote lands before the next image's bytes
-   * do. Starting a second download of the same image then would throw away
-   * everything already transferred and split the link with the first one
-   * until it finished.
-   */
-  claim(url: string): Promise<string | null> | null {
-    const entry = this.inFlight.get(url);
-    if (!entry) return null;
-    entry.claimed = true;
-    return entry.done.then((objectUrl) => {
-      if (!objectUrl) return null;
-      if (!entry.claimed) {
-        // Released while in flight. If the bytes landed after the release they
-        // went to `ready` like any warm; if they landed before it, nobody holds
-        // them any more.
-        if (![...this.ready.values()].includes(objectUrl)) this.revoke(objectUrl);
-        return null;
-      }
-      // Claimed bytes bypass `ready`, so hand them out here.
-      this.handOut(objectUrl);
-      return objectUrl;
-    });
-  }
-
-  /**
-   * Give up a {@link claim}: the viewer moved on before the bytes landed. The
-   * fetch becomes an ordinary target again, so the next {@link prefetch} keeps
-   * it only if it is still wanted.
-   */
-  release(url: string): void {
-    const entry = this.inFlight.get(url);
-    if (entry) entry.claimed = false;
-  }
-
-  /** Drop everything: in-flight fetches, warmed bytes, and the object URL the
-   *  caller was last handed. For teardown. */
+  /** Forget everything and abort every fetch in flight. For teardown. */
   clear(): void {
     this.targets = [];
-    this.wanted = new Set();
+    this.warmed.clear();
     this.failed.clear();
-    for (const entry of this.inFlight.values()) {
-      entry.claimed = false;
-      entry.controller.abort();
-    }
+    for (const controller of this.inFlight.values()) controller.abort();
     this.inFlight.clear();
-    for (const objectUrl of this.ready.values()) this.revoke(objectUrl);
-    this.ready.clear();
-    this.revokeLastConsumed();
   }
 
   ngOnDestroy(): void {
@@ -255,78 +151,42 @@ export class MediaPrefetchService implements OnDestroy {
   }
 
   /**
-   * Start the first wanted target that is neither held nor in flight, if
-   * nothing is in flight. One fetch at a time; see {@link prefetch}.
+   * Start the first target that is neither warm nor failed, if nothing is in
+   * flight. One fetch at a time; see {@link prefetch}.
    *
    * A target whose fetch failed is skipped while it stays wanted (#5099).
-   * Picking it again, as this did, refetched a url that 404s or errors back
-   * to back for as long as the prediction held it: a request storm in the
-   * browser, and under jsdom, where the fetch rejects at once, a microtask
-   * loop that starved every timer. The viewer still fetches it itself when it
-   * comes on screen.
+   * Picking it again refetched a url that 404s or errors back to back for as
+   * long as the prediction held it: a request storm in the browser, and under
+   * jsdom, where the fetch rejects at once, a microtask loop that starved every
+   * timer. The viewer still fetches it itself when it comes on screen.
    */
   private pump(): void {
     if (this.inFlight.size > 0) return;
-    const next = this.targets.find((url) => !this.ready.has(url) && !this.failed.has(url));
+    const next = this.targets.find((url) => !this.warmed.has(url) && !this.failed.has(url));
     if (next) this.warm(next);
   }
 
-  private handOut(objectUrl: string): void {
-    this.revokeLastConsumed();
-    this.lastConsumed = objectUrl;
-  }
-
-  /** Trim {@link ready} to {@link PREFETCH_CAPACITY}, oldest first, sparing
-   *  what the last {@link prefetch} wanted for as long as anything else can go. */
-  private evict(): void {
-    while (this.ready.size > PREFETCH_CAPACITY) {
-      let victim: string | undefined;
-      for (const url of this.ready.keys()) {
-        if (!this.wanted.has(url)) {
-          victim = url;
-          break;
-        }
-      }
-      victim ??= this.ready.keys().next().value;
-      if (victim === undefined) return;
-      const objectUrl = this.ready.get(victim);
-      this.ready.delete(victim);
-      if (objectUrl) this.revoke(objectUrl);
-    }
-  }
-
-  private revokeLastConsumed(): void {
-    if (this.lastConsumed) this.revoke(this.lastConsumed);
-    this.lastConsumed = null;
-  }
-
   /**
-   * Ask the browser to decode the bytes now rather than when the `<img>`
+   * Ask the browser to decode the image now rather than when the `<img>`
    * mounts.
    *
-   * Best effort, and honestly so: the issue's traces put several hundred ms of
-   * the felt pause after the bytes could have arrived — decode, layout, paint —
-   * and this is the half of that we can move off the critical path. Whether the
-   * decoded frame is actually reused when a *different* element later points at
-   * the same object URL is a browser-internals question this has not measured;
-   * it costs one detached image per warmed entry either way, which is why the
-   * store stays small. A failure (a decode-less environment, an undecodable
-   * payload) is ignored: the bytes are still warm, which was the main prize.
+   * Best effort. The traces in #3896 put several hundred ms of the felt pause
+   * after the bytes could have arrived (decode, layout, paint), and this is the
+   * part of that which can move off the critical path. The image is loaded by
+   * the same URL the viewer's `<img>` uses, so it is answered from the cache
+   * the warm just filled; whether the browser then reuses the decoded frame for
+   * the `<img>` is a browser-internals question this has not measured. A
+   * failure (an environment with no decode, an undecodable payload) is
+   * ignored: the bytes are still in the cache, which was the main prize.
    */
-  private predecode(objectUrl: string): void {
+  private predecode(url: string): void {
     if (typeof Image !== 'function') return;
     try {
       const img = new Image();
-      img.src = objectUrl;
+      img.src = url;
       void img.decode?.().catch(() => undefined);
     } catch {
       // ignored, see above
-    }
-  }
-
-  private revoke(objectUrl: string): void {
-    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(objectUrl);
     }
   }
 }

@@ -1,8 +1,9 @@
 """Shaping a media item into an HTTP response.
 
 Two halves of the same job: the image endpoints that stream a media's pixels
-back as a cacheable thumbnail, and the JSON filter that decides which keys of
-a media dict are safe to serialize into a response body at all.
+back as a cacheable picture (full size or thumbnail), and the JSON filter that
+decides which keys of a media dict are safe to serialize into a response body
+at all.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from vtscore.utils.hashing import content_md5, new_md5
 from vtscore.datasets.labelset import hit_custom_metadata
 
 
-def _sniff_image_mimetype(data: bytes) -> str:
+def sniff_image_mimetype(data: bytes) -> str:
     """Best-effort image mimetype from magic bytes (PNG vs JPEG).
 
     Precomputed thumbnails are always either PNG (alpha / waveform / video
@@ -28,16 +29,23 @@ def _sniff_image_mimetype(data: bytes) -> str:
     return "image/jpeg"
 
 
-def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
-    """Serve already-final thumbnail bytes with an ``ETag`` and cache headers.
+def cached_image_response(image_bytes: bytes, download_name: str, mimetype: str | None = None):
+    """Serve already-final image bytes with an ``ETag`` and cache headers.
 
     Unlike :func:`image_thumbnail_response`, this does **no** decode/resize:
-    the bytes are a thumbnail that was precomputed at ingest (the media dict's
-    ``thumbnail_bytes``), so the request path just streams them.  The ``ETag``
-    fingerprints the thumbnail bytes so the browser reuses one tile per item
-    across scrolls and zoom levels, short-circuiting to a 304.
+    the bytes are served exactly as given -- a thumbnail precomputed at ingest
+    (the media dict's ``thumbnail_bytes``), or the full-size display image of
+    ``/api/medias/<id>/image``.  The ``ETag`` fingerprints those bytes, so the
+    browser reuses one picture per item across scrolls, zoom levels and review
+    advances, and a conditional request short-circuits to a 304.  ``mimetype``
+    defaults to a PNG/JPEG sniff of the bytes.
+
+    ``max-age`` is safe because nothing rewrites a loaded media's bytes under
+    the same URL: cropping and cleaning happen at import, and a re-import is a
+    new dataset id, which every media URL carries.  ``?variant=original`` is a
+    different URL, so it is a different cache entry.
     """
-    etag = content_md5(thumb_bytes)
+    etag = content_md5(image_bytes)
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
@@ -45,7 +53,11 @@ def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
         return resp
 
     resp = make_response(
-        send_file(io.BytesIO(thumb_bytes), mimetype=_sniff_image_mimetype(thumb_bytes), download_name=download_name)
+        send_file(
+            io.BytesIO(image_bytes),
+            mimetype=mimetype or sniff_image_mimetype(image_bytes),
+            download_name=download_name,
+        )
     )
     resp.set_etag(etag)
     resp.headers["Cache-Control"] = "private, max-age=86400"

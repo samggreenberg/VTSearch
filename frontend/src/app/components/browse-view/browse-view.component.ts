@@ -1,6 +1,7 @@
 import { HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ReplaySubject } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PEOPLE_MEDIA_TYPE } from '../../utils/people';
@@ -8,6 +9,7 @@ import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
   HexHoverEvent,
+  type ThumbProgress,
 } from '../browse-canvas/browse-canvas.component';
 import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
@@ -24,7 +26,6 @@ import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-u
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { PairRecoveryService } from '../../services/pair-recovery.service';
-import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
@@ -95,7 +96,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private tileCache = inject(TileCacheService);
   private activeContext = inject(ActiveContextService);
   private pairRecovery = inject(PairRecoveryService);
-  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private settingsState = inject(SettingsStateService);
   private route = inject(ActivatedRoute);
@@ -126,7 +126,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly meta = signal<ProjectionMeta | null>(null);
   /** The meta's built layout, which the canvas and minimap draw; null until one is ready. */
   readonly layout = computed(() => readyLayout(this.meta()));
-  // Written from raw/async callbacks (dataset-status subscribe, projection
+  // Written from raw/async callbacks (the projection meta subscribe, the
   // build poller, settings effect), so a signal so those writes repaint the
   // canvas/minimap inputs and the info row under zoneless.
   readonly mediaType = signal('');
@@ -159,6 +159,30 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * in-place refresh of an already-ready canvas leaves it untouched.
    */
   readonly revealed = signal(false);
+  /**
+   * Thumbnails on screen that have landed, out of how many are on screen, as
+   * the canvas last reported them (#5636). The map is uncovered before its
+   * thumbnails arrive, painting each bin flat grey until its image lands; this
+   * drives the bar that says how many are still coming.
+   */
+  readonly thumbProgress = signal<ThumbProgress>({ loaded: 0, total: 0 });
+  /** Whether some thumbnail on screen is still loading. */
+  readonly thumbsLoading = computed(() => {
+    const { loaded, total } = this.thumbProgress();
+    return loaded < total;
+  });
+  /**
+   * Whether the thumbnail bar is up. It follows {@link thumbsLoading}, but
+   * comes up only once loading has run for {@link THUMB_BAR_DELAY_MS}, so a pan
+   * whose few new thumbnails land at once never flashes it; it goes down the
+   * moment the last one lands.
+   */
+  readonly thumbBarShown = signal(false);
+  /** Whether the canvas's opening load is over; until then the minimap holds
+   *  its tile fetch (see {@link BrowseCanvasComponent.openingViewSettled}). */
+  readonly openingViewSettled = signal(false);
+  private static readonly THUMB_BAR_DELAY_MS = 300;
+  private thumbBarTimer: ReturnType<typeof setTimeout> | null = null;
   readonly errorMessage = signal('');
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
@@ -554,18 +578,33 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private poll: PollHandle | null = null;
 
   /**
-   * Gate for the *first* projection load. Held until the per-media display
-   * prefs (cell size, colormap) are known, which needs two async facts: the
-   * saved settings and the dataset's media type (those prefs are keyed
-   * per-media). Loading sooner would fit the canvas at the default ``M`` cell
-   * size and then re-frame once the saved size arrives — a visible jump. We'd
-   * rather hold on the loading spinner until the prefs are in. Once true, later
-   * reloads (pair change) go through the normal paths.
+   * Gate for applying the *first* projection meta. Held until the per-media
+   * display prefs (cell size, colormap) are known, which needs two async facts:
+   * the saved settings and the dataset's media type (those prefs are keyed
+   * per-media). Mounting the canvas sooner would fit it at the default ``M``
+   * cell size and then re-frame once the saved size arrives — a visible jump.
+   * We'd rather hold on the loading spinner until the prefs are in. Once true,
+   * later reloads (pair change) go through the normal paths.
+   *
+   * The gate holds the *fit*, not the request (#5649): the meta is asked for
+   * as soon as the view starts ({@link firstMeta}), in parallel with the
+   * settings, and the media type comes with it — a meta that has a map to show
+   * names its media type, and only a map that is shown needs one. So the wait
+   * before the canvas mounts is the slower of the two requests, not their sum
+   * plus a dataset-status round trip.
    */
   private initialLoadStarted = false;
-  /** Set once the dataset-status fetch — which yields the media type the
-   *  per-media display prefs are keyed on — has resolved or failed. */
-  private statusResolved = false;
+  /** Set once {@link startLoad} has run: the subset ids (if any) are in hand
+   *  and {@link firstMeta} is out, so the gate may open. */
+  private loadStarted = false;
+  /**
+   * The first projection meta, requested by {@link startLoad} ahead of the
+   * gate and replayed to the gated first {@link loadProjection}, which takes
+   * it instead of asking again. ``null`` once taken, and dropped (so the gated
+   * load asks afresh) when the pair moves or the dataset is reloaded before
+   * the gate opens: an answer about the old backend state must not be applied.
+   */
+  private firstMeta: ReplaySubject<ProjectionMeta> | null = null;
 
   constructor() {
     effect(() => {
@@ -603,6 +642,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       }
       if (settings || settingsErrored) this.maybeStartInitialLoad();
     });
+    effect(() => {
+      const loading = this.thumbsLoading();
+      untracked(() => this.syncThumbBar(loading));
+    });
     // Any first selection retires the select hint: a tile clicked or boxed on
     // the canvas, select-all, or an item picked in the bin details.
     effect(() => {
@@ -611,20 +654,52 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Raise the thumbnail bar after a beat of loading, drop it when done. */
+  private syncThumbBar(loading: boolean): void {
+    if (!loading) {
+      this.clearThumbBarTimer();
+      this.thumbBarShown.set(false);
+      return;
+    }
+    if (this.thumbBarShown() || this.thumbBarTimer !== null) return;
+    this.thumbBarTimer = setTimeout(() => {
+      this.thumbBarTimer = null;
+      if (this.thumbsLoading()) this.thumbBarShown.set(true);
+    }, BrowseViewComponent.THUMB_BAR_DELAY_MS);
+  }
+
+  private clearThumbBarTimer(): void {
+    if (this.thumbBarTimer === null) return;
+    clearTimeout(this.thumbBarTimer);
+    this.thumbBarTimer = null;
+  }
+
+  /** The canvas's opening load is over: let the minimap fetch its tiles. */
+  onOpeningViewSettled(): void {
+    this.openingViewSettled.set(true);
+  }
+
+  /** The canvas re-tallied the thumbnails on screen. */
+  onThumbProgress(progress: ThumbProgress): void {
+    this.thumbProgress.set(progress);
+  }
+
   /** The user moved the map (see {@link BrowseCanvasComponent.navigated}). */
   onNavigated(): void {
     this.hints.markUsed('browse-pan-zoom');
   }
 
   /**
-   * Start the first projection load once — but only when the per-media display
-   * prefs are known: the saved settings must be in (or their load have failed)
-   * AND the dataset's media type resolved. See {@link initialLoadStarted}.
+   * Start the first projection load once — but only when the saved settings
+   * are in (or their load has failed), so the per-media display prefs are
+   * applied before the canvas fits. The media type they are keyed on arrives
+   * with the meta itself, which this load takes from {@link firstMeta}: it has
+   * been in flight since {@link startLoad}. See {@link initialLoadStarted}.
    */
   private maybeStartInitialLoad(): void {
-    if (this.initialLoadStarted) return;
+    if (this.initialLoadStarted || !this.loadStarted) return;
     const settingsIn = this.lastSettings != null || this.settingsState.error() != null;
-    if (!settingsIn || !this.statusResolved) return;
+    if (!settingsIn) return;
     this.initialLoadStarted = true;
     this.loadProjection();
   }
@@ -706,29 +781,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private startLoad(): void {
     this.tileCache.setSubset(this.subset);
 
-    this.datasetsRegistryApi
-      .getStatus()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (status) => {
-          this.mediaType.set(status.media_type || '');
-          this.applyBrowsePrefsForMediaType();
-          this.statusResolved = true;
-          this.maybeStartInitialLoad();
-        },
-        error: () => {
-          // Couldn't read the dataset status (media type unknown). Proceed with
-          // the default lattice rather than hang on the loading spinner.
-          this.statusResolved = true;
-          this.maybeStartInitialLoad();
-        },
-      });
-
     // The full-dataset projection re-resolves when the active pair changes via
     // the top bar. A subset projection is tied to the ids that produced it, so
     // ignore pair changes in subset mode. The first (replayed) emission lands
-    // before settings/status are in, so it routes through the gated initial
-    // load; genuine later changes reload directly.
+    // synchronously, before the first meta is even asked for below, so it
+    // routes through the gated initial load as a no-op; genuine later changes
+    // reload directly (or, before the gate opens, drop the stale first meta).
     if (!this.subset) {
       this.activeContext.pair$
         .pipe(takeUntilDestroyed(this.destroyRef))
@@ -743,6 +801,36 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.pairRecovery.reloaded$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.reloadProjection());
+
+    // Ask for the first meta now, beside the settings the gate waits for,
+    // rather than once they are in (#5649).
+    this.firstMeta = this.requestFirstMeta();
+    this.loadStarted = true;
+    this.maybeStartInitialLoad();
+  }
+
+  /**
+   * Send the first meta request and keep its answer for the gated first load.
+   * Its region labels need nothing the gate waits for, so they are asked for
+   * the moment the meta names its projection, while the gate may still be
+   * holding the canvas.
+   */
+  private requestFirstMeta(): ReplaySubject<ProjectionMeta> {
+    const first = new ReplaySubject<ProjectionMeta>(1);
+    this.projectionApi
+      .getMeta(this.subset)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (meta) => {
+          // Taken already: the first load applies it, labels and all. Dropped:
+          // it describes a pair or a backend state the view has moved past.
+          if (this.firstMeta === first && (meta.point_count ?? 0) > 0) this.syncLabels(meta);
+          first.next(meta);
+        },
+        error: (err) => first.error(err),
+        complete: () => first.complete(),
+      });
+    return first;
   }
 
   /** Re-resolve the projection from scratch, or start the gated first load if
@@ -751,6 +839,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.initialLoadStarted) {
       this.loadProjection();
     } else {
+      // The first meta was asked of the backend state this reload replaces.
+      this.firstMeta = null;
       this.maybeStartInitialLoad();
     }
   }
@@ -760,6 +850,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // to reopen over the next one.
     this.sourcePhoto.close();
     this.stopPoll();
+    this.clearThumbBarTimer();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
@@ -879,10 +970,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /**
    * Re-resolve the per-media browser preferences (colormap, icon size) for the
    * active media type from the last settings snapshot. Called when settings
-   * arrive and again once the media type is known (it lands after the initial
-   * settings push), so a saved-per-type choice is applied even though the two
-   * facts arrive out of order. (The bin shape is not a preference — it is fixed
-   * by media type and reported by the projection meta.)
+   * arrive and again once the media type is known (the projection meta names
+   * it), so a saved-per-type choice is applied whichever of the two lands
+   * first. (The bin shape is not a preference — it is fixed by media type and
+   * reported by the projection meta.)
    */
   private applyBrowsePrefsForMediaType(): void {
     // Gate on the sticky snapshot rather than the live settings signal: a
@@ -1165,6 +1256,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * older server) clear the signs instead of fetching a guaranteed-empty list.
    * A failure just leaves the map unsigned — the signs are optional decoration,
    * never worth an error state.
+   *
+   * Called for the first meta as soon as it lands, before the settings gate
+   * has applied it (see {@link requestFirstMeta}), so the stale-answer check
+   * reads {@link labelsFetchedFor} rather than the applied {@link meta}.
    */
   private syncLabels(meta: ProjectionMeta): void {
     if (!meta.projection_id || meta.point_count === 0) return;
@@ -1178,7 +1273,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (resp) => {
           // Guard against a stale response landing after the projection moved on.
-          if (resp.projection_id && resp.projection_id !== this.meta()?.projection_id) return;
+          if (resp.projection_id && resp.projection_id !== this.labelsFetchedFor) return;
           this.labels.set(resp.labels ?? []);
         },
         error: () => {
@@ -1675,20 +1770,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * (the existing canvas won't re-emit the one-shot signal).
    */
   private enterReady(): void {
-    if (this.status() !== 'ready') this.revealed.set(false);
+    if (this.status() !== 'ready') {
+      this.revealed.set(false);
+      // A fresh canvas starts its own count and its own opening load; the last
+      // one's must not linger.
+      this.thumbProgress.set({ loaded: 0, total: 0 });
+      this.openingViewSettled.set(false);
+    }
     this.status.set('ready');
   }
 
-  /** The canvas finished painting its opening view (fit + top-view thumbnails);
-   *  uncover it. */
+  /** The canvas finished painting its opening view (the fit and the bins
+   *  under it; thumbnails follow); uncover it. */
   onCanvasFirstView(): void {
     this.revealed.set(true);
-  }
-
-  /** Message on the pre-reveal cover: names thumbnails for media that paint
-   *  them (the case this cover exists for), the projection otherwise. */
-  get preloadMessage(): string {
-    return this.mediaTypeCaps.usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
   /** Enter the building state with a cleared bar (a fresh build starts at 0). */
@@ -1712,8 +1807,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private loadProjection(): void {
     this.status.set('loading');
     this.stopPoll();
-    this.projectionApi
-      .getMeta(this.subset)
+    // The first load takes the meta already in flight (see firstMeta); every
+    // later one asks again.
+    const meta$ = this.firstMeta ?? this.projectionApi.getMeta(this.subset);
+    this.firstMeta = null;
+    meta$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => this.applyMeta(meta),

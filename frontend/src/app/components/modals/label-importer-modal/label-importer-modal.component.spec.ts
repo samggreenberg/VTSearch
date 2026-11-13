@@ -317,4 +317,22 @@ describe('LabelImporterModalComponent', () => {
     expect(component.error()).toBe('Could not resolve the missing elements: origin unreachable');
     component.close();
   });
+
+  // #5661: an `rxResource`'s `value()` throws once its read fails, and the
+  // importer list read it straight through. So a failed list read threw from the
+  // template, and the "Failed to load" message beside the list never rendered.
+  it('shows "Failed to load label importers" when the list read fails', async () => {
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/label-importers')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await settleZoneless(fixture);
+
+    expect(component.importers()).toEqual([]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.error-text')?.textContent).toContain('Failed to load label importers');
+    // An empty list says nothing about what exists when the read failed.
+    expect(el.textContent).not.toContain('No label importers available');
+    expect(el.querySelectorAll('.picker-card').length).toBe(0);
+  });
 });

@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
-import { KeyValuePipe, TitleCasePipe } from '@angular/common';
+import { KeyValuePipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService, NavDirection } from '../../services/keyboard.service';
@@ -10,12 +11,20 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { ActiveDatasetService } from '../../services/active-dataset.service';
-import { SourcePhotoService } from '../../services/source-photo.service';
+import { ActiveDetectorService } from '../../services/active-detector.service';
+import { SourcePhotoService, WiderView, widerView } from '../../services/source-photo.service';
+import { FaceReferenceService } from '../../services/face-reference.service';
+import { FaceEvenOutService, MeasureRequest, measureKey } from '../../services/face-even-out.service';
+import { ActiveContextService } from '../../services/active-context.service';
+import { ToneMap, greyPair, toneMap } from './face-even-out/even-out';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
+import { ViewLink } from './image-viewer/face-link';
 import { ImageViewControlsComponent } from './image-view-controls/image-view-controls.component';
+import { FaceChecklistComponent } from './face-checklist/face-checklist.component';
+import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
@@ -38,10 +47,13 @@ const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'i
   standalone: true,
   imports: [
     KeyValuePipe,
+    NgTemplateOutlet,
     TitleCasePipe,
     AudioPlayerComponent,
     ImageViewerComponent,
     ImageViewControlsComponent,
+    FaceReferenceComponent,
+    FaceChecklistComponent,
     VideoPlayerComponent,
     TextViewerComponent,
     DocumentViewerComponent,
@@ -63,7 +75,11 @@ export class CenterPanelComponent implements OnDestroy {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private activeDataset = inject(ActiveDatasetService);
+  private activeDetector = inject(ActiveDetectorService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private faceRefs = inject(FaceReferenceService);
+  private evenOut = inject(FaceEvenOutService);
+  private activeContext = inject(ActiveContextService);
   readonly sourcePhoto = inject(SourcePhotoService);
 
   readonly media = input<Media | null>(null);
@@ -150,6 +166,18 @@ export class CenterPanelComponent implements OnDestroy {
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
   readonly videoPlayer = viewChild(VideoPlayerComponent);
+  /** The compare layout's reference pane, while it is on screen. Its own
+   *  viewer lives in its template, so {@link imageViewer} stays the candidate's. */
+  readonly faceReference = viewChild(FaceReferenceComponent);
+  /**
+   * Ties the reference's viewer to the candidate's in the compare layout
+   * (#5647): the reference is sized and placed to match the candidate's face,
+   * and zooms and pans with it. The candidate leads, so its view is what the
+   * keys and its toolbar have always moved. Only while both faces have
+   * landmarks and are shown as crops; under Wider the photos are not levelled,
+   * so the points measured on the levelled crops do not land on them.
+   */
+  readonly faceLink = new ViewLink();
 
   // These fields are written from non-bound callbacks — the keyboard-shortcut
   // dispatch (`KeyboardService.action$`), HTTP/vote subscriptions, and timers —
@@ -161,6 +189,9 @@ export class CenterPanelComponent implements OnDestroy {
   readonly audioPlaying = signal(true);
   readonly showAnimations = signal(true);
   readonly showMetadata = signal(false);
+  /** The user's Compare choice (the `face_compare` setting): on until they
+   *  turn it off. Whether it shows is {@link compareOn}. */
+  readonly faceCompare = signal(true);
   readonly swipeClass = signal('');
   readonly spinningVote = signal<'good' | 'bad' | null>(null);
 
@@ -233,6 +264,75 @@ export class CenterPanelComponent implements OnDestroy {
     return kind !== 'none' && kind !== 'error';
   });
 
+  /**
+   * Offer the compare layout's Wider toggle (#5645): the layout is on and the
+   * Image dataset with the photos is loaded. A lookup answering 409 overrules
+   * a registry that has not heard of an unload yet. Not per face: a face whose
+   * own photo cannot be found keeps the toggle and stays on its crop.
+   */
+  readonly widerOffered = computed(
+    () => this.compareOn && this.sourcePhoto.photosLoaded() && this.sourceLookup.value()?.kind !== 'not-loaded',
+  );
+
+  /** The user's Wider choice, which holds for the page's lifetime. */
+  readonly wider = this.faceRefs.wider;
+
+  /** Both faces are shown from their photos: offered, and turned on. */
+  readonly widerOn = computed(() => this.widerOffered() && this.wider());
+
+  /**
+   * What the candidate's viewer shows (see {@link WiderView}): the crop, or
+   * under Wider its photo framed wide on it, out of the same lookup Show in
+   * photo asks.
+   */
+  readonly candidateView = computed<WiderView>(() => {
+    if (!this.widerOn()) return { kind: 'crop' };
+    return widerView(this.sourceLookup.value(), this.sourceLookup.isLoading(), this.media()?.filename);
+  });
+
+  /**
+   * The candidate's crop to measure for evening out (#5674, #5675), while the
+   * compare layout is on: its own picture, in the payload on screen, whatever
+   * Wider shows, since the map is global. Its landmarks were measured on the
+   * clean crop, so the original payload is measured without them.
+   */
+  private readonly candidateMeasureRequest = computed<MeasureRequest | undefined>(
+    () => {
+      const media = this.media();
+      if (!media || !this.compareOn || this.viewer !== 'image') return undefined;
+      // Media ids, and so the URL's meaning, are per dataset.
+      this.activeDataset.activeId();
+      const variant = this.payloadVariant();
+      return {
+        src: this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant }),
+        landmarks: variant === '' ? media.face_landmarks : null,
+      };
+    },
+    { equal: (a, b) => (a && b ? measureKey(a) === measureKey(b) : a === b) },
+  );
+
+  private readonly candidateMeasure = toSignal(
+    toObservable(this.candidateMeasureRequest).pipe(switchMap((request) => this.evenOut.measured(request))),
+    { initialValue: null },
+  );
+
+  /** The panes are evened out: the compare layout is on, and the originals key is not held. */
+  readonly evenOutShown = computed(() => this.compareOn && !this.evenOut.showOriginals());
+
+  /** Both panes in greyscale (#5674): the pair rule, over both faces' pictures. */
+  readonly paneGreyscale = computed(() => {
+    if (!this.evenOutShown()) return false;
+    const candidate = this.candidateMeasure()?.grey ?? null;
+    const reference = this.faceReference()?.measure()?.grey ?? null;
+    return greyPair(candidate, reference, this.evenOut.choices());
+  });
+
+  /** The candidate's exposure, contrast and white-balance map (#5675), or null for none. */
+  readonly candidateToneMap = computed<ToneMap | null>(() => {
+    const measure = this.candidateMeasure();
+    return this.evenOutShown() && measure ? toneMap(measure, this.evenOut.choices()) : null;
+  });
+
   constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -241,6 +341,7 @@ export class CenterPanelComponent implements OnDestroy {
       this.audioPlaying.set(settings.audio_playing !== false);
       this.showAnimations.set(settings.show_animations !== 'hide');
       this.showMetadata.set(settings.show_metadata === true);
+      this.faceCompare.set(settings.face_compare !== false);
     });
 
     // Reset per-item transient state on every media change (including same-id
@@ -286,6 +387,7 @@ export class CenterPanelComponent implements OnDestroy {
     this.sourcePhoto.close();
     this.stopPlayback();
     this.keyboard.stop();
+    this.evenOut.showOriginals.set(false);
     if (this.spinTimer) clearTimeout(this.spinTimer);
     if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
@@ -352,6 +454,12 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'reference':
+          this.faceReference()?.next();
+          break;
+        case 'originals':
+          this.evenOut.showOriginals.set(action.held === true);
+          break;
         case 'navigate':
           // Navigation moves the selection, never the labels, so an exhausted
           // queue is no reason to block it — walking back to a voted item is
@@ -417,6 +525,29 @@ export class CenterPanelComponent implements OnDestroy {
     const type = this.mediaType;
     if (OWN_VIEWER_TYPES.has(type)) return type as CenterViewer;
     return this.mediaTypeCaps.usesThumbnails(type) ? 'image' : 'document';
+  }
+
+  /**
+   * Whether the Face compare layout (#5642) is offered on the focused item: a
+   * face, with a detector active to say who is being looked for. Only then is
+   * there a reference to put beside it, so only then does the toggle show.
+   */
+  get compareOffered(): boolean {
+    return this.mediaType === 'face' && this.viewer === 'image' && !!this.activeDetector.activeId();
+  }
+
+  /** The reference pane is on screen: offered, and not turned off. */
+  get compareOn(): boolean {
+    return this.compareOffered && this.faceCompare();
+  }
+
+  toggleFaceCompare(): void {
+    this.faceCompare.set(!this.faceCompare());
+    this.settingsState.update({ face_compare: this.faceCompare() }).subscribe();
+  }
+
+  toggleWider(): void {
+    this.faceRefs.toggleWider();
   }
 
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the
@@ -626,6 +757,8 @@ export class CenterPanelComponent implements OnDestroy {
    *  keeps its current behaviour. */
   onPanelMouseDown(event: MouseEvent): void {
     if (this.viewer !== 'image') return;
+    // The reference pane is another face's, not spare room around this one.
+    if ((event.target as Element | null)?.closest?.('vt-face-reference')) return;
     this.imageViewer()?.tryStartOffCanvasDraw(event);
   }
 

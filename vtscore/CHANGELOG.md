@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`image2face` keeps each face's five landmarks on its crop** (issue #5644). A converter output may now carry
+  the top-level `face_landmarks`: five `[x, y]` points (left eye, right eye, nose tip, left and right mouth
+  corners) as fractions of the output image as stored, named by the new
+  `vtscore.media.provenance.FACE_LANDMARKS_FIELD` (`N_FACE_LANDMARKS` is 5). `image2face` sets it on every crop
+  whose detection had usable landmarks, measured after the `align` turn by the new
+  `vtscore.converters.image2face.crop_landmarks(det, align)`, and leaves it off otherwise. A point is not clamped,
+  so one may lie outside `[0, 1]`. The folder and demo conversion path carries it, and
+  `export_dataset_to_file` / `load_dataset_from_pickle` persist it beside `source_box`. Read it through the new
+  `provenance.face_landmarks_of(media)`, which returns fresh float lists or `None` for a missing or malformed
+  value. Face datasets built before keep loading and lack the field until re-imported.
+
 - **`vtscore.media.face.face_ball.face_ball_path()` resolves beside the face pipeline config in use** (issue
   #5621): `FACE_BALL_NAME` (`face_ball.json`) in the directory of the new
   `vtscore.media.face.imagekit_bridge.config_path()`, which is the file `IMAGEKIT_FACE_CONFIG` names, else

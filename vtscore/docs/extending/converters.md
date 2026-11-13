@@ -104,6 +104,12 @@ Two optional keys every target type keeps:
   image you detected on, so a downsampled decode needs no rescaling.
   `image2face` sets it on every face crop. It persists with the dataset
   and renders as a **Source Box** row.
+- `"face_landmarks"` - a face crop's five landmarks (left eye, right eye,
+  nose tip, left and right mouth corners), as `[[x, y], ...]` fractions of
+  the output image as stored, so a crop you turned is measured after the
+  turn (`vtscore.media.provenance.FACE_LANDMARKS_FIELD`). `image2face` sets
+  it on every crop whose detection had landmarks. It persists with the
+  dataset and is served on `POST /api/medias/batch`; it renders no row.
 
 `convert()` does **not** populate `id`, `embeddings`, or `md5` - those
 are filled in by the caller. Don't compute embeddings inside

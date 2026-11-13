@@ -49,6 +49,7 @@ import {
 } from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { MAX_THUMBS, THUMB_NATIVE_MAX_DIM, ThumbStore } from './thumb-store';
+import { BrowseThumbsService, type ThumbHost } from '../../services/browse-thumbs.service';
 import {
   finerTilesForZoom,
   offViewRing,
@@ -81,6 +82,14 @@ export interface BrowseContextMenuEvent {
   /** The canvas's bounding rect (viewport coords); the popup clamps inside it
    *  so it never spills onto the side panel or past the canvas edges. */
   bounds: DOMRect;
+}
+
+/** The on-screen thumbnails' loading state: how many of the bins in view have
+ *  their representative thumbnail settled (painted, or failed back to flat
+ *  shading) out of how many bins are in view. */
+export interface ThumbProgress {
+  loaded: number;
+  total: number;
 }
 
 /** How much larger a hovered *flat-density* cell (text — no thumbnail) is
@@ -213,28 +222,45 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    */
   readonly densityMaxChanged = output<number>();
   /**
-   * Emitted once, after the opening view is fully painted with real content:
-   * the fit has run against the real canvas size, every density tile under the
-   * viewport is in, and — for image/video datasets — every on-screen
-   * representative thumbnail has decoded (or failed). The browse view keeps a
-   * cover over the canvas until this fires, so the user is shown the finished
-   * view rather than a thumbnail-less grey grid that then fills in. Fires
-   * exactly once per canvas instance (a later pan/zoom loads on demand as
-   * before). See {@link maybeReportFirstView}.
+   * Emitted once, after the opening view's *layout* is painted: the fit has run
+   * against the real canvas size and every bin tile under the viewport is in,
+   * so the map shows its real bins in their real places. Thumbnails are not
+   * waited for: until each lands its bin is painted as flat grey shading, and
+   * {@link thumbProgress} reports how many are still coming (#5636). The browse
+   * view keeps a cover over the canvas until this fires. Fires exactly once
+   * per canvas instance. See {@link maybeReportFirstView}.
    */
   readonly firstViewReady = output<void>();
+  /**
+   * How many of the representative thumbnails on screen have landed (painted,
+   * or failed and fallen back to flat shading) out of how many there are,
+   * emitted whenever either number changes. Only thumbnail media emit; the
+   * browse view shows a progress bar while ``loaded < total``.
+   */
+  readonly thumbProgress = output<ThumbProgress>();
+  /**
+   * Emitted once, when the opening load is over: the opening view is whole
+   * (its tiles in, every thumbnail on screen settled), the user moved the map,
+   * or the backstop ran out. Until then the canvas fetches only what is on
+   * screen, and the browse view holds the minimap's tile fetch back too, so
+   * nothing speculative queues ahead of the view. See
+   * {@link holdingForOpeningView}.
+   */
+  readonly openingViewSettled = output<void>();
 
   /**
    * Representative-thumbnail cache: the LRU of decoded images, the tinted
    * waveform masks, the resolution tier, and the retry backoff for failed
    * loads. See `thumb-store.ts`; the canvas only decides *which* ids to ask
-   * for, never how they are fetched or retained.
+   * for, never how they are fetched or retained. It outlives the canvas, so a
+   * revisit to the map paints at once (see {@link BrowseThumbsService}).
    */
-  private readonly thumbs = new ThumbStore({
-    mediaUrl: (path) => this.activeContext.mediaUrl(path),
+  private readonly thumbCache = inject(BrowseThumbsService);
+  private readonly thumbHost: ThumbHost = {
     onLoaded: () => this.requestRedraw(),
     accent: () => this.waveAccent,
-  });
+  };
+  private readonly thumbs = this.thumbCache.attach(this.thumbHost);
   /** Cap on new thumbnail fetches kicked off per idle preload pass, so a fast
    * pan can warm the just-revealed ring without flooding the network or filling
    * the thumbnail cache in a single burst. */
@@ -350,11 +376,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   // Guards {@link firstViewReady} so the opening-view signal fires exactly once
   // per canvas instance.
   private firstViewReported = false;
-  // Backstop so a representative thumbnail that never resolves (a hung request)
-  // can't strand the reveal cover: armed the first time we begin waiting on the
-  // opening view's thumbnails, it releases the view after this long regardless.
+  // Backstop so a bin tile that never resolves (a hung request) can't strand
+  // the reveal cover: armed the first time we begin waiting on the opening
+  // view's tiles, it releases the view after this long regardless.
   private firstViewTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly FIRST_VIEW_MAX_WAIT_MS = 12000;
+  // The last {@link thumbProgress} emitted, so a frame that changes nothing
+  // about it emits nothing. Starts out of range so the first frame reports.
+  private lastThumbProgress: ThumbProgress = { loaded: -1, total: -1 };
+  // Whether the opening view is still loading, holding the speculative
+  // prefetches back until it is whole. See {@link holdingForOpeningView}.
+  private openingLoad = true;
+  // Backstop so a thumbnail that never settles (a hung request) can't hold the
+  // prefetches back for good: armed on the first frame that holds them.
+  private openingLoadTimer: ReturnType<typeof setTimeout> | null = null;
   // Whether the user has taken over the framing (panned, zoomed, or resized a
   // thumbnail). Until then the view stays auto-fit: applying a saved cell size
   // (which changes the bin radius and thus how far edge bins reach) re-fits so
@@ -615,13 +650,15 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
       // pan/zoom and just re-bin visually; only a genuinely new projection
-      // re-frames to data and drops stale representative thumbnails.
+      // re-frames to data.
       if (meta.projection_id !== this.lastProjectionId) {
         this.lastProjectionId = meta.projection_id;
         // A brand-new projection opens auto-fit: clear the user-framed flag so a
         // saved cell size applied right after load re-fits to keep it all in view.
         this.framedByUser = false;
-        this.thumbs.clear();
+        // Thumbnails are per item, not per layout: a new layout of the same
+        // dataset paints the ones already cached. Another dataset drops them.
+        this.thumbCache.useDataset(this.activeContext.datasetId);
         // A new projection (media-type switch / rebuild) re-lays-out every item,
         // so the old selection no longer maps to what's on screen — drop it. A
         // bin-shape toggle keeps the same projection id and selection, since the
@@ -713,7 +750,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // snap-back / directional glide and hard-clamp straight to the bounds.
       this.cancelSettle();
       this.cancelPanAnim();
-      this.navigated.emit();
+      this.onUserNavigated();
       this.transform.centerX = x;
       this.transform.centerY = y;
       // A minimap click/drag can target a content edge; keep the viewport inside
@@ -776,6 +813,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
     }
     if (this.firstViewTimer !== null) clearTimeout(this.firstViewTimer);
+    if (this.openingLoadTimer !== null) clearTimeout(this.openingLoadTimer);
     // `ctx` is only assigned in ngAfterViewInit — the same place the canvas
     // listeners are attached — so it doubles as "the view query resolved" and
     // keeps a destroy-before-render from reading the required query.
@@ -790,7 +828,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     }
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    this.thumbs.clear();
+    this.thumbCache.detach(this.thumbHost);
   }
 
   private resize(): void {
@@ -1425,6 +1463,11 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const enlargedCell = this.pinnedCell ?? this.hoveredCell;
     const enlargedLevel = this.pinnedCell ? this.pinnedLevel : this.hoveredLevel;
     let hovered: { cell: HexCell; sx: number; sy: number } | null = null;
+    // Tally the thumbnails this frame paints, for the loading bar. Read after
+    // each cell is drawn, since drawing is what asks for its thumbnail.
+    const paintsThumbs = this.thumbnailMode;
+    let thumbsTotal = 0;
+    let thumbsLoaded = 0;
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
@@ -1434,6 +1477,10 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         continue;
       }
       this.drawHex(ctx, sx, sy, screenRadius, cell, cmap, selectionActive);
+      if (paintsThumbs) {
+        thumbsTotal++;
+        if (this.thumbs.settled(cell.rep_id)) thumbsLoaded++;
+      }
     }
     if (hovered) {
       this.drawHoveredHex(
@@ -1445,7 +1492,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         cmap,
         selectionActive,
       );
+      if (paintsThumbs) {
+        thumbsTotal++;
+        if (this.thumbs.settled(hovered.cell.rep_id)) thumbsLoaded++;
+      }
     }
+    if (paintsThumbs) this.reportThumbProgress(thumbsLoaded, thumbsTotal);
 
     // Region signposts letter the map above the bins (and the hover-enlarged
     // cell) but below the transient marquee, like place names on a map layer.
@@ -1457,7 +1509,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     this.viewport.setViewport(this.getVisibleBounds());
 
     this.updatePanDirection();
-    this.prefetchNeighbors(visibleTiles);
+    if (!this.holdingForOpeningView()) this.prefetchNeighbors(visibleTiles);
 
     // Record what's now on screen so a zoom transition can grow/shrink this
     // exact frame the next time a zoom crosses a level boundary.
@@ -1474,31 +1526,34 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Emit {@link firstViewReady} once the opening view is fully painted with real
-   * content. Called at the end of every {@link draw} until it fires. It holds
-   * until three facts are true: the fit ran against the *real* canvas size (the
-   * 800×600 fallback fit paints a framing {@link resize} immediately refits
-   * away), every tile under the viewport has loaded, and — for thumbnail media —
-   * every on-screen representative thumbnail has decoded or failed. Each pending
-   * tile / thumbnail lands with its own redraw, so a later draw re-runs this
-   * check until the view is whole; a one-shot timer, armed the first time we
-   * start waiting on thumbnails, releases the cover if an image hangs. Pure
-   * density media (text) paint no thumbnails, so it fires as soon as the
-   * visible tiles are in.
+   * Emit {@link firstViewReady} once the opening view's layout is painted.
+   * Called at the end of every {@link draw} until it fires. It holds until two
+   * facts are true: the fit ran against the *real* canvas size (the 800×600
+   * fallback fit paints a framing {@link resize} immediately refits away), and
+   * every tile under the viewport has loaded, so every bin is on screen in its
+   * place. Each pending tile lands with its own redraw, so a later draw re-runs
+   * this check; a one-shot timer, armed the first time we start waiting,
+   * releases the cover if a tile request hangs.
+   *
+   * It deliberately does not wait for thumbnails (#5636). A bin whose thumbnail
+   * has not landed paints as flat grey shading, which is a truthful picture of
+   * the map, and {@link thumbProgress} counts the rest in; holding a blank
+   * cover over the map until the last of a few hundred images arrived made the
+   * whole load look stalled.
    */
   private maybeReportFirstView(): void {
     if (this.firstViewReported) return;
     // Hold until the fit used the real canvas size: the fallback fit paints
-    // tiles/thumbnails for a framing the refit discards, so revealing then would
-    // flash the wrong view.
+    // tiles for a framing the refit discards, so revealing then would flash
+    // the wrong view.
     if (!this.fittedAgainstRealSize) return;
     const meta = this.meta();
     if (!meta || meta.point_count === 0) return;
 
-    // Arm the backstop the first time we begin waiting: a tile or thumbnail that
-    // hard-fails to load caches nothing and fires no redraw, so without this the
-    // cover could strand. The timer releases it regardless (falling back to the
-    // old show-then-fill behaviour), and reportFirstView clears it on success.
+    // Arm the backstop the first time we begin waiting: a tile that hard-fails
+    // to load caches nothing and fires no redraw, so without this the cover
+    // could strand. The timer releases it regardless, and reportFirstView
+    // clears it on success.
     if (this.firstViewTimer === null) {
       this.firstViewTimer = setTimeout(
         () => this.reportFirstView(),
@@ -1506,31 +1561,80 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       );
     }
 
-    const thumbs = this.thumbnailMode;
-    const level = this.activeLevel;
-    const radius = meta.base_radius / Math.pow(2, level);
-    const screenRadius = radius * this.effZoom;
-
-    for (const { tx, ty } of this.getVisibleTiles()) {
-      const tile = this.tileCache.getCached(level, tx, ty);
-      // Geometry still loading: a tileLoaded$ redraw re-runs this check.
-      if (!tile) return;
-      if (!thumbs) continue;
-      for (const cell of tile.cells) {
-        // Only cells actually on screen gate the reveal — the visible-tile set
-        // carries a one-tile margin, so mirror draw()'s per-cell cull exactly.
-        const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
-        if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
-        if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-        if (this.thumbs.failed(cell.rep_id)) continue;
-        // draw() already kicked off the load for every drawn cell; here we only
-        // read whether it has decoded. A missing / still-decoding image holds
-        // the reveal (its onload fires a redraw that re-checks).
-        const img = this.thumbs.peek(cell.rep_id);
-        if (!img || !img.complete || img.naturalWidth === 0) return;
-      }
-    }
+    // Geometry still loading: a tileLoaded$ redraw re-runs this check.
+    if (!this.visibleTilesCached()) return;
     this.reportFirstView();
+  }
+
+  /** The user moved the map: tell the view, and end the opening load, since
+   *  a pan or zoom wants its speculative prefetches ahead of it again. */
+  private onUserNavigated(): void {
+    this.endOpeningLoad();
+    this.navigated.emit();
+  }
+
+  /** End the opening load (once): release the held prefetches. */
+  private endOpeningLoad(): void {
+    if (!this.openingLoad) return;
+    this.openingLoad = false;
+    if (this.openingLoadTimer !== null) {
+      clearTimeout(this.openingLoadTimer);
+      this.openingLoadTimer = null;
+    }
+    this.openingViewSettled.emit();
+  }
+
+  /**
+   * Whether this frame should hold the speculative prefetches (the off-view
+   * ring and the adjacent levels' tiles, and the thumbnail warm-ups) because
+   * the opening view is still loading. On a first visit those prefetches came
+   * to several times the requests the view itself needed — some 170 tiles
+   * against 25 on screen — and, sharing the browser's few connections per
+   * host, they queued ahead of the thumbnails the user was waiting for (#5636).
+   * So until the opening view is whole (its tiles in and every thumbnail on
+   * screen settled) only what is on screen is fetched. The hold ends for good
+   * at that point, or as soon as the user moves the map. Pure-density media
+   * paint no thumbnails, so their opening view holds nothing.
+   */
+  private holdingForOpeningView(): boolean {
+    if (!this.openingLoad) return false;
+    if (
+      this.thumbnailMode &&
+      (!this.fittedAgainstRealSize || !this.visibleTilesCached() || this.visibleThumbsPending)
+    ) {
+      if (this.openingLoadTimer === null) {
+        this.openingLoadTimer = setTimeout(() => {
+          this.openingLoadTimer = null;
+          this.endOpeningLoad();
+          // The frame that would have prefetched has been and gone.
+          this.requestRedraw();
+        }, BrowseCanvasComponent.FIRST_VIEW_MAX_WAIT_MS);
+      }
+      return true;
+    }
+    this.endOpeningLoad();
+    return false;
+  }
+
+  /** Whether every tile under the viewport at the active level is cached. */
+  private visibleTilesCached(): boolean {
+    const level = this.activeLevel;
+    return this.getVisibleTiles().every(({ tx, ty }) => this.tileCache.getCached(level, tx, ty) !== null);
+  }
+
+  /** Emit {@link thumbProgress} when this frame's tally differs from the last
+   *  one emitted. */
+  private reportThumbProgress(loaded: number, total: number): void {
+    const last = this.lastThumbProgress;
+    if (last.loaded === loaded && last.total === total) return;
+    this.lastThumbProgress = { loaded, total };
+    this.thumbProgress.emit({ loaded, total });
+  }
+
+  /** Whether some thumbnail on screen is still loading, as of the last frame
+   *  painted. */
+  private get visibleThumbsPending(): boolean {
+    return this.lastThumbProgress.loaded < this.lastThumbProgress.total;
   }
 
   /** Fire {@link firstViewReady} once and cancel the backstop timer. */
@@ -2164,7 +2268,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ) {
       this.dragMoved = true;
       this.framedByUser = true;
-      this.navigated.emit();
+      this.onUserNavigated();
       // The press turned into a pan: the map is about to slide out from under a
       // stationary cursor while hover stays frozen ({@link onCanvasMouseMove}
       // early-returns for the rest of the drag), so a hover held from before the
@@ -2427,7 +2531,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   zoomToFit(): void {
     this.cancelSettle();
     this.cancelPanAnim();
-    this.navigated.emit();
+    this.onUserNavigated();
     this.fitToData();
     this.commitZoomChange();
     this.refreshHoverAfterZoom();
@@ -2454,7 +2558,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.animActive) this.endZoomAnim();
     this.cancelSettle();
     this.framedByUser = true;
-    this.navigated.emit();
+    this.onUserNavigated();
     const z = this.effZoom;
     const stepX = (dirX * this.width * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
     const stepY = (dirY * this.height * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
@@ -2669,7 +2773,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     this.framedByUser = true;
-    this.navigated.emit();
+    this.onUserNavigated();
     // A zoom takes over from any in-flight snap-back or directional glide;
     // continue from where the view visually is and reschedule the settle below.
     this.cancelSettle();

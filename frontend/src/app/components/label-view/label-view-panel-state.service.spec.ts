@@ -137,6 +137,28 @@ describe('LabelViewPanelStateService (zoneless per-media-type canary)', () => {
     expect(text('.focus-left')).toBe('click');
   });
 
+  // #5658: a failed settings load used to leave every read of the settings
+  // throwing, these bindings included.
+  it('renders its fallbacks when the settings load fails, and saves nothing', async () => {
+    panelState.setMediaType('audio');
+    settingsState.load();
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/settings')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await settleResource();
+    await settleZoneless(fixture);
+
+    expect(text('.goal')).toBe('80');
+    expect(text('.focus-left')).toBe('click');
+    expect(panelState.getPanelPx('left')).toBeNull();
+
+    // With nothing loaded there is no dict to merge into, so a width saved now
+    // would replace every other media type's saved width: it is dropped.
+    panelState.savePanelPx('left', 512);
+    httpMock.expectNone('/api/settings');
+  });
+
   describe('saved panel widths', () => {
     it('reads the saved width for the active media type', async () => {
       panelState.setMediaType('audio');

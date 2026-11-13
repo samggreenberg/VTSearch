@@ -713,6 +713,26 @@ class TestSettingsAPI:
         assert data["hide_left_panel"] is False
         assert data["hide_right_panel"] is True
 
+    def test_face_compare_round_trip(self, client):
+        assert client.get("/api/settings/defaults").get_json()["face_compare"] is True
+
+        res = client.put("/api/settings", json={"face_compare": False})
+        assert res.status_code == 200
+        assert client.get("/api/settings").get_json()["face_compare"] is False
+
+    def test_face_even_out_round_trip(self, client):
+        defaults = client.get("/api/settings/defaults").get_json()["face_even_out"]
+        assert defaults["exposure"] is True and defaults["greyscale_both"] is False
+
+        choices = {**defaults, "contrast": False, "greyscale_both": True}
+        res = client.put("/api/settings", json={"face_even_out": choices})
+        assert res.status_code == 200
+        assert client.get("/api/settings").get_json()["face_even_out"] == choices
+
+    def test_face_even_out_rejects_a_non_boolean(self, client):
+        res = client.put("/api/settings", json={"face_even_out": {"exposure": "maybe"}})
+        assert res.status_code == 422
+
     def test_update_autopilot_goal_diversity(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": 60})
         assert res.status_code == 200

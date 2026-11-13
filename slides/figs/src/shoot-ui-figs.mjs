@@ -1026,21 +1026,59 @@ async function shootRegionVoting(page) {
 // ── browse ───────────────────────────────────────────────────────────────────
 
 /**
- * The Book detector's votes, for a `browse` run that has no session to take
- * them from.
+ * The Book detector's votes for the Vision frames, by file name.
  *
- * In a full run the Vision frames use the detector the train loop just voted
- * on, as a user would: they come after it in the deck. A run of `browse` alone
- * starts from an empty app, so it puts votes of the same size on the same pile
- * through the API — none of the Vision slides shows voting, so none of them
- * claims these were cast by hand. Enough of them to clear the label quota and
- * the typed query's hold (#4736), so Find runs a trained head as it does after
- * the session; Goods are books the deck would call books (`isBook`), Bads the
- * near-misses the session's own Bad pile fills with.
+ * The `browse` group puts exactly these on the detector through the API,
+ * whether or not the session ran before it (#5634). It used to keep the
+ * session's own votes after a full run and stage a different set on its own,
+ * which made two detectors: a `browse`-only reshoot came back with 57 results
+ * where the deck's frame, from a full run, showed 20, and the speaker notes
+ * count them. A session's votes are not the same from one run to the next
+ * either, since autopilot chooses what it serves. None of the Vision slides
+ * shows voting, so none of them claims these were cast by hand.
+ *
+ * The list is chosen, not recorded: these slides are a cartoon of the tool, and
+ * what they need is a set of results small enough to read as a map, with the
+ * books where the notes in `slides/fragments/vision-find.md` say they are.
+ * There are enough votes to clear the label quota and the typed query's hold
+ * (#4736), so Find runs a trained head: every book of `photos-train` the deck
+ * would call one, and the near-misses a session's Bad pile fills with.
+ *
+ * How many photos Find returns turns on single votes (one more chair in the Bad
+ * pile took it from 26 to 24, one book fewer in the Good pile to 45), so the
+ * list is spelled out rather than drawn by category, and `shootBrowse` fails
+ * the run when Find stops returning `BROWSE_FIND_RESULTS`: change the list, or
+ * the app's training, and the count the notes give has to be looked at again.
  */
 const BROWSE_STAGED_VOTES = {
-  good: 18,
-  bad: { laptop: 3, tv: 3, keyboard: 2, 'cell-phone': 2, clock: 2, chair: 2, vase: 1, dog: 1, bus: 1, pizza: 1 },
+  good: [
+    'book/000000000632.jpg', 'book/000000025603.jpg', 'book/000000035279.jpg',
+    'book/000000061333.jpg', 'book/000000096001.jpg', 'book/000000099182.jpg',
+    'book/000000121586.jpg', 'book/000000134882.jpg', 'book/000000147415.jpg',
+    'book/000000166166.jpg', 'book/000000167159.jpg', 'book/000000183049.jpg',
+    'book/000000194724.jpg', 'book/000000222299.jpg', 'book/000000251140.jpg',
+    'book/000000255483.jpg', 'book/000000262938.jpg', 'book/000000302030.jpg',
+    'book/000000309938.jpg', 'book/000000346968.jpg', 'book/000000348481.jpg',
+    'book/000000376264.jpg', 'book/000000386912.jpg', 'book/000000389315.jpg',
+    'book/000000395701.jpg', 'book/000000396729.jpg', 'book/000000400082.jpg',
+    'book/000000400161.jpg', 'book/000000416451.jpg', 'book/000000455301.jpg',
+    'book/000000479248.jpg', 'book/000000506933.jpg', 'book/000000509260.jpg',
+    'book/000000512403.jpg', 'book/000000520077.jpg', 'book/000000520531.jpg',
+    'book/000000536038.jpg', 'book/000000542776.jpg', 'book/000000551439.jpg',
+  ],
+  bad: [
+    'laptop/000000026465.jpg', 'laptop/000000051008.jpg', 'laptop/000000076731.jpg',
+    'laptop/000000077595.jpg', 'laptop/000000078420.jpg', 'tv/000000004795.jpg',
+    'tv/000000025560.jpg', 'tv/000000098839.jpg', 'tv/000000131131.jpg',
+    'tv/000000149222.jpg', 'keyboard/000000001675.jpg', 'keyboard/000000038576.jpg',
+    'keyboard/000000042889.jpg', 'cell-phone/000000022623.jpg', 'cell-phone/000000053909.jpg',
+    'cell-phone/000000099428.jpg', 'clock/000000067896.jpg', 'clock/000000140929.jpg',
+    'clock/000000145591.jpg', 'chair/000000044068.jpg', 'chair/000000057232.jpg',
+    'chair/000000082180.jpg', 'chair/000000210099.jpg', 'vase/000000019742.jpg',
+    'vase/000000051326.jpg', 'dog/000000131273.jpg', 'dog/000000181969.jpg',
+    'bus/000000027768.jpg', 'pizza/000000100582.jpg', 'sandwich/000000021503.jpg',
+    'bird/000000056545.jpg', 'bicycle/000000061108.jpg', 'umbrella/000000009448.jpg',
+  ],
 };
 
 /**
@@ -1098,18 +1136,14 @@ const BROWSE_RESULTS_SIZE_STEPS = 0;
 /** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
 const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
 
-/** The Book detector, trained: the session's if it ran, else staged. */
+/** How many photos Find returns, as `slides/fragments/vision-find.md`'s notes count them. */
+const BROWSE_FIND_RESULTS = 24;
+
+/** The Book detector, trained on `BROWSE_STAGED_VOTES` and nothing else. */
 async function trainedBookDetector() {
   const train = await app.ensureDataset(TRAIN_DATASET, 'siglip');
-  const existed = app.named(await app.detectors(), BOOK_DETECTOR);
   const detector = await app.ensureDetector(BOOK_DETECTOR, train, BOOK_TEXT);
-  if (!existed) {
-    const meta = await app.mediaIndex(train, detector);
-    await app.setVotes(train, detector, {
-      good: framesOf(meta, 'book', BROWSE_STAGED_VOTES.good, isBook),
-      bad: Object.entries(BROWSE_STAGED_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
-    });
-  }
+  await app.setVotes(train, detector, BROWSE_STAGED_VOTES);
   return detector;
 }
 
@@ -1132,6 +1166,8 @@ async function openedMap(page, signs = true) {
   // nothing, so wait for the map first and then for the cover to lift.
   await page.waitForSelector('.browse-content', { timeout: 600000 });
   await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 });
+  // The cover lifts once the tiles are laid out; their thumbnails land after.
+  await page.waitForSelector('.browse-main[data-thumbs="settled"]', { timeout: 600000 });
   if (signs) await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
   const close = page.locator('.browse-details .bin-popup-close');
   if (await close.count()) await close.first().click();
@@ -1246,6 +1282,13 @@ async function shootBrowse(page) {
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   const dialog = page.locator('vt-modal').filter({ hasText: 'Find Results' });
   await dialog.locator('.results-table').waitFor({ timeout: 600000 });
+  const found = Number((await dialog.innerText()).match(/Good \((\d+)\)/)?.[1]);
+  if (found !== BROWSE_FIND_RESULTS) {
+    throw new Error(
+      `browse: Find returned ${found} photos, not ${BROWSE_FIND_RESULTS}: `
+        + 'BROWSE_STAGED_VOTES no longer gives the set the Lost & Found notes describe',
+    );
+  }
   // The dialog opens on its Clipboard tab. A user sending the list on picks a
   // destination's tab and fills it in (#5464); this one picks a file.
   await dialog.locator('.export-tab', { hasText: BROWSE_EXPORT.exporter }).click();

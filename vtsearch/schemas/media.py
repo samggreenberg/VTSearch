@@ -52,7 +52,9 @@ docstring there.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from typing import Any
+
+from marshmallow import Schema, ValidationError, fields, validate
 
 from vtscore.datasets import vote_provenance
 
@@ -106,6 +108,46 @@ class MediaVariantQuerySchema(Schema):
         # Tolerate the request-context params (``dataset_id`` / ``detector_id``)
         # that browser-native requests smuggle in as query args, plus the
         # thumbnail route's ``region``, matching SortPageQuerySchema.
+        unknown = "exclude"
+
+
+#: Most ids one ``GET /api/medias/thumbnails`` may ask for. The Browse canvas
+#: asks in batches of 32; the cap only bounds what a hand-made URL can cost.
+MAX_THUMBNAILS_PER_BATCH = 256
+
+
+class _MediaIdList(fields.Field):
+    """``1,2,3`` in a query string, as a list of media ids."""
+
+    def _deserialize(self, value: Any, attr: str | None, data: Any, **kwargs: Any) -> list[int]:
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError("Expected media ids separated by commas.")
+        try:
+            ids = [int(part) for part in value.split(",")]
+        except ValueError:
+            raise ValidationError("Expected media ids separated by commas, e.g. 3,17,42.") from None
+        if len(ids) > MAX_THUMBNAILS_PER_BATCH:
+            raise ValidationError(f"At most {MAX_THUMBNAILS_PER_BATCH} ids per request.")
+        return ids
+
+
+class ThumbnailBatchQuerySchema(Schema):
+    """Query for ``GET /api/medias/thumbnails``."""
+
+    ids = _MediaIdList(
+        required=True,
+        metadata={
+            "description": (
+                f"The media whose thumbnails to return, as ids separated by commas, at most "
+                f"{MAX_THUMBNAILS_PER_BATCH}. Answered in this order."
+            ),
+            "type": "string",
+        },
+    )
+
+    class Meta:
+        # The request-context params (``dataset_id`` / ``detector_id``) ride
+        # along as query args, as on every browser-fetched media URL.
         unknown = "exclude"
 
 
@@ -273,6 +315,29 @@ class MediaEntrySchema(Schema):
                 "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. "
                 "On an anamorphic video the player reports display pixels, so it scales the box by "
                 "this before cropping. Absent on a box recorded without one, which is used as is."
+            )
+        },
+    )
+    face_landmarks = fields.List(
+        fields.List(fields.Float()),
+        metadata={
+            "description": (
+                "A face crop's five landmarks, as ``[[x, y], ...]`` fractions of the crop as served "
+                "(after any ``align`` turn; ``[0, 0]`` is its top-left corner, ``[1, 1]`` its "
+                "bottom-right), in the order left eye, right eye, nose tip, left mouth corner, right "
+                "mouth corner (left is the image's left). A point may lie outside ``[0, 1]`` when the "
+                "face runs past the crop's edge. Absent when the item has none: not a face, a face "
+                "whose detection gave no landmarks, or one imported before they were kept."
+            )
+        },
+    )
+    face_hard_view = fields.Boolean(
+        metadata={
+            "description": (
+                "A face's verdict from the Face Quality its converter stamped: ``true`` for a hard "
+                "view (turned, covered, small), which is harder to compare and to search from "
+                "(#5372). Absent when there is no verdict: not a face, no stamped quality, or an "
+                "embedding space with no hard-view cut."
             )
         },
     )
@@ -616,6 +681,17 @@ class ServerMediaListResponseSchema(Schema):
     files = fields.List(fields.Nested(_ServerMediaFileEntrySchema), required=True)
 
 
+class ServerMediaFaceHardViewResponseSchema(Schema):
+    """Response for ``GET /api/server-media-files/<filename>/face-hard-view``.
+
+    ``face_hard_view`` is true when the face in the picture is a hard view
+    (turned, covered, small; #5372), false when it is not, and null when there
+    is no verdict: Face is off, no face is found, or the space has no cut.
+    """
+
+    face_hard_view = fields.Boolean(required=True, allow_none=True)
+
+
 class ServerMediaUploadResponseSchema(Schema):
     """Response for ``POST /api/server-media-files/upload`` (success path).
 
@@ -864,4 +940,5 @@ __all__ = [
     "ServerMediaFromMediaIdRequestSchema",
     "ServerMediaListResponseSchema",
     "ServerMediaUploadResponseSchema",
+    "ThumbnailBatchQuerySchema",
 ]

@@ -1,7 +1,9 @@
 import io
 import wave
+from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
@@ -501,20 +503,39 @@ class TestMediaImage:
         assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_returns_404_for_invalid_id(self, client):
-        resp = client.get("/api/medias/1/image")
-        # Pins the premise the reviewer-side image prefetch is built on (#3896):
-        # `no-cache` with no validator. The browser may keep these bytes but may
-        # not reuse them without revalidating, and with neither an ETag nor a
-        # Last-Modified there is nothing to revalidate against -- so a reuse is a
-        # fresh download of the whole body. That is why `MediaPrefetchService`
-        # holds the bytes client-side instead of warming the HTTP cache. Giving
-        # this route a validator would be a real improvement; it would also make
-        # that store redundant, so it should change this test too.
-        assert resp.headers.get("Cache-Control") == "no-cache"
-        assert "ETag" not in resp.headers and "Last-Modified" not in resp.headers
-
         resp = client.get("/api/medias/9999/image")
         assert resp.status_code == 404
+
+    def test_is_cacheable_with_a_validator(self, client):
+        # Pins the premise the reviewer-side image prefetch is built on (#5648):
+        # a day's `max-age` plus an ETag, so `MediaPrefetchService` can warm the
+        # browser's HTTP cache and the viewer's `<img>` reuses those bytes
+        # without a request. Before #5648 this route answered `no-cache` with no
+        # validator, and every reuse was a fresh download of the whole image.
+        resp = client.get("/api/medias/1/image")
+        assert resp.status_code == 200
+        assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+        assert resp.headers.get("ETag")
+
+    def test_etag_fingerprints_the_bytes_served(self, client):
+        # For audio the bytes served are the waveform picture, not the clip,
+        # so the ETag must be a hash of the picture rather than the media's md5.
+        resp = client.get("/api/medias/1/image")
+        assert resp.get_etag()[0] == content_md5(resp.data)
+        assert resp.get_etag()[0] != medias[1].get("md5")
+
+    def test_conditional_request_returns_304(self, client):
+        etag = client.get("/api/medias/1/image").headers["ETag"]
+        resp = client.get("/api/medias/1/image", headers={"If-None-Match": etag})
+        assert resp.status_code == 304
+        assert resp.data == b""
+        assert resp.headers["ETag"] == etag
+        assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+
+    def test_stale_validator_gets_the_full_body(self, client):
+        resp = client.get("/api/medias/1/image", headers={"If-None-Match": '"not-the-etag"'})
+        assert resp.status_code == 200
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_consistent_responses(self, client):
         """Same media should return the same thumbnail."""
@@ -667,6 +688,93 @@ class TestMediaThumbnail:
         assert whole.status_code == 200
         assert whole.data == almost.data
         assert whole.data != half.data
+
+
+def _unpack_thumbnail_batch(body: bytes) -> list[tuple[str, bytes]]:
+    """Split a ``GET /api/medias/thumbnails`` body into ``(mimetype, bytes)``."""
+    import struct  # noqa: PLC0415
+
+    entries = []
+    at = 0
+    while at < len(body):
+        size, mime_len = struct.unpack_from(">IB", body, at)
+        at += 5
+        mime = body[at : at + mime_len].decode("ascii")
+        at += mime_len
+        entries.append((mime, body[at : at + size]))
+        at += size
+    return entries
+
+
+class TestMediaThumbnailBatch:
+    """``GET /api/medias/thumbnails``: many thumbnails in one response (#5637)."""
+
+    def test_each_entry_is_what_the_single_route_serves_in_request_order(self, client):
+        resp = client.get("/api/medias/thumbnails?ids=3,1,2")
+        assert resp.status_code == 200
+        assert resp.content_type == "application/octet-stream"
+        entries = _unpack_thumbnail_batch(resp.data)
+        assert len(entries) == 3
+        for media_id, (mime, image) in zip((3, 1, 2), entries, strict=True):
+            single = client.get(f"/api/medias/{media_id}/thumbnail")
+            assert image == single.data
+            assert mime == single.content_type
+
+    def test_a_missing_media_is_an_empty_entry_not_an_error(self, client):
+        resp = client.get("/api/medias/thumbnails?ids=1,9999,2")
+        assert resp.status_code == 200
+        entries = _unpack_thumbnail_batch(resp.data)
+        assert [len(image) > 0 for _, image in entries] == [True, False, True]
+        assert entries[1] == ("", b"")
+
+    def test_a_media_with_no_picture_is_an_empty_entry(self, client):
+        from vtsearch.state import get_media  # noqa: PLC0415
+
+        media = get_media(2)
+        assert media is not None
+        from vtsearch.routes.media.content import _NoImage  # noqa: PLC0415
+
+        with patch("vtsearch.routes.media.content._display_image", return_value=_NoImage.NO_PICTURE):
+            saved = media.get("thumbnail_bytes")
+            media["thumbnail_bytes"] = None
+            try:
+                entries = _unpack_thumbnail_batch(client.get("/api/medias/thumbnails?ids=2").data)
+            finally:
+                media["thumbnail_bytes"] = saved
+        assert entries == [("", b"")]
+
+    def test_generated_thumbnails_are_memoised_like_the_single_route(self, client):
+        from vtsearch.state import get_media  # noqa: PLC0415
+
+        media = get_media(1)
+        assert media is not None
+        original = media.get("thumbnail_bytes")
+        media["thumbnail_bytes"] = None
+        try:
+            ((_, image),) = _unpack_thumbnail_batch(client.get("/api/medias/thumbnails?ids=1").data)
+            assert image and media.get("thumbnail_bytes") == image
+        finally:
+            media["thumbnail_bytes"] = original
+
+    def test_is_cacheable_and_revalidates_to_304(self, client):
+        first = client.get("/api/medias/thumbnails?ids=1,2")
+        assert "max-age" in first.headers.get("Cache-Control", "")
+        etag = first.headers["ETag"]
+        second = client.get("/api/medias/thumbnails?ids=1,2", headers={"If-None-Match": etag})
+        assert second.status_code == 304
+        assert second.data == b""
+
+    @pytest.mark.parametrize("query", ["", "ids=", "ids=1,x", "ids=1,,2"])
+    def test_rejects_a_malformed_id_list(self, client, query):
+        assert client.get(f"/api/medias/thumbnails?{query}").status_code == 422
+
+    def test_caps_the_ids_per_request(self, client):
+        from vtsearch.schemas.media import MAX_THUMBNAILS_PER_BATCH  # noqa: PLC0415
+
+        ok = ",".join("1" for _ in range(MAX_THUMBNAILS_PER_BATCH))
+        assert client.get(f"/api/medias/thumbnails?ids={ok}").status_code == 200
+        too_many = ",".join("1" for _ in range(MAX_THUMBNAILS_PER_BATCH + 1))
+        assert client.get(f"/api/medias/thumbnails?ids={too_many}").status_code == 422
 
 
 class TestMediaAudio:

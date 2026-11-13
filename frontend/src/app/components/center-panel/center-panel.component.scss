@@ -106,6 +106,92 @@
   color: var(--text-secondary);
 }
 
+// What the viewer sits in. The item is alone in it for everything but a face
+// being compared (#5642).
+.media-stage {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+}
+
+.media-stage__candidate {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// The compare layout: two equal columns for the faces, the viewers in one row
+// and their bars in the next, and a narrow third for the checklist (#5643),
+// down both rows. A shared row is what keeps the two faces the same height
+// when one bar wraps and the other does not. The reference pane's host is
+// `display: contents`, so its viewer and bar are cells of this grid.
+.media-stage--compare {
+  --face-checklist-width: 26ch;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--face-checklist-width);
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: var(--space-md);
+  row-gap: var(--space-2xs);
+
+  // The one line between the two faces, down the middle of the gap between
+  // their columns: half of what the checklist and its gap leave.
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc((100% - var(--face-checklist-width) - var(--space-md)) / 2);
+    width: 1px;
+    background: var(--border);
+    pointer-events: none;
+  }
+
+  .media-stage__candidate {
+    grid-column: 2;
+    grid-row: 1;
+    // The vote swipe stays in the candidate's own half.
+    overflow: hidden;
+  }
+}
+
+.media-stage__tools {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+}
+
+// Compare, Wider and Show in photo, side by side so they cost the image one row.
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+// The compare layout's toggles, Compare and Wider, each lit while it is on.
+.compare-toggle.active,
+.compare-toggle.active:hover {
+  color: var(--btn-filled-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+// Under Wider (#5645), the candidate while its photo is being looked up: an
+// empty pane rather than its crop for a moment. `visibility` keeps the
+// viewer's size, so the layout does not jump when the photo arrives.
+vt-image-viewer.wider-pending {
+  visibility: hidden;
+}
+
 // Swipe animation wrapper
 .media-swipe-wrapper {
   flex: 1;
