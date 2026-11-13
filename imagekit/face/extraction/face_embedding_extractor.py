@@ -41,7 +41,7 @@ from imagekit.util import (
     decode_image_buffer,
     ensure_image_tensor,
     load_model_config,
-    resolve_model_file,
+    resolve_onnx_model,
 )
 
 #: Reference config for the official MagFace iResNet-100 release.
@@ -127,7 +127,7 @@ class FaceEmbeddingExtractor:
         model_config_path: str | Path | None = None,
     ) -> None:
         """Load the model and the config naming its embedding space; raises on any failure."""
-        model = resolve_model_file(model_filepath)
+        model = resolve_onnx_model(model_filepath)
         raw = load_model_config(model, model_config_path)
         config = ExtractorConfig.from_dict(raw, source=str(model_config_path or model.with_suffix(".json")))
         chain = build_transforms(config.transforms)

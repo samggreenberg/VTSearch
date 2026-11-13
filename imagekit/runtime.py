@@ -76,9 +76,23 @@ class RuntimeOptions:
         """Open *model_path* as an ``InferenceSession`` on these options.
 
         Raises whatever ``onnxruntime`` raises on a bad model, after
-        :meth:`check_available` has refused an uninstalled provider.
+        :meth:`check_available` has refused an uninstalled provider; a file
+        ONNX Runtime cannot parse as ONNX at all raises
+        :class:`imagekit.util.NotOnnxModelError`, which says how to run a model
+        in another format.
         """
         import onnxruntime as ort  # noqa: PLC0415
 
         self.check_available()
-        return ort.InferenceSession(model_path, sess_options=self.session_options(), providers=self.providers())
+        try:
+            return ort.InferenceSession(model_path, sess_options=self.session_options(), providers=self.providers())
+        except Exception as exc:
+            if type(exc).__name__ != "InvalidProtobuf":
+                raise
+            from imagekit.util import OTHER_FORMATS_DOC, NotOnnxModelError  # noqa: PLC0415
+
+            raise NotOnnxModelError(
+                f"ONNX Runtime cannot read {model_path} as an ONNX model ({exc}). imagekit's own detector and "
+                "embedder run ONNX models only: convert the model to ONNX, or run it through a face provider "
+                f"that reads its format; see {OTHER_FORMATS_DOC}"
+            ) from exc

@@ -3,25 +3,31 @@
 from __future__ import annotations
 
 import json
+import pickle
+import zipfile
 
 import cv2
 import numpy as np
 import pytest
 
-from imagekit import decode_image_buffer, read_image_tensor
+from imagekit import RuntimeOptions, decode_image_buffer, read_image_tensor
 from imagekit.util import (
+    NotOnnxModelError,
     Sample,
     apply_transforms,
     build_transforms,
     clamp_box,
     collect_image_paths,
+    describe_model_format,
     ensure_image_tensor,
     letterbox,
     load_model_config,
     nms,
     resize_within,
     resolve_model_file,
+    resolve_onnx_model,
 )
+from tests_lib.imagekit._synthetic_models import build_embedder_model
 
 
 def _png_bytes(arr: np.ndarray) -> bytes:
@@ -153,6 +159,27 @@ class TestModelFiles:
         with pytest.raises(FileNotFoundError):
             resolve_model_file(tmp_path / "nothing")
 
+    def test_a_bundle_directory_finds_a_dot_model_file(self, tmp_path):
+        model = tmp_path / "m.model"
+        model.write_bytes(b"x")
+        (tmp_path / "m.json").write_text("{}")
+        assert resolve_model_file(tmp_path) == model
+        (tmp_path / "m.onnx").write_bytes(b"y")
+        with pytest.raises(
+            FileNotFoundError, match=r"exactly one \.onnx or \.model file; found \['m\.model', 'm\.onnx'\]"
+        ):
+            resolve_model_file(tmp_path)
+
+    def test_a_model_file_named_outright_may_have_any_extension(self, tmp_path):
+        model = tmp_path / "weights.bin"
+        model.write_bytes(b"x")
+        assert resolve_model_file(model) == model
+
+    def test_a_single_suffix_still_narrows_the_search(self, tmp_path):
+        (tmp_path / "m.model").write_bytes(b"x")
+        with pytest.raises(FileNotFoundError, match=r"exactly one \.onnx file"):
+            resolve_model_file(tmp_path, ".onnx")
+
     def test_load_model_config_lookup_order(self, tmp_path):
         model = tmp_path / "m.onnx"
         model.write_bytes(b"x")
@@ -194,3 +221,83 @@ class TestCollectImagePaths:
 
     def test_img_is_one_path(self, tmp_path):
         assert collect_image_paths(image=tmp_path / "z.png") == [tmp_path / "z.png"]
+
+
+class TestModelFormats:
+    """Models in another format are named, not handed to ONNX Runtime to fail on (#5683)."""
+
+    @staticmethod
+    def _zip(path, *names):
+        with zipfile.ZipFile(path, "w") as zf:
+            for name in names:
+                zf.writestr(name, b"x")
+        return path
+
+    def test_onnx_and_unrecognised_bytes_are_not_described(self, tmp_path):
+        assert describe_model_format(build_embedder_model(tmp_path / "emb.model")) is None
+        (tmp_path / "vendor.model").write_bytes(b"\x01\x02vendor format")
+        assert describe_model_format(tmp_path / "vendor.model") is None
+        assert describe_model_format(tmp_path) is None
+        assert describe_model_format(tmp_path / "missing.model") is None
+
+    @pytest.mark.filterwarnings("ignore:.*torch.jit.*is deprecated:FutureWarning")
+    def test_real_pytorch_files_are_recognised(self, tmp_path):
+        torch = pytest.importorskip("torch")
+        torch.save({"w": torch.zeros(2)}, tmp_path / "state.model")
+        torch.jit.save(torch.jit.script(torch.nn.Linear(2, 2)), str(tmp_path / "script.model"))
+        torch.save({"w": torch.zeros(2)}, tmp_path / "legacy.model", _use_new_zipfile_serialization=False)
+        assert "PyTorch" in describe_model_format(tmp_path / "state.model").what
+        assert "PyTorch" in describe_model_format(tmp_path / "script.model").what
+        assert "pickle" in describe_model_format(tmp_path / "legacy.model").what
+
+    def test_keras_tensorflow_pickle_zip_and_empty_files_are_recognised(self, tmp_path):
+        (tmp_path / "h5.model").write_bytes(b"\x89HDF\r\n\x1a\n" + bytes(64))
+        (tmp_path / "pickled.model").write_bytes(pickle.dumps({"a": 1}, protocol=5))
+        (tmp_path / "saved.model").mkdir()
+        (tmp_path / "saved.model" / "saved_model.pb").write_bytes(b"x")
+        (tmp_path / "empty.model").write_bytes(b"")
+        (tmp_path / "broken.model").write_bytes(b"PK\x03\x04 not really a zip")
+        found = {
+            name: describe_model_format(tmp_path / name)
+            for name in ("h5.model", "pickled.model", "saved.model", "empty.model", "broken.model")
+        }
+        found["keras.model"] = describe_model_format(
+            self._zip(tmp_path / "keras.model", "metadata.json", "config.json", "model.weights.h5")
+        )
+        found["plain.model"] = describe_model_format(self._zip(tmp_path / "plain.model", "readme.txt"))
+        assert {name: fmt.what.split(" (")[0] for name, fmt in found.items() if fmt} == {
+            "h5.model": "an HDF5 file",
+            "pickled.model": "a Python pickle",
+            "saved.model": "a TensorFlow SavedModel directory",
+            "empty.model": "an empty file",
+            "broken.model": "a zip archive",
+            "keras.model": "a Keras 3 model",
+            "plain.model": "a zip archive",
+        }
+
+    def test_resolve_onnx_model_refuses_another_format_naming_it(self, tmp_path):
+        self._zip(tmp_path / "det.model", "archive/data.pkl", "archive/version")
+        with pytest.raises(NotOnnxModelError, match="is a PyTorch file") as err:
+            resolve_onnx_model(tmp_path / "det.model")
+        assert "torch.onnx.export" in str(err.value) and "Models in other formats" in str(err.value)
+        with pytest.raises(NotOnnxModelError, match="PyTorch"):
+            resolve_onnx_model(tmp_path)  # the one .model file in a bundle directory
+
+    def test_resolve_onnx_model_refuses_a_savedmodel_named_or_bundled(self, tmp_path):
+        saved = tmp_path / "bundle" / "emb.model"
+        saved.mkdir(parents=True)
+        (saved / "saved_model.pb").write_bytes(b"x")
+        for given in (saved, saved.parent):
+            with pytest.raises(NotOnnxModelError, match="TensorFlow SavedModel directory.*tf2onnx"):
+                resolve_onnx_model(given)
+
+    def test_resolve_onnx_model_passes_onnx_under_any_name(self, tmp_path):
+        model = build_embedder_model(tmp_path / "emb.model")
+        assert resolve_onnx_model(model) == model == resolve_onnx_model(tmp_path)
+
+    def test_a_file_onnx_runtime_cannot_parse_says_how_to_run_it(self, tmp_path):
+        (tmp_path / "vendor.model").write_bytes(b"\x01\x02vendor format")
+        with pytest.raises(NotOnnxModelError, match="cannot read .*vendor.model as an ONNX model") as err:
+            RuntimeOptions().make_session(str(tmp_path / "vendor.model"))
+        assert type(err.value.__cause__).__name__ == "InvalidProtobuf"
+        assert "Models in other formats" in str(err.value)
