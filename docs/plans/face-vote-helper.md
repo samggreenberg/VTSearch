@@ -358,41 +358,19 @@ These are the owner's; the recommendation is first in each.
 
 ## Open work
 
-Each item is an issue; the issue holds its scope. An arrow means "must land
-before"; the dotted one is a soft dependency, for the checklist rows' click to
-zoom only.
-
-```text
-#5642 compare layout ──> #5643 checklist strip ┄┄┄┄┄┄┐
-        │                                             ┆
-        ├──────────────> #5645 wider view             ▼
-        │                                     #5647 size and position,
-        └───────────────────────────────────> linked zoom
-                                                      ▲
-#5644 keep landmarks ─────────────────────────────────┘
-```
-
-#5642 and #5644 can start together. Nothing else is blocked on #5645.
+Not yet filed: the detail notice (the list's **Detail** row), then the rows
+marked *Later*. Each becomes an issue, with a pointer here, when it is picked
+up.
 
 <!-- item-sep -->
 
-- [ ] #5642 — Compare layout with a reference face beside the candidate (Opus)
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #5643 — Checklist strip of what to compare, in diagnostic order (Sonnet)
-
 <!-- item-sep -->
 
-- [ ] #5644 — image2face: keep each face's five landmarks on its item (Sonnet)
-
 <!-- item-sep -->
-
-- [ ] #5647 — Match the two faces' size and position, with linked zoom (Opus)
-
-<!-- item-sep -->
-
-- [ ] #5645 — Wider view of both faces from their parent photos (Sonnet)
 
 <!-- item-sep -->
 
