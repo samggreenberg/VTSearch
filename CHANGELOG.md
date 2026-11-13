@@ -20,6 +20,60 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-11-13
+
+### Changed
+
+- **Face datasets keep where each face's eyes, nose and mouth are** (issue #5644). Turning photos into faces now
+  saves five points on every face crop (the two eyes, the nose tip and the two corners of the mouth), which the
+  compare view uses to show a reference face at the same size and position as the face you are voting on.
+  Face datasets made before this keep working; re-import one to give its faces the points. For API users: `POST
+  /api/medias/batch` returns them as `face_landmarks`.
+- **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening
+  Browse used to hold a blank "Loading thumbnails…" screen until every thumbnail on screen had arrived, up to 12
+  seconds, and could then show a map with half its pictures still missing. The map now appears as soon as its tiles
+  are laid out, each tile grey until its picture lands, with a bar at the bottom counting them in. The pictures come
+  sooner too: the opening view no longer queues a few hundred background fetches (the next zoom level, the
+  minimap, the off-screen ring) ahead of the ones on screen. On an 8,000-image map over a link with 100 ms of
+  latency, the map now shows after 2.7 s instead of 8.8 s, and every picture on screen is in after 5.1 s instead of
+  8.8 s.
+- **Browse fetches its map tiles a batch at a time** (issue #5637). The map's tiles used to arrive one request each,
+  and a browser talking plain HTTP to a remote server runs only about six requests at a time, so opening a map cost
+  a round trip for every five or six of its 160–260 tiles. They now come in a handful of requests (six, on an
+  8,000-image map), and since the same view asks for the same batches, revisits still come from the browser cache.
+  With 100 ms of latency the map appeared 0.7 s sooner (2.1 s instead of 2.8 s).
+- **Browse fetches its thumbnails a batch at a time too** (issue #5637). With the tiles batched, the map's
+  thumbnails were the wait: one request each, a few hundred on screen. They now come 32 to a request, and the
+  Browse map keeps the ones it has decoded when you leave it, so going back to the same dataset's map paints them at
+  once. On an 8,000-image map with 347 thumbnails on screen, every thumbnail was in 3.1 s after opening Browse
+  instead of 9.4 s with 100 ms of latency, and 1.6 s instead of 4.2 s with 40 ms.
+- **Browse sends fewer requests, side by side, before the map appears** (issue #5649). Before drawing anything,
+  Browse asked for the dataset's status, then waited for it before asking for the map's layout, and asked for your
+  settings up to four times. It now asks for the layout and the settings together, skips the status (the layout
+  names the media type), and asks for the settings once when you open it from the Dashboard (twice on a full page
+  load, counting the app's own). Opening an 8,000-image map from the Dashboard with 100 ms of latency, the map
+  appeared in 0.64 s instead of 0.73 s; on a fresh page load it appeared in 1.87 s instead of 1.96 s.
+- **Every page starts sooner when you open it in a new tab** (issue #5657). The app's startup code used to arrive
+  as 32 files, and a browser talking plain HTTP to the server fetches only about six at a time, so a fresh page
+  load spent four extra round trips on them before showing anything. It is now one file. A page that checks
+  something with the server before it opens (Train, Tune, Browse and People) also fetches its own code during that
+  check now, not after it. Opening an 8,000-image Browse map in a new tab with 100 ms of latency, the map appeared
+  in 1.22 s instead of 1.87 s.
+- **Opening a page from the Dashboard no longer waits for its code** (issue #5663). The code for Train, Tune,
+  Browse and People used to be downloaded when you first opened each, as some 15–20 small files that a browser
+  talking plain HTTP fetches about six at a time. The app now downloads it in the background once the page you are
+  on has finished loading, one page at a time, and only while nothing else is being fetched. Opening an 8,000-image
+  Browse map from the Dashboard with 100 ms of latency, the map appeared in 0.31 s instead of 0.63 s. A page opened
+  in a new tab is unchanged; [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#reverse-proxy) now recommends HTTP/2 at the
+  reverse proxy, which removes that wait.
+- **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
+  downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
+  originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,
+  as it already did thumbnails. The review flows still fetch the next two pictures while you look at the current
+  one, but they now do it by filling the browser's cache, so a picture you come back to is not fetched again.
+  For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
+  max-age=86400`, and answers `304` to a matching `If-None-Match`.
+
 ### Added
 
 - **The two faces in the Face compare layout are evened out before you compare them** (issues #5674, #5675). Two
@@ -83,58 +137,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   and zoom controls. **Compare**, under the face, turns the layout off; the choice is saved in a new per-user
   `face_compare` setting, on by default. The faces are never overlaid on each other. For API users: `GET
   /api/server-media-files/{filename}/image` serves an example picture at full size.
-
-### Changed
-
-- **Face datasets keep where each face's eyes, nose and mouth are** (issue #5644). Turning photos into faces now
-  saves five points on every face crop (the two eyes, the nose tip and the two corners of the mouth), which the
-  compare view uses to show a reference face at the same size and position as the face you are voting on.
-  Face datasets made before this keep working; re-import one to give its faces the points. For API users: `POST
-  /api/medias/batch` returns them as `face_landmarks`.
-- **The Browse map shows up before its thumbnails, and says how many are still coming** (issue #5636). Opening
-  Browse used to hold a blank "Loading thumbnails…" screen until every thumbnail on screen had arrived, up to 12
-  seconds, and could then show a map with half its pictures still missing. The map now appears as soon as its tiles
-  are laid out, each tile grey until its picture lands, with a bar at the bottom counting them in. The pictures come
-  sooner too: the opening view no longer queues a few hundred background fetches (the next zoom level, the
-  minimap, the off-screen ring) ahead of the ones on screen. On an 8,000-image map over a link with 100 ms of
-  latency, the map now shows after 2.7 s instead of 8.8 s, and every picture on screen is in after 5.1 s instead of
-  8.8 s.
-- **Browse fetches its map tiles a batch at a time** (issue #5637). The map's tiles used to arrive one request each,
-  and a browser talking plain HTTP to a remote server runs only about six requests at a time, so opening a map cost
-  a round trip for every five or six of its 160–260 tiles. They now come in a handful of requests (six, on an
-  8,000-image map), and since the same view asks for the same batches, revisits still come from the browser cache.
-  With 100 ms of latency the map appeared 0.7 s sooner (2.1 s instead of 2.8 s).
-- **Browse fetches its thumbnails a batch at a time too** (issue #5637). With the tiles batched, the map's
-  thumbnails were the wait: one request each, a few hundred on screen. They now come 32 to a request, and the
-  Browse map keeps the ones it has decoded when you leave it, so going back to the same dataset's map paints them at
-  once. On an 8,000-image map with 347 thumbnails on screen, every thumbnail was in 3.1 s after opening Browse
-  instead of 9.4 s with 100 ms of latency, and 1.6 s instead of 4.2 s with 40 ms.
-- **Browse sends fewer requests, side by side, before the map appears** (issue #5649). Before drawing anything,
-  Browse asked for the dataset's status, then waited for it before asking for the map's layout, and asked for your
-  settings up to four times. It now asks for the layout and the settings together, skips the status (the layout
-  names the media type), and asks for the settings once when you open it from the Dashboard (twice on a full page
-  load, counting the app's own). Opening an 8,000-image map from the Dashboard with 100 ms of latency, the map
-  appeared in 0.64 s instead of 0.73 s; on a fresh page load it appeared in 1.87 s instead of 1.96 s.
-- **Every page starts sooner when you open it in a new tab** (issue #5657). The app's startup code used to arrive
-  as 32 files, and a browser talking plain HTTP to the server fetches only about six at a time, so a fresh page
-  load spent four extra round trips on them before showing anything. It is now one file. A page that checks
-  something with the server before it opens (Train, Tune, Browse and People) also fetches its own code during that
-  check now, not after it. Opening an 8,000-image Browse map in a new tab with 100 ms of latency, the map appeared
-  in 1.22 s instead of 1.87 s.
-- **Opening a page from the Dashboard no longer waits for its code** (issue #5663). The code for Train, Tune,
-  Browse and People used to be downloaded when you first opened each, as some 15–20 small files that a browser
-  talking plain HTTP fetches about six at a time. The app now downloads it in the background once the page you are
-  on has finished loading, one page at a time, and only while nothing else is being fetched. Opening an 8,000-image
-  Browse map from the Dashboard with 100 ms of latency, the map appeared in 0.31 s instead of 0.63 s. A page opened
-  in a new tab is unchanged; [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#reverse-proxy) now recommends HTTP/2 at the
-  reverse proxy, which removes that wait.
-- **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
-  downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
-  originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,
-  as it already did thumbnails. The review flows still fetch the next two pictures while you look at the current
-  one, but they now do it by filling the browser's cache, so a picture you come back to is not fetched again.
-  For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
-  max-age=86400`, and answers `304` to a matching `If-None-Match`.
 
 ### Fixed
 

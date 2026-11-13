@@ -22,10 +22,14 @@ loss.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+# Not typing's: pydantic refuses a typing.TypedDict as a model field below
+# Python 3.12, and the floor is 3.11 (FaceEvenOut, the app failed to start).
+from typing_extensions import TypedDict
 
 from vtscore.config import (
     DATA_DIR,
