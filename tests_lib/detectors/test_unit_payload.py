@@ -56,7 +56,9 @@ def test_a_converted_page_serves_that_page(pdf, make_pages):
     pages = make_pages(pdf)
     assert len(pages) == 3
 
-    served = [resolve_unit_payload(pdf, page["origin"]) for page in pages]
+    resolved = [resolve_unit_payload(pdf, page["origin"]) for page in pages]
+    served = [payload for payload in resolved if payload is not None]
+    assert len(served) == 3
 
     assert [payload[1] for payload in served] == [".png"] * 3
     assert [payload[0] for payload in served] == [page["media_bytes"] for page in pages]
