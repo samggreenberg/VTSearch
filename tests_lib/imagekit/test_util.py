@@ -246,9 +246,14 @@ class TestModelFormats:
         torch.save({"w": torch.zeros(2)}, tmp_path / "state.model")
         torch.jit.save(torch.jit.script(torch.nn.Linear(2, 2)), str(tmp_path / "script.model"))
         torch.save({"w": torch.zeros(2)}, tmp_path / "legacy.model", _use_new_zipfile_serialization=False)
-        assert "PyTorch" in describe_model_format(tmp_path / "state.model").what
-        assert "PyTorch" in describe_model_format(tmp_path / "script.model").what
-        assert "pickle" in describe_model_format(tmp_path / "legacy.model").what
+        found = {
+            name: describe_model_format(tmp_path / name) for name in ("state.model", "script.model", "legacy.model")
+        }
+        assert {name: fmt.what.split(" (")[0] if fmt else None for name, fmt in found.items()} == {
+            "state.model": "a PyTorch file",
+            "script.model": "a PyTorch file",
+            "legacy.model": "a Python pickle",
+        }
 
     def test_keras_tensorflow_pickle_zip_and_empty_files_are_recognised(self, tmp_path):
         (tmp_path / "h5.model").write_bytes(b"\x89HDF\r\n\x1a\n" + bytes(64))
