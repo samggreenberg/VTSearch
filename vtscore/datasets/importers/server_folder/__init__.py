@@ -12,10 +12,15 @@ rows that declare which media types to scan for.  Each row is either:
   ``source_type`` and feeds them through the converter (with the
   per-row params) to produce media of the output type.
 
-When the output type is ``"image"``, ``*.pdf`` files in the folder are
-also expanded as per-page images.  (PDFs participate independently of
-the explicit converter rows - they are tied to the "image" output type
-rather than to a converter.)
+A request that names no ``source_specs`` rows of its own also gets a
+converter row for every *convert-out* half type whose default conversion is
+the output type (:func:`~vtscore.datasets.importers.base.with_default_conversions`):
+an ``"image"`` import renders each page of the folder's documents through
+``document2image``.  That converter row is the only way a PDF becomes pages,
+so a request that names the document row itself gets each page once.  Asked
+for ``"document"`` outright, the scan hands the files over as they are and the
+load pipeline converts them before embedding
+(:func:`~vtscore.datasets.stages.clipper.convert_unembeddable_medias`).
 
 Archives
 --------
@@ -42,9 +47,8 @@ from vtscore.datasets.archive import (
     load_archive_into,
 )
 from vtscore.datasets.chunks import DeferredChunk
-from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec, with_default_conversions
 from vtscore.datasets.loader import iter_folder_chunks_deferred, load_dataset_from_folder
-from vtscore.datasets.pdf import load_pdf_images_into
 
 
 def _coerce_recursive(field_values: dict[str, Any]) -> bool:
@@ -116,8 +120,9 @@ class ServerFolderDatasetImporter(DatasetImporter):
     imported.  With ``dig_archives`` enabled, archives found inside the
     scanned directory are extracted and folded in too.
 
-    When the output media type is ``"image"``, any ``*.pdf`` files in the
-    folder are also processed: each page is rendered as a separate image.
+    When the output media type is ``"image"`` and the request names no source
+    rows of its own, the folder's documents are converted too: each page of a
+    ``*.pdf`` becomes a separate image (see the module docstring).
 
     .. note::
        This importer reads files from the server's filesystem.  In the web
@@ -213,7 +218,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             if spec.converter is None:
                 return spec.source_type
         # Multi-media imports without a direct row still have an output type
-        # from ``media_type``; resolve it explicitly so PDF expansion and
+        # from ``media_type``; resolve it explicitly so the converter rows and
         # origin recording behave correctly.
         from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
@@ -271,6 +276,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
         dig_archives = _coerce_dig_archives(field_values)
         specs = self.effective_source_specs(field_values)
         output_type = self._resolve_output_type(field_values, specs)
+        specs = with_default_conversions(field_values, specs, output_type)
 
         # Single clear up front: every loader below appends from here.
         medias.clear()
@@ -286,9 +292,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
             if spec.converter is None:
                 if self._accumulate_direct(path, spec, medias, thin, recursive):
                     has_direct_files = True
-
-        if output_type == "image":
-            load_pdf_images_into(path, medias, thin=thin, recursive=recursive)
 
         _run_converter_specs(
             path,
@@ -334,17 +337,18 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
         The direct rows' chunks read no file until they are built (see
         :func:`~vtscore.datasets.loader_folder.iter_folder_chunks_deferred`),
-        and neither do an archive's.  The PDF and converter chunks come built,
-        as their sizes are not known until their sources are read.
+        and neither do an archive's.  The converter chunk comes built, as its
+        size is not known until its sources are read.
         """
         path = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
         dig_archives = _coerce_dig_archives(field_values)
 
         specs = self.effective_source_specs(field_values)
+        output_type = self._resolve_output_type(field_values, specs)
+        specs = with_default_conversions(field_values, specs, output_type)
         direct_specs = [s for s in specs if s.converter is None]
         converter_specs = [s for s in specs if s.converter is not None]
-        output_type = self._resolve_output_type(field_values, specs)
 
         if is_archive_path(path):
             yield from self._chunk_archive(path, output_type, specs, chunk_size, thin)
@@ -369,14 +373,8 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 )
             except ValueError:
                 # Empty folder for this source type - keep going; later
-                # PDF / converter rows may still produce output.
+                # converter rows may still produce output.
                 pass
-
-        if output_type == "image":
-            chunk: dict[int, dict[str, Any]] = {}
-            load_pdf_images_into(path, chunk, thin=thin, recursive=recursive)
-            if chunk:
-                yield DeferredChunk.built(chunk)
 
         if converter_specs:
             converter_chunk: dict[int, dict[str, Any]] = {}

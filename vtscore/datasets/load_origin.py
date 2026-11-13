@@ -140,7 +140,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     """
     apply_custom_metadata_md5(ctx.medias)
     _tag_origins(ctx.medias, spec.origin)
-    _apply_clipper_stage(ctx, pacer, spec.clipper, spec.clipper_params, spec.chain_steps)
+    _apply_clipper_stage(ctx, pacer, spec.clipper, spec.clipper_params, spec.chain_steps, spec.media_type)
     embed_failures = _embed_missing_stage(ctx, pacer, spec.embedders if spec.embedders else [spec.embedder])
     # Step 4 (finalize) bundles several sub-stages. Route them
     # through a FinalizeProgress proxy so each maps into its own

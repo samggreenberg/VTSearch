@@ -39,7 +39,13 @@ from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.datasets.archive import extract_archive, is_archive_path, load_archive_into
 from vtscore.datasets.downloader import download_file_with_progress
-from vtscore.datasets.importers.base import DatasetImporter, OutputSpec, PluginField, SourceSpec
+from vtscore.datasets.importers.base import (
+    DatasetImporter,
+    OutputSpec,
+    PluginField,
+    SourceSpec,
+    with_default_conversions,
+)
 from vtscore.datasets.loader import load_dataset_from_folder
 
 
@@ -155,11 +161,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             # Local server path to an archive: extract (cached) and load,
             # stamping local_archive origins for on-demand re-derivation.
             media_type = field_values.get("media_type", "audio")
-            specs = self.effective_source_specs(field_values)
+            output_type = self._output_type_id(media_type)
+            specs = with_default_conversions(field_values, self.effective_source_specs(field_values), output_type)
             medias.clear()
             load_archive_into(
                 url,
-                self._output_type_id(media_type),
+                output_type,
                 specs,
                 medias,
                 thin=thin,

@@ -91,6 +91,7 @@ def _apply_clipper(
     on_progress: Callable[[int, int, str], None] | None = None,
     chain_steps: list[dict] | None = None,
     embedder=None,
+    embed: bool = True,
 ) -> None:
     """Apply a clipper (or full chain) to all medias in *clips_dict*, in place.
 
@@ -127,6 +128,9 @@ def _apply_clipper(
             media with a specific embedder (e.g. the demo loader honouring a
             user-chosen embedder) pass it here so clips are embedded with the
             same model the parents were.
+        embed: ``False`` leaves the produced clips unembedded (their MD5s and
+            thumbnails are still repaired), for a caller whose own embed
+            stage follows and knows which embedders the load asked for.
     """
     from vtscore.datasets.clipper_chain import apply_chain_to_clips, normalise_chain
 
@@ -158,13 +162,121 @@ def _apply_clipper(
     final_type, needs_recompute = result
 
     clips_list = list(clips_dict.values())
-    _fixup_clip_md5_and_embeddings(clips_list, needs_recompute, final_type, on_progress=on_progress, embedder=embedder)
+    _fixup_clip_md5_and_embeddings(
+        clips_list, needs_recompute, final_type, on_progress=on_progress, embedder=embedder, embed=embed
+    )
     _regenerate_clip_thumbnails(clips_list, needs_recompute, final_type)
 
     # Update `media_type` on every clip so downstream code sees the final type
     # (converter chains change the media_type of the carriers).
     for clip in clips_dict.values():
         clip["media_type"] = final_type
+
+
+def default_conversion_step(source_type: str, preferred_target: str = "") -> dict | None:
+    """The chain step that converts a half type: :func:`~vtscore.converters.default_converter_for` as a step.
+
+    ``None`` when *source_type* embeds as it is or has no converter to take.
+    """
+    from vtscore.converters import default_converter_for  # noqa: PLC0415
+
+    converter = default_converter_for(source_type, preferred_target)
+    if converter is None:
+        return None
+    return {"kind": "converter", "name": converter.name, "params": {}}
+
+
+def _conversion_chain(step: dict, clipper_name: str, clipper_params: dict | None, chain_steps: list[dict]) -> list[dict]:
+    """*step* leading the load's own clipper choice and cleanup gates.
+
+    The clipper and the gates were picked for the dataset's type, which is what
+    *step* produces, so they follow it.  A ``*_default`` clipper cuts nothing
+    and an unknown or other-type one cannot run on the converter's output;
+    neither joins the chain.
+    """
+    from vtscore.converters import get_converter  # noqa: PLC0415
+    from vtscore.media import get_clipper  # noqa: PLC0415
+
+    steps = [step]
+    converter = get_converter(step["name"])
+    if clipper_name and not clipper_name.endswith("_default") and not any(s["kind"] == "clipper" for s in chain_steps):
+        try:
+            clipper = get_clipper(clipper_name)
+        except KeyError:
+            clipper = None
+        if clipper is not None and converter is not None and clipper.media_type == converter.target_type:
+            steps.append({"kind": "clipper", "name": clipper_name, "params": dict(clipper_params or {})})
+    return [*steps, *chain_steps]
+
+
+def convert_unembeddable_medias(
+    clips_dict: dict,
+    preferred_target: str = "",
+    *,
+    clipper_name: str = "",
+    clipper_params: dict | None = None,
+    chain_steps: list[dict] | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
+) -> set[int]:
+    """Convert every media of a *convert-out* half type in *clips_dict*, in place.
+
+    An importer may hand over media of a type nothing can embed: a folder scan
+    asked for documents, a plugin that lists PDFs, a document demo loaded with
+    no converter named.  Left alone they reach the embed stage, find no
+    embedder, and are dropped, so the load ends empty (#5680).  Here each such
+    media is run through its type's default converter
+    (:func:`default_conversion_step`) as the leading step of a chain, which
+    records the recipe on every output's origin exactly as a chain the user
+    built would: a label on page 3 resolves back to the PDF and re-renders
+    page 3.
+
+    Media that already embed are left untouched, and so is everything when
+    *chain_steps* carries a converter of its own (the caller chose the
+    conversion).  The outputs take the ids after the untouched media's and
+    leave **unembedded**: the caller's embed stage follows, with the embedders
+    the load asked for.
+    Returns the ids of the media it produced, empty when it converted nothing.
+    """
+    from vtscore.datasets.clipper_chain import normalise_chain  # noqa: PLC0415
+
+    user_steps = normalise_chain(chain_steps)
+    if any(s["kind"] == "converter" for s in user_steps):
+        return set()
+
+    lead: dict[str, dict] = {}
+    for media in clips_dict.values():
+        media_type = media.get("media_type") or ""
+        if media_type and media_type not in lead:
+            step = default_conversion_step(media_type, preferred_target)
+            if step is not None:
+                lead[media_type] = step
+    if not lead:
+        return set()
+
+    kept = {mid: m for mid, m in clips_dict.items() if m.get("media_type") not in lead}
+    produced: list[dict] = []
+    for media_type, step in lead.items():
+        subset = {mid: m for mid, m in clips_dict.items() if m.get("media_type") == media_type}
+        _apply_clipper(
+            subset,
+            "",
+            None,
+            on_progress=on_progress,
+            chain_steps=_conversion_chain(step, clipper_name, clipper_params, user_steps),
+            embed=False,
+        )
+        produced.extend(subset.values())
+
+    clips_dict.clear()
+    clips_dict.update(kept)
+    next_id = max(kept, default=0) + 1
+    produced_ids: set[int] = set()
+    for media in produced:
+        media["id"] = next_id
+        clips_dict[next_id] = media
+        produced_ids.add(next_id)
+        next_id += 1
+    return produced_ids
 
 
 def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
@@ -445,6 +557,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     media_type: str,
     on_progress: Callable[[int, int, str], None] | None = None,
     embedder=None,
+    embed: bool = True,
 ) -> None:
     """Recompute MD5 and embeddings for clips that need it.
 
@@ -464,7 +577,8 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
 
     Embeddings are batched through ``embed_media_bulk`` in a single call
     per invocation so GPU-backed embedders can fuse the forward pass.
-    Failures fall back to keeping the clip's existing embedding.
+    Failures fall back to keeping the clip's existing embedding.  With
+    *embed* false only the MD5s are repaired: the caller embeds afterwards.
     """
 
     total_clips = len(clips)
@@ -506,7 +620,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         embed_indices.append(clip_idx)
         embed_inputs.append(_build_clip_embed_input(clip, media_type))
 
-    if not embed_indices:
+    if not embed_indices or not embed:
         return
 
     if on_progress:
@@ -656,10 +770,25 @@ def _resolve_clip_embedder(media_type: str):
 
 
 def _apply_clipper_stage(
-    ctx: DatasetContext, tracker, clipper: str, clipper_params: dict | None, chain_steps: list[dict] | None
+    ctx: DatasetContext,
+    tracker,
+    clipper: str,
+    clipper_params: dict | None,
+    chain_steps: list[dict] | None,
+    media_type: str = "",
 ) -> None:
-    """Run the clipper / chain stage with tracker-routed progress."""
-    if not (clipper or chain_steps):
+    """Run the clipper / chain stage with tracker-routed progress.
+
+    Media of a type nothing embeds (a document) are converted first, whatever
+    the load asked for: see :func:`convert_unembeddable_medias`.  *media_type*
+    is the load's declared type, the conversion's target when the half type
+    can become it.
+    """
+    needs_conversion = any(
+        default_conversion_step(t, media_type) is not None
+        for t in {m.get("media_type") or "" for m in ctx.medias.values()}
+    )
+    if not (clipper or chain_steps or needs_conversion):
         return
 
     def _clipper_progress(current: int, total: int, phase: str) -> None:
@@ -694,8 +823,31 @@ def _apply_clipper_stage(
             total_steps=_TOTAL_LOAD_STEPS,
         )
 
-    _clipper_progress(0, 0, "clipping")
-    _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
+    _clipper_progress(0, 0, "converting" if needs_conversion else "clipping")
+    converted: set[int] = set()
+    if needs_conversion:
+        converted = convert_unembeddable_medias(
+            ctx.medias,
+            media_type,
+            clipper_name=clipper,
+            clipper_params=clipper_params,
+            chain_steps=chain_steps,
+            on_progress=_clipper_progress,
+        )
+    if converted and (clipper or chain_steps):
+        # The converted media ran the load's clipper and gates behind their
+        # converter; only what the importer handed over embeddable still owes them.
+        rest = {mid: m for mid, m in ctx.medias.items() if mid not in converted}
+        if rest:
+            done = [ctx.medias[mid] for mid in sorted(converted)]
+            _apply_clipper(rest, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
+            ctx.medias.clear()
+            ctx.medias.update(rest)
+            for new_id, media in enumerate(done, max(rest, default=0) + 1):
+                media["id"] = new_id
+                ctx.medias[new_id] = media
+    elif clipper or chain_steps:
+        _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
     # Clipping reassigns media IDs starting from 1 and rewrites embeddings
     # in place; the cached matrix's id list can collide with the new one
     # while pointing at stale rows. Drop the cache so the next reader
