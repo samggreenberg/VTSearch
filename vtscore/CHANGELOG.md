@@ -54,6 +54,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   first failed index query and the first failed PDF (with its HTTP status), where it used to return an empty
   folder. A category that comes up short is still tolerated.
 
+- **`UCSF_IDL_DOWNLOAD_URL` is the library's S3 bucket** (issue #5681):
+  `https://ucsf-idl-dataset.s3.us-east-1.amazonaws.com`, where it was `https://download.industrydocuments.ucsf.edu`,
+  which refused downloads with a CloudFront 403 and which the library's own viewer no longer uses. The `<a>/<b>/<c>/<d>/<id>/<id>.pdf` path under it is unchanged, so
+  `download_ucsf_documents` fetches the same documents; `UCSF_IDL_API_URL` is unchanged.
+
 - **`positives_browse` previews the unit, not its source file**: a positive a converter made is served and
   embedded from the output its recipe rebuilds (`resolve_unit_payload`), where the PDF's own bytes were handed
   over as an image.
