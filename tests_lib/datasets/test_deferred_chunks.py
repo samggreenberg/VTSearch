@@ -183,15 +183,8 @@ class TestServerFolderDeferred:
         deferred = list(IMPORTER.run_chunked_cli_deferred(dict(field_values), chunk_size, thin=True))
         return built, deferred
 
-    def test_pdf_and_converter_chunks_keep_their_places(self, tmp_path, monkeypatch):
-        import fitz
-
+    def test_converter_chunk_keeps_its_place(self, tmp_path, monkeypatch):
         folder = _image_folder(tmp_path / "imgs", 3)
-        doc = fitz.open()
-        for _ in range(2):
-            doc.new_page(width=100, height=100)
-        doc.save(str(folder / "doc.pdf"))
-        doc.close()
 
         def fake_converters(folder, output_type, specs, medias, **kwargs):
             if specs:
@@ -209,9 +202,9 @@ class TestServerFolderDeferred:
 
         built, deferred = self._both(field_values, 2)
 
-        # Two folder chunks, the PDF's pages, the converter's row.
-        assert [d.count for d in deferred] == [len(c) for c in built] == [2, 1, 2, 1]
-        assert [d.key is not None for d in deferred] == [True, True, False, False]
+        # Two folder chunks, then the converter rows' chunk, built as it is reached.
+        assert [d.count for d in deferred] == [len(c) for c in built] == [2, 1, 1]
+        assert [d.key is not None for d in deferred] == [True, True, False]
         assert _names([d.build() for d in deferred]) == _names(built)
 
     def test_dug_archives_keep_their_places(self, tmp_path, archive_cache):

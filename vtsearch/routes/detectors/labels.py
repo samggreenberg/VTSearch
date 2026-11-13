@@ -472,29 +472,29 @@ def preview_detector_label(name: str, element_id: str):
     _, elem = found
     media_type = data.get("media_type", "")
 
+    from vtscore.detectors.resolver import resolve_unit_payload
+
     with resolve_element_to_path(elem) as file_path:
         if file_path is None or not file_path.is_file():
             abort(404, message="Element media file unavailable")
 
-        if media_type == "text":
-            try:
-                content = file_path.read_text(encoding="utf-8", errors="replace").strip()
-            except OSError:
-                abort(404, message="Element media file unreadable")
-            return jsonify(
-                {
-                    "content": content,
-                    "word_count": len(content.split()),
-                    "character_count": len(content),
-                }
-            )
-
-        try:
-            file_bytes = file_path.read_bytes()
-        except OSError:
+        # The unit's own bytes: a label a converter made (a page of a PDF, a
+        # document's text) resolves to the file it was converted from.
+        payload = resolve_unit_payload(file_path, elem.origin)
+        if payload is None:
             abort(404, message="Element media file unreadable")
+        file_bytes, suffix = payload
 
-        suffix = file_path.suffix.lower()
+    if media_type == "text":
+        # Universal newlines, as the text-mode read this replaced gave.
+        content = file_bytes.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n").strip()
+        return jsonify(
+            {
+                "content": content,
+                "word_count": len(content.split()),
+                "character_count": len(content),
+            }
+        )
 
     mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or _DEFAULT_MIMETYPE_BY_TYPE.get(media_type, "application/octet-stream")
     return send_file(
@@ -558,12 +558,14 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem, crop=None
     voted sub-region; ignored for non-image types.
     """
     if media_type == "image":
-        suffix = file_path.suffix.lower()
-        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
-        try:
-            image_bytes = file_path.read_bytes()
-        except OSError:
+        from vtscore.detectors.resolver import resolve_unit_payload  # noqa: PLC0415
+
+        # A page a converter rendered resolves to its PDF: paint the page.
+        payload = resolve_unit_payload(file_path, elem.origin)
+        if payload is None:
             abort(404, message="Element media file unreadable")
+        image_bytes, suffix = payload
+        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
         download_name = elem.origin_name or elem.filename or f"label{suffix}"
         return image_thumbnail_response(image_bytes, mimetype, download_name, crop=crop)
 

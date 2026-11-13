@@ -860,10 +860,31 @@ class TestFolderImporterWithConverters:
             patch("vtscore.datasets.importers.server_folder._run_converter_specs") as mock_conv,
         ):
             medias: dict = {}
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
+            IMPORTER.run(
+                {
+                    "path": str(tmp_path),
+                    "media_type": "image",
+                    "source_specs": [{"source_type": "image", "converter": None, "params": {}}],
+                },
+                medias,
+            )
             mock_conv.assert_called_once()
             forwarded_specs = mock_conv.call_args[0][2]
             assert forwarded_specs == []
+
+    def test_run_with_no_source_specs_adds_the_document_row(self, tmp_path):
+        """A request that names no rows gets the half types that become images by default (#5680)."""
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        (tmp_path / "photo.png").write_bytes(_make_png_bytes())
+
+        with (
+            patch("vtscore.datasets.importers.server_folder.load_dataset_from_folder"),
+            patch("vtscore.datasets.importers.server_folder._run_converter_specs") as mock_conv,
+        ):
+            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, {})
+            forwarded = mock_conv.call_args[0][2]
+            assert [(s.source_type, s.converter) for s in forwarded] == [("document", "document2image")]
 
     def test_folder_only_converters_no_regular_files(self, tmp_path):
         """When only converter source files exist and no regular target files."""

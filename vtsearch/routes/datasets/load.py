@@ -469,11 +469,18 @@ def _apply_demo_media_type_fields(field_values: dict, converter_name: str, demo_
 
     With a converter the resulting dataset has the converter's *target* type,
     not the demo's original type; without one it keeps the demo's native type.
+    A demo of a type nothing embeds (documents) has no native dataset to keep,
+    so a request that names no converter gets that type's default one: the
+    pages, as images.
     """
+    from vtscore.converters import default_converter_for, get_converter  # noqa: PLC0415
+
+    if not converter_name:
+        default = default_converter_for(demo_info.get("media_type", ""))
+        converter_name = default.name if default is not None else ""
     if not converter_name:
         field_values["media_type"] = demo_info.get("media_type", "")
         return
-    from vtscore.converters import get_converter  # noqa: PLC0415
 
     conv = get_converter(converter_name)
     field_values["media_type"] = conv.target_type if conv is not None else demo_info.get("media_type", "")

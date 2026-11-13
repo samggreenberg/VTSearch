@@ -295,8 +295,10 @@ class TestDownloadUcsfDocuments:
             overalls.append(tracker.get()["overall"])
         assert all(b >= a - 1e-9 for a, b in zip(overalls, overalls[1:])), overalls
 
-    def test_handles_api_failure_gracefully(self, tmp_path):
-        """If the Solr API request fails, the category is skipped."""
+    def test_nothing_downloaded_says_why(self, tmp_path):
+        """#5680: an index that cannot be reached used to leave an empty folder and a load with no medias."""
+        import pytest
+
         from vtscore.datasets import downloader as dl_module
 
         def fail_get(*a, **kw):
@@ -305,15 +307,60 @@ class TestDownloadUcsfDocuments:
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch("requests.get", fail_get),
+            pytest.raises(RuntimeError, match="No UCSF Industry Documents could be downloaded.*network down"),
+        ):
+            dl_module.download_ucsf_documents(categories=["Tobacco"], docs_per_category=5, on_progress=lambda *a: None)
+
+    def test_refused_downloads_name_the_status(self, tmp_path):
+        """The index answers but every PDF is refused: the error carries the HTTP status."""
+        import pytest
+        import requests
+
+        from vtscore.datasets import downloader as dl_module
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = _fake_solr_response(["abcd0001", "abcd0002"])
+
+        def refuse(url, dest, size, cb):
+            response = MagicMock()
+            response.status_code = 403
+            raise requests.HTTPError("403 Client Error", response=response)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", refuse),
+            patch("requests.get", return_value=mock_response),
+            pytest.raises(RuntimeError, match="downloading abcd0001.pdf failed \\(HTTP 403\\)"),
+        ):
+            dl_module.download_ucsf_documents(categories=["Tobacco"], docs_per_category=2, on_progress=lambda *a: None)
+
+    def test_a_short_category_is_tolerated(self, tmp_path):
+        """One category's index query failing costs that category, not the demo."""
+        from vtscore.datasets import downloader as dl_module
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = _fake_solr_response(["abcd0001"])
+        calls = {"n": 0}
+
+        def flaky_get(*a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("network down")
+            return mock_response
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"%PDF-1.0 stub")
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+            patch("requests.get", flaky_get),
         ):
             result = dl_module.download_ucsf_documents(
-                categories=["Tobacco"],
-                docs_per_category=5,
-                on_progress=lambda *a: None,
+                categories=["Tobacco", "Food"], docs_per_category=1, on_progress=lambda *a: None
             )
 
-        # Should still return the directory (possibly empty).
-        assert result.name == "ucsf_documents"
+        assert [p.name for p in result.glob("*/*.pdf")] == ["abcd0001.pdf"]
 
 
 # ---------------------------------------------------------------------------
