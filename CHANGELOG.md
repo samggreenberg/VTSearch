@@ -20,6 +20,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **Face models may be called `.model`** (issue #5683). A folder of face models now finds a detector or embedder
+  named `.model` as well as `.onnx`; a model file named outright in `face.json` already loaded under any name,
+  since what counts is that it holds an ONNX model. A model saved in another format (a PyTorch file, a Keras
+  model, a TensorFlow SavedModel) is refused with a message naming the format and how to convert it, where it
+  used to fail on a protobuf parse error. See "Models in other formats" in `imagekit/README.md`.
+
 ### Fixed
 
 - **Importing a folder of PDFs gives each page once** (issue #5680). Adding a dataset from a folder of PDFs made

@@ -41,10 +41,10 @@ class OssFacePipeline:
         embedder = _section(config, EMBEDDER_KEY)
         bundle = detector.get("model_bundle") or detector.get("model")
         if not bundle:
-            raise ValueError("oss provider: config['detector']['model_bundle'] (the detector .onnx) is required")
+            raise ValueError("oss provider: config['detector']['model_bundle'] (the detector model) is required")
         model = embedder.get("model")
         if not model:
-            raise ValueError("oss provider: config['embedder']['model'] (the embedder .onnx) is required")
+            raise ValueError("oss provider: config['embedder']['model'] (the embedder model) is required")
         self.detector.initialize(opts, bundle, detector.get("config"))
         self.extractor.initialize(opts, model, embedder.get("config"))
         threshold = detector.get("confidence_threshold")

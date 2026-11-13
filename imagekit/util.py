@@ -314,25 +314,135 @@ register_transform("ChannelSwap", _channel_swap_factory)
 # ---------------------------------------------------------------------------
 
 
-def resolve_model_file(bundle: str | Path, suffix: str = ".onnx") -> Path:
+#: The extensions a bundle directory is searched for.  ONNX Runtime reads a model
+#: by what is in it, not by its name, so an ONNX model named ``.model`` (#5683)
+#: loads exactly as one named ``.onnx`` does; a model file named outright may be
+#: called anything.
+MODEL_SUFFIXES: tuple[str, ...] = (".onnx", ".model")
+
+#: Where a refusal sends someone holding a model in another format.
+OTHER_FORMATS_DOC = "'Models in other formats' in imagekit/README.md"
+
+
+class NotOnnxModelError(ValueError):
+    """A model handed to imagekit's own detector or embedder is not ONNX, so ONNX Runtime cannot run it."""
+
+
+@dataclass(frozen=True)
+class ModelFormat:
+    """A model format other than ONNX, recognised by :func:`describe_model_format`."""
+
+    #: What the file is, as a phrase: ``"a PyTorch file (torch.save or TorchScript)"``.
+    what: str
+    #: How to turn it into ONNX.
+    convert: str
+
+
+_PYTORCH = ModelFormat(
+    "a PyTorch file (torch.save or TorchScript)",
+    "load it with torch.load or torch.jit.load and export it with torch.onnx.export",
+)
+_KERAS_ZIP = ModelFormat("a Keras 3 model", "convert it with tf2onnx")
+_ZIP = ModelFormat("a zip archive", "unpack it: the model may be inside")
+_HDF5 = ModelFormat("an HDF5 file (a Keras .h5 model)", "convert it with tf2onnx")
+_PICKLE = ModelFormat(
+    "a Python pickle (an old-style torch.save, joblib or similar)",
+    "load it in the framework that wrote it and export it to ONNX",
+)
+_SAVED_MODEL = ModelFormat("a TensorFlow SavedModel directory", "convert it with tf2onnx (--saved-model)")
+_EMPTY = ModelFormat("an empty file", "copy the model again")
+
+
+def describe_model_format(path: str | Path) -> ModelFormat | None:
+    """What *path* holds, when its first bytes show it is a model format other than ONNX.
+
+    ``None`` for anything else, ONNX included.  An ONNX file has no magic number,
+    so ``None`` means "not recognisably something else", never "this is ONNX":
+    only ONNX Runtime can say that.  Reads a few bytes (and a zip's index); loads nothing.
+    """
+    p = Path(path)
+    if p.is_dir():
+        return _SAVED_MODEL if (p / "saved_model.pb").is_file() else None
+    try:
+        with open(p, "rb") as fh:
+            head = fh.read(8)
+    except OSError:
+        return None
+    if not head:
+        return _EMPTY
+    if head.startswith(b"PK\x03\x04"):
+        return _describe_zip(p)
+    if head == b"\x89HDF\r\n\x1a\n":
+        return _HDF5
+    if head[:1] == b"\x80" and head[1:2] in (b"\x02", b"\x03", b"\x04", b"\x05"):
+        return _PICKLE
+    return None
+
+
+def _describe_zip(path: Path) -> ModelFormat:
+    import zipfile  # noqa: PLC0415
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+    except (zipfile.BadZipFile, OSError):
+        return _ZIP
+    leaves = {name.rsplit("/", 1)[-1] for name in names}
+    if "data.pkl" in leaves:
+        return _PYTORCH
+    if "config.json" in leaves and any(leaf.endswith(".weights.h5") for leaf in leaves):
+        return _KERAS_ZIP
+    return _ZIP
+
+
+def not_onnx_message(path: str | Path, what: str, convert: str) -> str:
+    """The refusal for a model in another format: what it is, and the two ways to run it."""
+    return (
+        f"{path} is {what}, not an ONNX model, and imagekit's own detector and embedder run ONNX models only. "
+        f"Convert it ({convert}), or run it through a face provider that reads it: see {OTHER_FORMATS_DOC}"
+    )
+
+
+def resolve_model_file(bundle: str | Path, suffix: str | Iterable[str] = MODEL_SUFFIXES) -> Path:
     """The model file a ``model_bundle`` argument names.
 
-    A bundle is either the model file itself or a directory holding exactly one
-    file with *suffix* (plus its JSON config and whatever else ships with it).
-    Model paths are always arguments, never defaults, so a missing one is an
-    error here rather than a silent download somewhere else.
+    A bundle is either the model file itself, under any name, or a directory
+    holding exactly one file with one of the extensions in *suffix* (plus its
+    JSON config and whatever else ships with it).  Model paths are always
+    arguments, never defaults, so a missing one is an error here rather than a
+    silent download somewhere else.
     """
+    suffixes = (suffix,) if isinstance(suffix, str) else tuple(suffix)
+    wanted = {s.lower() for s in suffixes}
     path = Path(bundle)
     if path.is_file():
         return path
     if path.is_dir():
-        candidates = sorted(p for p in path.iterdir() if p.suffix.lower() == suffix)
+        candidates = sorted(p for p in path.iterdir() if p.suffix.lower() in wanted)
         if len(candidates) == 1:
             return candidates[0]
         raise FileNotFoundError(
-            f"model bundle {path} must hold exactly one {suffix} file; found {[c.name for c in candidates]}"
+            f"model bundle {path} must hold exactly one {' or '.join(suffixes)} file; "
+            f"found {[c.name for c in candidates]}"
         )
     raise FileNotFoundError(f"no such model file or bundle directory: {path}")
+
+
+def resolve_onnx_model(bundle: str | Path) -> Path:
+    """:func:`resolve_model_file` for an ONNX model, refusing one whose bytes show another format.
+
+    Raises :class:`NotOnnxModelError` naming the format (a PyTorch file, a Keras
+    model, a TensorFlow SavedModel, a pickle) before anything is loaded, so the
+    error says what to do rather than that a protobuf failed to parse.
+    """
+    path = Path(bundle)
+    found = describe_model_format(path) if path.is_dir() else None
+    if found is None:
+        path = resolve_model_file(bundle)
+        found = describe_model_format(path)
+    if found is not None:
+        raise NotOnnxModelError(not_onnx_message(path, found.what, found.convert))
+    return path
 
 
 def load_model_config(
