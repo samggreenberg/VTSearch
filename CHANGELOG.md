@@ -50,6 +50,10 @@ what is on `dev` but not yet on `main`; each release dates that section
   HTTP status the download was refused with. For API users: `POST /api/dataset/load-demo` with no `converter`
   loads this demo as page images, where it loaded nothing.
 
+- **The UCSF Documents demo downloads again** (issue #5681). The Industry Documents Library now serves its PDFs
+  from a new address, and the old one refused the demo's downloads, so it could not fetch a single document. It
+  now downloads from the address the library's own document viewer uses.
+
 ## 2026-11-13
 
 ### Changed
