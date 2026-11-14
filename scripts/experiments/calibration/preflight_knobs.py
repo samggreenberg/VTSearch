@@ -312,6 +312,26 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #3688's one wrong vote: a simulated user the app never has.
+    if C.FLIP_VOTE is not None:
+        from vtscore.eval.voting_iterations import parse_flip_vote  # noqa: PLC0415
+
+        try:
+            parse_flip_vote(C.FLIP_VOTE)
+        except ValueError:
+            refuse(
+                "flip_vote", "CALIB_FLIP_VOTE", "must be good:K or bad:K with K >= 1, the served item to answer wrongly"
+            )
+        else:
+            rows.append(("flip_vote", C.FLIP_VOTE, "<unset> = an honest simulated user"))
+    # #3688's held-out record: cells scored (and, with scope both, voted) without the record's images.
+    if C.HOLD_OUT is not None:
+        if C.HOLD_OUT_SCOPE not in ("withheld", "both"):
+            refuse("hold_out", "CALIB_HOLD_OUT_SCOPE", "must be withheld or both")
+        elif not Path(C.HOLD_OUT).is_file():
+            refuse("hold_out", "CALIB_HOLD_OUT", "must name a JSON file {class: [media ids]}")
+        else:
+            rows.append(("hold_out", f"{C.HOLD_OUT}:{C.HOLD_OUT_SCOPE}", "<unset> = the cell as built"))
     # #4664's early check: an arm the app does not take.
     if C.EARLY_CHECK is not None:
         if isinstance(C.EARLY_CHECK, int) and C.EARLY_CHECK >= 1:

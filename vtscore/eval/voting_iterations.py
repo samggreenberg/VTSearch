@@ -239,6 +239,20 @@ _SKYLINE_SEED: int = 3322
 _MIN_PREVALENCE_POSITIVES = 15
 
 
+def parse_flip_vote(spec: Optional[str]) -> tuple[Optional[bool], int]:
+    """``(side, k)`` for a *flip_vote* spec (issue #3688): ``"good:3"`` -> ``(True, 3)``; ``None`` -> ``(None, 0)``.
+
+    *side* is the truth of the item whose vote flips: True for the K-th true
+    positive served (voted Bad), False for the K-th true negative (voted Good).
+    """
+    if spec is None:
+        return None, 0
+    side, _, k = str(spec).partition(":")
+    if side not in ("good", "bad") or not k.isdigit() or int(k) < 1:
+        raise ValueError(f"flip_vote must be 'good:K' or 'bad:K' with K >= 1; got {spec!r}")
+    return side == "good", int(k)
+
+
 def _prevalence(clips_dict: dict[int, dict[str, Any]], target_category: str) -> float:
     """Fraction of *clips_dict* that is positive for *target_category*."""
     if not clips_dict:
@@ -3226,6 +3240,9 @@ def simulate_voting_iterations(  # noqa: C901
     min_good: Optional[int] = None,
     hard_dry_run: Optional[int] = None,
     band_share: Optional[int] = None,
+    flip_vote: Optional[str] = None,
+    hold_out: Optional[Iterable[int]] = None,
+    hold_out_voting: bool = False,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
@@ -3679,6 +3696,20 @@ def simulate_voting_iterations(  # noqa: C901
             (:func:`~vtscore.eval.al_strategies.band_pick`).  It is an ordinary
             click, logged with phase ``"band"``.  ``None`` - the default - is the
             app.  Needs the balance (*beta*) and the phase machine.
+        flip_vote: An experiment knob (issue #3688): ``"good:K"`` has the
+            simulated user vote the K-th true positive served Bad, ``"bad:K"``
+            the K-th true negative served Good (K from 1).  Exactly one vote in
+            the run is wrong; everything else, the withheld scoring included,
+            reads the truth.  The pick log's ``picked_label`` stays the truth
+            and ``picked_vote`` is what was voted.  ``None`` - the default - is
+            the app.
+        hold_out: An experiment knob (issue #3688): media ids taken out of the
+            withheld half after the split (and out of its band cohorts), so a
+            run is scored only on images nobody disputes.  With
+            *hold_out_voting* they leave the voting half too: the corrected arm
+            of a pair whose other arm votes them as built.  After the split, so
+            neither half otherwise moves.  ``None`` - the default - is the app.
+        hold_out_voting: Whether *hold_out* also leaves the voting half.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -4081,6 +4112,7 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"new_walk must be one of {NEW_WALKS}; got {new_walk!r}")
     if span_green is not None and (isinstance(span_green, bool) or not isinstance(span_green, int) or span_green < 0):
         raise ValueError(f"span_green must be an integer >= 0 or None; got {span_green!r}")
+    flip_side, flip_at = parse_flip_vote(flip_vote)
     if min_good is not None and (
         isinstance(min_good, bool) or not isinstance(min_good, int) or not 1 <= min_good <= MIN_PER_CLASS
     ):
@@ -4204,6 +4236,17 @@ def simulate_voting_iterations(  # noqa: C901
         realized_prevalence = round(
             sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
         )
+
+    # #3688: images a human found mislabelled leave the withheld half in both arms
+    # of a pair, and the voting half in the corrected one.
+    if hold_out:
+        held_out = set(hold_out)
+        test_ids = [cid for cid in test_ids if cid not in held_out]
+        band_cohorts = {b: [cid for cid in ids if cid not in held_out] for b, ids in band_cohorts.items()}
+        if hold_out_voting:
+            sim_ids = [cid for cid in sim_ids if cid not in held_out]
+    elif hold_out_voting:
+        raise ValueError("hold_out_voting needs hold_out, the ids to hold out")
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the
@@ -4426,6 +4469,10 @@ def simulate_voting_iterations(  # noqa: C901
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
+    #: #3688: how many true positives / negatives have been served, and the one
+    #: item whose vote was flipped (None until it is served).
+    served_truth = {True: 0, False: 0}
+    flipped: list[int] = []
 
     # Voting proceeds one item at a time: the autopilot selector picks the next
     # pool item using the *current* detector (trained at the previous step), the
@@ -4580,10 +4627,14 @@ def simulate_voting_iterations(  # noqa: C901
     recent_steps: list[tuple[Any, float]] = []
 
     def _cast(cid: int, phase_name: str | None) -> bool:
-        """Reveal *cid*'s ground truth as a vote; whether it was positive."""
+        """Reveal *cid*'s ground truth as a vote (one flipped under *flip_vote*); whether it was voted Good."""
         pool.remove(cid)
         vote_phase[cid] = phase_name or ""
         is_positive = media_is_positive(clips_dict[cid], target_category)
+        served_truth[is_positive] += 1
+        if flip_side is is_positive and served_truth[is_positive] == flip_at:
+            flipped.append(cid)
+            is_positive = not is_positive
         if is_positive:
             good_votes[cid] = None
             labeled[cid] = 1.0
@@ -4631,7 +4682,8 @@ def simulate_voting_iterations(  # noqa: C901
                     _sorted_percentile(seed_sorted_scores, startup_cut) if startup_cut is not None else float("nan")
                 ),
                 "picked_id": cid,
-                "picked_label": 1 if is_positive else 0,
+                "picked_label": int(is_positive != (cid in flipped)),
+                "picked_vote": 1 if is_positive else 0,
                 "picked_seed_rank": rank,
                 "picked_seed_percentile": (
                     round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")

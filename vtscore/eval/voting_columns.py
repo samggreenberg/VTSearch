@@ -503,6 +503,9 @@ PICK_COLUMNS: tuple[str, ...] = (
     "picked_id",
     #: Ground truth for the click: 1 if the item was a positive.
     "picked_label",
+    #: What the simulated user voted: 1 for Good.  The truth except on the one
+    #: click a ``flip_vote`` run (#3688) answers wrongly.
+    "picked_vote",
     #: Where the picked item sat in the seed sort - as a 0-based rank over the
     #: whole sort of the voting half (#5004: the withheld half is not on the
     #: user's screen) and as a percentile (0 = top).  Together with ``picked_label``
