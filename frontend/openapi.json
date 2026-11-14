@@ -319,6 +319,9 @@
           "face_compare": {
             "type": "boolean"
           },
+          "face_even_out": {
+            "$ref": "#/components/schemas/FaceEvenOut"
+          },
           "focus_mode_left": {
             "additionalProperties": {
               "type": "string"
@@ -4445,6 +4448,29 @@
         ],
         "type": "object"
       },
+      "FaceEvenOut": {
+        "properties": {
+          "contrast": {
+            "type": "boolean"
+          },
+          "exposure": {
+            "type": "boolean"
+          },
+          "greyscale_both": {
+            "type": "boolean"
+          },
+          "greyscale_either": {
+            "type": "boolean"
+          },
+          "turn_matched": {
+            "type": "boolean"
+          },
+          "white_balance": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "FieldOptions": {
         "additionalProperties": false,
         "properties": {
@@ -8338,6 +8364,9 @@
           },
           "face_compare": {
             "type": "boolean"
+          },
+          "face_even_out": {
+            "$ref": "#/components/schemas/FaceEvenOut"
           },
           "focus_mode_left": {},
           "focus_mode_right": {},

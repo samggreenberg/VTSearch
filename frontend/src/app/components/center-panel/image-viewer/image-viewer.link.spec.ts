@@ -375,4 +375,43 @@ describe('ImageViewerComponent linked (Face compare registration)', () => {
     TestBed.tick();
     expect(link.lead()).toBeNull();
   });
+
+  it('tells the link both faces while they are matched, and neither otherwise', () => {
+    expect(link.faces()).toBeNull();
+    openBoth();
+    const faces = link.faces()!;
+    // Each in its own face space: eyes half an eye-to-eye apart round the origin.
+    expectClose(faces.lead.points[0], [-0.5, 0]);
+    expectClose(faces.follower.points[1], [0.5, 0]);
+    // The candidate's image runs 2.5 units either side of its eyes; the
+    // reference's, its face up in a corner, mostly to the right and below.
+    expect(faces.lead.bounds.x0).toBeCloseTo(-2.5, 9);
+    expect(faces.follower.bounds.x0).toBeCloseTo(-1.5, 9);
+    expect(faces.follower.bounds.x1).toBeCloseTo(3.5, 9);
+    open(follower, 3, null);
+    expect(link.faces()).toBeNull();
+  });
+
+  it('zooms both panes to a part of the face', async () => {
+    openBoth();
+    // The eyes: a unit wide round the eye midpoint, in a 100 px pane.
+    lead.viewer.showFaceRect({ x0: -0.5, y0: -0.25, x1: 0.5, y1: 0.25 });
+    await settleZoneless(follower.fixture);
+    // Both faces' eye midpoints in the middle of their panes...
+    expectClose(faceUnder(lead, CENTRED), [0, 0]);
+    expectClose(faceUnder(follower, CORNERED), [0, 0]);
+    // ...and an eye at each side of them.
+    expectClose(faceUnder(lead, CENTRED, 40, 0), [0.4, 0]);
+    expectClose(faceUnder(follower, CORNERED, 40, 0), [0.4, 0]);
+    expectMatched();
+  });
+
+  it('fits a part to the pane, and stops at the zoom range', () => {
+    openBoth();
+    // 2 units down 100 px, where the candidate's unit is 20 px at zoom 1.
+    lead.viewer.showFaceRect({ x0: -0.25, y0: -1, x1: 0.25, y1: 1 });
+    expect(lead.viewer.zoom()).toBeCloseTo(2.5, 9);
+    lead.viewer.showFaceRect({ x0: -0.01, y0: -0.01, x1: 0.01, y1: 0.01 });
+    expect(lead.viewer.zoom()).toBe(lead.viewer.maxZoom);
+  });
 });

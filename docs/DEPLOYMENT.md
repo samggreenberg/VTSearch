@@ -239,6 +239,15 @@ A few VTSearch-specific points matter when configuring the proxy:
   cap only applies under gunicorn: the dev server (`python app.py`) spawns a
   thread per connection and runs uncapped unless `VTSEARCH_SSE_MAX_CONNECTIONS`
   is set explicitly.
+- **HTTP/2.** Turn it on at the proxy (`http2 on;` in nginx; Caddy and
+  Traefik enable it with TLS). Gunicorn serves HTTP/1.1, over which a browser
+  opens six connections per host, and the `/api/events` stream holds one of
+  them for the life of the page. A view's code is some 15–20 small files, so
+  on a connection with latency they arrive in waves: about 0.4 s of a 1.2 s
+  page load at 100 ms. HTTP/2 sends them all over one connection at once, and
+  the event stream no longer costs a connection. The proxy still talks
+  HTTP/1.1 to gunicorn; only the browser's side changes. Browsers use HTTP/2
+  only over TLS.
 - **Forwarded headers.** Forward `Host` and `X-Forwarded-Proto`. Gunicorn
   trusts `X-Forwarded-Proto` from loopback (its default
   `forwarded_allow_ips`), which is how the app learns the external `https`
@@ -509,7 +518,10 @@ data/models/imagekit/
 ```
 
 Where the weights come from, which ones work, and the full config schema are in
-[`imagekit/README.md`](../imagekit/README.md#models-where-to-get-them). **Check the licence of
+[`imagekit/README.md`](../imagekit/README.md#models-where-to-get-them). A model file may be
+called anything (`.onnx`, `.model`, ...) as long as it holds an ONNX model; one saved in another
+format is converted or run through a provider that reads it ([Models in other
+formats](../imagekit/README.md#models-in-other-formats)). **Check the licence of
 any weights you deploy**: the InsightFace model-zoo weights (`buffalo_s`, above, the GRID's
 default; `buffalo_l` and `buffalo_m` likewise) are for non-commercial research only.
 `arcface_mbf.json` is a copy of `imagekit/face/extraction/arcface_mbf.json`; `buffalo_l`'s

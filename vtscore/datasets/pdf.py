@@ -4,9 +4,12 @@ Converts each page of a PDF document into a PIL Image at a specified DPI.
 Requires ``PyMuPDF``, which a default install provides but the AGPL opt-out
 (``VTSEARCH_NO_AGPL=1``) leaves out - see :mod:`vtscore.utils.optional_deps`.
 
-Also provides :func:`load_pdf_images_into`, the shared folder-scan helper that
-expands every PDF in a directory into per-page image medias (used by the
-``server_folder`` importer and the local-archive loader).
+Also provides :func:`load_pdf_images_into`, a folder-scan helper that expands
+every PDF in a directory into per-page image medias.  The app's own importers
+no longer call it: they render a folder's documents through the
+``document2image`` converter, whose origin records which page each image is,
+so a label on a page can be resolved back to it (#5680).  It stays for
+library callers that want pages without a load pipeline.
 """
 
 from __future__ import annotations

@@ -10,7 +10,58 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Added
+
+- **Media of a type nothing embeds are converted before the embed stage** (issue #5680). A *convert-out* half
+  type (`document`) has files to ingest and no embedder, and an importer that handed such media over as they
+  were (a `run()` override listing PDFs, a folder scan asked for `document`) had every one dropped for want of a
+  vector. New `vtscore.converters.default_converter_for(source_type, preferred_target="")` names the converter
+  such a type takes: into `preferred_target` when its `converts_to` lists it, else into `converts_to[0]`; `None`
+  for a type that embeds. New `vtscore.datasets.stages.clipper.convert_unembeddable_medias(medias,
+  preferred_target="", *, clipper_name="", clipper_params=None, chain_steps=None, on_progress=None)` runs it as
+  the leading step of a chain over those media, in place, and returns the ids it produced; the load pipeline's
+  clipper stage and the staging import call it. Outputs leave unembedded, with the recipe in
+  `origin.params["clipper_chain"]`. An importer that converts its own media is unaffected.
+
+- **`vtscore.detectors.resolver.resolve_unit_payload(file_path, origin)`** returns `(bytes, suffix)` of the unit
+  an origin names, given the file it resolved to: the file's own bytes, or, for an origin a converter made (a flat
+  `converter` recipe, or a `clipper_chain` with a converter step), the output the recipe rebuilds. `None` when
+  the recipe no longer reproduces it.
+
+- **`vtscore.datasets.importers.base.with_default_conversions(field_values, specs, output_type)`** adds, for a
+  request that names no `source_specs`, a converter row for every half type whose default conversion is
+  `output_type`.
+
 ### Changed
+
+- **A folder's PDFs become pages through `document2image` only** (issue #5680). The `server_folder` importer and
+  the archive loader (`iter_archive_chunks_deferred`, `load_archive_into`) no longer call
+  `vtscore.datasets.pdf.load_pdf_images_into` beside their converter rows, which gave every page twice when a
+  request named the `document` → `document2image` row. A request with no `source_specs` and an `image` output
+  still renders the folder's PDFs, now through that converter: a page is named `doc.pdf→doc_page_1.png` (was
+  `doc.pdf-1`) and its origin is the `converter` recipe (was `{"importer": "pdf"}`, which resolved to the whole
+  PDF). A request that names its own rows gets those rows and nothing more, so an explicit image-only row no
+  longer picks up PDFs. The archive loader takes the document row from its caller's `specs`.
+  `load_pdf_images_into` itself is unchanged and stays for library callers.
+
+- **A clipper-chain converter step returns storable media** (issue #5680). `apply_chain_to_clips` now fills
+  `file_size`, `md5`, `embeddings`, `embedder`, `category` and `duration` on a converter step's outputs and
+  carries the source's `category` and `media_path` over; before, a chain ending in a converter could not be
+  saved (`KeyError: 'file_size'`). `_apply_clipper` takes `embed=False` to leave the clips for the caller's
+  embed stage.
+
+- **`download_ucsf_documents` raises when nothing was downloaded** (issue #5680): a `RuntimeError` naming the
+  first failed index query and the first failed PDF (with its HTTP status), where it used to return an empty
+  folder. A category that comes up short is still tolerated.
+
+- **`UCSF_IDL_DOWNLOAD_URL` is the library's S3 bucket** (issue #5681):
+  `https://ucsf-idl-dataset.s3.us-east-1.amazonaws.com`, where it was `https://download.industrydocuments.ucsf.edu`,
+  which refused downloads with a CloudFront 403 and which the library's own viewer no longer uses. The `<a>/<b>/<c>/<d>/<id>/<id>.pdf` path under it is unchanged, so
+  `download_ucsf_documents` fetches the same documents; `UCSF_IDL_API_URL` is unchanged.
+
+- **`positives_browse` previews the unit, not its source file**: a positive a converter made is served and
+  embedded from the output its recipe rebuilds (`resolve_unit_payload`), where the PDF's own bytes were handed
+  over as an image.
 
 - **`image2face` keeps each face's five landmarks on its crop** (issue #5644). A converter output may now carry
   the top-level `face_landmarks`: five `[x, y]` points (left eye, right eye, nose tip, left and right mouth

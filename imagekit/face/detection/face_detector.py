@@ -1,7 +1,7 @@
 """``FaceDetector``: SCRFD (primary) and RetinaFace-ResNet50 face detection on ONNX Runtime.
 
 One class, two decoders, chosen by the ``model.name`` field of the JSON config
-that sits beside the ``.onnx`` file (:func:`~imagekit.util.load_model_config`):
+that sits beside the model file (:func:`~imagekit.util.load_model_config`):
 
 * **SCRFD** (any other name; the packaged default is ``scrfd_10g_gnkps``).
   Letterbox to the config's ``Resize`` (640 x 640 by default), normalise
@@ -49,7 +49,7 @@ from imagekit.util import (
     ensure_image_tensor,
     load_model_config,
     nms,
-    resolve_model_file,
+    resolve_onnx_model,
     resize_within,
 )
 
@@ -337,11 +337,12 @@ class FaceDetector:
     ) -> None:
         """Load the model and its config; raises on any failure.
 
-        *model_bundle_filepath* is the ``.onnx`` file or a directory holding
-        one.  The config is ``<model>.json`` beside it, or *model_config_path*,
-        or the packaged SCRFD default.
+        *model_bundle_filepath* is the ONNX model file, under any name, or a
+        directory holding one ``.onnx`` or ``.model`` file.  The config is
+        ``<model>.json`` beside it, or *model_config_path*, or the packaged
+        SCRFD default.
         """
-        model = resolve_model_file(model_bundle_filepath)
+        model = resolve_onnx_model(model_bundle_filepath)
         raw = load_model_config(model, model_config_path, DEFAULT_CONFIG_PATH)
         config = DetectorConfig.from_dict(raw)
         chain = build_transforms(config.transforms)

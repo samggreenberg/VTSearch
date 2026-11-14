@@ -20,42 +20,41 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
-### Added
+### Changed
 
-- **A checklist of what to compare between two faces** (issue #5643). Beside the Face compare layout, a narrow
-  strip lists five things to compare, most telling first: marks (moles, scars, freckles), ears, nose, eyes and
-  brows, then mouth, chin and face outline, the weakest evidence. Under them, a reminder not to weigh hair, beard,
-  makeup or skin tone. The order follows the research on how face examiners compare: ears and marks tell the
-  most, face shape and mouth the least. It is a prompt, not a form: nothing is ticked off or recorded. When the
-  face you are voting on, or the reference beside it, is a hard view (turned, covered or small), the strip says
-  so, so you know to expect a weaker comparison. For API users: `POST /api/medias/batch` now carries a face's
-  `face_hard_view` verdict, and the new `GET /api/server-media-files/{filename}/face-hard-view` gives one for an
-  example picture.
-- **The reference face is shown the same size and in the same place as the face you are voting on, and the two
-  zoom together** (issue #5647). In the Face compare layout, one face could fill its crop while the other sat small
-  in a corner. The reference is now enlarged or shrunk, and moved, so its eyes sit where the candidate's do and
-  its eyes-to-mouth distance is the same; it is not stretched or bent. Zooming or dragging either face moves both,
-  so zooming in on one face's ear shows the other's; each still turns on its own, and **Next** keeps the zoom. It
-  needs the eye and mouth points Face datasets now keep (#5644): a face from an older dataset, or a reference that
-  is your example picture, is shown at its own size and zooms on its own, as before. Under **Wider** the photos
-  are not levelled like the crops, so they are not matched either.
-- **See the ears and hairline of both faces while comparing them** (issue #5645). In the Face compare layout,
-  **Wider** shows the reference and the face you are voting on from the photos they were cut from, with twice as
-  much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is
-  offered when the Image dataset with the photos is loaded. The photos are shown as taken, not levelled like the
-  crops. A face whose photo can't be found, or a reference that is your example picture, stays as it is. Wider
-  stays on until you turn it off or leave the page. Everywhere an image is shown, the zoom and rotate buttons and
-  keys now keep what is in the middle of the view in the middle, so a part you have moved to look at stays on
-  screen as you zoom or turn it.
-- **Compare a face with a reference while you vote** (issue #5642). On a Face dataset with a detector selected,
-  the panel you vote in now shows two faces: a **reference** face of the person on the left and the
-  face you are voting on on the right, so you compare the two on screen instead of from memory. The reference is
-  the example you made the detector from until you have voted, then your Good pile, clearest face first and hard
-  views last. **Next** (or the new `R` key) steps to another reference without moving the face you are on, and
-  **Pin** keeps one as the starting reference until you unpin it or leave the page. Each face has its own rotate
-  and zoom controls. **Compare**, under the face, turns the layout off; the choice is saved in a new per-user
-  `face_compare` setting, on by default. The faces are never overlaid on each other. For API users: `GET
-  /api/server-media-files/{filename}/image` serves an example picture at full size.
+- **Face models may be called `.model`** (issue #5683). A folder of face models now finds a detector or embedder
+  named `.model` as well as `.onnx`; a model file named outright in `face.json` already loaded under any name,
+  since what counts is that it holds an ONNX model. A model saved in another format (a PyTorch file, a Keras
+  model, a TensorFlow SavedModel) is refused with a message naming the format and how to convert it, where it
+  used to fail on a protobuf parse error. See "Models in other formats" in `imagekit/README.md`.
+
+### Fixed
+
+- **Importing a folder of PDFs gives each page once** (issue #5680). Adding a dataset from a folder of PDFs made
+  every page twice. Pages now come from one place, the Document → Images converter, and each one remembers which
+  page of which file it is. Page names change with it: `report.pdf→report_page_1.png`, where they were
+  `report.pdf-1`. An Image import you set up by hand with only the image row no longer pulls the folder's PDFs
+  in; tick Document as well to get them.
+
+- **Documents handed to the app unconverted are turned into pages before embedding** (issue #5680). A dataset
+  importer plugin that lists PDFs, or an import asked for the Document type with no conversion named, used to end
+  with nothing loaded, because no embedder reads a document. The load now converts them first (each page an
+  image, or the text when the dataset is a text one).
+
+- **Labels on converted pages show their thumbnails** (issue #5680). Browse Positives, and a label's thumbnail and
+  preview when its dataset is not loaded, showed nothing for a page rendered from a PDF: the app was handing the
+  whole PDF over as the picture. They now render the page the label is on.
+
+- **The UCSF Documents demo says why it could not load** (issue #5680). When the library's PDFs could not be
+  downloaded the import ended with "Import produced no medias". It now reports what failed, for example the
+  HTTP status the download was refused with. For API users: `POST /api/dataset/load-demo` with no `converter`
+  loads this demo as page images, where it loaded nothing.
+
+- **The UCSF Documents demo downloads again** (issue #5681). The Industry Documents Library now serves its PDFs
+  from a new address, and the old one refused the demo's downloads, so it could not fetch a single document. It
+  now downloads from the address the library's own document viewer uses.
+
+## 2026-11-13
 
 ### Changed
 
@@ -94,6 +93,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   something with the server before it opens (Train, Tune, Browse and People) also fetches its own code during that
   check now, not after it. Opening an 8,000-image Browse map in a new tab with 100 ms of latency, the map appeared
   in 1.22 s instead of 1.87 s.
+- **Opening a page from the Dashboard no longer waits for its code** (issue #5663). The code for Train, Tune,
+  Browse and People used to be downloaded when you first opened each, as some 15–20 small files that a browser
+  talking plain HTTP fetches about six at a time. The app now downloads it in the background once the page you are
+  on has finished loading, one page at a time, and only while nothing else is being fetched. Opening an 8,000-image
+  Browse map from the Dashboard with 100 ms of latency, the map appeared in 0.31 s instead of 0.63 s. A page opened
+  in a new tab is unchanged; [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#reverse-proxy) now recommends HTTP/2 at the
+  reverse proxy, which removes that wait.
 - **Full-size pictures come from the browser cache on a revisit** (issue #5648). A full-size picture used to be
   downloaded again every time it was shown. That hit the Browse map hardest at its largest cells, which paint
   originals, often megabytes each, rather than thumbnails. The browser now keeps each full-size picture for a day,
@@ -101,6 +107,70 @@ what is on `dev` but not yet on `main`; each release dates that section
   one, but they now do it by filling the browser's cache, so a picture you come back to is not fetched again.
   For API users: `GET /api/medias/{media_id}/image` now sends an `ETag` and `Cache-Control: private,
   max-age=86400`, and answers `304` to a matching `If-None-Match`.
+
+### Added
+
+- **The two faces in the Face compare layout are evened out before you compare them** (issues #5674, #5675). Two
+  photos of one person taken in different light look less alike than the person is, so each face is now shown
+  through one adjustment over its whole picture, measured on the face's skin alone: small patches on the forehead,
+  the bridge of the nose and the cheeks, placed from the eye, nose and mouth points, so the wall behind a person,
+  white or black, and their hair, eyes and lips never count. **Exposure** and **Contrast** bring both faces' skin
+  to the same brightness and contrast, and **White balance** moves each face's skin toward a typical skin colour,
+  which takes a lamp's orange or shade's blue out; read from the skin, it also narrows the difference between two
+  people's skin colour. A face without the points (an example picture, or one from an older dataset) is measured
+  where a face crop's face usually sits. Every change is capped, so neither face is pushed far from how it was
+  taken. When either face is a black-and-white photo, both
+  are shown in greyscale, since a colour face beside a grey one looks more alike than it is. Each is a checkbox
+  under **Even out the photos** at the foot of the What to compare strip, all ticked but **Both in greyscale**,
+  which greys any pair; **Reference turned the same way** there turns off #5670's choice of reference. Hold `O` to
+  see both faces as taken. The stored pictures are never changed, and nothing changes what the detector sees. The
+  choices are saved in a new per-user `face_even_out` setting.
+- **The reference face is one turned the same way as the face you are voting on** (issue #5670). In the Face
+  compare layout, the reference was always the clearest face of your Good pile, so a face turned to show its left
+  ear could be shown beside one turned to show its right. The app now reads which way each head is turned from its
+  eye, nose and mouth points, and starts each face on a Good face turned like it, the clearest of those first;
+  **Next** steps on to faces turned further away. A pinned reference still comes first. Faces from an older dataset
+  without the points, and your example pictures, keep the order they had.
+- **A checklist of what to compare between two faces** (issue #5643). Beside the Face compare layout, a narrow
+  strip lists five things to compare, most telling first: marks (moles, scars, freckles), ears, nose, eyes and
+  brows, then mouth, chin and face outline, the weakest evidence. Under them, a reminder not to weigh hair, beard,
+  makeup or skin tone. The order follows the research on how face examiners compare: ears and marks tell the
+  most, face shape and mouth the least. It is a prompt, not a form: nothing is ticked off or recorded. When the
+  face you are voting on, or the reference beside it, is a hard view (turned, covered or small), the strip says
+  so, so you know to expect a weaker comparison. For API users: `POST /api/medias/batch` now carries a face's
+  `face_hard_view` verdict, and the new `GET /api/server-media-files/{filename}/face-hard-view` gives one for an
+  example picture.
+- **The reference face is shown the same size and in the same place as the face you are voting on, and the two
+  zoom together** (issue #5647). In the Face compare layout, one face could fill its crop while the other sat small
+  in a corner. The reference is now enlarged or shrunk, and moved, so its eyes sit where the candidate's do and
+  its eyes-to-mouth distance is the same; it is not stretched or bent. Zooming or dragging either face moves both,
+  so zooming in on one face's ear shows the other's; each still turns on its own, and **Next** keeps the zoom. It
+  needs the eye and mouth points Face datasets now keep (#5644): a face from an older dataset, or a reference that
+  is your example picture, is shown at its own size and zooms on its own, as before. Under **Wider** the photos
+  are not levelled like the crops, so they are not matched either.
+- **Click a part in the What to compare list to zoom both faces to it** (issue #5647). With the two faces matched,
+  each row of the list is a button: **Nose** fills both panes with the two noses, **Ears** shows one ear and then
+  the other, and a second click on a part zooms back out. The app finds each part from the face's eye, nose and
+  mouth points. A part that either picture does not hold (an ear the crop cut off, or the far ear of a turned
+  head) is greyed. Where the faces are not matched (an older dataset, an example picture as the reference, or
+  **Wider**) the list is plain text, as before.
+- **See the ears and hairline of both faces while comparing them** (issue #5645). In the Face compare layout,
+  **Wider** shows the reference and the face you are voting on from the photos they were cut from, with twice as
+  much around each as its crop has, so the ears and hairline, which a crop often cuts off, are in view. It is
+  offered when the Image dataset with the photos is loaded. The photos are shown as taken, not levelled like the
+  crops. A face whose photo can't be found, or a reference that is your example picture, stays as it is. Wider
+  stays on until you turn it off or leave the page. Everywhere an image is shown, the zoom and rotate buttons and
+  keys now keep what is in the middle of the view in the middle, so a part you have moved to look at stays on
+  screen as you zoom or turn it.
+- **Compare a face with a reference while you vote** (issue #5642). On a Face dataset with a detector selected,
+  the panel you vote in now shows two faces: a **reference** face of the person on the left and the
+  face you are voting on on the right, so you compare the two on screen instead of from memory. The reference is
+  the example you made the detector from until you have voted, then your Good pile, clearest face first and hard
+  views last. **Next** (or the new `R` key) steps to another reference without moving the face you are on, and
+  **Pin** keeps one as the starting reference until you unpin it or leave the page. Each face has its own rotate
+  and zoom controls. **Compare**, under the face, turns the layout off; the choice is saved in a new per-user
+  `face_compare` setting, on by default. The faces are never overlaid on each other. For API users: `GET
+  /api/server-media-files/{filename}/image` serves an example picture at full size.
 
 ### Fixed
 

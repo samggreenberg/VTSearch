@@ -41,6 +41,35 @@ def list_converters_for_source(source_type: str) -> list[MediaConverter]:
     return [c for c in list_converters() if c.source_type == source_type]
 
 
+def default_converter_for(source_type: str, preferred_target: str = "") -> MediaConverter | None:
+    """The converter a *convert-out* half type takes before it can be embedded.
+
+    A half type (``document``: files to ingest, no embedder of its own) names
+    the types it can become in
+    :attr:`~vtscore.media.base.MediaType.converts_to`.  *preferred_target* wins
+    when it is one of them (a text dataset fed PDFs extracts their text);
+    otherwise the first entry does (a PDF's pages, as images).
+
+    ``None`` for a type that embeds as it is (image, audio, video, text,
+    face), for an unknown type, and for a half type no registered converter
+    leaves.
+    """
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
+
+    try:
+        mt = get_media_type(source_type)
+    except KeyError:
+        return None
+    targets = list(mt.converts_to)
+    if mt.embeddable or not targets:
+        return None
+    target = preferred_target if preferred_target in targets else targets[0]
+    candidates = [c for c in list_converters_for_source(mt.type_id) if c.target_type == target]
+    # A converter the pickers hide is still a converter; prefer one they show.
+    candidates.sort(key=lambda c: bool(c.hidden_from_picker))
+    return candidates[0] if candidates else None
+
+
 __all__ = [
     "MediaConverter",
     "Audio2ImageMediaConverter",
@@ -50,6 +79,7 @@ __all__ = [
     "Image2TextMediaConverter",
     "Video2AudioMediaConverter",
     "Video2ImageMediaConverter",
+    "default_converter_for",
     "list_converters",
     "get_converter",
     "list_converters_for_target",

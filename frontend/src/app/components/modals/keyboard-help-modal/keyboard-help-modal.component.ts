@@ -204,7 +204,10 @@ export class KeyboardHelpModalComponent implements OnInit {
         },
         {
           title: 'Comparing faces',
-          shortcuts: [{ keys: ['R'], description: 'Show the next reference face beside the one you are voting on' }],
+          shortcuts: [
+            { keys: ['R'], description: 'Show the next reference face beside the one you are voting on' },
+            { keys: ['O'], description: 'Hold to see both faces as taken, without evening them out' },
+          ],
         },
       ],
     },

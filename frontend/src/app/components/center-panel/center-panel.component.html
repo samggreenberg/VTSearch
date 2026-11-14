@@ -123,10 +123,19 @@
          swipe, so a Bad vote does not fly across the reference. -->
     <div class="media-stage" [class.media-stage--compare]="compareOn">
       @if (compareOn) {
-        <vt-face-reference #faceRef [candidateId]="media()!.id" [wider]="widerOn()" [link]="faceLink" />
+        <vt-face-reference
+          #faceRef
+          [candidateId]="media()!.id"
+          [candidateLandmarks]="media()!.face_landmarks"
+          [wider]="widerOn()"
+          [link]="faceLink"
+          [evenOut]="evenOutShown()"
+          [greyscale]="paneGreyscale()"
+        />
         <vt-face-checklist
           [candidateHardView]="media()!.face_hard_view ?? null"
           [referenceHardView]="faceRef.currentHardView()"
+          [link]="faceLink"
         />
       }
       <div class="media-stage__candidate">
@@ -151,6 +160,8 @@
                 [regionDraw]="regionDrawOffered"
                 [link]="compareOn ? faceLink : null"
                 [landmarks]="wide.kind === 'crop' ? media()!.face_landmarks : null"
+                [toneMap]="candidateToneMap()"
+                [greyscale]="paneGreyscale()"
                 (regionBoxChange)="onRegionBoxChange($event)"
                 (armedConfirmCanceled)="onArmedConfirmCanceled()"
               ></vt-image-viewer>

@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
-import { FACE_QUALITY_KEY, FaceReferenceService, orderByQuality } from './face-reference.service';
+import { FACE_QUALITY_KEY, FaceReferenceService, VIEW_STEP, orderByQuality, orderByView } from './face-reference.service';
 import { ActiveDatasetService } from './active-dataset.service';
 import { ActiveDetectorService } from './active-detector.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
@@ -27,10 +27,34 @@ describe('orderByQuality', () => {
   });
 });
 
+describe('orderByView (#5670)', () => {
+  // A pile already in quality order, and how far each head is turned.
+  const ranked = [1, 2, 3, 4, 5];
+  const turns: Record<number, number | null> = { 1: 0, 2: 0.55, 3: -0.5, 4: 0.6, 5: null };
+  const turn = (id: number) => turns[id] ?? null;
+
+  it('puts the faces turned like the candidate first, the clearest of them first', () => {
+    // 2 and 4 are turned the candidate's way; 1 looks ahead, and 3 is turned the other way.
+    expect(orderByView(ranked, 0.6, turn)).toEqual([2, 4, 1, 3, 5]);
+    expect(orderByView(ranked, -0.45, turn)).toEqual([3, 1, 2, 4, 5]);
+  });
+
+  it('counts faces less than a step apart as one view, and keeps their quality order', () => {
+    expect(orderByView([1, 2], 0.1, (id) => (id === 1 ? 0.1 + VIEW_STEP * 0.9 : 0.1))).toEqual([1, 2]);
+    expect(orderByView([1, 2], 0.1, (id) => (id === 1 ? 0.1 + VIEW_STEP * 1.1 : 0.1))).toEqual([2, 1]);
+  });
+
+  it('puts a face with no turn to read last, and keeps the quality order with no candidate turn', () => {
+    expect(orderByView([5, 1], 0, turn)).toEqual([1, 5]);
+    expect(orderByView(ranked, null, turn)).toEqual(ranked);
+  });
+});
+
 /**
  * The reference set of the Face compare layout (#5642): the detector's
- * examples until there is a Good pile, then the pile by Face Quality; and the
- * pin, which lasts as long as what it names.
+ * examples until there is a Good pile, then the pile by Face Quality, or for a
+ * candidate turned like it first (#5670); and the pin, which lasts as long as
+ * what it names.
  */
 describe('FaceReferenceService', () => {
   let service: FaceReferenceService;
@@ -41,6 +65,7 @@ describe('FaceReferenceService', () => {
   const detector = signal<{ examples?: Array<Record<string, unknown>> } | null>(null);
   let quality: Record<number, number>;
   let hard: Record<number, boolean>;
+  let landmarks: Record<number, number[][]>;
   let ensureLoaded: ReturnType<typeof vi.fn<(ids: number[]) => void>>;
   /** The server's answers about each example picture, sent when a test says. */
   let verdicts: Record<string, Subject<boolean | null>>;
@@ -62,6 +87,7 @@ describe('FaceReferenceService', () => {
     });
     quality = {};
     hard = {};
+    landmarks = {};
     ensureLoaded = vi.fn();
     verdicts = {};
     exampleFaceHardView = vi.fn((filename: string) => (verdicts[filename] = new Subject<boolean | null>()));
@@ -74,7 +100,9 @@ describe('FaceReferenceService', () => {
             version,
             ensureLoaded,
             get: (id: number) =>
-              id in quality ? { id, custom_metadata: { [FACE_QUALITY_KEY]: quality[id] }, face_hard_view: hard[id] } : undefined,
+              id in quality
+                ? { id, custom_metadata: { [FACE_QUALITY_KEY]: quality[id] }, face_hard_view: hard[id], face_landmarks: landmarks[id] }
+                : undefined,
           },
         },
         { provide: SortingApiService, useValue: { exampleFaceHardView } },
@@ -108,6 +136,24 @@ describe('FaceReferenceService', () => {
     quality = { 1: 10, 2: 40 };
     version.set(1);
     expect(service.pool().map((r) => r.kind === 'media' && r.id)).toEqual([2, 1]);
+  });
+
+  it('orders the pile for a candidate by which way each head is turned (#5670)', () => {
+    // Eyes level, mouth below them, and the nose moved off the line between
+    // them by *nose*: toward the image's left is a turn that way.
+    const turned = (nose: number) => [[0.4, 0.4], [0.6, 0.4], [0.5 + nose, 0.5], [0.45, 0.6], [0.55, 0.6]];
+    quality = { 4: 30, 6: 5, 9: 18 };
+    landmarks = { 4: turned(0), 6: turned(-0.08), 9: turned(0.08) };
+    goods.set(new Set([6, 4, 9]));
+    const ids = (turn: number | null) => service.pool(turn).map((r) => r.kind === 'media' && r.id);
+    // With no turn for the candidate, the quality order.
+    expect(ids(null)).toEqual([4, 9, 6]);
+    expect(ids(-0.7)).toEqual([6, 4, 9]);
+    expect(ids(0.7)).toEqual([9, 4, 6]);
+  });
+
+  it('keeps the examples\' order for any candidate, since they have no landmarks here', () => {
+    expect(service.pool(0.7)).toEqual(service.pool());
   });
 
   it('asks for the metadata of the pile, and for nothing with no pile', () => {

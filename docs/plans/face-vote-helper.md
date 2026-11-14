@@ -172,15 +172,18 @@ exists; this plan adds nothing for it.
   center panel is a two-column grid: `vt-face-reference` on the left, the
   candidate on the right, each a `vt-image-viewer` with its own toolbar
   (`components/center-panel/face-reference/`). The reference is a set the
-  user steps through with **Next** or `R`: the Good pile by `Face Quality`
-  once there is one, the detector's example pictures before
+  user steps through with **Next** or `R`: the Good pile once there is one,
+  for each candidate the faces turned its way first and by `Face Quality`
+  among those (#5670), the detector's example pictures before
   (`face-reference.service.ts`). One can be pinned for the page's lifetime.
   The Compare toggle is the per-user `face_compare` setting.
 - **Five landmarks on every crop.** `image2face` gets two eyes, a nose tip
   and two mouth corners per face (`imagekit/face/records.py`), uses them to
   level the crop (`align="roll"`, #4777), and keeps them on the item as
   `face_landmarks`, fractions of the crop as stored, served on
-  `POST /api/medias/batch` (#5644). No pose is computed.
+  `POST /api/medias/batch` (#5644). The converter computes no pose; the
+  compare layout reads a rough turn of the head from the five points
+  (`landmarkTurn`, `face-checklist/face-regions.ts`).
 - **Crop padding of 0.25** of the face box on every side by default. Ears and
   hairline are often at or past the crop edge.
 - **A wider view.** The compare layout's **Wider** toggle shows both faces
@@ -202,10 +205,30 @@ exists; this plan adds nothing for it.
   `vt-face-checklist` (`components/center-panel/face-checklist/`) lists five
   rows in diagnostic order, worded from the FISWG list: marks, ears, nose,
   eyes and brows, then mouth, chin and face outline. Under them is the line
-  on what not to weigh. Nothing is ticked off or recorded. Its fitness notice
+  on what not to weigh. Nothing is ticked off or recorded. While the panes
+  are linked, a row is a button that zooms both to its part, a rectangle of
+  face space placed from the landmarks (`face-checklist/face-regions.ts`); a
+  row whose part is off either crop is greyed. Its fitness notice
   says when the candidate or the reference is a hard view, from each face's
   `face_hard_view` on `POST /api/medias/batch`, or for an example picture
   `GET /api/server-media-files/<f>/face-hard-view`.
+- **The photos evened out.** Each pane is shown through one SVG
+  `feComponentTransfer` filter, a gamma curve per channel, then
+  `grayscale(1)` when either face is a greyscale photo (#5674, #5675).
+  Everything is measured on the face's skin alone: patches on the forehead,
+  the nose bridge and each visible cheek, placed from the landmarks
+  (`skinPatches`, `face-checklist/face-regions.ts`), so nothing behind the face
+  counts (the owner's call). Exposure and contrast are fitted on the skin's
+  luminance, and white balance moves the skin's mean colour toward a typical
+  skin colour, which also narrows two people's skin difference within its
+  caps. Each face moves toward fixed targets, the median face's, with every
+  gain capped, so each pane's map is its own pixels' alone; a face is always
+  measured on its crop, so the map applies unchanged under **Wider**, and a
+  face without landmarks is measured where a crop's face usually sits
+  (`components/center-panel/face-even-out/even-out.ts`). Each standardization,
+  the turn-matched reference of #5670 included, is a checkbox in the
+  checklist's "Even out the photos" group, the per-user `face_even_out`
+  setting; a held `O` shows both originals (`face-even-out.service.ts`).
 
 ## Design
 
@@ -216,10 +239,104 @@ are measured on the levelled crop, do not land on them, and the two panes
 zoom on their own. Registering there needs the crop's roll angle, which the
 converter does not keep yet.
 
-### The checklist's rows zoom
+### Matching how the two faces look
 
-Clicking a row of the checklist zooms both panes to that region, located from
-the landmarks. A row is greyed when its region falls outside either crop.
+The owner's request (#5671): two photos of one person can differ in
+brightness, contrast, colour, tilt and more, and the pair then looks less alike
+than the person is. List the standardizations that would move the reference
+and the candidate toward each other, correcting for how photos vary without
+turning one face into the other.
+
+This is about what the user sees in the compare layout. Nothing here changes
+what the face embedder sees: that is scoring, and a change there is an
+experiment.
+
+**What the sources allow.**
+
+- FISWG's [*Image Processing Techniques for Facial Image Comparison*
+  v1.0 (2022.06.17)](https://fiswg.org/fiswg_imag_procssng_tchnqs_for_fac_img_comparison_v1.0_20220617.pdf)
+  is the list. It names eight techniques (5.1): "Brightness/Contrast",
+  "Cropping", "Rotation", "Color balance", "Levels", "Curves",
+  "Grayscale/Extract channel" and "Mirroring/Flipping". Its conditions:
+  - "It is imperative to preserve the original image" (4.3).
+  - "use the minimum amount of image processing", since it can "introduce
+    artifacts to the imagery or eliminate/alter facial characteristics" (4.4).
+  - "All image processing techniques shall be made over the whole image and
+    not in localized areas" (4.5).
+  - Sharpening, noise reduction and deblurring are not on the list.
+- The ENFSI manual (5.2.3) allows enhancement that is "better suited for the
+  purpose of comparison", with three conditions: a copy "without the
+  enhancement" stays available, "alterations to the facial appearance of the
+  subject ... should be kept to a minimum", and the examiner "should always
+  refer back to the original un-enhanced image". It warns that "image
+  deconvolution, adaptive filtering and inter-frame processing (e.g. super
+  resolution) should be used with caution, due to the high propensity of these
+  techniques to introduce artefacts".
+- **Matching the pair is the standards' own goal.** The ENFSI manual (5.3.2)
+  says the two images should ideally "be captured at a similar camera angle",
+  "show the subject in a similar pose and expression" and "be captured under
+  similar lighting conditions". It cites "reduced accuracy in facial
+  comparison tasks when these conditions are not met". The UK Forensic Science
+  Regulator's [guidance (Issue 2, 2016, archived
+  2020)](https://assets.publishing.service.gov.uk/media/5f47da99d3bf7f5d7d18a5f0/Image_Comparison_and_Interpretation_Guidance_Issue_2.pdf)
+  says the same of angle: a reference "captured at a matching angle ... may
+  help to improve the reliability of the comparison" (5.1.4).
+- An OSAC [note on generative AI (January
+  2026)](https://www.nist.gov/document/use-generative-ai-image-processing-facial-images-reference-document-jan2026)
+  warns that restored faces "may introduce apparent detail that is not
+  reflective of the subject's facial features". It recalls that "OSAC and
+  ... FISWG standards state to always use the original image as the basis for
+  a final opinion".
+- **Colour.** [Bobak, Mileva & Hancock
+  2019](https://pmc.ncbi.nlm.nih.gov/articles/PMC6646495/) showed pairs both
+  in colour, both in greyscale, or one of each.
+  - Mixed pairs made people "more likely to declare a match". Accuracy on
+    different-person pairs fell about 10 points (Experiment 2: 68.1% mixed
+    against 78.2% colour).
+  - Both-greyscale pairs were not reliably worse than both-colour, but made
+    people more cautious about saying "same".
+  - So a difference in how two photos look does not only cost misses. Here it
+    caused false matches.
+- **Detail.** Two studies on resolution:
+  - [Bindemann et al.
+    2013](https://doi.org/10.1002/acp.2970) matched pixelated faces against
+    sharp ones. Showing both at a quarter of their size raised accuracy by 13
+    points on same-person pairs and 12 on different-person pairs.
+  - [Merino et al. 2025](https://arxiv.org/abs/2503.20108) paired a sharp
+    reference with a low-resolution probe. At 10 and 5 pixels between the
+    pupils, accuracy was 50.7% and 35.9%, at or below chance, while the
+    participants' certainty stayed at 77% and 70.7%.
+
+**What is done.** Roll is levelled when the crop is cut (`align="roll"`,
+#4777). Size and position are matched by registration (#5647). Quarter turns
+are by hand (`[` and `]`). Those are all the geometric axes a shape-preserving
+transform can reach. The reference shown first is a Good face turned the same
+way as the candidate (#5670). Exposure, contrast, colour cast and greyscale
+are evened out per pane (#5674, #5675). What is left is detail, further
+choices of reference, or a geometric change no standard allows.
+
+**The list.** Each row is one axis along which two photos of one person
+differ.
+
+| Axis | Standardization | Standing | Verdict |
+|---|---|---|---|
+| Exposure | Bring each face's median skin luminance to a common target. Measure it on skin patches placed from the landmarks (forehead, nose bridge, the visible cheeks), so background, hair, eyes and lips don't count. Apply it to the whole image as a gamma curve, with the gain capped. | FISWG 5.1.1, 5.1.5 | **Done** (#5675) |
+| Contrast | On the same patches, bring the spread (the 5th to 95th percentile) to a common target, by a gentle, capped stretch about the median: on skin alone the spread mostly says how evenly the light falls. | FISWG 5.1.1, 5.1.6 | **Done** (#5675) |
+| Colour cast | White-balance each face from its own skin, toward a typical skin colour, capped, so nothing behind the face sways it. It narrows two people's skin difference within the caps (the owner's call over measuring the scene). | FISWG 5.1.4 | **Done** (#5675) |
+| Colour against greyscale | When either face is greyscale (a black-and-white photo), show both in greyscale. A manual toggle greys both panes, never one. | FISWG 5.1.7; Bobak 2019 | **Done** (#5674) |
+| Detail | When the two faces' native pixels between the eyes are far apart, say so in the fitness notice. Later, try softening the sharper face toward the other's level, or showing the pair smaller. | Softening is not on FISWG's list, but it removes detail rather than adding it; Bindemann 2013, Merino 2025 | **Notice now**, softening later |
+| Head turn (yaw, pitch) | No transform: choose the reference instead. The Good faces turned like the candidate come first, the turn read from the five landmarks (`landmarkTurn`). | ENFSI 5.3.2; FSR 5.1.4 | **Done** (#5670) |
+| Lighting, expression | The same choice can weigh exposure, and mouth width against eye distance (a smile widens the mouth), after pose. | ENFSI 5.3.2 | Later, if pose choice works |
+| Mirroring | Only for a selfie the phone saved mirrored, and only by hand, with a **Mirrored** badge. Mirroring automatically, to make two turned faces face the same way, compares one face's left ear with the other's right and moves every mark to the other side. | FISWG 5.1.8 | Not now |
+| Sharpening, denoising, deblurring, super-resolution, face restoration | None. These add or invent detail, the direction ENFSI's viewing-order rule guards against. | Not on FISWG's list; ENFSI 5.2.3; OSAC 2026 | **Reject** |
+| One side of the face in shadow | No local equalization (CLAHE), dodging, shadow removal or relighting. The contrast row's global curve is the allowed tool. | FISWG 4.5 | **Reject** |
+| Frontalizing, stretching, warping onto landmarks | None. Frontalizing invents a view the camera never took. A stretch makes the faces' proportions match by construction, which is the morph the request rules out. | ENFSI 5.3.2 ("the aspect ratio ... must be maintained"); OSAC 2022-S-0007 ("tools which preserve shapes") | **Reject** |
+| Lens distortion, compression blocking | Nothing to do. A close phone camera enlarges the nose and blocking hides detail, but undoing either needs depth or invented detail. | ENFSI 5.3.1, Appendix B | Out of reach |
+
+**How the detail notice would be built.**
+
+- **Detail** is the native distance between the eyes: the image's natural
+  size times the landmark fractions. Merino 2025 measured on the same scale.
 
 ## Open decisions
 
@@ -241,41 +358,23 @@ These are the owner's; the recommendation is first in each.
 
 ## Open work
 
-Each item is an issue; the issue holds its scope. An arrow means "must land
-before"; the dotted one is a soft dependency, for the checklist rows' click to
-zoom only.
-
-```text
-#5642 compare layout ──> #5643 checklist strip ┄┄┄┄┄┄┐
-        │                                             ┆
-        ├──────────────> #5645 wider view             ▼
-        │                                     #5647 size and position,
-        └───────────────────────────────────> linked zoom
-                                                      ▲
-#5644 keep landmarks ─────────────────────────────────┘
-```
-
-#5642 and #5644 can start together. Nothing else is blocked on #5645.
+Not yet filed: the detail notice (the list's **Detail** row), then the rows
+marked *Later*. Each becomes an issue, with a pointer here, when it is picked
+up.
 
 <!-- item-sep -->
 
-- [ ] #5642 — Compare layout with a reference face beside the candidate (Opus)
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #5643 — Checklist strip of what to compare, in diagnostic order (Sonnet)
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #5644 — image2face: keep each face's five landmarks on its item (Sonnet)
-
 <!-- item-sep -->
 
-- [ ] #5647 — Match the two faces' size and position, with linked zoom (Opus)
-
 <!-- item-sep -->
-
-- [ ] #5645 — Wider view of both faces from their parent photos (Sonnet)
 
 <!-- item-sep -->
 

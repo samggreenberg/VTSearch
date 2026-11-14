@@ -598,6 +598,22 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_face_compare() is False
 
+    def test_face_even_out_defaults_and_persists(self, isolated_settings):
+        # The compare layout's standardizations (#5674, #5675): all on but the
+        # manual greyscale, and a write keeps only the keys it names.
+        assert settings_mod.get_face_even_out() == {
+            "exposure": True,
+            "contrast": True,
+            "white_balance": True,
+            "greyscale_either": True,
+            "greyscale_both": False,
+            "turn_matched": True,
+        }
+        settings_mod.set_face_even_out({"exposure": False, "greyscale_both": True, "unknown": True})
+        assert json.loads(isolated_settings.read_text())["face_even_out"] == {"exposure": False, "greyscale_both": True}
+        settings_mod.reset()
+        assert settings_mod.get_face_even_out() == {"exposure": False, "greyscale_both": True}
+
     def test_get_set_autopilot_goal_diversity(self, isolated_settings):
         settings_mod.set_autopilot_goal_diversity(60)
         assert settings_mod.get_autopilot_goal_diversity() == 60

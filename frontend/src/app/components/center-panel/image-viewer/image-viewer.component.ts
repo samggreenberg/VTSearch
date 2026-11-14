@@ -5,18 +5,24 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import {
   FaceFrame,
   FaceLandmarks,
+  FaceRect,
+  FaceShape,
   FaceView,
   LEAD_OFF,
   LEAD_PENDING,
   LeadState,
+  LinkFollower,
   LinkLead,
   PaneView,
   ViewLink,
   faceAnchor,
   faceFrame,
+  faceShape,
   faceViewOf,
   paneViewOf,
+  viewOfRect,
 } from './face-link';
+import { ToneMap } from '../face-even-out/even-out';
 
 export type RegionBox = readonly [number, number, number, number];
 export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
@@ -75,6 +81,9 @@ type DragMode =
   | { kind: 'move'; startLocal: { x: number; y: number }; startBox: RegionBox }
   | { kind: 'resize'; handle: ResizeHandle; startBox: RegionBox };
 
+/** Numbers each viewer's evening-out filter, whose id must be the page's only one. */
+let nextFilterId = 0;
+
 const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a stray click
 
 /** How far past the opening view the user can zoom in (see `maxZoom`). */
@@ -101,7 +110,7 @@ const OFF_CANVAS_DRAW_EXCLUDED =
   templateUrl: './image-viewer.component.html',
   styleUrl: './image-viewer.component.scss',
 })
-export class ImageViewerComponent implements OnDestroy, LinkLead {
+export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
   private activeContext = inject(ActiveContextService);
 
   readonly media = input.required<Media>();
@@ -192,6 +201,17 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
    */
   readonly link = input<ViewLink | null>(null);
   readonly linkAs = input<'lead' | 'follow'>('lead');
+  /**
+   * A per-channel curve to show the image through (the Face compare layout's
+   * exposure, contrast and white balance, #5675; `face-even-out/even-out.ts`),
+   * or null to show it as it is. It is one SVG `feComponentTransfer` filter
+   * over the whole image, never part of it, and the image itself is
+   * untouched: the stored bytes, and every overlay drawn over them, are the
+   * same.
+   */
+  readonly toneMap = input<ToneMap | null>(null);
+  /** Show the image in greyscale (#5674), after {@link toneMap}. */
+  readonly greyscale = input(false);
   readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -199,6 +219,16 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
    * fresh Shift-drag). The parent clears its armed state but keeps the box.
    */
   readonly armedConfirmCanceled = output<void>();
+
+  /** The id of this viewer's {@link toneMap} filter. */
+  readonly toneFilterId = `vt-even-out-${++nextFilterId}`;
+  /** The CSS `filter` the image is drawn through, or null for none. */
+  readonly imageFilter = computed<string | null>(() => {
+    const parts: string[] = [];
+    if (this.toneMap()) parts.push(`url(#${this.toneFilterId})`);
+    if (this.greyscale()) parts.push('grayscale(1)');
+    return parts.length ? parts.join(' ') : null;
+  });
 
   // Public: the coord-transform specs substitute a stub wrap element here.
   readonly wrapRef = viewChild<ElementRef<HTMLDivElement>>('imageWrap');
@@ -260,6 +290,11 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     if (!anchor || this.loadState() !== 'loaded') return null;
     return faceFrame(anchor, this.renderedW(), this.renderedH());
   });
+
+  /** The face in face space, for whatever locates a part of it (the checklist's rows). */
+  readonly faceShape = computed<FaceShape | null>(() =>
+    this.frame() ? faceShape(this.landmarks(), this.renderedW(), this.renderedH()) : null,
+  );
 
   /** As a lead: the face view this viewer shows, for the one that follows it. */
   readonly leadState = computed<LeadState>(() => {
@@ -351,12 +386,18 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
   constructor() {
     this.setupWindowKeyListeners();
 
-    // A lead puts itself on its link, for as long as both are its.
+    // A viewer puts itself on its link, as what it is there, for as long as
+    // both are its.
     effect((onCleanup) => {
       const link = this.link();
-      if (!link || this.linkAs() !== 'lead') return;
-      link.attach(this);
-      onCleanup(() => link.detach(this));
+      if (!link) return;
+      if (this.linkAs() === 'lead') {
+        link.attach(this);
+        onCleanup(() => link.detach(this));
+      } else {
+        link.attachFollower(this);
+        onCleanup(() => link.detachFollower(this));
+      }
     });
 
     // A follower draws itself from its lead's view whenever that moves, or its
@@ -819,6 +860,13 @@ export class ImageViewerComponent implements OnDestroy, LinkLead {
     const zoom = this.clampZoom(view.scale / frame.unit);
     this.setPaneView(paneViewOf(frame, { ...view, scale: zoom * frame.unit }, this.rotation()));
     this.applyTransform();
+  }
+
+  /** Show *rect* of the face, as large as this pane and the zoom range allow. */
+  showFaceRect(rect: FaceRect): void {
+    const wrap = this.wrapRef()?.nativeElement;
+    const view = wrap && viewOfRect(rect, wrap.clientWidth, wrap.clientHeight, this.rotation());
+    if (view) this.showFaceView(view);
   }
 
   /** The whole image, keeping the turn. */

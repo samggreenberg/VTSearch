@@ -11,6 +11,8 @@
     [link]="link()"
     linkAs="follow"
     [landmarks]="wide.kind === 'crop' ? viewerMedia().face_landmarks : null"
+    [toneMap]="toneMap()"
+    [greyscale]="greyscale()"
   />
   <div class="reference-bar">
     <span class="reference-caption">

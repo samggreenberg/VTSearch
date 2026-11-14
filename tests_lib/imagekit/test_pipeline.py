@@ -231,6 +231,23 @@ class TestOssPipeline:
         assert ok
         assert len(pipe.process_buffer(png.tobytes(), media_id="b")) == 2
 
+    def test_onnx_models_named_dot_model_run_the_same(self, tmp_path, pipe):
+        """An ONNX model loads under any name (#5683): named outright, or as the one ``.model`` in a bundle."""
+        paths = build_model_dir(tmp_path / "renamed", FACES)
+        det_dir = tmp_path / "renamed" / "det"
+        det_dir.mkdir()
+        paths["detector"].rename(det_dir / "det.model")
+        paths["detector_config"].rename(det_dir / "det.json")
+        emb = paths["embedder"].rename(paths["embedder"].with_suffix(".model"))  # its sidecar emb.json stays
+        renamed = OssFacePipeline()
+        renamed.initialize(
+            RuntimeOptions(), {"detector": {"model_bundle": str(det_dir)}, "embedder": {"model": str(emb)}}
+        )
+        want, got = pipe.process(BLACK), renamed.process(BLACK)
+        assert len(got) == 2 and [r.bbox for r in got] == [r.bbox for r in want]
+        assert all(np.array_equal(a.embedding, b.embedding) for a, b in zip(got, want, strict=True))
+        assert renamed.compatibility() == pipe.compatibility()
+
 
 # ---------------------------------------------------------------------------
 # The ext wrapper
