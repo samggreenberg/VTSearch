@@ -59,11 +59,15 @@ def style(ax) -> None:
 
 def by_vote(tables: dict, out: Path) -> None:
     rows = [(stem, sets) for stem in tables for sets in PANELS[stem]]
-    fig, axes = plt.subplots(1, len(rows), figsize=(4.2 * len(rows), 3.4), sharey=True, squeeze=False,
+    ncol = 3
+    nrow = -(-len(rows) // ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.4 * ncol, 3.2 * nrow), sharey=True, squeeze=False,
                              constrained_layout=True)  # fmt: skip
     fig.suptitle("F at every vote, one wrong vote minus none, paired (band: 95%, clustered on the class)",
                  color=INK, fontsize=11, x=0.01, ha="left")  # fmt: skip
-    for ax, (stem, sets) in zip(axes[0], rows):
+    for ax in axes.flat[len(rows) :]:
+        ax.set_visible(False)
+    for ax, (stem, sets) in zip(axes.flat, rows):
         style(ax)
         cur = pd.read_csv(tables[stem] / f"flip_3688_{stem}_curves.csv")
         ax.axhline(0, color=MUTED, linewidth=1)
@@ -77,7 +81,8 @@ def by_vote(tables: dict, out: Path) -> None:
         ax.set_title(TITLE[stem], color=INK, fontsize=10, loc="left")
         ax.set_xlabel("vote", color=MUTED, fontsize=9)
         ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower right")
-    axes[0, 0].set_ylabel("F, wrong vote minus none", color=MUTED, fontsize=9)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("F, wrong vote minus none", color=MUTED, fontsize=9)
     fig.savefig(out / "fig_by_vote.png", dpi=110)
     plt.close(fig)
 
