@@ -795,6 +795,19 @@ lands, as the detector writer's do. The logic is
 `vtscore/datasets/blur_state.py`; the routes are `GET /api/medias/blurred` and
 `PUT /api/medias/<id>/blur` ([medias.md](api/medias.md#blurred-items)).
 
+A sidecar is valid for exactly the file it sits beside, so the flows that make
+a new dataset from an old one carry the overrides across (#5693): a pickle
+export and its re-import, promote, combine. Each renumbers the media ids, often
+more than once along the way (the loader keeps a file's ids, the load pipeline
+renumbers its chunks, combine renumbers its merge), so in transit an override
+rides **on its item**, as a `blur_override` field, and every renumbering carries
+it for free. The same field, one per entry, is how an exported container holds
+them. Reading a file with a sidecar beside it (combine's sources) lets the
+sidecar win over the container's own. The save takes the field off the items
+and writes the new dataset's sidecar before registering it, so a saved
+dataset's overrides still have one home and its live medias never carry the
+field. Promote has the source's overrides in memory and remaps them directly.
+
 **Primarily Flask routes mutate this state.**  Most ML and dataset
 functions accept state as parameters; so you can use the ML code in a
 script or notebook by passing your own dicts. A few modules (notably

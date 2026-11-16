@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Blur overrides follow their items into a new dataset** (issue #5693). `export_dataset_to_file` takes
+  `blur_overrides={media_id: blurred}` and folds each into its item's entry as `blur_override`; given, it alone
+  decides, and omitted, an override an item already carries in that field is written. `load_dataset_from_pickle`
+  (and the chunked loader) put the field back on each loaded media, so every id renumbering on the way to a new
+  dataset carries it. In `vtscore.datasets.blur_state`: `BLUR_OVERRIDE_FIELD`; `stamp_blur_overrides(medias,
+  overrides)` and `take_blur_overrides(medias)` put the field on and take it off; `carry_blur_overrides(ctx)` makes
+  the overrides a context's items carry its own; `write_blur_sidecar(pkl_path, overrides)` writes a new file's
+  sidecar now. The load pipeline's save writes the sidecar before registering a dataset and leaves no field on its
+  medias; the combine importer, and the pickle importer given a server path, read the sidecar beside each source
+  file, which wins over the file's own fields. `CliUploadedFile` gains a read-only `path`.
+
 - **`vtscore.datasets.blur_state`**, the per-dataset blur state (issue #5692). An item's effective state is its
   Blur / Unblur override if one was set, else whether a blur rule matches its raw `custom_metadata`
   (`effective_blurred(override, rules, custom_metadata)`). `set_blur_override(ctx, media_id, blurred)` records an

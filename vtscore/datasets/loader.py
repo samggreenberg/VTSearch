@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import io
 import pickle
+from collections.abc import Mapping
 from typing import Any, Callable
 
 from vtscore.datasets.loader_common import (  # noqa: F401  - re-exported for consumers
@@ -151,6 +152,28 @@ def _copy_ground_truth(entry: dict[str, Any], media: dict[str, Any]) -> None:
             entry[field] = media[field]
 
 
+def _copy_blur_override(
+    entry: dict[str, Any], cid: int, media: dict[str, Any], blur_overrides: Mapping[int, bool] | None
+) -> None:
+    """Fold an item's Blur / Unblur override into its pickle entry (#5693).
+
+    From *blur_overrides* when the caller passed the dataset's, else from the
+    ``blur_override`` the item carries in from the file it was read from (a
+    staged copy of an exported file).  Written only when there is one, so a
+    dataset without overrides keeps the same entry shape.
+    """
+    from vtscore.datasets.blur_state import BLUR_OVERRIDE_FIELD  # noqa: PLC0415
+
+    if blur_overrides is not None:
+        value = blur_overrides.get(cid)
+        if value is not None:
+            entry[BLUR_OVERRIDE_FIELD] = bool(value)
+        return
+    value = media.get(BLUR_OVERRIDE_FIELD)
+    if isinstance(value, bool):
+        entry[BLUR_OVERRIDE_FIELD] = value
+
+
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
     *,
@@ -162,6 +185,7 @@ def export_dataset_to_file(
     expires_at: float | None = None,
     extra_pickle_keys: dict[str, Any] | None = None,
     on_stage: Callable[[str], None] | None = None,
+    blur_overrides: Mapping[int, bool] | None = None,
 ) -> bytes:
     """Serialise the current media dataset to a ZIP container byte string.
 
@@ -183,6 +207,14 @@ def export_dataset_to_file(
         on_stage: Optional callback fired with a human-readable message
             before each internal stage (build dict / pickle / package), so
             a caller can keep a progress bar moving during serialisation.
+        blur_overrides: The dataset's Blur / Unblur overrides,
+            ``{media_id: blurred}``, to fold into the container: each goes
+            on its item's entry as ``blur_override``, so the file brings them
+            along wherever it is imported (#5693).  Given, it alone decides.
+            Omitted, an override an item carries in its own ``blur_override``
+            field (read from a container and not yet saved) is written
+            instead.  A dataset with no overrides is written exactly as
+            before.
 
     Returns:
         Raw bytes of the ZIP container.
@@ -248,6 +280,7 @@ def export_dataset_to_file(
         _copy_clip_window(entry, media)
         _copy_source_geometry(entry, media)
         _copy_ground_truth(entry, media)
+        _copy_blur_override(entry, cid, media, blur_overrides)
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile
         # fetch (the browse first-paint delay).  Image *demos* never generate

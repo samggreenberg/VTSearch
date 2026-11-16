@@ -2,8 +2,9 @@
 
 Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Built so far: the rules setting and its
-evaluator (#5691), the override store and its routes (#5692), and the frontend
-state service and `vtBlur` directive (#5694).
+evaluator (#5691), the override store and its routes (#5692), carrying
+overrides across dataset copies (#5693), and the frontend state service and
+`vtBlur` directive (#5694).
 
 ## Goal
 
@@ -68,15 +69,9 @@ media dict, not the display-formatted metadata the API returns.
 ### Where overrides live
 
 Built: per dataset, in a `<stem>.blur.json` sidecar beside the container
-(`vtscore/datasets/blur_state.py`; the reasons are under "Blur state" in
-`docs/ARCHITECTURE.md`). Media ids are per dataset file, so the sidecar is
-valid for exactly the file it sits beside.
-
-The flows that mint a new dataset from an old one (subset, promote, pickle
-export and re-import) must carry overrides across: the export folds them into
-the container, and subset/promote remap them through the id renumbering.
-`read_blur_overrides(pkl_path)` reads a source's overrides (a queued write
-included) without loading it.
+(`vtscore/datasets/blur_state.py`), and carried across the flows that make a
+new dataset from an old one (export and re-import, promote, combine). The
+reasons and the mechanism are under "Blur state" in `docs/ARCHITECTURE.md`.
 
 ### The API
 

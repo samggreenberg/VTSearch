@@ -77,6 +77,11 @@ class CliUploadedFile:
         self.filename = self._path.name
         self._fh: BinaryIO | None = None
 
+    @property
+    def path(self) -> Path:
+        """The local file this adapter reads."""
+        return self._path
+
     def _open(self) -> BinaryIO:
         if self._fh is None:
             self._fh = self._path.open("rb")
