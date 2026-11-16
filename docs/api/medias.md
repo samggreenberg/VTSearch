@@ -394,6 +394,63 @@ whose state actually moved (idempotent re-applies don't count); ids not in the
 loaded dataset are reported in `missing`.
 400 if no ids supplied; 422 on an unrecognised `provenance` value.
 
+### Blurred items
+
+```
+GET /api/medias/blurred
+X-Dataset-Id: <dataset id>
+```
+
+→ `{"ids": [4, 17, 230]}`: the ascending ids of the dataset's items that show
+blurred. An item's **effective** blur state is its override when someone set
+one with [Set an item's blur](#set-an-items-blur), else whether any of the
+server's [`blur_rules`](../SETTINGS.md#server-tier--datasettingsjson) matches its raw ingest metadata
+(`custom_metadata`). Only overrides are stored, so changing the rules
+re-decides every item nobody has overruled, at once, and leaves the overruled
+ones alone.
+
+One compact list for the whole dataset, because most places an image is drawn
+hold a bare id and no metadata. The set is cached on the dataset and recomputed
+only when its items, its overrides or the rules change, so polling it is cheap.
+The state applies to every media type; it is the client that decides what a
+blurred item looks like.
+
+| Status | When |
+|---|---|
+| `400` | No dataset header. |
+| `403` | The current user may not read the dataset (checked before anything else, so the answer says nothing about it). |
+| `409` | The dataset is not loaded (404 when the id names no dataset at all). |
+
+### Set an item's blur
+
+```
+PUT /api/medias/{media_id}/blur
+X-Dataset-Id: <dataset id>
+Content-Type: application/json
+
+{ "blurred": true }
+```
+
+→ `{"ok": true, "id": 12, "blurred": true}`. The Blur / Unblur button: records
+`blurred` as the item's override, which wins over the `blur_rules` from then
+on in either direction, so it corrects a wrong "sensitive" ruling and a missed
+one with the same write. Sending the state the item already has is a no-op.
+
+There is **one state per dataset**, shared by everyone who can read it; a
+detector has no part in it. It persists in a `<stem>.blur.json` sidecar beside
+the dataset's container (`{"<media_id>": true|false}`), written atomically
+about half a second after the click so a burst of clicks lands as one write,
+and deleted with the dataset. Reopening the dataset, or restarting the server,
+keeps every override.
+
+| Status | When |
+|---|---|
+| `400` | No dataset header. |
+| `403` | The current user may not read the dataset. |
+| `404` | The id names no item of the dataset. |
+| `409` | The dataset is not loaded. |
+| `422` | `blurred` is missing, `null` or not a boolean. |
+
 ### Thumbnail
 
 ```

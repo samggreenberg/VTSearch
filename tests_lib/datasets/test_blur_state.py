@@ -44,8 +44,14 @@ def _ctx(dataset_id: str, metadata: dict[int, dict]) -> DatasetContext:
 
 
 def _registered(tmp_path: Path, name: str = "blur") -> tuple[str, Path]:
-    """A registered dataset whose container is a real file; returns ``(dataset_id, pkl_path)``."""
-    pkl = tmp_path / f"ds_{name}.pkl"
+    """A registered dataset whose container is a real file; returns ``(dataset_id, pkl_path)``.
+
+    The container goes in its own directory (the registry manifest sits in
+    *tmp_path* itself), so a test can list exactly the dataset's files.
+    """
+    saved = tmp_path / "saved"
+    saved.mkdir(exist_ok=True)
+    pkl = saved / f"ds_{name}.pkl"
     pkl.write_bytes(b"container")
     entry = register_dataset(name=name, media_type="image", num_items=3, pkl_path=str(pkl))
     return entry["id"], pkl
@@ -199,7 +205,7 @@ class TestPersistence:
         flush_blur_writes()
         sidecar = blur_sidecar_path(pkl)
         assert json.loads(sidecar.read_text()) == {"3": True, "12": False}
-        assert sorted(p.name for p in tmp_path.iterdir()) == ["ds_format.blur.json", "ds_format.pkl"]
+        assert sorted(p.name for p in pkl.parent.iterdir()) == ["ds_format.blur.json", "ds_format.pkl"]
 
     def test_the_writer_lands_a_queued_write_on_its_own(self, tmp_path, monkeypatch):
         monkeypatch.setattr(blur_state, "WRITE_DELAY_SECONDS", 0.0)
@@ -266,7 +272,7 @@ class TestRemovedWithTheDataset:
         flush_blur_writes()
         assert blur_sidecar_path(pkl).is_file()
         assert unregister_dataset(dataset_id) is True
-        assert list(tmp_path.iterdir()) == []
+        assert list(pkl.parent.iterdir()) == []
 
     def test_a_write_still_queued_does_not_put_it_back(self, tmp_path, parked_writes):
         dataset_id, pkl = _registered(tmp_path, "resurrect")
@@ -276,7 +282,7 @@ class TestRemovedWithTheDataset:
         set_blur_override(ctx, 2, True)  # queued, not yet landed
         assert unregister_dataset(dataset_id) is True
         flush_blur_writes()
-        assert list(tmp_path.iterdir()) == []
+        assert list(pkl.parent.iterdir()) == []
 
     def test_a_write_queued_after_the_delete_is_skipped(self, tmp_path, parked_writes):
         dataset_id, pkl = _registered(tmp_path, "late")
@@ -285,4 +291,4 @@ class TestRemovedWithTheDataset:
         unregister_dataset(dataset_id)
         blur_state._queue_write(pkl, {1: True})
         flush_blur_writes()
-        assert list(tmp_path.iterdir()) == []
+        assert list(pkl.parent.iterdir()) == []
