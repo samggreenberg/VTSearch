@@ -177,6 +177,61 @@ class TestPromoteToDataset:
         assert snap.get("dataset_id") is None
         assert len(reg.list_datasets()) == before
 
+    def test_failure_after_the_write_removes_the_file_and_its_blur_sidecar(self, client, monkeypatch):
+        """A promote whose registry insert fails leaves neither the pkl nor the
+        blur sidecar written beside it."""
+        from vtscore.datasets.registry import get_saved_datasets_dir
+        from vtscore.datasets.blur_state import set_blur_override
+        from vtsearch.routes.datasets import staging as staging_module
+        from vtsearch.state import get_active_context, snapshot_medias
+
+        def refuse(**_kwargs):
+            raise RuntimeError("registry is read-only")
+
+        monkeypatch.setattr(staging_module, "_reg_register", refuse)
+        ids = sorted(snapshot_medias())[:2]
+        set_blur_override(get_active_context(), ids[0], True)
+
+        resp = client.post("/api/dataset/promote", json={"name": "Doomed", "media_ids": ids})
+        assert resp.status_code == 200, resp.get_json()
+        snap = _wait_for_task(resp.get_json()["task_id"])
+        assert "registry is read-only" in (snap.get("error") or "")
+        saved = get_saved_datasets_dir()
+        assert not saved.exists() or list(saved.iterdir()) == []
+
+    def test_blur_overrides_follow_their_items_to_their_new_ids(self, client):
+        """Each promoted item keeps its Blur / Unblur override under its new id;
+        an item left out leaves its override behind (#5693)."""
+        import json
+
+        from vtscore.datasets import registry as reg
+        from vtscore.datasets.blur_state import blur_sidecar_path, set_blur_override
+        from vtsearch.state import get_active_context, snapshot_medias
+
+        a, b, c = sorted(snapshot_medias())[:3]
+        ctx = get_active_context()
+        set_blur_override(ctx, a, True)
+        set_blur_override(ctx, b, True)  # b is not promoted
+        set_blur_override(ctx, c, False)
+
+        # Promoted in the order [c, a], so c becomes 1 and a becomes 2.
+        task = _promote(client, "Promoted With Blur", [c, a])
+        entry = reg.get_dataset(task["dataset_id"])
+        assert entry is not None
+
+        sidecar = blur_sidecar_path(entry["pkl_path"])
+        assert json.loads(sidecar.read_text()) == {"1": False, "2": True}
+
+    def test_no_blur_overrides_writes_no_sidecar(self, client):
+        from vtscore.datasets import registry as reg
+        from vtscore.datasets.blur_state import blur_sidecar_path
+        from vtsearch.state import snapshot_medias
+
+        task = _promote(client, "Promoted Without Blur", sorted(snapshot_medias())[:2])
+        entry = reg.get_dataset(task["dataset_id"])
+        assert entry is not None
+        assert not blur_sidecar_path(entry["pkl_path"]).exists()
+
     def test_rejects_unknown_ids(self, client):
         resp = client.post(
             "/api/dataset/promote",
