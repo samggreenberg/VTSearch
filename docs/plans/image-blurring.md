@@ -163,8 +163,26 @@ and the blur must leave the player's controls sharp and usable.
 
 ## Work items
 
-Roughly in dependency order: the setting, then the store, then the frontend
-foundation, then the display sites.
+### Dependencies
+
+An arrow points from an issue to one that needs it merged first.
+
+```text
+#5691 rules setting
+  └─> #5692 override store and routes
+        ├─> #5693 carry overrides across dataset copies
+        └─> #5694 state service and vtBlur directive
+              ├─> #5695 button and focused viewer ──> #5698 video playback
+              ├─> #5696 every DOM image site
+              └─> #5697 Browse canvas
+
+#5691 … #5698 (all eight) ──> #5699 docs and changelog
+```
+
+- #5698 needs both #5694 and #5695: it reuses the button #5695 adds.
+- #5693, #5695, #5696 and #5697 do not depend on one another and can run in
+  parallel once their parent has merged.
+- The longest chain is #5691 → #5692 → #5694 → #5695 → #5698 → #5699.
 
 <!-- item-sep -->
 
