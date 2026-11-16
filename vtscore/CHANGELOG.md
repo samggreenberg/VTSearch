@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.blur_state`**, the per-dataset blur state (issue #5692). An item's effective state is its
+  Blur / Unblur override if one was set, else whether a blur rule matches its raw `custom_metadata`
+  (`effective_blurred(override, rules, custom_metadata)`). `set_blur_override(ctx, media_id, blurred)` records an
+  override on the `DatasetContext` and queues it to a `<stem>.blur.json` sidecar beside the dataset's container
+  (`blur_sidecar_path`), written atomically and coalesced after `WRITE_DELAY_SECONDS`; `read_blur_overrides`,
+  `blur_overrides(ctx)`, `flush_blur_writes` and `pending_blur_writes` read and land it, and
+  `removing_blur_sidecar(pkl_path)` holds the writer off while a dataset's files are deleted (as
+  `registry.unregister_dataset` now does). `blurred_ids(ctx, rules)` is the set of blurred ids, cached on the context
+  until its medias, overrides or the rules change. `DatasetContext.reset_derived_caches` gains a `blur` family
+  keyword, defaulting to `True` like the others.
+
 - **`vtscore.datasets.blur_rules`**, the pure half of image blurring (issue #5691): which ingest metadata marks an
   image as worth blurring. A rule is `{"field", "op", "value"}` with `op` in `BLUR_RULE_OPS` (`truthy`, `==`, `!=`,
   `>`, `>=`, `<`, `<=`, `in`). `partition_blur_rules(entries)` returns `(rules, rejected)`, the rules normalized and

@@ -777,6 +777,24 @@ Detectors are persisted as JSON files, `<detectors_dir>/<slug>.json`
 `embedder_type`, and caller extras such as `text_query` — never embeddings or
 weights.
 
+**Blur state** (#5689) is the one piece of per-item user state that belongs to
+the *dataset*, not a detector: whether an image shows blurred has nothing to do
+with what anyone is searching for, and everyone who reads a dataset shares one
+answer. An item's effective state is its Blur / Unblur **override** if a user
+set one, else whether any server-tier `blur_rules` rule matches its raw
+`custom_metadata`. Only the overrides are stored, so a rules change re-decides
+every item nobody overruled. They live on the `DatasetContext`
+(`_blur_overrides`, read on first use, and the `_blurred_ids` cache, keyed on
+the media revision, an overrides revision and the rules) and persist in a
+`<stem>.blur.json` sidecar beside the dataset's container. A sidecar rather
+than a container entry, because replacing an entry rewrites the whole archive
+and this is written on a click; sharing the container's stem is what lets
+`registry.unregister_dataset` delete it with the dataset. Writes are queued off
+the request thread and coalesced, and a read sees a queued write before it
+lands, as the detector writer's do. The logic is
+`vtscore/datasets/blur_state.py`; the routes are `GET /api/medias/blurred` and
+`PUT /api/medias/<id>/blur` ([medias.md](api/medias.md#blurred-items)).
+
 **Primarily Flask routes mutate this state.**  Most ML and dataset
 functions accept state as parameters; so you can use the ML code in a
 script or notebook by passing your own dicts. A few modules (notably
@@ -814,7 +832,7 @@ summary; the field-by-field tables are in
 
 | Context | Key state |
 |---------|-----------|
-| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins, the 1-D similarity order that lists of its items sort look-alikes together by (fit with the full-dataset layout, or on its own for Face), and a Face dataset's people (its faces merged into people at the face ball's floor, `vtscore.datasets.people`) |
+| `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins, the 1-D similarity order that lists of its items sort look-alikes together by (fit with the full-dataset layout, or on its own for Face), and a Face dataset's people (its faces merged into people at the face ball's floor, `vtscore.datasets.people`); plus the Blur / Unblur overrides and the cached blurred-id set (`vtscore.datasets.blur_state`) |
 | `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `label_history_base`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the

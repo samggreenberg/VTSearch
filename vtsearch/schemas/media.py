@@ -587,6 +587,55 @@ class MediaVoteBulkResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
+# /api/medias/blurred and /api/medias/<id>/blur
+# ---------------------------------------------------------------------------
+
+
+class MediaBlurredIdsResponseSchema(Schema):
+    """Response for ``GET /api/medias/blurred``: which of the dataset's items show blurred."""
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={
+            "description": (
+                "Ascending ids of the items whose effective blur state is blurred: the item's "
+                "Blur / Unblur override when someone set one, else whether any ``blur_rules`` "
+                "rule matches its ingest metadata."
+            ),
+        },
+    )
+
+
+class MediaBlurRequestSchema(Schema):
+    """Body for ``PUT /api/medias/<id>/blur``: set one item's blur override.
+
+    The override wins over the ``blur_rules`` from then on, in either
+    direction, for everyone who reads the dataset. Unknown fields are dropped,
+    matching the vote route.
+    """
+
+    blurred = fields.Boolean(
+        required=True,
+        metadata={"description": "Whether the item shows blurred from now on. Idempotent."},
+    )
+
+    class Meta:
+        unknown = "exclude"
+
+
+class MediaBlurResponseSchema(Schema):
+    """Response for ``PUT /api/medias/<id>/blur`` (success path)."""
+
+    ok = fields.Boolean(required=True)
+    id = fields.Integer(required=True, metadata={"description": "The item's id."})
+    blurred = fields.Boolean(
+        required=True,
+        metadata={"description": "The item's blur state after the call: its override, as just set."},
+    )
+
+
+# ---------------------------------------------------------------------------
 # /api/medias/<id>/source and /api/medias/source-batch
 # ---------------------------------------------------------------------------
 

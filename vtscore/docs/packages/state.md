@@ -91,6 +91,7 @@ Per-dataset mutable state. One context per loaded dataset.
 | `_subset_*` | | The same three, for an ephemeral subset layout (e.g. a Find run's positives) |
 | `_region_labels` / `_subset_region_labels` / `_relabel_job_id` | | VTSBrowse region signposts for each layout, plus the in-flight relabel job |
 | `_text_embedder` / `_patch_embedder` / `_structural_embedder` / `_binding_explicit` | | Role-typed embedder binding - embedder **names** only, never vectors |
+| `_blur_overrides` / `_blur_overrides_revision` / `_blurred_ids` | | Blur state (`vtscore.datasets.blur_state`): the Blur / Unblur overrides `{media_id: bool}`, read from the `<stem>.blur.json` sidecar on first use and replaced on each write, a counter of those writes, and the cached set of ids whose effective state is blurred |
 
 The private fields are caches and bookkeeping; treat the first block of
 the table as the supported surface. See

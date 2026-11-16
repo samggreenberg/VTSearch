@@ -2,7 +2,7 @@
 
 Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Only the rules setting and its evaluator
-(#5691) are built so far.
+(#5691) and the override store and its routes (#5692) are built so far.
 
 ## Goal
 
@@ -36,9 +36,8 @@ gore, …). Three behaviours:
 - **A CSS filter hook on the focused viewer**: `imageFilter` in
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
-What does **not** exist: any per-item user state other than votes (which are
-per detector, so the wrong home), any shared thumbnail component (about twenty
-sites each write their own `<img>`), and any blur or moderation code.
+What does **not** exist: any shared thumbnail component (about twenty sites
+each write their own `<img>`), and any blur code in the frontend.
 
 ## Design
 
@@ -66,32 +65,22 @@ media dict, not the display-formatted metadata the API returns.
 
 ### Where overrides live
 
-Per **dataset**, shared by every reader of that dataset, in a small JSON
-sidecar beside the dataset container (`<stem>.blur.json`, `{media_id: bool}`).
+Built: per dataset, in a `<stem>.blur.json` sidecar beside the container
+(`vtscore/datasets/blur_state.py`; the reasons are under "Blur state" in
+`docs/ARCHITECTURE.md`). Media ids are per dataset file, so the sidecar is
+valid for exactly the file it sits beside.
 
-- Not in the detector JSON: blur has nothing to do with a detector.
-- Not a container entry: replacing an entry rewrites the whole ZIP, far too
-  heavy for a click.
-- A sidecar sharing the pickle's stem is already swept by
-  `registry.unregister_dataset`.
-- Written atomically, debounced like the detector writer.
-- In memory: a non-derived slot on `DatasetContext` for the overrides, and a
-  derived-cache slot for the computed blurred-id set (invalidated by an
-  override, a media revision, or a rules change).
-
-Media ids are per dataset file, so the sidecar is valid for exactly the file it
-sits beside. The flows that mint a new dataset from an old one (subset,
-promote, pickle export and re-import) must carry overrides across: the export
-folds them into the container, and subset/promote remap them through the id
-renumbering.
+The flows that mint a new dataset from an old one (subset, promote, pickle
+export and re-import) must carry overrides across: the export folds them into
+the container, and subset/promote remap them through the id renumbering.
+`read_blur_overrides(pkl_path)` reads a source's overrides (a queued write
+included) without loading it.
 
 ### The API
 
-- `GET /api/medias/blurred` → the ids whose effective state is blurred, for the
-  dataset in `X-Dataset-Id`. One compact list, because most display sites hold
-  a bare id and no metadata (Browse cells, member grids, pickers).
-- `PUT /api/medias/<id>/blur` with `{"blurred": bool}` → records the override.
-- `blur_rules` appears, dump-only, in `GET /api/settings`.
+Built: `GET /api/medias/blurred` → `{"ids": [...]}` for the dataset in
+`X-Dataset-Id`, and `PUT /api/medias/<id>/blur` with `{"blurred": bool}`, both
+in `docs/api/medias.md`; `blur_rules` is dump-only in `GET /api/settings`.
 
 ### This is a shield, not access control
 
