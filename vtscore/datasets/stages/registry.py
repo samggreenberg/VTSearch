@@ -15,6 +15,12 @@ from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from vtscore.concurrency.progress import loading_tasks
+from vtscore.datasets.blur_state import (
+    blur_sidecar_path,
+    carry_blur_overrides,
+    take_blur_overrides,
+    write_blur_sidecar,
+)
 from vtscore.datasets.loader import export_dataset_to_file
 from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
@@ -26,8 +32,16 @@ from vtscore.datasets.registry import (
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS, _origin_to_str
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from vtscore.datasets.stages.finalize import DroppedGroup
     from vtscore.state import DatasetContext
+
+
+def _remove_saved_files(pkl_path: str) -> None:
+    """Remove a dataset file a failed save left behind, and its blur sidecar."""
+    Path(pkl_path).unlink(missing_ok=True)
+    blur_sidecar_path(pkl_path).unlink(missing_ok=True)
 
 
 def _auto_register_dataset(
@@ -45,6 +59,7 @@ def _auto_register_dataset(
     import_group: str | None = None,
     output_category: str = "",
     dropped_groups: list[DroppedGroup] | None = None,
+    blur_overrides: Mapping[int, bool] | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -53,10 +68,19 @@ def _auto_register_dataset(
     *import_group* / *output_category* / *dropped_groups* go to the registry
     entry as given (see :func:`~vtscore.datasets.registry.register_dataset`).
 
+    *blur_overrides* (``{media_id: blurred}``) are written to the new file's
+    blur sidecar before it is registered.  Omitted, they are the overrides
+    the items carry in from the file they were read from, taken off
+    *media_dict* (:func:`~vtscore.datasets.blur_state.take_blur_overrides`).
+    Either way no item is saved still carrying one.
+
     Returns the registry entry dict on success, or ``None`` on failure/skip.
     """
     if not media_dict:
         return None
+
+    if blur_overrides is None:
+        blur_overrides = take_blur_overrides(media_dict)
 
     _stage = on_stage or (lambda _msg: None)
 
@@ -123,8 +147,11 @@ def _auto_register_dataset(
         _stage("Writing to disk…")
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
+        # Before the registry insert, so the dataset never opens without them.
+        write_blur_sidecar(pkl_path, blur_overrides)
     except Exception:
         traceback.print_exc()
+        _remove_saved_files(pkl_path)
         return None
 
     _stage("Registering dataset…")
@@ -150,10 +177,11 @@ def _auto_register_dataset(
             dropped_groups=dropped_groups,
         )
     except Exception:
-        # Registry write failed; clean up the orphaned pkl so we don't
-        # leave a stale file behind with nothing pointing at it.
+        # Registry write failed; clean up the orphaned pkl (and its blur
+        # sidecar) so we don't leave stale files behind with nothing pointing
+        # at them.
         traceback.print_exc()
-        Path(pkl_path).unlink(missing_ok=True)
+        _remove_saved_files(pkl_path)
         return None
     _reg_add_loaded(entry["id"])
     return entry
@@ -222,6 +250,11 @@ def _register_and_migrate(
     if ctx.coverage_atlas is not None:
         extra_pickle_keys = {"coverage_atlas": ctx.coverage_atlas.to_serializable()}
 
+    # The Blur / Unblur overrides the items carried in from the file they were
+    # read from (an exported pickle, a combine's sources), already through every
+    # id renumbering of the load, become the new dataset's (#5693).
+    blur_overrides = carry_blur_overrides(ctx)
+
     _on_stage("Saving to registry…")
     entry = _auto_register_dataset(
         ctx.medias,
@@ -238,6 +271,7 @@ def _register_and_migrate(
         import_group=import_group,
         output_category=output_category,
         dropped_groups=dropped_groups,
+        blur_overrides=blur_overrides,
     )
     if entry is None:
         return task_id, None

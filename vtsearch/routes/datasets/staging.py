@@ -31,6 +31,7 @@ import vtscore.security.path_validation as _paths
 from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
+from vtscore.datasets.blur_state import blur_overrides, blur_sidecar_path, write_blur_sidecar
 from vtscore.datasets.file_types import count_file_types
 from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY, parse_output_specs
 from vtscore.datasets.load_multi import _run_multi_output_load_in_background
@@ -250,6 +251,13 @@ _PROMOTE_TOTAL_STEPS = 3
 _PROMOTE_TASK = "dataset_promote"
 
 
+def _remove_promoted_files(pkl_path: str | None) -> None:
+    """Remove what a failed promote wrote: the dataset file and its blur sidecar."""
+    if pkl_path:
+        Path(pkl_path).unlink(missing_ok=True)
+        blur_sidecar_path(pkl_path).unlink(missing_ok=True)
+
+
 def _promote_in_background(
     subset: dict[int, dict],
     *,
@@ -261,6 +269,7 @@ def _promote_in_background(
     source: dict,
     file_type_counts: dict[str, int],
     created_by: str,
+    blur_overrides: dict[int, bool] | None = None,
 ) -> str:
     """Build, write, and register the promoted dataset in a daemon thread.
 
@@ -278,10 +287,14 @@ def _promote_in_background(
     replaced (never mutated in place) throughout the codebase, so the shared
     references stay valid.
 
+    *blur_overrides* are the source's Blur / Unblur overrides already keyed
+    by *subset*'s ids; they are written to the new file's blur sidecar before
+    the dataset is registered.
+
     On success the task's ``dataset_id`` association is set to the new registry
     entry's id so the frontend's completion callback can identify the dataset.
     Failures (and cancellation) surface as the task's ``error`` field; a
-    partially written pkl is removed.
+    partially written pkl (and its sidecar) is removed.
 
     Returns the ``task_id`` for progress polling / cancellation.
     """
@@ -340,6 +353,8 @@ def _promote_in_background(
                 )
                 Path(pkl_path).write_bytes(data_bytes)
                 del data_bytes
+                # Before the registry insert, so the dataset never opens without them.
+                write_blur_sidecar(pkl_path, blur_overrides or {})
                 tracker.check_cancelled()
 
                 tracker.update("loading", "Registering dataset…", 0, 0, step=3, total_steps=_PROMOTE_TOTAL_STEPS)
@@ -366,12 +381,10 @@ def _promote_in_background(
                     total_steps=_PROMOTE_TOTAL_STEPS,
                 )
         except CancelledError:
-            if pkl_path:
-                Path(pkl_path).unlink(missing_ok=True)
+            _remove_promoted_files(pkl_path)
             tracker.update("idle", "", 0, 0, error="Cancelled")
         except MemoryError:
-            if pkl_path:
-                Path(pkl_path).unlink(missing_ok=True)
+            _remove_promoted_files(pkl_path)
             tracker.update(
                 "idle",
                 "",
@@ -381,8 +394,7 @@ def _promote_in_background(
             )
         except Exception as exc:  # noqa: BLE001 (surface the failure on the task tracker)
             traceback.print_exc()
-            if pkl_path:
-                Path(pkl_path).unlink(missing_ok=True)
+            _remove_promoted_files(pkl_path)
             tracker.update("idle", "", 0, 0, error=str(exc) or repr(exc) or "Unknown error during promote")
         finally:
             gc.collect()
@@ -428,14 +440,18 @@ def promote_to_dataset(body: dict):
     snap = snapshot_medias()
     if not snap:
         abort(400, message="No dataset loaded")
+    ctx = get_active_context()
+    source_overrides = blur_overrides(ctx)
 
     # Build the subset, renumbering IDs from 1 and preserving each item's
     # origin/embedding (a shallow copy is enough; the background task
     # serialises it and never mutates the embedding array).  Snapshotting
     # here, in the request thread, is what isolates the background job
     # from concurrent mutation of the source dataset — see
-    # :func:`_promote_in_background`.
+    # :func:`_promote_in_background`.  Each item's Blur / Unblur override
+    # follows it to its new id; items left out leave theirs behind (#5693).
     subset: dict[int, dict] = {}
+    subset_overrides: dict[int, bool] = {}
     new_id = 1
     for mid in media_ids:
         media = snap.get(mid)
@@ -444,6 +460,8 @@ def promote_to_dataset(body: dict):
         clone = dict(media)
         clone["id"] = new_id
         subset[new_id] = clone
+        if mid in source_overrides:
+            subset_overrides[new_id] = source_overrides[mid]
         new_id += 1
 
     if not subset:
@@ -452,7 +470,6 @@ def promote_to_dataset(body: dict):
     # Inherit embedder / clipper / media_type / death-date from the source
     # dataset's registry entry when available; otherwise derive from the
     # promoted items themselves.
-    ctx = get_active_context()
     src_id = ctx.dataset_id or None
     src_entry = _reg_get(src_id) if src_id else None
 
@@ -479,6 +496,7 @@ def promote_to_dataset(body: dict):
         source=source,
         file_type_counts=count_file_types(subset.values()),
         created_by=get_current_user(),
+        blur_overrides=subset_overrides,
     )
     return {"ok": True, "message": "Promoting to dataset...", "task_id": task_id}
 

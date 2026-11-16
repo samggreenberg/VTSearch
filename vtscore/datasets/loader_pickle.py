@@ -309,6 +309,21 @@ def _restore_ground_truth(media_data: dict[str, Any], media_info: dict[str, Any]
             media_data[field] = value
 
 
+def _restore_blur_override(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry an exported item's Blur / Unblur override onto the media (#5693).
+
+    An exported container holds its dataset's overrides one per entry.  The
+    media carries it from here until the dataset it lands in is saved, which
+    moves it into that dataset's sidecar, so every id renumbering on the way
+    carries it too (``vtscore.datasets.blur_state``).
+    """
+    from vtscore.datasets.blur_state import BLUR_OVERRIDE_FIELD  # noqa: PLC0415
+
+    value = media_info.get(BLUR_OVERRIDE_FIELD)
+    if isinstance(value, bool):
+        media_data[BLUR_OVERRIDE_FIELD] = value
+
+
 def _build_pickle_thin_media(
     new_id: int,
     media_info: dict[str, Any],
@@ -345,6 +360,7 @@ def _build_pickle_thin_media(
     _restore_clip_window(media_data, media_info)
     _restore_source_geometry(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
+    _restore_blur_override(media_data, media_info)
     return media_data
 
 
@@ -386,6 +402,7 @@ def _build_pickle_full_media(
     _restore_clip_window(media_data, media_info)
     _restore_source_geometry(media_data, media_info)
     _restore_ground_truth(media_data, media_info)
+    _restore_blur_override(media_data, media_info)
     return media_data
 
 

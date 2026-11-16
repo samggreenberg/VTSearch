@@ -34,6 +34,7 @@ from flask_smorest import Blueprint, abort
 import vtscore.security.path_validation as _paths
 from vtscore.config import DATA_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
+from vtscore.datasets.blur_state import blur_overrides
 from vtscore.datasets.importers.base import OutputSpec, parse_output_specs
 from vtscore.datasets.load_multi import _run_multi_output_load_in_background
 from vtscore.datasets.load_origin import _run_origin_load_in_background
@@ -52,7 +53,7 @@ from vtsearch.schemas.datasets.load import (
     DatasetLoadSourceRequestSchema,
     DatasetLoadStartedResponseSchema,
 )
-from vtsearch.state import snapshot_medias, unregister_context
+from vtsearch.state import get_active_context, snapshot_medias, unregister_context
 
 datasets_load_bp = Blueprint(
     "datasets_load",
@@ -693,13 +694,16 @@ def export_dataset():
     Success returns a binary ``application/octet-stream`` download; that
     body is left undescribed in the spec (mirroring the audio / video /
     image streaming routes in ``media/list.py``).
+
+    The dataset's Blur / Unblur overrides are folded into the file, since its
+    sidecar stays behind on the server: importing the file restores them.
     """
     snap = snapshot_medias()
     if not snap:
         abort(400, message="No dataset loaded")
 
     try:
-        dataset_bytes = export_dataset_to_file(snap)
+        dataset_bytes = export_dataset_to_file(snap, blur_overrides=blur_overrides(get_active_context()))
         return send_file(
             io.BytesIO(dataset_bytes),
             mimetype="application/octet-stream",
@@ -728,8 +732,6 @@ def clear_dataset_route():
     containers rule out a meaningful global-clear fallback inside a
     request), so a header-less clear is rejected loudly instead.
     """
-    from vtsearch.state import get_active_context
-
     ctx = get_active_context()
     unregister_context(ctx.dataset_id)
     _reg_remove_loaded(ctx.dataset_id)

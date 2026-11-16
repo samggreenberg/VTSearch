@@ -20,11 +20,19 @@ def _load_clips_from_pickle(file_path: Path, thin: bool = False) -> dict[int, di
     Returns a fresh dict mapping media-id to media-data.  This is a
     simplified version of :func:`~vtscore.datasets.loader.load_dataset_from_pickle`
     that avoids side-effects on any global state.
+
+    Each media carries its Blur / Unblur override into the combined dataset
+    (#5693): the one its container entry holds, replaced by the one in the
+    blur sidecar beside *file_path* (a saved dataset's live state).  The
+    sidecar is keyed by the file's own ids, which the loader keeps, so it is
+    applied here, before the merge renumbers them.
     """
+    from vtscore.datasets.blur_state import read_blur_overrides, stamp_blur_overrides
     from vtscore.datasets.loader import load_dataset_from_pickle
 
     temp_medias: dict[int, dict[str, Any]] = {}
     load_dataset_from_pickle(file_path, temp_medias, thin=thin)
+    stamp_blur_overrides(temp_medias, read_blur_overrides(file_path))
     return temp_medias
 
 

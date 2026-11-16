@@ -41,6 +41,20 @@ detector writer's reads do (``vtscore.detectors.store``), so closing and
 reopening a dataset inside the delay loses nothing. Queued writes are landed at
 exit; :func:`flush_blur_writes` lands them on demand.
 
+**Carrying overrides into a new dataset** (#5693). A flow that makes a new
+dataset from an old one (a pickle export and re-import, promote, combine)
+renumbers the media ids, often more than once on the way: the loader keeps a
+file's ids, the pipeline renumbers its chunks, combine renumbers its merge. So
+between reading a file and saving the new dataset, an override travels *on its
+item*, as that media's :data:`BLUR_OVERRIDE_FIELD`, and every renumbering
+carries it for free. The same field is how an exported container holds them
+(:func:`~vtscore.datasets.loader.export_dataset_to_file` folds them in, one
+per entry). The field never reaches a saved dataset's live medias: the save
+takes it off (:func:`carry_blur_overrides`) and writes the sidecar instead
+(:func:`write_blur_sidecar`), so a registered dataset's overrides still live
+in exactly one place. A file with a sidecar beside it is read with the
+sidecar winning over its own fields (:func:`stamp_blur_overrides`).
+
 This module stores no vectors: the overrides are ids and booleans.
 """
 
@@ -51,7 +65,7 @@ import contextlib
 import json
 import logging
 import threading
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -64,21 +78,32 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "BLUR_OVERRIDE_FIELD",
     "BLUR_SIDECAR_SUFFIX",
     "WRITE_DELAY_SECONDS",
     "blur_overrides",
     "blur_sidecar_path",
     "blurred_ids",
+    "carry_blur_overrides",
     "effective_blurred",
     "flush_blur_writes",
     "pending_blur_writes",
     "read_blur_overrides",
     "removing_blur_sidecar",
     "set_blur_override",
+    "stamp_blur_overrides",
+    "take_blur_overrides",
+    "write_blur_sidecar",
 ]
 
 #: What a dataset container's blur sidecar is named after its stem.
 BLUR_SIDECAR_SUFFIX = ".blur.json"
+
+#: The field an item's override rides in, ``True`` / ``False``, while it is
+#: carried into a new dataset: on a media dict between reading a file and
+#: saving the new dataset, and on a container entry of an exported file.  A
+#: saved dataset's live medias never carry it (see the module docstring).
+BLUR_OVERRIDE_FIELD = "blur_override"
 
 #: How long a queued sidecar write waits before it lands, so a burst of clicks
 #: becomes one write.  Read when a write is queued.
@@ -389,6 +414,80 @@ def removing_blur_sidecar(pkl_path: str | Path) -> Iterator[None]:
         with _queue_lock:
             _pending.pop(path, None)
         yield
+
+
+# ---------------------------------------------------------------------------
+# Carrying overrides into a new dataset
+# ---------------------------------------------------------------------------
+
+
+def stamp_blur_overrides(medias: Mapping[int, MutableMapping[str, Any]], overrides: Mapping[int, bool]) -> None:
+    """Put each of *overrides* on its item of *medias*, as that media's :data:`BLUR_OVERRIDE_FIELD`.
+
+    *overrides* is keyed by the ids *medias* has now; one naming an id
+    *medias* does not hold is dropped. An item's existing field is replaced,
+    so stamping a file's sidecar over the fields its container carried lets
+    the sidecar win, as it does for a dataset that is open.
+    """
+    for media_id, blurred in overrides.items():
+        media = medias.get(media_id)
+        if media is not None:
+            media[BLUR_OVERRIDE_FIELD] = bool(blurred)
+
+
+def take_blur_overrides(medias: Mapping[int, MutableMapping[str, Any]]) -> dict[int, bool]:
+    """Take the carried :data:`BLUR_OVERRIDE_FIELD` off every item of *medias*; return ``{media_id: blurred}``.
+
+    Keyed by the ids *medias* has now, so whatever renumbering the items went
+    through on the way is already applied. A field that is not a boolean is
+    removed and ignored.
+    """
+    overrides: dict[int, bool] = {}
+    for media_id, media in medias.items():
+        value = media.pop(BLUR_OVERRIDE_FIELD, None)
+        if isinstance(value, bool):
+            overrides[media_id] = value
+    return overrides
+
+
+def carry_blur_overrides(ctx: DatasetContext) -> dict[int, bool]:
+    """Make the overrides *ctx*'s items carry its own, and return every override it holds.
+
+    For the save at the end of an import: the carried fields come off *ctx*'s
+    medias (:func:`take_blur_overrides`) and become the context's overrides.
+    One already set on *ctx* in memory during the import is newer than
+    anything carried in, so it wins. The caller writes what this returns
+    beside the saved file (:func:`write_blur_sidecar`).
+    """
+    carried = take_blur_overrides(ctx.medias)
+    with _overrides_lock:
+        held = ctx._blur_overrides or {}
+        if not carried:
+            return dict(held)
+        merged = {**carried, **held}
+        ctx._blur_overrides = merged
+        ctx._blur_overrides_revision += 1
+        return dict(merged)
+
+
+def write_blur_sidecar(pkl_path: str | Path, overrides: Mapping[int, bool]) -> None:
+    """Make the sidecar of the container just written at *pkl_path* hold exactly *overrides*, now.
+
+    For a flow that saves a new dataset: its overrides land beside the file
+    before the dataset is registered, so it never opens without them. The
+    write is synchronous and atomic and replaces any write queued for that
+    sidecar. No overrides leaves no sidecar, so a dataset without any is saved
+    exactly as before. A failure propagates: a save that cannot keep the
+    overrides should fail rather than drop them silently.
+    """
+    path = blur_sidecar_path(pkl_path)
+    with _writer_lock:
+        with _queue_lock:
+            _pending.pop(path, None)
+        if overrides:
+            atomic_write_json(path, _serialise(overrides))
+        else:
+            path.unlink(missing_ok=True)
 
 
 def reset_blur_writes_for_tests() -> None:
