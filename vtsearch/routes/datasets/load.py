@@ -694,15 +694,14 @@ def export_dataset():
     Success returns a binary ``application/octet-stream`` download; that
     body is left undescribed in the spec (mirroring the audio / video /
     image streaming routes in ``media/list.py``).
-
-    The dataset's Blur / Unblur overrides are folded into the file, since its
-    sidecar stays behind on the server: importing the file restores them.
     """
     snap = snapshot_medias()
     if not snap:
         abort(400, message="No dataset loaded")
 
     try:
+        # The Blur / Unblur overrides are folded into the file, since the
+        # dataset's sidecar stays behind on the server: importing it restores them.
         dataset_bytes = export_dataset_to_file(snap, blur_overrides=blur_overrides(get_active_context()))
         return send_file(
             io.BytesIO(dataset_bytes),
