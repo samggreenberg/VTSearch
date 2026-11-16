@@ -258,6 +258,22 @@ def _normalize_docs_links(v: Any) -> Any:
     return partition_docs_links(v)[0]
 
 
+def _normalize_blur_rules(v: Any) -> Any:
+    """Keep only the usable rules of a ``blur_rules`` list, normalized.
+
+    See :func:`vtscore.datasets.blur_rules.partition_blur_rules`, which owns
+    what a well-formed rule is. Non-list input is passed through untouched for
+    Pydantic to reject.
+    """
+    if not isinstance(v, list):
+        return v
+    # Imported here, not at the top: ``vtscore.datasets`` is a heavy package
+    # to load at settings-model import time.
+    from vtscore.datasets.blur_rules import partition_blur_rules
+
+    return partition_blur_rules(v)[0]
+
+
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
@@ -362,6 +378,15 @@ class ServerSettings(BaseModel):
     # not an absolute ``http(s)`` URL or a root-relative ``/path``, is dropped,
     # and the startup log names each one it drops.
     docs_links: Annotated[list[dict[str, str]], BeforeValidator(_normalize_docs_links)] = Field(default_factory=list)
+
+    # Which ingest metadata fields mark an image as worth blurring (#5689): an
+    # ordered list of ``{"field": ..., "op": ..., "value": ...}`` rules, and an
+    # image starts blurred when any rule matches its raw ``custom_metadata``.
+    # Shared across all users and read-only over the API; set it by editing
+    # this key in the settings file. Normalized on read and write (see
+    # :func:`vtscore.datasets.blur_rules.partition_blur_rules`): a malformed
+    # rule is dropped, and the startup log names each one it drops and why.
+    blur_rules: Annotated[list[dict[str, Any]], BeforeValidator(_normalize_blur_rules)] = Field(default_factory=list)
 
     # Lock this deployment to **Semantic** embedders only.  The Patch Semantic
     # and Structural embedder types are still prototypes; an operator running a

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from marshmallow import EXCLUDE, Schema, fields, validate
 
+from vtscore.datasets.blur_rules import BLUR_RULE_OPS
 from vtsearch.settings.models import (
     VALID_ANIMATION_MODES,
     VALID_BROWSE_GRAPHICS,
@@ -64,6 +65,20 @@ class DocsLinkSchema(Schema):
 
     label = fields.String(required=True)
     url = fields.String(required=True)
+
+
+class BlurRuleSchema(Schema):
+    """One entry of the server's ``blur_rules`` list.
+
+    An image starts blurred when any rule matches its ingest metadata (see
+    ``vtscore/datasets/blur_rules.py``). ``value`` is absent for ``truthy``, a
+    number for the four orderings, a string / number / boolean for ``==`` and
+    ``!=``, and a list of those for ``in``.
+    """
+
+    field = fields.String(required=True)
+    op = fields.String(required=True, validate=validate.OneOf(BLUR_RULE_OPS))
+    value = fields.Raw()
 
 
 class FaceEvenOutSchema(Schema):
@@ -210,6 +225,12 @@ class AppSettingsSchema(Schema):
     # without a label or a usable URL are dropped). Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     docs_links = fields.List(fields.Nested(DocsLinkSchema), dump_only=True)
+    # Server-tier list of the ingest metadata rules that mark an image as worth
+    # blurring (#5689). Set by editing the persisted settings file; surfaced
+    # read-only here, already normalized (malformed rules are dropped), so the
+    # Server settings tab can list them. Not in ``SettingsUpdateSchema`` - not
+    # editable via PUT.
+    blur_rules = fields.List(fields.Nested(BlurRuleSchema), dump_only=True)
     # Server-tier "Semantic embedders only" lock. Set via the
     # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
     # (process-wide, all users) or the persisted settings file; surfaced
@@ -398,6 +419,9 @@ class SettingsUpdateSchema(Schema):
     # NB: docs_links is intentionally absent too - it is the operator's list of
     # Help-modal doc links, set in the settings file. It is dump_only in
     # AppSettingsSchema.
+    # NB: blur_rules is intentionally absent as well - it is the operator's
+    # list of ingest-metadata blur rules, set in the settings file. It is
+    # dump_only in AppSettingsSchema.
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()

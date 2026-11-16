@@ -164,6 +164,39 @@ describe('SettingsModalComponent', () => {
     });
   });
 
+  describe('the Server tab blur rules (#5691)', () => {
+    const blurRow = () =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('.form-group')].find((el) =>
+        el.querySelector('.form-label')?.textContent?.startsWith('Blur rules:'),
+      ) as HTMLElement;
+
+    async function openServer(extraSettings: Record<string, unknown>): Promise<void> {
+      await flushInit(extraSettings);
+      component.activeSettingsTab.set('server');
+      await settleZoneless(fixture);
+    }
+
+    it('lists each rule as a phrase, in the operator order', async () => {
+      await openServer({
+        blur_rules: [
+          { field: 'Porn', op: '>=', value: 0.8 },
+          { field: 'Gore', op: 'truthy' },
+          { field: 'Rating', op: 'in', value: ['R', 'X'] },
+        ],
+      });
+      expect([...blurRow().querySelectorAll('.server-list li')].map((li) => li.textContent?.trim())).toEqual([
+        'Porn >= 0.8',
+        'Gore is truthy',
+        'Rating in R, X',
+      ]);
+    });
+
+    it('says None when the server has no rules', async () => {
+      await openServer({ blur_rules: [] });
+      expect(blurRow().querySelector('.server-value--empty')?.textContent?.trim()).toBe('None');
+    });
+  });
+
   describe('the per-type tab bars (#5106)', () => {
     const tabNames = () =>
       Array.from(fixture.nativeElement.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).map((el) =>

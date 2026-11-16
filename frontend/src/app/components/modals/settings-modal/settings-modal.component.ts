@@ -595,6 +595,17 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       });
   }
 
+  /** The server's blur rules as one short phrase each (``Porn >= 0.8``,
+   *  ``Gore is truthy``, ``Rating in R, X``), in the operator's order, for the
+   *  read-only Server tab. The server has already dropped malformed rules. */
+  get blurRulesDisplay(): string[] {
+    return (this.settings().blur_rules ?? []).map((rule) => {
+      if (rule.op === 'truthy') return `${rule.field} is truthy`;
+      if (rule.op === 'in' && Array.isArray(rule.value)) return `${rule.field} in ${rule.value.join(', ')}`;
+      return `${rule.field} ${rule.op} ${String(rule.value)}`;
+    });
+  }
+
   async resetDefaults(): Promise<void> {
     const choice = await this.dialog.confirmDestructiveWithEscape(
       'Reset all settings to factory defaults?',

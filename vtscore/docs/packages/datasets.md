@@ -27,6 +27,7 @@ The largest package in the library. Every module, grouped by role.
 | `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
 | `vtscore/datasets/people.py` | A Face dataset's people: its faces merged into people at the face ball's floor (`fit_people`, `PeoplePartition`), stored in the container and cached on the context; `request_people` is what a view polls - see [People](#people) |
 | `vtscore/datasets/co_occurrence.py` | The photo index: which faces of a dataset were cut from one photo, read off each face's own converter refs (no sibling needed), and which groups of faces (people) share photos |
+| `vtscore/datasets/blur_rules.py` | Blur rules: which ingest metadata fields mark an image as worth blurring. `partition_blur_rules` keeps the well-formed `{field, op, value}` rules and names each malformed one's problem; `matches_blur_rules(rules, custom_metadata)` is whether any rule matches a media's raw `custom_metadata` (lenient field matching and value coercion; a missing field or an incomparable value never matches) |
 | `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped, less its rank and score on export; nothing acts on it yet) |
 
 **Loading and persistence**

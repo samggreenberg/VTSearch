@@ -1,7 +1,8 @@
 # Blurring and unblurring sensitive images
 
-Planned in #5689. Nothing here is built yet. The work is split into the issues
-under "Work items"; this file holds the design they share.
+Planned in #5689. The work is split into the issues under "Work items"; this
+file holds the design they share. Only the rules setting and its evaluator
+(#5691) are built so far.
 
 ## Goal
 
@@ -58,29 +59,10 @@ so both directions of "the ingest got it wrong" are the same write.
 
 ### The rules: `blur_rules`, a server-tier setting
 
-A list in `data/settings.json`; an image is blurred when **any** rule matches:
-
-```json
-"blur_rules": [
-  {"field": "Porn", "op": ">=", "value": 0.8},
-  {"field": "Gore", "op": "truthy"},
-  {"field": "Rating", "op": "in", "value": ["R", "X"]}
-]
-```
-
-- Operators: `truthy`, `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`.
-- `field` matches a `custom_metadata` key after trimming whitespace and a
-  trailing colon, case-insensitively (the ingest side's `"Porn:"` should not
-  silently miss).
-- Values are coerced leniently: a numeric rule reads `"0.93"` as a number;
-  `truthy` treats `"false"`, `"no"`, `"0"` and empty as false.
-- A missing field, or a value that cannot be compared, does **not** match.
-- A malformed rule is dropped and reported at startup, as `docs_links` does.
-- Evaluated server-side against the **raw** media dict, not the display-formatted
-  metadata the API returns.
-
-Server-tier only: not writable through `PUT /api/settings`, shown read-only on
-the settings modal's Server tab.
+Built: the setting is documented in `docs/SETTINGS.md` and evaluated by
+`vtscore.datasets.blur_rules.matches_blur_rules`. What the remaining work needs
+from it: evaluate it server-side against the **raw** `custom_metadata` of the
+media dict, not the display-formatted metadata the API returns.
 
 ### Where overrides live
 

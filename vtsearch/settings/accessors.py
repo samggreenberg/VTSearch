@@ -424,4 +424,7 @@ def get_all() -> dict[str, Any]:
     # a ``javascript:`` URL); read through the accessor so only usable links
     # ever reach the Help modal.
     result["docs_links"] = settings.get_docs_links()
+    # Likewise for the blur rules: only well-formed, normalized rules reach
+    # the Server tab.
+    result["blur_rules"] = settings.get_blur_rules()
     return result

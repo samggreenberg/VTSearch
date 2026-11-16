@@ -724,7 +724,8 @@ field lists — this document names the tiers and the shape, not every key.
 - **Server tier** (`ServerSettings`, shared, `data/settings.json`): the
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
-  `dataset_max_age_days`, `support_email`, `docs_links`, `semantic_only`,
+  `dataset_max_age_days`, `support_email`, `docs_links`, `blur_rules`,
+  `semantic_only`,
   `autopilot_only`, `solo_media_type`, `projection_n_neighbors`,
   `projection_min_dist`,
   `browse_signpost_vocab`, `default_settings_source`,
