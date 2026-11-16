@@ -213,6 +213,13 @@
             },
             "type": "object"
           },
+          "blur_rules": {
+            "items": {
+              "$ref": "#/components/schemas/BlurRule"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
@@ -838,6 +845,33 @@
           "schedule",
           "shape",
           "status"
+        ],
+        "type": "object"
+      },
+      "BlurRule": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "truthy",
+              "==",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "in"
+            ],
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "field",
+          "op"
         ],
         "type": "object"
       },

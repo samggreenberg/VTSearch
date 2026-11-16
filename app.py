@@ -397,6 +397,26 @@ def _report_docs_links() -> None:
         )
 
 
+def _report_blur_rules() -> None:
+    """Log the blur rules this deployment configured, and any it drops with why.
+
+    ``blur_rules`` is set only in the server settings file, so a malformed
+    rule (an unknown op, a threshold that is not a number) would otherwise
+    just blur nothing, silently. Naming each dropped rule and its problem here
+    gives the operator the one place to find out why. An empty list, the
+    shipped default, prints nothing.
+    """
+    from vtscore.datasets.blur_rules import describe_blur_rule
+    from vtsearch import settings as _settings
+
+    rules = _settings.get_blur_rules()
+    if rules:
+        described = "; ".join(describe_blur_rule(rule) for rule in rules)
+        print(f"\U0001f32b\ufe0f  Blur rules: {described} (from the blur_rules setting)", flush=True)
+    for entry, reason in _settings.get_rejected_blur_rules():
+        print(f"\u26a0\ufe0f  Ignoring blur_rules entry {entry!r}: {reason}", flush=True)
+
+
 def _report_face_models() -> None:
     """Say whether Face is on, and why not when it is off.
 
@@ -453,6 +473,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     _report_admin_overrides()
     _report_import_hooks()
     _report_docs_links()
+    _report_blur_rules()
     _report_face_models()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat

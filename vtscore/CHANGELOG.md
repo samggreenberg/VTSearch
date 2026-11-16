@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.datasets.blur_rules`**, the pure half of image blurring (issue #5691): which ingest metadata marks an
+  image as worth blurring. A rule is `{"field", "op", "value"}` with `op` in `BLUR_RULE_OPS` (`truthy`, `==`, `!=`,
+  `>`, `>=`, `<`, `<=`, `in`). `partition_blur_rules(entries)` returns `(rules, rejected)`, the rules normalized and
+  each rejected entry paired with its problem (`blur_rule_problem(entry)`); `matches_blur_rules(rules,
+  custom_metadata)` and `rule_matches(rule, custom_metadata)` say whether any rule, or one, matches a media's raw
+  `custom_metadata`; `field_key(name)` is the case-, whitespace- and trailing-colon-blind form fields are matched in;
+  `describe_blur_rule(rule)` is a one-line phrase for logs.
+
 - **Media of a type nothing embeds are converted before the embed stage** (issue #5680). A *convert-out* half
   type (`document`) has files to ingest and no embedder, and an importer that handed such media over as they
   were (a `run()` override listing PDFs, a folder scan asked for `document`) had every one dropped for want of a

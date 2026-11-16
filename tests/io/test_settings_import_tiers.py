@@ -47,6 +47,7 @@ def _server_key_values(tmp_path: Path) -> dict[str, Any]:
         "dataset_max_age_days": 1,
         "support_email": "evil@example.com",
         "docs_links": [{"label": "Evil", "url": "https://example.com/evil"}],
+        "blur_rules": [{"field": "Evil", "op": "truthy"}],
         "semantic_only": True,
         "autopilot_only": True,
         "solo_media_type": "image",
