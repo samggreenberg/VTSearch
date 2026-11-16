@@ -1,6 +1,7 @@
 # Blurring and unblurring sensitive images
 
-Tracking issue: #5689. Nothing here is built yet; this file is the whole plan.
+Planned in #5689. Nothing here is built yet. The work is split into the issues
+under "Work items"; this file holds the design they share.
 
 ## Goal
 
@@ -23,9 +24,9 @@ gore, …). Three behaviours:
 - **The ingest channel.** Per-item metadata from an importer already lands in
   `media["custom_metadata"]`, survives the dataset pickle, and is served by
   `POST /api/medias/batch`. Converters copy it onto their outputs, so a face
-  crop inherits its photo's fields. No new ingest path is needed for the
-  rulings themselves; see the open question on how the outside service's
-  fields reach an importer.
+  crop inherits its photo's fields. Each outside ingest service brings its own
+  field names through the existing importers, so no new ingest path is needed:
+  `blur_rules` is where an instance names the fields it receives.
 - **A structured server-tier setting to copy**: `docs_links` (a normalised list
   with a rejected-entries report at startup), in `vtsearch/settings/models.py`.
 - **A per-item state service to copy**: `VoteStateService`
@@ -156,87 +157,59 @@ control is mounted in the centre panel, the face-reference pane and the
 source-photo modal; the modal passes the sibling dataset's id. Shortcut: `b`
 (free today), listed in `utils/keyboard-shortcuts.ts`.
 
+Video playback is blurred too. The video player has no toolbar of its own, so
+the same button is placed in the centre panel's shared item tools for a video,
+and the blur must leave the player's controls sharp and usable.
+
 ## Work items
 
-<!-- item-sep -->
-
-- **Blur rules setting** — `blur_rules` on `ServerSettings` with its
-  normaliser, the rejected-rules startup report, the dump-only schema field,
-  and a rule evaluator in the library tier (pure function: rules + metadata →
-  bool) with tests for every operator and the lenient coercions. Docs:
-  `docs/SETTINGS.md`, `docs/api/settings.md`. Regenerate the OpenAPI snapshot.
+Roughly in dependency order: the setting, then the store, then the frontend
+foundation, then the display sites.
 
 <!-- item-sep -->
 
-- **Override store and API** — the `DatasetContext` slots (and their place in
-  the derived/non-derived partition), the sidecar read/write, the two routes,
-  the blurred-set cache and its invalidation. Tests: effective-state truth
-  table, persistence across a reload, sweep on unregister. Docs:
-  `docs/api/medias.md`, `docs/ARCHITECTURE.md` (the first per-dataset,
-  per-item user state).
+- [ ] #5691 — Blur rules setting and the rule evaluator (Sonnet)
 
 <!-- item-sep -->
 
-- **Carry overrides across dataset copies** — fold into the pickle export and
-  read back on import; remap through subset and promote.
+- [ ] #5692 — Override store, blurred-id set and the two routes (Opus)
 
 <!-- item-sep -->
 
-- **`BlurStateService` and the `vtBlur` directive** — the service, the
-  fail-closed loading rule, the directive, the shared SCSS. Verify the peek
-  timing in real chromium, not only jsdom: a CSS transition cannot be asserted
-  in the unit suite.
+- [ ] #5693 — Carry overrides across dataset export, subset and promote (Sonnet)
 
 <!-- item-sep -->
 
-- **Focused viewer and the Blur / Unblur button** — the `imageFilter` term, the
-  button, the `b` shortcut, the three mount points. Queue the toolbar
-  screenshots under `docs/reshoot-queue/`.
+- [ ] #5694 — `BlurStateService` and the `vtBlur` directive (Opus)
 
 <!-- item-sep -->
 
-- **Apply `vtBlur` at every DOM image site** — `media-item`, `photo-grid`,
-  `vote-grid` (session votes and labelset piles), `browse-bin-popup`,
-  `browse-bin-member-grid`, `browse-selection-panel`, `people-view` (five
-  sites), `autodetect-results-modal`, `dataset-example-picker`, and the crop
-  modal when it was opened on a dataset image. `VoteGridEntry` needs the media
-  id (and dataset id) added, since it carries only a precomputed URL today.
-  Add a spec that fails when a template binds a `/api/medias/…/thumbnail` or
-  `/image` URL without the directive, so a future site cannot forget it.
+- [ ] #5695 — The Blur / Unblur button and the focused image viewer (Sonnet)
 
 <!-- item-sep -->
 
-- **Browse canvas blur and peek** — the pre-blurred bitmap cache in
-  `ThumbStore`, the `drawHex` / `drawHoveredHex` switch, the hover timer and
-  cross-fade, the full-resolution tier, redraw on state change.
+- [ ] #5696 — Apply `vtBlur` at every DOM image site (Sonnet)
 
 <!-- item-sep -->
 
-- **User docs and changelog** — a user-guide section on blurring and peeking,
-  the operator's how-to for `blur_rules`, a `CHANGELOG.md` entry.
+- [ ] #5697 — Browse canvas blur and peek (Opus)
+
+<!-- item-sep -->
+
+- [ ] #5698 — Video playback blur and its button (Sonnet)
+
+<!-- item-sep -->
+
+- [ ] #5699 — User guide, operator how-to and changelog (Sonnet)
 
 <!-- item-sep -->
 
 ## Open questions
 
-- **How do the outside service's fields reach `custom_metadata`?** No in-tree
-  importer reads a per-item metadata sidecar today; importer plugins supply
-  metadata in code. If the ingest service arrives as its own importer plugin,
-  nothing is owed here. If it writes a JSON or CSV beside the images for the
-  stock folder importers to pick up, that reader is one more work item.
-- **Shared or per-user overrides?** The plan stores one state per dataset,
-  seen by every reader, which is how the issue reads ("update the state"). A
-  per-user layer would let one user unblur without unblurring for everyone.
-- **Which media types?** The plan covers every still-image display, which
-  includes face crops and the poster thumbnails of videos and documents. The
-  video *player* and the document viewer have no toolbar and are left sharp;
-  blurring playback is a separate piece of work.
-- **Labelset thumbnails with no dataset item.** A detector's stored label can
-  point at media outside the loaded dataset, so there is no override and no
-  dataset metadata to consult. Proposed: evaluate the rules against the label
-  element's own `metadata`, and leave it sharp when that is empty.
 - **Faces and their source photo.** Both inherit the same ingest fields, so
   both start blurred, but an override on one does not move the other. Linking
   them is possible through the source-item link if that proves annoying.
+- **The document viewer.** A document's poster thumbnail is blurred with the
+  other stills; the viewer itself (an embedded `<object>`) is left sharp.
 - **Blur state as an export column.** Results exporters could offer the
   effective state as a column; nothing has asked for it yet.
