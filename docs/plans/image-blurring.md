@@ -1,9 +1,10 @@
 # Blurring and unblurring sensitive images
 
 Planned in #5689. The work is split into the issues under "Work items"; this
-file holds the design they share. Only the rules setting and its evaluator
-(#5691), the override store and its routes (#5692), and carrying overrides
-across dataset copies (#5693) are built so far.
+file holds the design they share. Built so far: the rules setting and its
+evaluator (#5691), the override store and its routes (#5692), carrying
+overrides across dataset copies (#5693), and the frontend state service and
+`vtBlur` directive (#5694).
 
 ## Goal
 
@@ -38,7 +39,8 @@ gore, …). Three behaviours:
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
 What does **not** exist: any shared thumbnail component (about twenty sites
-each write their own `<img>`), and any blur code in the frontend.
+each write their own `<img>`). Only `vt-media-item`'s thumbnail carries
+`vtBlur` so far.
 
 ## Design
 
@@ -86,33 +88,26 @@ directly sees the image. That is the intended trade for this feature.
 
 ### Frontend: one service, one directive, one canvas path
 
-- **`BlurStateService`** holds, per dataset id, the set of blurred ids as a
-  signal; `isBlurred(datasetId, id)`; an optimistic `setBlurred(...)`; a poll
-  for other clients' changes. Keyed by dataset because several sites show a
-  sibling dataset's media (a face's source photo).
-- **Fail closed while loading.** When the instance has blur rules and a
-  dataset's set has not arrived yet, every image of that dataset counts as
-  blurred. Otherwise the first paint leaks.
-- **`vtBlur` directive** for every DOM site: `[vtBlur]="id"` plus an optional
-  dataset id. It toggles a class; the peek is pure CSS:
+Built: `BlurStateService` (per-dataset blurred sets, optimistic
+`setBlurred`, a poll, fail-closed while loading) and the `vtBlur` directive
+with the CSS peek, described under "Blurred images" in `docs/FRONTEND.md`.
+What the remaining sites need from them:
 
-  ```scss
-  .vt-blurred       { filter: blur(var(--vt-blur-radius)); transition: none; }
-  .vt-blurred:hover { filter: blur(0); transition: filter 1.5s ease-out 1s; }
-  ```
-
-  The one-second transition delay is the "more than a second"; `transition:
-  none` on the resting rule is the instant snap back. The radius scales with
-  the element's size (a 40px chip and a full-screen image need different
-  radii), and each host clips its overflow so the blur does not bleed.
+- **DOM sites** carry `[vtBlur]="id"` (plus `[vtBlurDataset]` for a sibling
+  dataset's item) on the element that draws the image, clip their container's
+  overflow, and leave the image hoverable.
 - **The focused viewer** adds a blur term to its existing `imageFilter` and
-  gets the same hover rule.
+  gets the same hover rule. It cannot simply carry `.vt-blurred`: that class's
+  `!important` filter would drop the viewer's tone map and greyscale.
 - **The Browse canvas** is a 2D canvas, so CSS cannot reach a cell. `ThumbStore`
   caches a pre-blurred bitmap per blurred thumbnail (the way it already caches
   tinted audio masks); `drawHex` draws that instead. Peek reuses the existing
   `hoveredCell`: after one second on a blurred cell, cross-fade from the
   blurred bitmap to the sharp one over the same duration, and drop back at once
-  when the hover ends. A blur-state change schedules a redraw.
+  when the hover ends. A blur-state change schedules a redraw. With no
+  directive to do it, the canvas retains its dataset itself
+  (`BlurStateService.retain`), reads `isBlurred` per cell, and sizes the blur
+  with `blurRadiusFor`.
 
 ### The button
 

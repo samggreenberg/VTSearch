@@ -1153,6 +1153,30 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   animation: icon-waggle 2s ease-in-out infinite;
 }
 
+// A blurred image (#5689). The `vtBlur` directive puts `.vt-blurred` on an
+// image the blur state says to hide and sets `--vt-blur-radius` from its
+// rendered size; the fallback covers the frame before its first measurement.
+// The image's container clips its overflow, or the blur bleeds past the box.
+//
+// The peek: resting the pointer on the image for a second fades the blur out
+// over 1.5s, and leaving puts it back at once. The transition's delay is the
+// second, and `transition: none` on the resting rule is the snap back (a
+// transition runs on the rule being changed *to*). Both are `!important`
+// because a component's own rule on the same element outranks this class
+// (emulated encapsulation adds an attribute selector): its `filter` would
+// unblur the image, and its `transition` would make the peek instant. The
+// cost is that the element's own transitions stop while it is blurred.
+// `styles.scss` drops the fade, but keeps the delay, under reduced motion.
+.vt-blurred {
+  filter: blur(var(--vt-blur-radius, 12px)) !important;
+  transition: none !important;
+
+  &:hover {
+    filter: blur(0) !important;
+    transition: filter 1.5s ease-out 1s !important;
+  }
+}
+
 // Theme-agnostic waveform tint (issue #2369). Audio waveform thumbnails are
 // alpha-mask PNGs — a transparent image whose only opaque pixels are the wave —
 // so they carry no baked-in colour and can be tinted to any theme at render

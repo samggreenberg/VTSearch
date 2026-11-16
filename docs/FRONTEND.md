@@ -127,7 +127,7 @@ frontend/
         ├── services/       API services, state services, coordination services (§4)
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
-        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
+        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`, `blur`)
         ├── models/         Hand-written types (§7): api.models.ts, projection.models.ts
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
@@ -421,7 +421,9 @@ file readable.
 The stores the views bind to: `MediaStateService` (the dataset-wide media stub
 list and current selection), `VoteStateService` (the per-pile vote sets, undo
 and redo), `SortStateService`, `SettingsStateService`, `DatasetStateService`
-(the registry listing), `LabelsetStateService`, `AutopilotStateService`.
+(the registry listing), `LabelsetStateService`, `AutopilotStateService`,
+`BlurStateService` (which images show blurred, per dataset; see
+[Blurred images](#blurred-images)).
 
 They own state and the reactive surface over it; they call API services for
 I/O. A component should almost never call an API service *and* keep the result
@@ -1139,6 +1141,43 @@ offers a Fork, and imports the sharing flows only when it is clicked (#5657):
 the static import had put ~6 kB of sharing code on the eager path. Any
 interceptor, guard or always-mounted service is eager, so reach a heavy service
 from one with `import()` at the moment it is needed.
+
+### Blurred images
+
+An image the server rules sensitive is drawn blurred until someone unblurs it
+(#5689). The server decides each item's state, its Blur / Unblur override or
+else the `blur_rules` ([medias.md](api/medias.md#blurred-items)); the SPA only
+draws it.
+
+- **`BlurStateService`** holds the answer per dataset id, not for the active
+  dataset alone, because some sites show a sibling dataset's items (a face's
+  source photo). `isBlurred(datasetId, id)` is a signal read.
+  `setBlurred(...)` is optimistic and rolls back on failure. A dataset's set
+  is loaded and polled while some site has `retain`ed it, and for ten seconds
+  after the last release, so a hover popup does not restart the poll.
+- **It fails closed.** While the instance may have blur rules (they are set,
+  or the settings have not arrived) and a dataset's set has not arrived, every
+  image of that dataset reads as blurred. Otherwise the first paint shows what
+  the rules are there to hide. A read that fails changes nothing, so a dataset
+  whose set cannot be read stays blurred.
+- **`vtBlur`** (`directives/blur.directive.ts`) is how a DOM site uses it:
+  `[vtBlur]="mediaId"`, plus `[vtBlurDataset]` for another dataset's item. It
+  retains the dataset while mounted, toggles `.vt-blurred`, and sets
+  `--vt-blur-radius` from the host's rendered size (`utils/blur-radius.ts`:
+  8% of the shorter side, 4 to 60px), measured by one `ResizeObserver` shared
+  by every blurred image, only while it is blurred.
+- **The hover peek is pure CSS** (`.vt-blurred` in `_components.scss`). After
+  one second of hover the blur fades out over 1.5s, and on leave it snaps back.
+  Both rules are `!important`, because a component's own `filter` or
+  `transition` on the element outranks a bare class and would unblur the image
+  or skip the delay. So the host's own transitions stop while it is blurred,
+  and a host that needs its own `filter` (the focused viewer's tone map and
+  greyscale, `imageFilter`) composes the blur into it rather than carrying the
+  directive. Under reduced motion the fade goes and the delay stays
+  (`styles.scss`).
+- **What a host owes the directive:** its container clips overflow, or the blur
+  bleeds past the box, and the host takes the pointer (no
+  `pointer-events: none`), or it can never be peeked at.
 
 ### Other primitives
 
