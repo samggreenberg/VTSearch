@@ -31,7 +31,7 @@ import vtscore.security.path_validation as _paths
 from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
-from vtscore.datasets.blur_state import blur_overrides, blur_sidecar_path, write_blur_sidecar
+from vtscore.datasets import blur_state
 from vtscore.datasets.file_types import count_file_types
 from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY, parse_output_specs
 from vtscore.datasets.load_multi import _run_multi_output_load_in_background
@@ -255,7 +255,7 @@ def _remove_promoted_files(pkl_path: str | None) -> None:
     """Remove what a failed promote wrote: the dataset file and its blur sidecar."""
     if pkl_path:
         Path(pkl_path).unlink(missing_ok=True)
-        blur_sidecar_path(pkl_path).unlink(missing_ok=True)
+        blur_state.blur_sidecar_path(pkl_path).unlink(missing_ok=True)
 
 
 def _promote_in_background(
@@ -354,7 +354,7 @@ def _promote_in_background(
                 Path(pkl_path).write_bytes(data_bytes)
                 del data_bytes
                 # Before the registry insert, so the dataset never opens without them.
-                write_blur_sidecar(pkl_path, blur_overrides or {})
+                blur_state.write_blur_sidecar(pkl_path, blur_overrides or {})
                 tracker.check_cancelled()
 
                 tracker.update("loading", "Registering dataset…", 0, 0, step=3, total_steps=_PROMOTE_TOTAL_STEPS)
@@ -441,7 +441,7 @@ def promote_to_dataset(body: dict):
     if not snap:
         abort(400, message="No dataset loaded")
     ctx = get_active_context()
-    source_overrides = blur_overrides(ctx)
+    source_overrides = blur_state.blur_overrides(ctx)
 
     # Build the subset, renumbering IDs from 1 and preserving each item's
     # origin/embedding (a shallow copy is enough; the background task

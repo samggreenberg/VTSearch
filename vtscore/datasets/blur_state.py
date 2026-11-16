@@ -209,7 +209,9 @@ def _container_path(ctx: DatasetContext) -> str | None:
 
     A dataset built purely in memory (a test's, or one still being ingested
     under its provisional id) has no registry entry: its overrides live in
-    memory only, and the first write after it is registered persists them all.
+    memory only, until the import's save writes them beside the new file
+    (:func:`carry_blur_overrides`) or the first write after it is registered
+    persists them all.
     """
     from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
 
