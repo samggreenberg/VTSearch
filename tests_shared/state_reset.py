@@ -241,6 +241,13 @@ def reset_shared_state(medias_snapshot) -> None:
 
     reset_label_sync_for_tests()
 
+    # Same for a blur-sidecar write a Blur / Unblur click left queued (#5692):
+    # landing it in the next test would write into a tmp dir that test never
+    # made, or into one it did.
+    from vtscore.datasets.blur_state import reset_blur_writes_for_tests
+
+    reset_blur_writes_for_tests()
+
     # A bad ``detector_sharing_source`` warns once per name; forget which were
     # warned about, so a test asserting that one warning is not order-dependent.
     from vtscore.labels.sharing import reset_sharing_warnings_for_tests

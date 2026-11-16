@@ -8,7 +8,7 @@ from vtsearch.routes.media.server import media_server_bp
 
 # ``medias_bp`` is defined in ``list``; these modules register the rest of its
 # routes on it, so they are imported (after ``list``) for that side effect.
-from vtsearch.routes.media import content, vote, pile  # noqa: F401
+from vtsearch.routes.media import blur, content, vote, pile  # noqa: F401
 
 __all__ = [
     "datasource_importers_bp",
