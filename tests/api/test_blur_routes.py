@@ -25,7 +25,13 @@ GORE = {"field": "Gore", "op": "truthy"}
 
 
 def _media(mid: int, **metadata: Any) -> dict[str, Any]:
-    return {"id": mid, "media_type": "image", "md5": f"md5-{mid}", "filename": f"{mid}.jpg", "custom_metadata": metadata}
+    return {
+        "id": mid,
+        "media_type": "image",
+        "md5": f"md5-{mid}",
+        "filename": f"{mid}.jpg",
+        "custom_metadata": metadata,
+    }
 
 
 def _medias() -> list[dict[str, Any]]:
