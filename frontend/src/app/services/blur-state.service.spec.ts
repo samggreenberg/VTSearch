@@ -211,23 +211,6 @@ describe('BlurStateService', () => {
       expect(service.isBlurred('ds', 1)).toBe(true);
     });
 
-    it('does not let a read issued before the confirmation undo it; a read issued after retires it', async () => {
-      vi.useFakeTimers();
-      await vi.advanceTimersByTimeAsync(5_000);
-      const stale = expectRead('ds'); // in flight across the click
-
-      service.setBlurred('ds', 1, false);
-      expectWrite('ds', 1).flush({ ok: true, id: 1, blurred: false });
-      stale.flush({ ids: [1] }); // read before the write landed
-      expect(service.isBlurred('ds', 1)).toBe(false);
-
-      // The next read was issued after the confirmation, so it is the truth,
-      // even when another client has blurred the item again since.
-      await vi.advanceTimersByTimeAsync(5_000);
-      expectRead('ds').flush({ ids: [1] });
-      expect(service.isBlurred('ds', 1)).toBe(true);
-    });
-
     it('lets the later of two clicks on one item win, whichever answer lands first', () => {
       service.setBlurred('ds', 7, true);
       service.setBlurred('ds', 7, false);
@@ -248,6 +231,26 @@ describe('BlurStateService', () => {
       second.flush({ ok: true, id: 7, blurred: false });
       expect(service.isBlurred('ds', 7)).toBe(false);
     });
+  });
+
+  it('does not let a read issued before a confirmation undo it; a read issued after retires it', async () => {
+    vi.useFakeTimers(); // before the poll starts, so its ticks are on the fake clock
+    settings.set(WITH_RULES);
+    service.retain('ds');
+    expectRead('ds').flush({ ids: [1] });
+    await vi.advanceTimersByTimeAsync(5_000);
+    const stale = expectRead('ds'); // in flight across the click
+
+    service.setBlurred('ds', 1, false);
+    expectWrite('ds', 1).flush({ ok: true, id: 1, blurred: false });
+    stale.flush({ ids: [1] }); // read before the write landed
+    expect(service.isBlurred('ds', 1)).toBe(false);
+
+    // The next read was issued after the confirmation, so it is the truth,
+    // even when another client has blurred the item again since.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expectRead('ds').flush({ ids: [1] });
+    expect(service.isBlurred('ds', 1)).toBe(true);
   });
 
   it('shows a click before the set arrives, and keeps the rest of the dataset closed', () => {
