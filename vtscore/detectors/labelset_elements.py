@@ -13,8 +13,9 @@ from __future__ import annotations
 import json as _json
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
+from vtscore.datasets.blur_rules import matches_blur_rules
 from vtscore.datasets.labelset import LabeledElement, LabelSet, element_key
 from vtscore.datasets.vote_provenance import attach_provenance
 from vtscore.utils.hashing import content_sha1
@@ -114,12 +115,22 @@ def build_element_view(
     click_times: Mapping[int, float | int],
     learned_scores: Mapping[int, float],
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
+    blur_rules: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Build the JSON-serialisable dict the frontend consumes for *elem*.
 
     Includes a current-dataset ``cid`` (and its click-time / learned-score)
     when the element resolves into the active dataset; otherwise those
     fields are ``null``.
+
+    ``blurred`` says whether an element *outside* the active dataset shows
+    blurred: whether any of *blur_rules* (well formed, as the app's
+    ``settings.get_blur_rules()`` are) matches the element's own stored
+    ``metadata``, its copy of the media's ingest fields. Such an element has
+    no Blur / Unblur override to consult, and an element with no metadata
+    stays sharp. It is ``null`` when ``cid`` is set: the active dataset's
+    blur state (:func:`vtscore.datasets.blur_state.blurred_ids`) decides
+    then, since it honours overrides.
 
     *lookups* is threaded straight into :func:`resolve_current_dataset_cid`;
     pass the pre-built ``build_media_lookup`` triple when calling this in a
@@ -149,13 +160,18 @@ def build_element_view(
         # cache when the voted box changes (the thumbnail route crops to the
         # element's stored box server-side).
         "region_box": list(elem.region_box) if elem.region_box is not None else None,
+        "blurred": matches_blur_rules(blur_rules, elem.metadata) if cid is None else None,
     }
 
 
-def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
+def build_labels_detail(
+    detector_data: dict[str, Any], *, blur_rules: Iterable[Mapping[str, Any]] = ()
+) -> dict[str, Any]:
     """Build the response body for ``GET /api/detectors/<name>/labels-detail``.
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
+    *blur_rules* decide each out-of-dataset element's ``blurred`` (see
+    :func:`build_element_view`).
     """
     from vtscore.state import cached_media_lookups, get_active_detector_context, snapshot_medias
 
@@ -173,6 +189,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
     snap = snapshot_medias()
     lookups = cached_media_lookups() if snap else None
 
+    rules = list(blur_rules)
     good: list[dict[str, Any]] = []
     bad: list[dict[str, Any]] = []
     for el in labelset.elements:
@@ -182,6 +199,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
             click_times=click_times,
             learned_scores=learned_scores,
             lookups=lookups,
+            blur_rules=rules,
         )
         if el.label == "good":
             good.append(view)

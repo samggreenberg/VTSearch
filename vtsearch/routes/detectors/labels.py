@@ -420,19 +420,22 @@ def get_detector_labels_detail(name: str):
     Each element gets a stable ``id`` (derived from its origin/md5 identity)
     plus ``label``, ``media_type``, display ``name``, and (when the
     element resolves into the active dataset) its current ``cid``,
-    ``time`` (click time), and ``score`` (last learned-sort score).
+    ``time`` (click time), and ``score`` (last learned-sort score). An
+    element outside the active dataset also says whether it shows blurred:
+    the ``blur_rules`` applied to its own stored metadata.
 
     This is the right pane's data source in label/train mode.  Unlike
     ``/api/votes`` it is *not* gated on the loaded dataset, so detector
     labels survive across dataset switches.
     """
     from vtscore.detectors.labelset_elements import build_labels_detail
+    from vtsearch import settings  # noqa: PLC0415
 
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
         abort(404, message=f"Detector '{name}' not found")
-    return build_labels_detail(data)
+    return build_labels_detail(data, blur_rules=settings.get_blur_rules())
 
 
 # ---------------------------------------------------------------------------

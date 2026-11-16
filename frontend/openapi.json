@@ -9435,6 +9435,11 @@
       "_DetectorLabelView": {
         "additionalProperties": false,
         "properties": {
+          "blurred": {
+            "description": "For an element outside the active dataset (``cid`` null): whether it shows blurred, i.e. whether any ``blur_rules`` rule matches its own stored metadata. Null when ``cid`` is set, where the dataset's blur state (``GET /api/medias/blurred``) decides.",
+            "nullable": true,
+            "type": "boolean"
+          },
           "cid": {
             "nullable": true,
             "type": "integer"
@@ -13997,7 +14002,7 @@
     },
     "/api/detectors/{name}/labels-detail": {
       "get": {
-        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and (when the\nelement resolves into the active dataset) its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score).\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
+        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and (when the\nelement resolves into the active dataset) its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score). An\nelement outside the active dataset also says whether it shows blurred:\nthe ``blur_rules`` applied to its own stored metadata.\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
         "operationId": "get_detector_labels_detail",
         "responses": {
           "200": {

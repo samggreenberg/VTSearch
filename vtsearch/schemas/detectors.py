@@ -1168,6 +1168,16 @@ class _DetectorLabelViewSchema(Schema):
     # thumbnail route crops to this box; the frontend uses it only to bust the
     # cached tile when the box changes.
     region_box = fields.List(fields.Float(), allow_none=True)
+    blurred = fields.Boolean(
+        allow_none=True,
+        metadata={
+            "description": (
+                "For an element outside the active dataset (``cid`` null): whether it shows blurred, "
+                "i.e. whether any ``blur_rules`` rule matches its own stored metadata. Null when ``cid`` "
+                "is set, where the dataset's blur state (``GET /api/medias/blurred``) decides."
+            )
+        },
+    )
 
 
 class DetectorLabelsDetailResponseSchema(Schema):

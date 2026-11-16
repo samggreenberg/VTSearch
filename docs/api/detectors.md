@@ -208,7 +208,11 @@ render data. Not gated on a loaded dataset (but when one is loaded, each item's
 → `{"media_type", "good": [...], "bad": [...]}`. Each element carries a stable
 `id` (derived from its origin / MD5 identity: the `element_id` the routes
 below take), its `label`, display `name`, `origin_name`, `md5` and
-`region_box`, plus the dataset-resolved `cid` / `time` / `score`.
+`region_box`, plus the dataset-resolved `cid` / `time` / `score`. An element
+outside the loaded dataset (`cid` null) also carries `blurred`: whether a
+[`blur_rules`](../SETTINGS.md) rule matches its own stored metadata, since it
+has no Blur / Unblur override to consult. For one inside it, `blurred` is
+`null` and the dataset's [blur state](medias.md#blurred-items) decides.
 
 404 if the detector is not found.
 
