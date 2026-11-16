@@ -56,7 +56,7 @@ class TestExportDataset:
     def test_returns_500_when_export_raises(self, client, monkeypatch):
         """Exporter exceptions are caught and surfaced as 500 + detail."""
 
-        def _boom(_snap):
+        def _boom(_snap, **_kwargs):
             raise RuntimeError("disk on fire")
 
         import vtsearch.routes.datasets.load as load_mod

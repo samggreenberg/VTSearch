@@ -616,7 +616,8 @@ new saved, registered dataset. The snapshot happens synchronously (a bad
 request still 400s at request time); the coverage-atlas build, pickle write,
 and registry insert run in a background task reported on the `loading-tasks`
 SSE channel. The finished task's `dataset_id` association carries the new
-dataset's id.
+dataset's id. Each promoted item keeps its Blur / Unblur override under its new
+id; items left out leave theirs behind.
 
 → `{"ok": true, "message": "Promoting to dataset...", "task_id": "_promote_ab12cd34"}`
 
@@ -631,7 +632,9 @@ GET /api/dataset/export
 ```
 
 → Binary `.pkl` file download (`vtsearch_dataset.pkl`) of the active
-dataset. 400 if no dataset is loaded.
+dataset. 400 if no dataset is loaded. The dataset's Blur / Unblur overrides
+are folded into the file (its sidecar stays on the server), so importing the
+file, or combining it with others, restores them on the right items.
 
 ### Clear dataset
 
