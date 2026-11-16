@@ -23,7 +23,14 @@
           [style.mask-image]="'url(' + thumbnailUrl + ')'"
         ></span>
       } @else {
-        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+        <img
+          class="media-thumbnail"
+          [src]="thumbnailUrl"
+          [alt]="displayName"
+          [vtBlur]="media().id"
+          loading="lazy"
+          (error)="onThumbnailError()"
+        />
       }
     } @else if (placeholderIcon) {
       <span class="media-placeholder">{{ placeholderIcon }}</span>

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input, linkedSignal, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { BlurDirective } from '../../../directives/blur.directive';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
@@ -8,7 +9,7 @@ import { MediaTypeCapabilityService } from '../../../services/media-type-capabil
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-media-item',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, BlurDirective],
   templateUrl: './media-item.component.html',
   styleUrl: './media-item.component.scss',
 })
