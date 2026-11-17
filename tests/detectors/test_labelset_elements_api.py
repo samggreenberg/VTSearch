@@ -198,8 +198,20 @@ class TestLabelsDetail:
                 "examples": [],
                 "labelset": {
                     "labels": [
-                        {"md5": "e5" * 16, "label": "good", "origin": origin, "origin_name": "hot.png", "metadata": {"Porn:": "0.95"}},
-                        {"md5": "f6" * 16, "label": "good", "origin": origin, "origin_name": "mild.png", "metadata": {"Porn": 0.2}},
+                        {
+                            "md5": "e5" * 16,
+                            "label": "good",
+                            "origin": origin,
+                            "origin_name": "hot.png",
+                            "metadata": {"Porn:": "0.95"},
+                        },
+                        {
+                            "md5": "f6" * 16,
+                            "label": "good",
+                            "origin": origin,
+                            "origin_name": "mild.png",
+                            "metadata": {"Porn": 0.2},
+                        },
                         {"md5": "a7" * 16, "label": "bad", "origin": origin, "origin_name": "bare.png"},
                     ]
                 },
