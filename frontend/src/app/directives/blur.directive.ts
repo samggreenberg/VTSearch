@@ -52,9 +52,11 @@ export class SharedResizeObserver implements OnDestroy {
  * unless `vtBlurFallback` says otherwise: a detector's stored label outside
  * the loaded dataset carries the server's answer for it.
  *
- * The host's container must clip its overflow, or the blur bleeds past the
- * image's box. The host itself must take the pointer (no
- * `pointer-events: none`), or it can never be peeked at.
+ * The blur is clipped to the host's own box by the shared CSS, so its
+ * container need not clip. The host must take the pointer (no
+ * `pointer-events: none`), or it can never be peeked at; where something is
+ * drawn over it, `vt-blur-peek` on the ancestor that takes the pointer peeks
+ * it instead.
  */
 @Directive({
   selector: '[vtBlur]',

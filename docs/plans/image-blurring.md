@@ -3,8 +3,8 @@
 Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
-overrides across dataset copies (#5693), and the frontend state service and
-`vtBlur` directive (#5694).
+overrides across dataset copies (#5693), the frontend state service and
+`vtBlur` directive (#5694), and the directive on every DOM image site (#5696).
 
 ## Goal
 
@@ -39,8 +39,9 @@ gore, …). Three behaviours:
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
 What does **not** exist: any shared thumbnail component (about twenty sites
-each write their own `<img>`). Only `vt-media-item`'s thumbnail carries
-`vtBlur` so far.
+each write their own `<img>`). Every DOM image site carries `vtBlur` (see
+"Blurred images" in `docs/FRONTEND.md`); the focused viewer and the Browse
+canvas are the two left.
 
 ## Design
 
@@ -89,13 +90,11 @@ directly sees the image. That is the intended trade for this feature.
 ### Frontend: one service, one directive, one canvas path
 
 Built: `BlurStateService` (per-dataset blurred sets, optimistic
-`setBlurred`, a poll, fail-closed while loading) and the `vtBlur` directive
-with the CSS peek, described under "Blurred images" in `docs/FRONTEND.md`.
-What the remaining sites need from them:
+`setBlurred`, a poll, fail-closed while loading), the `vtBlur` directive
+with the CSS peek, and the directive on every DOM site, described under
+"Blurred images" in `docs/FRONTEND.md`. What the remaining sites need from
+them:
 
-- **DOM sites** carry `[vtBlur]="id"` (plus `[vtBlurDataset]` for a sibling
-  dataset's item) on the element that draws the image, clip their container's
-  overflow, and leave the image hoverable.
 - **The focused viewer** adds a blur term to its existing `imageFilter` and
   gets the same hover rule. It cannot simply carry `.vt-blurred`: that class's
   `!important` filter would drop the viewer's tone map and greyscale.
