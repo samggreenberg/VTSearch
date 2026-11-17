@@ -4,9 +4,12 @@ import { IconComponent } from '../../icon/icon.component';
 
 /**
  * The image viewer's toolbar: rotate, zoom (buttons, slider and readout) and
- * reset, led by the Marquee and Highlight toggles where the host offers them.
- * The centre panel and the Show in photo overlay both use it (#5227), so a
- * photo opened from a face crop gets the controls the ranking's image has.
+ * reset, led by the Marquee and Highlight toggles where the host offers them,
+ * and ended by Blur / Unblur (#5689) whenever the viewer shows an item of a
+ * dataset. The centre panel, the Face compare layout's reference pane and the
+ * Show in photo overlay all use it (#5227), so a photo opened from a face crop
+ * gets the controls the ranking's image has. Every control acts through the
+ * viewer, which knows which dataset its item is in.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
