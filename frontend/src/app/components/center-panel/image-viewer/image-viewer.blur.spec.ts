@@ -3,7 +3,8 @@ import { Component, signal } from '@angular/core';
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { vi } from 'vitest';
 
-import { ImageViewerComponent, PEEK_DELAY_MS } from './image-viewer.component';
+import { ImageViewerComponent } from './image-viewer.component';
+import { PEEK_DELAY_MS } from '../../../utils/focused-blur';
 import { ImageViewControlsComponent } from '../image-view-controls/image-view-controls.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { SettingsStateService } from '../../../services/settings-state.service';

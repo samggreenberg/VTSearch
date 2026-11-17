@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ImageViewerComponent } from '../image-viewer/image-viewer.component';
 import { IconComponent } from '../../icon/icon.component';
+import { BlurToggleComponent } from '../blur-toggle/blur-toggle.component';
 
 /**
  * The image viewer's toolbar: rotate, zoom (buttons, slider and readout) and
@@ -15,7 +16,7 @@ import { IconComponent } from '../../icon/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-image-view-controls',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, BlurToggleComponent],
   host: { class: 'image-view-controls' },
   templateUrl: './image-view-controls.component.html',
   styleUrl: './image-view-controls.component.scss',

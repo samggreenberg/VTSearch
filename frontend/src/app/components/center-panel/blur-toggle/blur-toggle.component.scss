@@ -1,0 +1,13 @@
+:host {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+// The roomier padding of the image toolbar's buttons (`.ivc-btn`), and wide
+// enough for either label, so flipping it does not move the toolbar under the
+// pointer that clicked it.
+.blur-toggle {
+  min-width: 5.5em;
+  justify-content: center;
+  padding: var(--space-2xs) var(--space-md);
+}

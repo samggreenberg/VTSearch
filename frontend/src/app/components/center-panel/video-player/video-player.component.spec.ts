@@ -4,6 +4,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 describe('VideoPlayerComponent', () => {
   let component: VideoPlayerComponent;
@@ -20,7 +21,8 @@ describe('VideoPlayerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [VideoPlayerComponent],
-      providers: [...provideZoneless(), ActiveContextService],
+      // Sharp: the blur has its own spec (video-player.blur.spec.ts).
+      providers: [...provideZoneless(), ActiveContextService, provideBlurStateStub().provider],
     }).compileComponents();
     fixture = TestBed.createComponent(VideoPlayerComponent);
     component = fixture.componentInstance;

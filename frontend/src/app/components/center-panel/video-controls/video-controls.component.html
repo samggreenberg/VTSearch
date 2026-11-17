@@ -1,0 +1,39 @@
+<button
+  type="button"
+  class="btn btn--toolbar vc-btn vc-play"
+  (click)="togglePlay()"
+  [title]="paused() ? 'Play (Space)' : 'Pause (Space)'"
+  [attr.aria-label]="paused() ? 'Play' : 'Pause'"
+><vt-icon [type]="paused() ? 'play' : 'pause'" [size]="16"></vt-icon></button>
+<span class="vc-time">{{ timeLabel() }}</span>
+<input
+  type="range"
+  class="vc-seek"
+  [min]="range()?.start ?? 0"
+  [max]="range()?.end ?? 0"
+  step="any"
+  [value]="time()"
+  [disabled]="!range()"
+  (input)="onSeek($event)"
+  title="Seek"
+  aria-label="Seek"
+/>
+<button
+  type="button"
+  class="btn btn--toolbar vc-btn vc-mute"
+  (click)="toggleMute()"
+  [attr.aria-pressed]="muted()"
+  [title]="muted() ? 'Unmute' : 'Mute'"
+  [attr.aria-label]="muted() ? 'Unmute' : 'Mute'"
+><vt-icon [type]="silent() ? 'volume-mute' : 'volume'" [size]="16"></vt-icon></button>
+<input
+  type="range"
+  class="vc-volume"
+  min="0"
+  max="1"
+  step="0.01"
+  [value]="muted() ? 0 : volume()"
+  (input)="onVolume($event)"
+  title="Volume (Shift+↑ / Shift+↓)"
+  aria-label="Volume"
+/>

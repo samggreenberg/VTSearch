@@ -45,13 +45,6 @@
   }
 }
 
-// Blur / Unblur (#5689): wide enough for either label, so flipping it does
-// not move the toolbar under the pointer that clicked it.
-.ivc-btn-blur {
-  min-width: 5.5em;
-  justify-content: center;
-}
-
 .ivc-sep {
   width: 1px;
   height: 18px;
