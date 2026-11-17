@@ -16,6 +16,7 @@ that maps model coordinates back onto the input image.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from io import BufferedIOBase
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -320,6 +321,12 @@ register_transform("ChannelSwap", _channel_swap_factory)
 #: called anything.
 MODEL_SUFFIXES: tuple[str, ...] = (".onnx", ".model")
 
+#: The first two bytes of a gzip stream.  A gzip-compressed ONNX model (how one
+#: group ships its ``.model`` files, #5683) is decompressed as it loads.  An ONNX
+#: file never starts with these bytes: its first byte is a protobuf field tag, and
+#: ``0x1f`` would name wire type 7, which does not exist.
+GZIP_MAGIC = b"\x1f\x8b"
+
 #: Where a refusal sends someone holding a model in another format.
 OTHER_FORMATS_DOC = "'Models in other formats' in imagekit/README.md"
 
@@ -351,6 +358,16 @@ _PICKLE = ModelFormat(
 )
 _SAVED_MODEL = ModelFormat("a TensorFlow SavedModel directory", "convert it with tf2onnx (--saved-model)")
 _EMPTY = ModelFormat("an empty file", "copy the model again")
+_TAR = ModelFormat("a tar archive", "unpack it: the model may be inside")
+_TAR_GZ = ModelFormat("a gzip-compressed tar archive", "unpack it with tar -xzf: the model may be inside")
+_EMPTY_GZ = ModelFormat("a gzip file holding nothing", "copy the model again")
+_DAMAGED_GZ = ModelFormat("a damaged gzip file", "copy the model again")
+
+#: Enough of a file to see a tar header's magic, at offset 257.
+_HEAD_BYTES = 512
+
+#: A tar header's magic: POSIX ``ustar``, or GNU tar's own spelling.
+_TAR_MAGICS = (b"ustar\x0000", b"ustar  \x00")
 
 
 def describe_model_format(path: str | Path) -> ModelFormat | None:
@@ -358,32 +375,63 @@ def describe_model_format(path: str | Path) -> ModelFormat | None:
 
     ``None`` for anything else, ONNX included.  An ONNX file has no magic number,
     so ``None`` means "not recognisably something else", never "this is ONNX":
-    only ONNX Runtime can say that.  Reads a few bytes (and a zip's index); loads nothing.
+    only ONNX Runtime can say that.  A gzip file is described by what it
+    decompresses to, so a gzip-compressed ONNX model is ``None`` too.  Reads a few
+    bytes (and a zip's index, and the start of a gzip stream); loads nothing.
     """
     p = Path(path)
     if p.is_dir():
         return _SAVED_MODEL if (p / "saved_model.pb").is_file() else None
+    if is_gzip(p):
+        return _describe_gzip(p)
     try:
         with open(p, "rb") as fh:
-            head = fh.read(8)
+            return _describe_stream(fh)
     except OSError:
         return None
+
+
+def _describe_stream(fh: BufferedIOBase) -> ModelFormat | None:
+    """:func:`describe_model_format` on an open, seekable binary stream, read from its start."""
+    head = fh.read(_HEAD_BYTES)
     if not head:
         return _EMPTY
     if head.startswith(b"PK\x03\x04"):
-        return _describe_zip(p)
-    if head == b"\x89HDF\r\n\x1a\n":
+        fh.seek(0)
+        return _describe_zip(fh)
+    if head.startswith(b"\x89HDF\r\n\x1a\n"):
         return _HDF5
     if head[:1] == b"\x80" and head[1:2] in (b"\x02", b"\x03", b"\x04", b"\x05"):
         return _PICKLE
+    if head[257:265] in _TAR_MAGICS:
+        return _TAR
     return None
 
 
-def _describe_zip(path: Path) -> ModelFormat:
+def _describe_gzip(path: Path) -> ModelFormat | None:
+    """What a gzip file decompresses to, when that is a model format other than ONNX."""
+    import gzip  # noqa: PLC0415
+    import zlib  # noqa: PLC0415
+
+    try:
+        with gzip.open(path, "rb") as fh:
+            inner = _describe_stream(fh)
+    except (OSError, EOFError, zlib.error):
+        return _DAMAGED_GZ
+    if inner is None:
+        return None
+    if inner is _EMPTY:
+        return _EMPTY_GZ
+    if inner is _TAR:
+        return _TAR_GZ
+    return ModelFormat(f"{inner.what}, gzip-compressed", f"decompress it with gunzip, then {inner.convert}")
+
+
+def _describe_zip(fh: BufferedIOBase) -> ModelFormat:
     import zipfile  # noqa: PLC0415
 
     try:
-        with zipfile.ZipFile(path) as zf:
+        with zipfile.ZipFile(fh) as zf:
             names = zf.namelist()
     except (zipfile.BadZipFile, OSError):
         return _ZIP
@@ -432,8 +480,10 @@ def resolve_onnx_model(bundle: str | Path) -> Path:
     """:func:`resolve_model_file` for an ONNX model, refusing one whose bytes show another format.
 
     Raises :class:`NotOnnxModelError` naming the format (a PyTorch file, a Keras
-    model, a TensorFlow SavedModel, a pickle) before anything is loaded, so the
-    error says what to do rather than that a protobuf failed to parse.
+    model, a TensorFlow SavedModel, a pickle, an archive, any of those
+    gzip-compressed) before anything is loaded, so the error says what to do
+    rather than that a protobuf failed to parse.  A gzip-compressed ONNX model
+    passes: :func:`read_model_source` decompresses it for ONNX Runtime.
     """
     path = Path(bundle)
     found = describe_model_format(path) if path.is_dir() else None
@@ -443,6 +493,37 @@ def resolve_onnx_model(bundle: str | Path) -> Path:
     if found is not None:
         raise NotOnnxModelError(not_onnx_message(path, found.what, found.convert))
     return path
+
+
+def is_gzip(path: str | Path) -> bool:
+    """Whether *path* is a file starting with the gzip magic number."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(len(GZIP_MAGIC)) == GZIP_MAGIC
+    except OSError:
+        return False
+
+
+def read_model_source(path: str | Path) -> str | bytes:
+    """What ``onnxruntime.InferenceSession`` is handed for the model file *path*.
+
+    The path itself, as a string, for a plain model file.  For a gzip-compressed
+    one, its decompressed bytes, held in memory and never written back to disk;
+    a damaged gzip stream raises :class:`NotOnnxModelError`, since there is no
+    model to read in it.
+    """
+    if not is_gzip(path):
+        return str(path)
+    import gzip  # noqa: PLC0415
+    import zlib  # noqa: PLC0415
+
+    try:
+        with gzip.open(path, "rb") as fh:
+            return fh.read()
+    except (OSError, EOFError, zlib.error) as exc:
+        raise NotOnnxModelError(
+            f"{path} is {_DAMAGED_GZ.what} ({exc}), so it holds no model to run: {_DAMAGED_GZ.convert}"
+        ) from exc
 
 
 def load_model_config(

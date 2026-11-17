@@ -75,24 +75,28 @@ class RuntimeOptions:
     def make_session(self, model_path: str) -> "ort.InferenceSession":
         """Open *model_path* as an ``InferenceSession`` on these options.
 
-        Raises whatever ``onnxruntime`` raises on a bad model, after
-        :meth:`check_available` has refused an uninstalled provider; a file
-        ONNX Runtime cannot parse as ONNX at all raises
+        A gzip-compressed model is decompressed in memory first
+        (:func:`imagekit.util.read_model_source`).  Raises whatever
+        ``onnxruntime`` raises on a bad model, after :meth:`check_available` has
+        refused an uninstalled provider; a file ONNX Runtime cannot parse as
+        ONNX at all, or a damaged gzip stream, raises
         :class:`imagekit.util.NotOnnxModelError`, which says how to run a model
         in another format.
         """
         import onnxruntime as ort  # noqa: PLC0415
 
+        from imagekit.util import OTHER_FORMATS_DOC, NotOnnxModelError, read_model_source  # noqa: PLC0415
+
         self.check_available()
+        source = read_model_source(model_path)
         try:
-            return ort.InferenceSession(model_path, sess_options=self.session_options(), providers=self.providers())
+            return ort.InferenceSession(source, sess_options=self.session_options(), providers=self.providers())
         except Exception as exc:
             if type(exc).__name__ != "InvalidProtobuf":
                 raise
-            from imagekit.util import OTHER_FORMATS_DOC, NotOnnxModelError  # noqa: PLC0415
-
+            what = f"{model_path} (once gunzipped)" if isinstance(source, bytes) else model_path
             raise NotOnnxModelError(
-                f"ONNX Runtime cannot read {model_path} as an ONNX model ({exc}). imagekit's own detector and "
+                f"ONNX Runtime cannot read {what} as an ONNX model ({exc}). imagekit's own detector and "
                 "embedder run ONNX models only: convert the model to ONNX, or run it through a face provider "
                 f"that reads its format; see {OTHER_FORMATS_DOC}"
             ) from exc
