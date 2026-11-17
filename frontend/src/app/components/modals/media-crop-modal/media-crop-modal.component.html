@@ -16,6 +16,11 @@
           <audio [src]="fileUrl" controls></audio>
         }
         @case ('video') {
+          <!-- Only an uploaded file reaches here, so nothing blurs it: the
+               dataset items handed in (Crop, then sort / seed) are images
+               and audio. A caller that hands in a dataset video must blur
+               it as vt-video-player does, since a filter on a video element
+               blurs its native controls too. -->
           <video [src]="fileUrl" controls></video>
         }
         @default {

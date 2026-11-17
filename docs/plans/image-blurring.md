@@ -125,7 +125,6 @@ An arrow points from an issue to one that needs it merged first.
 ```
 
 - #5698 needs both #5694 and #5695: it reuses the button #5695 adds.
-- #5708 needs #5698: it reuses the control bar and peek #5698 adds.
 - #5693, #5695, #5696 and #5697 do not depend on one another and can run in
   parallel once their parent has merged.
 - The longest chain is #5691 → #5692 → #5694 → #5695 → #5698 → #5699.
@@ -163,8 +162,6 @@ An arrow points from an issue to one that needs it merged first.
 - [ ] #5698 — Video playback blur and its button (Sonnet)
 
 <!-- item-sep -->
-
-- [ ] #5708 — Blur the "Use This Example?" preview's video (Sonnet)
 
 <!-- item-sep -->
 
