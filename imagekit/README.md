@@ -159,8 +159,17 @@ what is in it, not by its name: an ONNX model called `det.model` loads exactly
 as `det.onnx` does, named outright or as the one `.onnx` or `.model` file in
 a bundle directory. A gzip-compressed ONNX model (`gzip -c det.onnx >
 det.model`, a common way to ship one) loads as it is: it is decompressed in
-memory, never written back to disk. A model saved in another format does not
-load whatever it is called, and there are two ways to run one:
+memory, never written back to disk. So does an ONNX model nested in a protobuf
+wrapper, gzipped or not: a message of a model store's own that carries the
+model as one of its fields, beside its name and version. A file that parses as
+a protobuf but has no graph of its own (what ONNX Runtime reports as `No graph
+was found in the protobuf`) is searched for the one message nested in it that
+is shaped like an ONNX model (an IR version, an opset, and a graph with
+outputs), and ONNX Runtime is handed that. No schema for the wrapper is needed.
+A wrapper holding no ONNX model, or several different ones, is refused with
+`imagekit.util.NotOnnxModelError`; `imagekit.util.find_nested_onnx_models(data)`
+lists the models in one. A model saved in another format does not load whatever
+it is called, and there are two ways to run one:
 
 - **Convert it to ONNX once**, offline, and change nothing else: a PyTorch
   model with `torch.onnx.export` ([above](#onnx-export-notes)), a Keras or
@@ -186,13 +195,16 @@ the check on its own.
 An ONNX model exported from PyTorch can pass for a PyTorch file: ONNX is a
 protobuf, and the export records `pytorch` and its version as the model's
 producer, so `pytorch 1.8` in `strings det.model` is no sign of a PyTorch file.
-To tell, gunzip the file first if `file det.model` says it is gzip, then load
-it with `onnx`, which prints an ONNX model's producer and fails to parse
-anything else:
+To tell, open the file the way `initialize()` does, gzipped, wrapped or bare.
+This prints an ONNX model's outputs and refuses anything else with a
+`NotOnnxModelError` saying what it found:
 
 ```bash
-python -c "import onnx, sys; m = onnx.load(sys.argv[1]); print(m.producer_name, m.producer_version)" det.onnx
+python -c "import sys; from imagekit import RuntimeOptions; s = RuntimeOptions().make_session(sys.argv[1]); print([(o.name, o.shape) for o in s.get_outputs()])" det.model
 ```
+
+`onnx.load` is no test of a wrapper. Protobuf parsing is lenient, so it reads
+one as a model with a garbled producer and no graph.
 
 ## The image tensor
 

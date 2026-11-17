@@ -626,7 +626,7 @@ data/models/imagekit/
 Where the weights come from, which ones work, and the full config schema are in
 [`imagekit/README.md`](../imagekit/README.md#models-where-to-get-them). A model file may be
 called anything (`.onnx`, `.model`, ...) as long as it holds an ONNX model, gzip-compressed or
-not; one saved in another format is converted or run through a provider that reads it ([Models
+not, bare or nested in a protobuf wrapper; one saved in another format is converted or run through a provider that reads it ([Models
 in other formats](../imagekit/README.md#models-in-other-formats)). **Check the licence of
 any weights you deploy**: the InsightFace model-zoo weights (`buffalo_s`, above, the GRID's
 default; `buffalo_l` and `buffalo_m` likewise) are for non-commercial research only.

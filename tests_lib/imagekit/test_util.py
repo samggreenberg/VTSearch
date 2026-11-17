@@ -11,6 +11,7 @@ import zipfile
 
 import cv2
 import numpy as np
+import onnx
 import pytest
 
 from imagekit import RuntimeOptions, decode_image_buffer, read_image_tensor
@@ -23,6 +24,7 @@ from imagekit.util import (
     collect_image_paths,
     describe_model_format,
     ensure_image_tensor,
+    find_nested_onnx_models,
     letterbox,
     load_model_config,
     nms,
@@ -31,7 +33,7 @@ from imagekit.util import (
     resolve_model_file,
     resolve_onnx_model,
 )
-from tests_lib.imagekit._synthetic_models import build_embedder_model
+from tests_lib.imagekit._synthetic_models import build_embedder_model, protobuf_field, wrap_in_bundle
 
 
 def _png_bytes(arr: np.ndarray) -> bytes:
@@ -394,3 +396,80 @@ class TestGzipModels:
         with pytest.raises(NotOnnxModelError, match=r"cannot read .*vendor.model \(once gunzipped\) as an ONNX") as err:
             RuntimeOptions().make_session(str(tmp_path / "vendor.model"))
         assert type(err.value.__cause__).__name__ == "InvalidProtobuf"
+
+
+class TestNestedModels:
+    """An ONNX model nested in a protobuf wrapper loads as the bare model does (#5683)."""
+
+    @staticmethod
+    def _shapes(args):
+        return [(a.name, a.shape) for a in args]
+
+    def test_a_wrapped_model_loads_gzipped_or_not(self, tmp_path):
+        (tmp_path / "plain").mkdir()
+        plain = build_embedder_model(tmp_path / "plain" / "emb.onnx")
+        wrapped = wrap_in_bundle(plain.read_bytes())
+        (tmp_path / "bare.model").write_bytes(wrapped)
+        (tmp_path / "gzipped.model").write_bytes(gzip.compress(wrapped))
+        want = RuntimeOptions().make_session(str(plain))
+        for name in ("bare.model", "gzipped.model"):
+            path = tmp_path / name
+            assert describe_model_format(path) is None and resolve_onnx_model(path) == path
+            assert read_model_source(path) == plain.read_bytes()
+            got = RuntimeOptions().make_session(str(path))
+            assert self._shapes(got.get_inputs()) == self._shapes(want.get_inputs())
+            assert self._shapes(got.get_outputs()) == self._shapes(want.get_outputs())
+
+    def test_a_bare_model_and_bytes_that_are_no_protobuf_are_left_alone(self, tmp_path):
+        model = build_embedder_model(tmp_path / "emb.onnx")
+        assert find_nested_onnx_models(model.read_bytes()) is None and read_model_source(model) == str(model)
+        assert find_nested_onnx_models(b"\x01\x02vendor format") is None
+        assert find_nested_onnx_models(b"") is None
+
+    def test_a_model_repeated_in_its_wrapper_is_one_model(self, tmp_path):
+        model = build_embedder_model(tmp_path / "emb.onnx").read_bytes()
+        assert find_nested_onnx_models(protobuf_field(1, wrap_in_bundle(model)) + protobuf_field(2, model)) == [model]
+
+    def test_a_wrapper_holding_two_models_is_refused(self, tmp_path):
+        first = build_embedder_model(tmp_path / "a.onnx").read_bytes()
+        second = build_embedder_model(tmp_path / "b.onnx", dim=128).read_bytes()
+        both = protobuf_field(1, first) + protobuf_field(2, wrap_in_bundle(second))
+        assert find_nested_onnx_models(both) == [first, second]
+        (tmp_path / "two.model").write_bytes(both)
+        with pytest.raises(
+            NotOnnxModelError, match="two.model holds 2 different ONNX models .*find_nested_onnx_models"
+        ):
+            RuntimeOptions().make_session(str(tmp_path / "two.model"))
+
+    def test_a_wrapper_holding_no_model_is_refused(self, tmp_path):
+        meta = protobuf_field(1, b"my-model") + protobuf_field(2, protobuf_field(1, b"1.0.0"))
+        (tmp_path / "meta.model").write_bytes(gzip.compress(meta))
+        with pytest.raises(
+            NotOnnxModelError, match=r"meta.model \(once gunzipped\) is a protobuf message but not an ONNX model"
+        ) as err:
+            RuntimeOptions().make_session(str(tmp_path / "meta.model"))
+        assert "Models in other formats" in str(err.value)
+
+    def test_a_message_shaped_almost_like_a_model_is_not_one(self, tmp_path):
+        model = onnx.load(str(build_embedder_model(tmp_path / "emb.onnx")))
+        model.producer_name = "pytorch"
+        good = model.SerializeToString()
+        no_ir, no_opset, no_outputs = (onnx.ModelProto.FromString(good) for _ in range(3))
+        no_ir.ir_version = 0
+        no_opset.ClearField("opset_import")
+        no_outputs.graph.ClearField("output")
+        producer = b"\x12\x07pytorch"  # producer_name, a string (wire type 2)
+        assert producer in good
+        varint_producer = good.replace(producer, b"\x10\x07", 1)  # the same field as a varint
+        assert find_nested_onnx_models(protobuf_field(1, good)) == [good]
+        for broken in (no_ir.SerializeToString(), no_opset.SerializeToString(), no_outputs.SerializeToString()):
+            assert find_nested_onnx_models(protobuf_field(1, broken)) == []
+        assert find_nested_onnx_models(protobuf_field(1, varint_producer)) == []
+
+    def test_a_search_out_of_budget_hands_the_file_over_as_it_is(self, tmp_path, monkeypatch):
+        import imagekit.util as util
+
+        path = tmp_path / "det.model"
+        path.write_bytes(wrap_in_bundle(build_embedder_model(tmp_path / "emb.onnx").read_bytes()))
+        monkeypatch.setattr(util, "_FIELD_BUDGET", 5)
+        assert find_nested_onnx_models(path.read_bytes()) is None and read_model_source(path) == str(path)

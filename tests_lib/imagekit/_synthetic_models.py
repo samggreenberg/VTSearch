@@ -9,6 +9,8 @@ crop, so alignment and batching are exercised too.
 
 Every graph consumes its input through a ``0 * mean(input)`` term, so the
 session sees a real dependence and the shapes are checked at run time.
+:func:`wrap_in_bundle` nests a built model in a protobuf wrapper, the way some
+model stores ship one.
 """
 
 from __future__ import annotations
@@ -260,3 +262,35 @@ def pipeline_config(paths: dict[str, Path], **extra: Any) -> dict[str, Any]:
     }
     config.update(extra)
     return config
+
+
+# ---------------------------------------------------------------------------
+# Protobuf wrappers
+# ---------------------------------------------------------------------------
+
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        low, value = value & 0x7F, value >> 7
+        out.append(low | 0x80 if value else low)
+        if not value:
+            return bytes(out)
+
+
+def protobuf_field(number: int, payload: bytes) -> bytes:
+    """One length-delimited protobuf field: *payload* as field *number*."""
+    return _varint(number << 3 | 2) + _varint(len(payload)) + payload
+
+
+def wrap_in_bundle(model: bytes) -> bytes:
+    """*model* nested as #5683's ``.model`` files nest theirs, once gunzipped.
+
+    A bundle message carrying the model beside its name and version, packed in
+    an ``Any``-style message under its type URL, under a name of its own: three
+    messages deep, with the strings ``strings`` showed on the real files.
+    """
+    meta = protobuf_field(1, b"my-model") + protobuf_field(2, b"1.0.0") + protobuf_field(4, b"my-model")
+    bundle = protobuf_field(1, meta) + protobuf_field(3, meta) + protobuf_field(5, model)
+    packed = protobuf_field(1, b"type.googleapis.com/My.Model.BundleProto") + protobuf_field(2, bundle)
+    return protobuf_field(1, b"my-model") + protobuf_field(2, packed)

@@ -75,17 +75,19 @@ class RuntimeOptions:
     def make_session(self, model_path: str) -> "ort.InferenceSession":
         """Open *model_path* as an ``InferenceSession`` on these options.
 
-        A gzip-compressed model is decompressed in memory first
+        A gzip-compressed model is decompressed in memory first, and one nested
+        in a protobuf wrapper is unwrapped
         (:func:`imagekit.util.read_model_source`).  Raises whatever
         ``onnxruntime`` raises on a bad model, after :meth:`check_available` has
         refused an uninstalled provider; a file ONNX Runtime cannot parse as
-        ONNX at all, or a damaged gzip stream, raises
+        ONNX at all, a damaged gzip stream, or a protobuf wrapper holding no
+        one ONNX model, raises
         :class:`imagekit.util.NotOnnxModelError`, which says how to run a model
         in another format.
         """
         import onnxruntime as ort  # noqa: PLC0415
 
-        from imagekit.util import OTHER_FORMATS_DOC, NotOnnxModelError, read_model_source  # noqa: PLC0415
+        from imagekit.util import OTHER_FORMATS_DOC, NotOnnxModelError, is_gzip, read_model_source  # noqa: PLC0415
 
         self.check_available()
         source = read_model_source(model_path)
@@ -94,7 +96,7 @@ class RuntimeOptions:
         except Exception as exc:
             if type(exc).__name__ != "InvalidProtobuf":
                 raise
-            what = f"{model_path} (once gunzipped)" if isinstance(source, bytes) else model_path
+            what = f"{model_path} (once gunzipped)" if is_gzip(model_path) else model_path
             raise NotOnnxModelError(
                 f"ONNX Runtime cannot read {what} as an ONNX model ({exc}). imagekit's own detector and "
                 "embedder run ONNX models only: convert the model to ONNX, or run it through a face provider "

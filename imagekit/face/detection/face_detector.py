@@ -337,11 +337,11 @@ class FaceDetector:
     ) -> None:
         """Load the model and its config; raises on any failure.
 
-        *model_bundle_filepath* is the ONNX model file, under any name and
-        gzip-compressed or not, or a directory holding one ``.onnx`` or
-        ``.model`` file.  The config is
-        ``<model>.json`` beside it, or *model_config_path*, or the packaged
-        SCRFD default.
+        *model_bundle_filepath* is the ONNX model file, under any name,
+        gzip-compressed or not and bare or nested in a protobuf wrapper
+        (:func:`imagekit.util.read_model_source`), or a directory holding one
+        ``.onnx`` or ``.model`` file.  The config is ``<model>.json`` beside
+        it, or *model_config_path*, or the packaged SCRFD default.
         """
         model = resolve_onnx_model(model_bundle_filepath)
         raw = load_model_config(model, model_config_path, DEFAULT_CONFIG_PATH)

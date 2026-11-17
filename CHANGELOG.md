@@ -20,6 +20,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **Face models nested in a protobuf wrapper load as they are** (issue #5683). Some model stores ship an ONNX model
+  inside a message of their own, beside its name and version, and gzip the lot: the `.model` files that fail with
+  `No graph was found in the protobuf`, even once gunzipped. A detector or embedder shipped that way now loads with
+  no unpacking first: the ONNX model nested in the wrapper is found and run, and nothing is written to disk. A
+  wrapper that holds no ONNX model, or more than one, is refused with a message saying so. See "Models in other
+  formats" in `imagekit/README.md`.
+
 ## 2026-11-17
 
 ### Added
