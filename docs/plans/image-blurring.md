@@ -4,7 +4,8 @@ Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
 overrides across dataset copies (#5693), the frontend state service and
-`vtBlur` directive (#5694), and the directive on every DOM image site (#5696).
+`vtBlur` directive (#5694), the Blur / Unblur button with the focused
+viewer's blur (#5695), and the directive on every DOM image site (#5696).
 
 ## Goal
 
@@ -39,9 +40,9 @@ gore, …). Three behaviours:
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
 What does **not** exist: any shared thumbnail component (about twenty sites
-each write their own `<img>`). Every DOM image site carries `vtBlur` (see
-"Blurred images" in `docs/FRONTEND.md`); the focused viewer and the Browse
-canvas are the two left.
+each write their own `<img>`). Every DOM image site carries `vtBlur`, and the
+focused viewer blurs itself (see "Blurred images" in `docs/FRONTEND.md`); the
+Browse canvas is the one left.
 
 ## Design
 
@@ -95,9 +96,6 @@ with the CSS peek, and the directive on every DOM site, described under
 "Blurred images" in `docs/FRONTEND.md`. What the remaining sites need from
 them:
 
-- **The focused viewer** adds a blur term to its existing `imageFilter` and
-  gets the same hover rule. It cannot simply carry `.vt-blurred`: that class's
-  `!important` filter would drop the viewer's tone map and greyscale.
 - **The Browse canvas** is a 2D canvas, so CSS cannot reach a cell. `ThumbStore`
   caches a pre-blurred bitmap per blurred thumbnail (the way it already caches
   tinted audio masks); `drawHex` draws that instead. Peek reuses the existing
@@ -110,12 +108,8 @@ them:
 
 ### The button
 
-In `vt-image-view-controls`, beside Zoom and Rotate: a text button reading
-**Blur** when the image is sharp and **Unblur** when it is blurred. It calls
-`BlurStateService.setBlurred`, so every other view of that image follows. The
-control is mounted in the centre panel, the face-reference pane and the
-source-photo modal; the modal passes the sibling dataset's id. Shortcut: `b`
-(free today), listed in `utils/keyboard-shortcuts.ts`.
+Built for stills: Blur / Unblur ends the image viewer's toolbar, and `b`
+toggles it; both are described under "Blurred images" in `docs/FRONTEND.md`.
 
 Video playback is blurred too. The video player has no toolbar of its own, so
 the same button is placed in the centre panel's shared item tools for a video,

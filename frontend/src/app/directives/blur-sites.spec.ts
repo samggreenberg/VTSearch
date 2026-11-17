@@ -44,7 +44,7 @@ const ALLOWED: readonly Allowed[] = [
   {
     file: 'components/center-panel/image-viewer/image-viewer.component.html',
     match: 'imageSrc()',
-    why: "the focused viewer composes the blur into its own `imageFilter` (#5695): `.vt-blurred`'s filter would drop its tone map",
+    why: 'the focused viewer blurs itself (#5695): under its zoom, with its tone map on another layer, and a peek it times per image',
   },
 ];
 

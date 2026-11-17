@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, injec
 import { NgStyle } from '@angular/common';
 import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { ActiveDatasetService } from '../../../services/active-dataset.service';
+import { BlurStateService } from '../../../services/blur-state.service';
+import { BLUR_RADIUS_MAX_PX, blurRadiusFor } from '../../../utils/blur-radius';
 import {
   FaceFrame,
   FaceLandmarks,
@@ -89,6 +92,13 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
 /** How far past the opening view the user can zoom in (see `maxZoom`). */
 const MAX_ZOOM = 5;
 
+/**
+ * How long the pointer rests on a blurred image before the peek starts: the
+ * delay of the shared `.vt-blurred:hover` rule (`scss/_components.scss`), which
+ * the viewer times itself (see {@link ImageViewerComponent.peeking}).
+ */
+export const PEEK_DELAY_MS = 1000;
+
 // What a region draw started from outside the canvas does NOT claim (see
 // `tryStartOffCanvasDraw`). Two different reasons:
 //
@@ -112,6 +122,8 @@ const OFF_CANVAS_DRAW_EXCLUDED =
 })
 export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
   private activeContext = inject(ActiveContextService);
+  private readonly activeDataset = inject(ActiveDatasetService);
+  private readonly blurState = inject(BlurStateService);
 
   readonly media = input.required<Media>();
   /**
@@ -222,13 +234,66 @@ export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
 
   /** The id of this viewer's {@link toneMap} filter. */
   readonly toneFilterId = `vt-even-out-${++nextFilterId}`;
-  /** The CSS `filter` the image is drawn through, or null for none. */
+  /**
+   * The CSS `filter` the image is drawn through, or null for none: the tone
+   * map and greyscale. It is drawn on the image's layer (`.image-tone`), not
+   * on the image, whose own `filter` is its blur alone (see {@link blurred}):
+   * a filter list holding a `url()` does not interpolate, so a blur sharing
+   * one with the tone map would jump at the end of the peek instead of fading.
+   */
   readonly imageFilter = computed<string | null>(() => {
     const parts: string[] = [];
     if (this.toneMap()) parts.push(`url(#${this.toneFilterId})`);
     if (this.greyscale()) parts.push('grayscale(1)');
     return parts.length ? parts.join(' ') : null;
   });
+
+  /**
+   * The dataset item whose blur state this viewer shows (#5689), or null when
+   * it shows none: a picture from {@link srcOverride} (a detector's example)
+   * is a file of the user's, which nothing blurs and no button can.
+   */
+  readonly blurItemId = computed<number | null>(() => (this.srcOverride() ? null : this.media().id));
+  /** The dataset the item belongs to: {@link datasetId}, or the active one. */
+  private readonly blurDatasetId = computed(() => this.datasetId() || this.activeDataset.activeId());
+  /** Whether the Blur / Unblur button has an item to act on. */
+  readonly blurrable = computed(() => this.blurItemId() !== null && !!this.blurDatasetId());
+  /**
+   * Whether the image is drawn blurred: its Blur / Unblur override, or else
+   * the blur rules, as `BlurStateService` has them (and blurred while that
+   * does not know yet, on an instance with rules).
+   */
+  readonly blurred = computed(() => {
+    const id = this.blurItemId();
+    return id !== null && this.blurState.isBlurred(this.blurDatasetId(), id);
+  });
+  /**
+   * The blur's radius while {@link blurred}: the shared share of the image's
+   * shorter side, as `vtBlur` gives every other site. It is measured on the
+   * image laid out unzoomed, because the blur is drawn on the image under its
+   * zoom, so zooming in enlarges it with the picture and it hides as much at
+   * 5× as at fit. Before the image is laid out, the most any site gets.
+   */
+  readonly blurRadiusCss = computed<string | null>(() => {
+    if (!this.blurred()) return null;
+    const w = this.renderedW();
+    const h = this.renderedH();
+    return `${w > 0 && h > 0 ? blurRadiusFor(w, h) : BLUR_RADIUS_MAX_PX}px`;
+  });
+  /** The pointer is over the pane. */
+  private readonly pointerInside = signal(false);
+  /**
+   * The pointer has rested on the blurred image for {@link PEEK_DELAY_MS}, so
+   * the blur fades out (`.image-peek`); leaving the pane drops it at once.
+   *
+   * Every other site peeks through the shared `:hover` rule, but the viewer
+   * times it here, because its image changes under a pointer that stays put:
+   * the user votes with the arrow keys with the pointer left on the pane, and
+   * under a hover rule each next image would arrive already peeked, sharp. So
+   * the wait starts again for every new image, and whenever the image is
+   * blurred again.
+   */
+  readonly peeking = signal(false);
 
   // Public: the coord-transform specs substitute a stub wrap element here.
   readonly wrapRef = viewChild<ElementRef<HTMLDivElement>>('imageWrap');
@@ -386,6 +451,26 @@ export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
   constructor() {
     this.setupWindowKeyListeners();
 
+    // Keep the shown item's dataset's blurred set loaded and polled, as the
+    // `vtBlur` directive does for every other site.
+    effect((onCleanup) => {
+      if (this.blurItemId() === null) return;
+      const datasetId = this.blurDatasetId();
+      onCleanup(untracked(() => this.blurState.retain(datasetId)));
+    });
+
+    // The peek's wait (see `peeking`): it runs while the pointer is on a
+    // blurred image that is on screen, and starts again for each new image
+    // (`imageSrc`) and each re-blur. Anything else ends the peek at once.
+    effect((onCleanup) => {
+      this.imageSrc();
+      const waiting = this.blurred() && this.pointerInside() && this.imageReady();
+      this.peeking.set(false);
+      if (!waiting) return;
+      const timer = setTimeout(() => this.peeking.set(true), PEEK_DELAY_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+
     // A viewer puts itself on its link, as what it is there, for as long as
     // both are its.
     effect((onCleanup) => {
@@ -497,6 +582,26 @@ export class ImageViewerComponent implements OnDestroy, LinkLead, LinkFollower {
       this.resizeObserver = null;
     }
     if (this.shakeTimer) clearTimeout(this.shakeTimer);
+  }
+
+  onPointerEnter(): void {
+    this.pointerInside.set(true);
+  }
+
+  onPointerLeave(): void {
+    this.pointerInside.set(false);
+  }
+
+  /**
+   * The Blur / Unblur button and its `b` key: flip the image's state for
+   * good, in its own dataset, so every view of it follows and the choice
+   * outlasts whatever the blur rules say.
+   */
+  toggleBlur(): void {
+    const id = this.blurItemId();
+    const datasetId = this.blurDatasetId();
+    if (id === null || !datasetId) return;
+    this.blurState.setBlurred(datasetId, id, !this.blurred());
   }
 
   onZoomInput(event: Event): void {
