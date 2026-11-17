@@ -3,8 +3,9 @@
 Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
-overrides across dataset copies (#5693), and the frontend state service and
-`vtBlur` directive (#5694).
+overrides across dataset copies (#5693), the frontend state service and
+`vtBlur` directive (#5694), and the Blur / Unblur button with the focused
+viewer's blur (#5695).
 
 ## Goal
 
@@ -96,9 +97,6 @@ What the remaining sites need from them:
 - **DOM sites** carry `[vtBlur]="id"` (plus `[vtBlurDataset]` for a sibling
   dataset's item) on the element that draws the image, clip their container's
   overflow, and leave the image hoverable.
-- **The focused viewer** adds a blur term to its existing `imageFilter` and
-  gets the same hover rule. It cannot simply carry `.vt-blurred`: that class's
-  `!important` filter would drop the viewer's tone map and greyscale.
 - **The Browse canvas** is a 2D canvas, so CSS cannot reach a cell. `ThumbStore`
   caches a pre-blurred bitmap per blurred thumbnail (the way it already caches
   tinted audio masks); `drawHex` draws that instead. Peek reuses the existing
@@ -111,12 +109,8 @@ What the remaining sites need from them:
 
 ### The button
 
-In `vt-image-view-controls`, beside Zoom and Rotate: a text button reading
-**Blur** when the image is sharp and **Unblur** when it is blurred. It calls
-`BlurStateService.setBlurred`, so every other view of that image follows. The
-control is mounted in the centre panel, the face-reference pane and the
-source-photo modal; the modal passes the sibling dataset's id. Shortcut: `b`
-(free today), listed in `utils/keyboard-shortcuts.ts`.
+Built for stills: Blur / Unblur ends the image viewer's toolbar, and `b`
+toggles it; both are described under "Blurred images" in `docs/FRONTEND.md`.
 
 Video playback is blurred too. The video player has no toolbar of its own, so
 the same button is placed in the centre panel's shared item tools for a video,

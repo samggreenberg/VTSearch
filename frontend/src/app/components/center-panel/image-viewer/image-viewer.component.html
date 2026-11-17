@@ -6,6 +6,8 @@
   (wheel)="onWheel($event)"
   (mousedown)="onMouseDown($event)"
   (dblclick)="onDoubleClick($event)"
+  (mouseenter)="onPointerEnter()"
+  (mouseleave)="onPointerLeave()"
 >
   @if (toneMap(); as map) {
     <!-- The evening-out curve (#5675): sRGB, the space it was fitted in. -->
@@ -19,19 +21,25 @@
       </filter>
     </svg>
   }
-  <img
-    #imageEl
-    [src]="imageSrc()"
-    [alt]="media().filename || 'Image media'"
-    class="image-element"
-    [class.image-loading]="!imageReady()"
-    [style.transform]="imageTransform"
-    [style.filter]="imageFilter()"
-    (load)="onImageLoad()"
-    (error)="onImageError()"
-    draggable="false"
-    fetchpriority="high"
-  />
+  <!-- The tone map and greyscale are the layer's, so the image's own filter
+       is its blur alone (#5689), which a peek can fade (see `imageFilter`). -->
+  <div class="image-tone" [style.filter]="imageFilter()">
+    <img
+      #imageEl
+      [src]="imageSrc()"
+      [alt]="media().filename || 'Image media'"
+      class="image-element"
+      [class.image-loading]="!imageReady()"
+      [class.image-blurred]="blurred()"
+      [class.image-peek]="peeking()"
+      [style.--image-blur-radius]="blurRadiusCss()"
+      [style.transform]="imageTransform"
+      (load)="onImageLoad()"
+      (error)="onImageError()"
+      draggable="false"
+      fetchpriority="high"
+    />
+  </div>
   @if (highlightVisible && renderedW() > 0 && renderedH() > 0) {
     <div
       class="region-stage"

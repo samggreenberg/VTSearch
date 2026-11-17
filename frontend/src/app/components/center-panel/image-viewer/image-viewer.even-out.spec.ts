@@ -5,12 +5,14 @@ import { ToneMap } from '../face-even-out/even-out';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 import { settleZoneless } from '../../../testing/settle-resource';
 
 /**
  * The viewer's evening-out filter (#5674, #5675): one SVG component transfer
- * over the whole image, then greyscale, through the image's CSS `filter`. The
- * look itself is checked in a browser; jsdom draws nothing.
+ * over the whole image, then greyscale, through the CSS `filter` of the
+ * image's layer (the image's own is its blur, #5689). The look itself is
+ * checked in a browser; jsdom draws nothing.
  */
 describe('ImageViewerComponent evening out', () => {
   let fixture: ComponentFixture<ImageViewerComponent>;
@@ -22,7 +24,7 @@ describe('ImageViewerComponent evening out', () => {
   };
 
   beforeEach(async () => {
-    configureZoneless({ imports: [ImageViewerComponent], providers: [ActiveContextService] });
+    configureZoneless({ imports: [ImageViewerComponent], providers: [ActiveContextService, ...provideHttpTesting()] });
     fixture = TestBed.createComponent(ImageViewerComponent);
     fixture.componentRef.setInput('media', face);
     await settleZoneless(fixture);
@@ -30,12 +32,13 @@ describe('ImageViewerComponent evening out', () => {
 
   afterEach(() => fixture.destroy());
 
+  const layer = (): HTMLElement => fixture.nativeElement.querySelector('.image-tone');
   const img = (): HTMLImageElement => fixture.nativeElement.querySelector('img.image-element');
   const filter = (): SVGFilterElement | null => fixture.nativeElement.querySelector('svg.tone-filter filter');
 
   it('shows the image as it is with nothing to apply', () => {
     expect(filter()).toBeNull();
-    expect(img().style.filter).toBe('');
+    expect(layer().style.filter).toBe('');
   });
 
   it('draws the image through its own curve per channel, over the whole of it', async () => {
@@ -52,22 +55,25 @@ describe('ImageViewerComponent evening out', () => {
     expect(funcs[2].getAttribute('amplitude')).toBe('1.1');
     expect(funcs[1].getAttribute('exponent')).toBe('0.7');
     expect(funcs[1].getAttribute('offset')).toBe('0.02');
-    expect(img().style.filter).toBe(`url(#${id})`);
+    expect(layer().style.filter).toBe(`url(#${id})`);
+    // Held off the image, whose filter a peek must be able to fade.
+    expect(img().style.filter).toBe('');
+    expect(img().parentElement).toBe(layer());
 
     fixture.componentRef.setInput('toneMap', null);
     await settleZoneless(fixture);
     expect(filter()).toBeNull();
-    expect(img().style.filter).toBe('');
+    expect(layer().style.filter).toBe('');
   });
 
   it('greys the image after its curve', async () => {
     fixture.componentRef.setInput('greyscale', true);
     await settleZoneless(fixture);
-    expect(img().style.filter).toBe('grayscale(1)');
+    expect(layer().style.filter).toBe('grayscale(1)');
 
     fixture.componentRef.setInput('toneMap', MAP);
     await settleZoneless(fixture);
-    expect(img().style.filter).toBe(`url(#${fixture.componentInstance.toneFilterId}) grayscale(1)`);
+    expect(layer().style.filter).toBe(`url(#${fixture.componentInstance.toneFilterId}) grayscale(1)`);
   });
 
   it('gives each viewer a filter id of its own', () => {

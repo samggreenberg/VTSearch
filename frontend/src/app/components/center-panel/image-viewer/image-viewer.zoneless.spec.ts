@@ -7,6 +7,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import { imageUrlsWhileImages } from '../../../services/media-prefetch.service';
 import { Media } from '../../../models/api.models';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 import { settleZoneless } from '../../../testing/settle-resource';
 
 /**
@@ -41,7 +42,7 @@ describe('ImageViewerComponent (zoneless Shift-drag canary)', () => {
   beforeEach(async () => {
     configureZoneless({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService],
+      providers: [ActiveContextService, ...provideHttpTesting()],
     });
     fixture = TestBed.createComponent(ImageViewerComponent);
     // `media` is a decorator @Input; set it through `setInput` (the same channel
@@ -116,7 +117,7 @@ describe('ImageViewerComponent', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService],
+      providers: [ActiveContextService, ...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;
@@ -1280,7 +1281,7 @@ describe('ImageViewerComponent Escape guard', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService],
+      providers: [ActiveContextService, ...provideHttpTesting()],
     }).compileComponents();
     const fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;
@@ -1336,7 +1337,7 @@ describe('ImageViewerComponent with the review prefetch', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService],
+      providers: [ActiveContextService, ...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;

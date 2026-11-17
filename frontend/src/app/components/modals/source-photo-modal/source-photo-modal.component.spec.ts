@@ -72,11 +72,20 @@ describe('SourcePhotoModalComponent', () => {
     await settleResource();
   }
 
-  async function answerPhoto(): Promise<void> {
+  /**
+   * Answer the photo's batch read, then the read of its dataset's blurred set
+   * (#5689) that its viewer makes once it is on screen, with *blurredIds*.
+   */
+  async function answerPhoto(blurredIds: number[] = []): Promise<void> {
     const req = httpMock.expectOne('/api/medias/batch');
     expect(req.request.body).toEqual({ ids: [2] });
     expect(req.request.context.get(DATASET_OVERRIDE)).toBe('photos');
     req.flush([{ id: 2, media_type: 'image', filename: 'b.jpg', md5: 'x', custom_metadata: {} }]);
+    await settleResource();
+    const blurred = httpMock.expectOne('/api/medias/blurred');
+    // The photo's own dataset, not the active one.
+    expect(blurred.request.context.get(DATASET_OVERRIDE)).toBe('photos');
+    blurred.flush({ ids: blurredIds });
     await settleResource();
   }
 
@@ -137,9 +146,11 @@ describe('SourcePhotoModalComponent', () => {
     for (const label of ['Rotate image left', 'Rotate image right', 'Zoom out', 'Zoom in', 'Zoom level', 'Reset image view']) {
       expect(control(label)).toBeTruthy();
     }
-    // Nothing is voted on here, so no Marquee or Highlight to lead the strip.
+    // Nothing is voted on here, so no Marquee or Highlight to lead the strip:
+    // its one separator is the one before Blur / Unblur, at its end.
     expect(toolbar.querySelector('.ivc-btn-toggle')).toBeNull();
-    expect(toolbar.querySelector('.ivc-sep')).toBeNull();
+    expect(toolbar.querySelectorAll('.ivc-sep').length).toBe(1);
+    expect(toolbar.firstElementChild!.classList.contains('ivc-sep')).toBe(false);
 
     control('Zoom in').click();
     control('Rotate image right').click();
@@ -164,6 +175,41 @@ describe('SourcePhotoModalComponent', () => {
     document.dispatchEvent(pageZoom);
     expect(viewer.zoom()).toBe(before);
     expect(pageZoom.defaultPrevented).toBe(false);
+  });
+
+  // The photo is an item of the Image sibling, so its Blur / Unblur is
+  // written there: the face crop being voted on is another item, in another
+  // dataset, with the same id space.
+  it('blurs and unblurs the photo in its own dataset, not the active one (#5689)', async () => {
+    await answerSource({ dataset_id: 'photos', media_id: 2, box: [0.1, 0.2, 0.3, 0.4] });
+    await answerPhoto();
+    const button = (): HTMLButtonElement => fixture.nativeElement.querySelector('[data-metric="imageBlur"]');
+    const img = (): HTMLImageElement => fixture.nativeElement.querySelector('img.image-element');
+    expect(button().textContent!.trim()).toBe('Blur');
+    expect(img().classList).not.toContain('image-blurred');
+
+    button().click();
+    await settleResource();
+    const blur = httpMock.expectOne('/api/medias/2/blur');
+    expect(blur.request.method).toBe('PUT');
+    expect(blur.request.body).toEqual({ blurred: true });
+    expect(blur.request.context.get(DATASET_OVERRIDE)).toBe('photos');
+    // Optimistic: the photo is blurred before the server answers.
+    expect(button().textContent!.trim()).toBe('Unblur');
+    expect(img().classList).toContain('image-blurred');
+    blur.flush({ ok: true, id: 2, blurred: true });
+    await settleResource();
+
+    // The overlay answers the toolbar's B, as it does its zoom and rotate keys.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }));
+    await settleResource();
+    const unblur = httpMock.expectOne('/api/medias/2/blur');
+    expect(unblur.request.body).toEqual({ blurred: false });
+    expect(unblur.request.context.get(DATASET_OVERRIDE)).toBe('photos');
+    unblur.flush({ ok: true, id: 2, blurred: false });
+    await settleResource();
+    expect(button().textContent!.trim()).toBe('Blur');
+    expect(activeContext.datasetId).toBe('faces');
   });
 
   it('never moves the active pair', async () => {

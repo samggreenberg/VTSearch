@@ -29,6 +29,16 @@
   pointer-events: none;
 }
 
+// The image's layer, filling the wrap as the image did before it had one: the
+// tone map and greyscale (`imageFilter`) are drawn here, so the image's own
+// `filter` is free for its blur.
+.image-tone {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
 .image-element {
   width: 100%;
   height: 100%;
@@ -39,6 +49,23 @@
 
   &.image-loading {
     visibility: hidden;
+  }
+
+  // A blurred image (#5689), the viewer's own form of the shared `.vt-blurred`
+  // (`scss/_components.scss`): drawn under its zoom, so the blur grows with
+  // the picture, and clipped by the wrap at any zoom. The peek is the same
+  // fade, but the second's wait before it is the viewer's (`peeking`), and
+  // leaving drops `.image-peek`, whose resting rule has no transition, so the
+  // blur snaps back. Neither rule is `!important`, so the app's motion
+  // settings (`styles.scss`) cut the fade and leave the wait.
+  &.image-blurred {
+    filter: blur(var(--image-blur-radius, 60px));
+    transition: none;
+
+    &.image-peek {
+      filter: blur(0);
+      transition: filter 1.5s ease-out;
+    }
   }
 }
 

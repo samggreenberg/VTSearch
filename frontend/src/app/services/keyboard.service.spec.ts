@@ -140,6 +140,19 @@ describe('KeyboardService', () => {
     expect(actions).toEqual([{ type: 'reference' }, { type: 'reference' }]);
   });
 
+  it('should emit a blur toggle on B, once per press (#5689)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'B' }));
+    // Held, the key would flip the image back and forth, writing each time.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', repeat: true }));
+    // Ctrl/Cmd+B is the browser's, and a modifier shortcut is no shortcut here.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+    expect(actions).toEqual([{ type: 'blur' }, { type: 'blur' }]);
+  });
+
   describe('the originals key (#5675)', () => {
     let actions: KeyboardAction[];
 

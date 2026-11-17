@@ -232,6 +232,33 @@ describe('CenterPanelComponent Face compare', () => {
     expect(fixture.componentInstance.imageViewer()!.media().id).toBe(4);
   });
 
+  // Blur / Unblur (#5689): each pane's toolbar has its own button, and the
+  // B key blurs the face being voted on, never the reference beside it.
+  it('blurs the candidate on the B key, and each pane on its own button', async () => {
+    await init({});
+    await show(face);
+    httpMock.match('/api/medias/blurred').forEach((req) => req.flush({ ids: [] }));
+    await settleZoneless(fixture);
+    const blurButtons = (): HTMLButtonElement[] =>
+      Array.from(fixture.nativeElement.querySelectorAll('[data-metric="imageBlur"]'));
+    expect(blurButtons().length).toBe(2);
+
+    TestBed.inject(KeyboardService).action$.next({ type: 'blur' });
+    await settleZoneless(fixture);
+    const [write] = httpMock.match((r) => r.method === 'PUT' && r.url.endsWith('/blur'));
+    expect(write.request.url).toBe('/api/medias/4/blur');
+    expect(write.request.body).toEqual({ blurred: true });
+    write.flush({ ok: true, id: 4, blurred: true });
+
+    // The reference pane's button writes its own face, reference 1.
+    const paneButton = fixture.nativeElement.querySelector('vt-face-reference [data-metric="imageBlur"]') as HTMLButtonElement;
+    paneButton.click();
+    await settleZoneless(fixture);
+    const [refWrite] = httpMock.match((r) => r.method === 'PUT' && r.url.endsWith('/blur'));
+    expect(refWrite.request.url).toBe('/api/medias/1/blur');
+    refWrite.flush({ ok: true, id: 1, blurred: true });
+  });
+
   describe('checklist (#5643)', () => {
     function checklist(): FaceChecklistComponent | null {
       const found = fixture.debugElement.query(By.directive(FaceChecklistComponent));
