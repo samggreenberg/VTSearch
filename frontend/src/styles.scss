@@ -73,18 +73,20 @@ html.animations-off {
   @include suppress-motion('*:not(.progress-fill)');
 }
 
-// A blurred image's peek (`.vt-blurred:hover`, `_components.scss`) is the one
-// transition whose *delay* is functional: the blur lifts only once the pointer
-// has rested for a second, so a pointer crossing a grid does not flash every
-// image it passes. Its `!important` shorthand outranks the blanket rules above,
+// A blurred image's peek (`.vt-blurred:hover`, and `.vt-blur-peek:hover` over
+// one, in `_components.scss`) is the one transition whose *delay* is
+// functional: the blur lifts only once the pointer has rested for a second, so
+// a pointer crossing a grid does not flash every image it passes. Its `!important` shorthand outranks the blanket rules above,
 // so they are restated here, more specifically: with motion off the fade goes,
 // and the image unblurs at once when the second is up.
 @media (prefers-reduced-motion: reduce) {
-  html:not(.animations-on) .vt-blurred:hover {
+  html:not(.animations-on) .vt-blurred:hover,
+  html:not(.animations-on) .vt-blur-peek:hover .vt-blurred {
     transition-duration: 0.01ms !important;
   }
 }
 
-html.animations-off .vt-blurred:hover {
+html.animations-off .vt-blurred:hover,
+html.animations-off .vt-blur-peek:hover .vt-blurred {
   transition-duration: 0.01ms !important;
 }

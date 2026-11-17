@@ -118,6 +118,8 @@ export class LabelListComponent {
       // Audio waveforms are theme-agnostic alpha masks (issue #2369); flag them
       // so vote-grid tints them via a CSS mask instead of a plain <img>.
       isAudio: media?.media_type === 'audio',
+      blurId: id,
+      blurDatasetId: this.activeContext.datasetId,
     };
   }
 

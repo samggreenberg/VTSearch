@@ -5,7 +5,8 @@ file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
 overrides across dataset copies (#5693), the frontend state service and
 `vtBlur` directive (#5694), the Blur / Unblur button with the focused
-viewer's blur (#5695), and the Browse canvas's blur and peek (#5697).
+viewer's blur (#5695), the directive on every DOM image site (#5696), and
+the Browse canvas's blur and peek (#5697).
 
 ## Goal
 
@@ -40,8 +41,9 @@ gore, …). Three behaviours:
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
 What does **not** exist: any shared thumbnail component (about twenty sites
-each write their own `<img>`). Only `vt-media-item`'s thumbnail carries
-`vtBlur` so far.
+each write their own `<img>`). Every DOM image site carries `vtBlur`, the
+focused viewer blurs itself, and the Browse canvas draws pre-blurred cells
+(see "Blurred images" in `docs/FRONTEND.md`).
 
 ## Design
 
@@ -90,17 +92,11 @@ directly sees the image. That is the intended trade for this feature.
 ### Frontend: one service, one directive, one canvas path
 
 Built: `BlurStateService` (per-dataset blurred sets, optimistic
-`setBlurred`, a poll, fail-closed while loading) and the `vtBlur` directive
-with the CSS peek, described under "Blurred images" in `docs/FRONTEND.md`.
-What the remaining sites need from them:
-
-- **DOM sites** carry `[vtBlur]="id"` (plus `[vtBlurDataset]` for a sibling
-  dataset's item) on the element that draws the image, clip their container's
-  overflow, and leave the image hoverable.
-- **The Browse canvas** is built: pre-blurred copies in `ThumbStore` and a
-  cross-fading peek, described under "Blurred images" in `docs/FRONTEND.md`.
-  Its bin popup is a DOM site (#5696); its hover preview shows no image for a
-  still.
+`setBlurred`, a poll, fail-closed while loading), the `vtBlur` directive
+with the CSS peek, the directive on every DOM site, and the Browse canvas's
+pre-blurred copies in `ThumbStore` with a cross-fading peek, all described
+under "Blurred images" in `docs/FRONTEND.md`. The canvas's hover preview
+shows no image for a still.
 
 ### The button
 

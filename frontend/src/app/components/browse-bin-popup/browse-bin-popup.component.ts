@@ -1,5 +1,6 @@
 import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { BlurDirective } from '../../directives/blur.directive';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -181,7 +182,7 @@ const DOCKED_MAIN_MIN = 60;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-popup',
   standalone: true,
-  imports: [CommonModule, IconComponent, CopyDetailButtonComponent, BrowseBinMemberGridComponent],
+  imports: [CommonModule, IconComponent, CopyDetailButtonComponent, BrowseBinMemberGridComponent, BlurDirective],
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })

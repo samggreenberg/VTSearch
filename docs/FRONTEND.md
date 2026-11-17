@@ -1165,16 +1165,40 @@ draws it.
   retains the dataset while mounted, toggles `.vt-blurred`, and sets
   `--vt-blur-radius` from the host's rendered size (`utils/blur-radius.ts`:
   8% of the shorter side, 4 to 60px), measured by one `ResizeObserver` shared
-  by every blurred image, only while it is blurred.
+  by every blurred image, only while it is blurred. A host that draws no item
+  of a loaded dataset passes `vtBlur` null and is sharp, unless
+  `[vtBlurFallback]` says otherwise: a detector's stored label outside the
+  loaded dataset carries the server's answer for it (`blurred` in
+  [labels-detail](api/detectors.md#labels-detail), the `blur_rules` applied
+  to the label's own stored metadata).
+- **Every DOM image carries it.** There is no shared thumbnail component, so
+  each template's `<img>` of a dataset item has the directive, the item id
+  coming from wherever the template builds its URL (`VoteGridEntry` carries
+  `blurId` and `blurDatasetId` for the vote piles). `directives/blur-sites.spec.ts`
+  reads every template and fails on an `<img>` with a bound source, or a
+  bound `background-image`, that has no `vtBlur`, unless its `ALLOWED` list
+  names the element with a reason (a bundled asset, an uploaded example file,
+  the focused viewer). A new image site either blurs or says why it does not.
+  The Browse canvas is the one drawn without the DOM; it reads the service
+  itself.
 - **The hover peek is pure CSS** (`.vt-blurred` in `_components.scss`). After
   one second of hover the blur fades out over 1.5s, and on leave it snaps back.
   Both rules are `!important`, because a component's own `filter` or
   `transition` on the element outranks a bare class and would unblur the image
   or skip the delay. So the host's own transitions stop while it is blurred.
   Under reduced motion the fade goes and the delay stays (`styles.scss`).
-- **What a host owes the directive:** its container clips overflow, or the blur
-  bleeds past the box, and the host takes the pointer (no
-  `pointer-events: none`), or it can never be peeked at.
+- **The blur stays in the image's box.** `.vt-blurred` also sets
+  `clip-path: border-box`, which clips the filter's spill to the element's own
+  box, rounded corners included, so an image whose container does not clip
+  (a People row's face) does not smear onto its neighbours. The cost is that
+  anything the image itself paints outside its box (an outline, a shadow) is
+  clipped while it is blurred.
+- **What a host owes the directive:** the image takes the pointer (no
+  `pointer-events: none`), or it can never be peeked at. Where other elements
+  are drawn over it (the face boxes on a photo) or the image deliberately
+  ignores the pointer (the crop target, under its drag surface), put
+  `vt-blur-peek` on the ancestor that takes the pointer instead: hovering it
+  peeks every blurred image inside.
 - **The focused viewer blurs itself** (`vt-image-viewer`), without the
   directive, for three reasons:
   - **Its tone map and greyscale** (`imageFilter`) would be dropped by the

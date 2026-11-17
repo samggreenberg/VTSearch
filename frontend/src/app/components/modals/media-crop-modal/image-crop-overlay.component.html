@@ -2,13 +2,22 @@
   Drag the edges or corners to crop. The cropped sub-region is what will be embedded.
 </div>
 
+<!-- vt-blur-peek: the image takes no pointer (this wrap is the drag surface),
+     so resting on the wrap is what peeks at a blurred one. -->
 <div
-  class="image-wrap"
+  class="image-wrap vt-blur-peek"
   (pointerdown)="onPointerDown($event)"
   (pointermove)="onPointerMove($event)"
   (pointerup)="onPointerUp($event)"
   (pointercancel)="onPointerUp($event)">
-  <img #img [src]="imageUrl()" (load)="onImageLoaded()" alt="Crop target" />
+  <img
+    #img
+    [src]="imageUrl()"
+    [vtBlur]="mediaId()"
+    [vtBlurDataset]="datasetId()"
+    (load)="onImageLoaded()"
+    alt="Crop target"
+  />
   <div
     class="crop-mask top"
     [style.height.px]="cropY">

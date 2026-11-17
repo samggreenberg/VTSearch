@@ -107,6 +107,7 @@
               <img
                 class="bsp-thumb"
                 [src]="thumbnailUrl(entry.id)"
+                [vtBlur]="entry.id"
                 [alt]="entry.name"
                 loading="lazy"
                 (error)="onThumbnailError(thumbnailUrl(entry.id))" />

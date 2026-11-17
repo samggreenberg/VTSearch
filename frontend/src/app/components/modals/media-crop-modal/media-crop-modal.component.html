@@ -10,7 +10,7 @@
     <div class="preview">
       @switch (mediaType()) {
         @case ('image') {
-          <img [src]="fileUrl" alt="Example preview" />
+          <img [src]="fileUrl" [vtBlur]="mediaId()" [vtBlurDataset]="datasetId()" alt="Example preview" />
         }
         @case ('audio') {
           <audio [src]="fileUrl" controls></audio>
@@ -32,6 +32,8 @@
     @if (mediaType() === 'image') {
       <vt-image-crop-overlay
         [imageUrl]="fileUrl"
+        [mediaId]="mediaId()"
+        [datasetId]="datasetId()"
         (applied)="onImageCropApplied($event)"
         (cancelled)="onCropOverlayCancelled()">
       </vt-image-crop-overlay>

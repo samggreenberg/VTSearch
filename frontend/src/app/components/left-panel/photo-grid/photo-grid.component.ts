@@ -24,6 +24,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { SiblingLoadService } from '../../../services/sibling-load.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
+import { BlurDirective } from '../../../directives/blur.directive';
 
 /** Photo rows asked for per page; the server caps a page at 2000. */
 export const PHOTO_PAGE = 200;
@@ -78,7 +79,7 @@ interface Page {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-photo-grid',
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, BlurDirective],
   providers: [SiblingLoadService],
   templateUrl: './photo-grid.component.html',
   styleUrl: './photo-grid.component.scss',
@@ -261,10 +262,24 @@ export class PhotoGridComponent {
   // --- what a card shows ---
 
   photoUrl(row: CollapsedPhoto): string {
-    if (row.source_dataset_id != null && row.source_media_id != null) {
-      return this.activeContext.mediaUrlIn(row.source_dataset_id, `/api/medias/${row.source_media_id}/thumbnail`);
+    if (this.siblingPhoto(row)) {
+      return this.activeContext.mediaUrlIn(row.source_dataset_id!, `/api/medias/${row.source_media_id}/thumbnail`);
     }
     return this.faceUrl(row.faces[0]);
+  }
+
+  /** The item {@link photoUrl} draws, for its blur state: the photo, or the face that stands in for it. */
+  photoBlurId(row: CollapsedPhoto): number {
+    return this.siblingPhoto(row) ? row.source_media_id! : row.faces[0].media_id;
+  }
+
+  /** The dataset {@link photoBlurId} is in: the photo's, or (undefined) the active one for a face. */
+  photoBlurDataset(row: CollapsedPhoto): string | undefined {
+    return this.siblingPhoto(row) ? row.source_dataset_id! : undefined;
+  }
+
+  private siblingPhoto(row: CollapsedPhoto): boolean {
+    return row.source_dataset_id != null && row.source_media_id != null;
   }
 
   faceUrl(face: CollapsedFace): string {

@@ -1156,7 +1156,11 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // A blurred image (#5689). The `vtBlur` directive puts `.vt-blurred` on an
 // image the blur state says to hide and sets `--vt-blur-radius` from its
 // rendered size; the fallback covers the frame before its first measurement.
-// The image's container clips its overflow, or the blur bleeds past the box.
+// `clip-path: border-box` keeps the blur inside the image's own box, rounded
+// corners included (a filter is applied before the clip), so it never bleeds
+// onto a neighbour, whether or not the image's container clips. It also clips
+// anything the image paints outside its box (an outline, a shadow) while
+// blurred.
 //
 // The peek: resting the pointer on the image for a second fades the blur out
 // over 1.5s, and leaving puts it back at once. The transition's delay is the
@@ -1167,11 +1171,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // unblur the image, and its `transition` would make the peek instant. The
 // cost is that the element's own transitions stop while it is blurred.
 // `styles.scss` drops the fade, but keeps the delay, under reduced motion.
+//
+// `.vt-blur-peek` on an ancestor peeks its blurred images on the ancestor's
+// hover instead: for an image that other elements are drawn over (the face
+// boxes on a photo), where resting on one of those would otherwise put the
+// blur back.
 .vt-blurred {
   filter: blur(var(--vt-blur-radius, 12px)) !important;
   transition: none !important;
+  clip-path: border-box;
 
-  &:hover {
+  &:hover,
+  .vt-blur-peek:hover & {
     filter: blur(0) !important;
     transition: filter 1.5s ease-out 1s !important;
   }

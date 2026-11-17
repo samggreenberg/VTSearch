@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { MediaCropModalComponent, MediaCropResult } from './media-crop-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 /**
  * Drives the modal's confirm/crop view switching and the crop-region payloads it
@@ -134,5 +136,50 @@ describe('MediaCropModalComponent', () => {
       component.onCancel();
       expect(spy).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+/** Opened on a dataset image (Crop and Sort), the image shows its blur state (#5696). */
+describe('MediaCropModalComponent (blur)', () => {
+  const file = new File(['bytes'], 'clip.png', { type: 'image/png' });
+  let fixture: ComponentFixture<MediaCropModalComponent>;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [MediaCropModalComponent],
+      providers: [...provideZoneless(), provideBlurStateStub([blurKey('ds-1', 7)]).provider],
+    });
+    URL.createObjectURL = vi.fn(() => 'blob:mock');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => fixture.destroy());
+
+  async function render(mediaId: number | null): Promise<HTMLElement> {
+    fixture = TestBed.createComponent(MediaCropModalComponent);
+    fixture.componentRef.setInput('file', file);
+    fixture.componentRef.setInput('mediaType', 'image');
+    fixture.componentRef.setInput('mediaId', mediaId);
+    fixture.componentRef.setInput('datasetId', 'ds-1');
+    await settleZoneless(fixture);
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('blurs the preview and the crop target of a blurred dataset image', async () => {
+    const el = await render(7);
+    expect(el.querySelector('.preview img')?.classList.contains('vt-blurred')).toBe(true);
+
+    const okButCrop = Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'OK but Crop')!;
+    okButCrop.click();
+    await settleZoneless(fixture);
+    expect(el.querySelector('vt-image-crop-overlay img')?.classList.contains('vt-blurred')).toBe(true);
+    // The image takes no pointer there; its drag surface is what peeks.
+    expect(el.querySelector('.image-wrap')?.classList.contains('vt-blur-peek')).toBe(true);
+  });
+
+  it('leaves a sharp dataset image, and an uploaded file, sharp', async () => {
+    expect((await render(8)).querySelector('.preview img')?.classList.contains('vt-blurred')).toBe(false);
+    fixture.destroy();
+    expect((await render(null)).querySelector('.preview img')?.classList.contains('vt-blurred')).toBe(false);
   });
 });

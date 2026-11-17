@@ -14,6 +14,7 @@ import { ToastService } from '../../services/toast.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { blurKey, provideBlurStateStub } from '../../testing/blur-state-stub';
 
 // The reads here are rxResources, which keep a zoneless app unstable while a
 // request is out, so each step drains with `settleResource` (a macrotask, then
@@ -72,12 +73,15 @@ const SHARED_1_2: SharedPhotos = {
 describe('PeopleViewComponent (zoneless)', () => {
   let fixture: ComponentFixture<PeopleViewComponent>;
   let httpMock: HttpTestingController;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   beforeEach(() => {
+    blur = provideBlurStateStub();
     configureZoneless({
       imports: [PeopleViewComponent],
       providers: [
         ...provideHttpTesting(),
+        blur.provider,
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ datasetId: 'faces' })) } },
       ],
@@ -183,6 +187,37 @@ describe('PeopleViewComponent (zoneless)', () => {
     expect(request?.mediaId).toBe(10);
     expect(request?.fromName).toBe('People');
     expect(request?.boxes?.map((b) => b.role)).toEqual(['primary', 'secondary', 'other']);
+  });
+
+  describe('blur (#5696)', () => {
+    const blurred = (img: Element | null | undefined): boolean => !!img?.classList.contains('vt-blurred');
+
+    it("blurs each face by the face dataset's state and the shared photo by the photo dataset's", async () => {
+      // Face 10 (Person 1's) and photo 5 are blurred; the same ids in the other
+      // dataset must not count.
+      blur.blurred.set(new Set([blurKey('faces', 10), blurKey('photos', 5), blurKey('faces', 5), blurKey('photos', 20)]));
+      await openReady();
+      expect(all('.people-list img.people-row-thumb').map(blurred)).toEqual([true, false]);
+      expect(blurred(el('.people-face-img'))).toBe(true);
+      expect(all('.people-with-row img.people-row-thumb').map(blurred)).toEqual([false]);
+      expect(blurred(el('.people-photo-img'))).toBe(true);
+      // The outlines cover the photo, so the photo peeks as a whole.
+      expect(el('.people-photo')?.classList.contains('vt-blur-peek')).toBe(true);
+    });
+
+    it('blurs the face chips that stand in for a photo nobody can read', async () => {
+      blur.blurred.set(new Set([blurKey('faces', 20)]));
+      fixture = TestBed.createComponent(PeopleViewComponent);
+      await settleResource();
+      await answer('/api/people', READY);
+      await answer('/api/people/1', PERSON_1);
+      const orphan = SHARED_1_2.photos[0];
+      await answer('/api/people/1/with/2', {
+        ...SHARED_1_2,
+        photos: [{ ...orphan, source_dataset_id: null, source_media_id: null }],
+      });
+      expect(all('.people-photo-chip').map(blurred)).toEqual([false, true, false]);
+    });
   });
 
   it('picking another person reads them under the same partition', async () => {

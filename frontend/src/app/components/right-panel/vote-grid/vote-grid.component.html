@@ -55,7 +55,16 @@
             [style.mask-image]="'url(' + entry.thumbnailUrl + ')'"
           ></span>
         } @else {
-          <img class="vote-thumbnail" [src]="entry.thumbnailUrl" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.thumbnailUrl)" />
+          <img
+            class="vote-thumbnail"
+            [src]="entry.thumbnailUrl"
+            [alt]="entry.name"
+            [vtBlur]="entry.blurId"
+            [vtBlurDataset]="entry.blurDatasetId"
+            [vtBlurFallback]="entry.blurredFallback"
+            loading="lazy"
+            (error)="onThumbnailError(entry.thumbnailUrl)"
+          />
         }
       </span>
     } @else if (entry.fallbackIcon) {

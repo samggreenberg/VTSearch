@@ -48,10 +48,15 @@ export class SharedResizeObserver implements OnDestroy {
  * The item is read from the active dataset unless `vtBlurDataset` names
  * another, as a site showing a sibling dataset's item (a face's source photo)
  * must. While mounted, the directive keeps that dataset's blurred set loaded.
+ * A host that draws no item of a loaded dataset (`vtBlur` null) is sharp,
+ * unless `vtBlurFallback` says otherwise: a detector's stored label outside
+ * the loaded dataset carries the server's answer for it.
  *
- * The host's container must clip its overflow, or the blur bleeds past the
- * image's box. The host itself must take the pointer (no
- * `pointer-events: none`), or it can never be peeked at.
+ * The blur is clipped to the host's own box by the shared CSS, so its
+ * container need not clip. The host must take the pointer (no
+ * `pointer-events: none`), or it can never be peeked at; where something is
+ * drawn over it, `vt-blur-peek` on the ancestor that takes the pointer peeks
+ * it instead.
  */
 @Directive({
   selector: '[vtBlur]',
@@ -67,6 +72,12 @@ export class BlurDirective {
   readonly vtBlur = input.required<number | null | undefined>();
   /** The dataset the item belongs to; the active dataset when left out. */
   readonly vtBlurDataset = input<string | null | undefined>(undefined);
+  /**
+   * Whether the host shows blurred when `vtBlur` is null, decided elsewhere
+   * and fixed. Ignored while `vtBlur` names an item, whose state is the
+   * dataset's.
+   */
+  readonly vtBlurFallback = input<boolean | null | undefined>(false);
 
   private readonly blurState = inject(BlurStateService);
   private readonly activeDataset = inject(ActiveDatasetService);
@@ -78,7 +89,8 @@ export class BlurDirective {
   /** Whether the host is blurred now. */
   readonly blurred = computed(() => {
     const id = this.vtBlur();
-    return id != null && this.blurState.isBlurred(this.datasetId(), id);
+    if (id == null) return !!this.vtBlurFallback();
+    return this.blurState.isBlurred(this.datasetId(), id);
   });
 
   /** The radius for the host's last measured size, or `null` before it was measured. */

@@ -13,6 +13,9 @@ import { topOpenModal, type ModalComponent } from '../modal/modal.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../testing/blur-state-stub';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 
 /**
  * Drain several zoneless settle passes. The popup places itself across a chain
@@ -879,5 +882,68 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     const { component } = makeGridComponent();
     component.onEntryFocus(30);
     expect(component.previewId).toBe(30);
+  });
+});
+
+/** The large preview shows the viewed item's blur state (#5696). */
+describe('BrowseBinPopupComponent (blur)', () => {
+  let rafSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    if (!Element.prototype.scrollTo) {
+      (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
+    }
+    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      void Promise.resolve().then(() => cb(0));
+      return 0;
+    });
+  });
+
+  afterEach(() => rafSpy.mockRestore());
+
+  function makeFixture(blurred: string[]): ComponentFixture<BrowseBinPopupComponent> {
+    const { stub: settingsStub } = makeSettingsStateStub({
+      settingsSignal: signal({}) as unknown as SettingsStateService['settingsSignal'],
+      update: () => of({}) as ReturnType<SettingsStateService['update']>,
+    });
+    TestBed.resetTestingModule();
+    configureZoneless({
+      imports: [BrowseBinPopupComponent],
+      providers: [
+        {
+          provide: BrowseSelectionService,
+          useValue: { version: signal(0), has: () => false, selectedCountIn: () => 0 } as unknown as BrowseSelectionService,
+        },
+        {
+          provide: MediaMetadataCacheService,
+          useValue: { version$: of(0), version: signal(0), get: () => undefined, ensureLoaded: () => {} },
+        },
+        { provide: ActiveContextService, useValue: makeActiveContextStub() },
+        { provide: ActiveDatasetService, useValue: { activeId: signal('ds-1') } },
+        { provide: SettingsStateService, useValue: settingsStub },
+        { provide: MediaTypeCapabilityService, useValue: { usesThumbnails: () => true } },
+        provideBlurStateStub(blurred).provider,
+      ],
+    });
+    const fixture = TestBed.createComponent(BrowseBinPopupComponent);
+    fixture.componentRef.setInput('docked', true);
+    fixture.componentRef.setInput('availableWidth', 340);
+    fixture.componentRef.setInput('mediaType', 'image');
+    return fixture;
+  }
+
+  async function previewFor(id: number, blurred: string[]): Promise<HTMLImageElement> {
+    const fixture = makeFixture(blurred);
+    fixture.componentRef.setInput('memberIds', [id]);
+    fixture.componentRef.setInput('repId', id);
+    await settlePasses(fixture);
+    const img = (fixture.nativeElement as HTMLElement).querySelector<HTMLImageElement>('img.bin-popup-preview-img')!;
+    expect(img.getAttribute('src')).toBe(`/api/medias/${id}/image`);
+    return img;
+  }
+
+  it('blurs the previewed item when its dataset says it is blurred, and not otherwise', async () => {
+    expect((await previewFor(7, [blurKey('ds-1', 7)])).classList.contains('vt-blurred')).toBe(true);
+    expect((await previewFor(8, [blurKey('ds-1', 7)])).classList.contains('vt-blurred')).toBe(false);
   });
 });

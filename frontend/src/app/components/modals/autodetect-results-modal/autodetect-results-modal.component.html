@@ -251,7 +251,14 @@
                         [style.-webkit-mask-image]="'url(' + thumbnailUrl(row.hit.id) + ')'"
                         [style.mask-image]="'url(' + thumbnailUrl(row.hit.id) + ')'"></span>
                     } @else {
-                      <img [src]="thumbnailUrl(row.hit.id)" alt="" decoding="async" (error)="onThumbnailError(row.hit.id)" />
+                      <img
+                        [src]="thumbnailUrl(row.hit.id)"
+                        [vtBlur]="row.hit.id"
+                        [vtBlurDataset]="data().dataset_id"
+                        alt=""
+                        decoding="async"
+                        (error)="onThumbnailError(row.hit.id)"
+                      />
                     }
                   }
                 </span>

@@ -67,6 +67,7 @@ import { DomainShiftWarning, domainShiftWarning } from '../../../utils/training-
 import { BalanceComponent } from '../../left-panel/balance/balance.component';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { BlurDirective } from '../../../directives/blur.directive';
 
 /** Which side of each detector's threshold the list shows. */
 export type ResultsSides = 'good' | 'bad' | 'both';
@@ -154,6 +155,7 @@ const COLUMN_ORDER_KEY = 'vtsearch.findResults.columnOrder';
     IconComponent,
     PluginCheckboxComponent,
     ProgressBarComponent,
+    BlurDirective,
   ],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',

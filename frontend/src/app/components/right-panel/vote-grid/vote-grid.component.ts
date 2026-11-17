@@ -16,6 +16,8 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 
+import { BlurDirective } from '../../../directives/blur.directive';
+
 /**
  * One display-ready cell in a Good/Bad vote pile. Every field is precomputed
  * by the parent when its inputs change (inside the existing sort pass), so
@@ -36,6 +38,16 @@ export interface VoteGridEntry {
    *  alpha-mask PNG (issue #2369) that must be tinted via a CSS mask rather
    *  than shown as a plain <img>, so it recolours with the live theme. */
   isAudio?: boolean;
+  /**
+   * The dataset item the tile draws, whose blur state it shows (#5689), and
+   * the dataset that holds it: the one {@link thumbnailUrl} was built for, so
+   * the two cannot disagree mid-switch. `blurId` is null for a stored label
+   * outside the loaded dataset, which shows {@link blurredFallback} instead.
+   */
+  blurId: number | null;
+  blurDatasetId: string;
+  /** Whether a tile with no {@link blurId} shows blurred (the server's answer for a stored label). */
+  blurredFallback?: boolean;
 }
 
 /**
@@ -69,7 +81,7 @@ const MIN_ROW_HEIGHT = 24;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-vote-grid',
   standalone: true,
-  imports: [NgTemplateOutlet, ScrollingModule],
+  imports: [NgTemplateOutlet, ScrollingModule, BlurDirective],
   templateUrl: './vote-grid.component.html',
   styleUrl: './vote-grid.component.scss',
 })

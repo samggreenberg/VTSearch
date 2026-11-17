@@ -1,4 +1,5 @@
 import { WritableSignal, signal } from '@angular/core';
+import { of } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
 import { SettingsStateService } from '../services/settings-state.service';
 import type { AppSettings } from '../generated/api-client/models/app-settings';
@@ -19,13 +20,15 @@ export const noop = (): void => {};
 
 /**
  * `ActiveContextService` stub whose `mediaUrl` is the identity function — the
- * shape the browse-* specs share. Pass overrides to add the fields a given spec
- * drives (`pair$`, `datasetId`, `setActive`, …).
+ * shape the browse-* specs share. No dataset is active (`datasetId$` and
+ * `intentDatasetId$` are `''`), which is what `ActiveDatasetService` reads, so
+ * a component whose images carry `vtBlur` renders under it. Pass overrides to
+ * add the fields a given spec drives (`pair$`, `datasetId`, `setActive`, …).
  */
 export function makeActiveContextStub(
   overrides: Partial<ActiveContextService> = {},
 ): Partial<ActiveContextService> {
-  return { mediaUrl: (p: string) => p, ...overrides };
+  return { mediaUrl: (p: string) => p, datasetId$: of(''), intentDatasetId$: of(''), ...overrides };
 }
 
 /**

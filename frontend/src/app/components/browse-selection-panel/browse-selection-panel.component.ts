@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { BlurDirective } from '../../directives/blur.directive';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
@@ -43,7 +44,7 @@ interface SelectionEntry extends SortableListEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent],
+  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent, BlurDirective],
   templateUrl: './browse-selection-panel.component.html',
   styleUrl: './browse-selection-panel.component.scss',
 })

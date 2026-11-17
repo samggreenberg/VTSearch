@@ -179,6 +179,57 @@ class TestLabelsDetail:
         body = client.get("/api/detectors/region-model/labels-detail").get_json()
         assert body["good"][0]["region_box"] == [0.1, 0.2, 0.7, 0.8]
 
+    def test_out_of_dataset_label_is_blurred_by_the_rules_on_its_own_metadata(self, client):
+        """A stored label outside the loaded dataset has no override and no
+        dataset metadata, so the route applies ``blur_rules`` to the label's own
+        stored metadata (#5696); a label with none stays sharp."""
+        import vtsearch.settings as settings_mod
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _detector_path, _write_detector
+
+        reset_for_tests()
+        origin = {"importer": "ds_a", "params": {}}
+        _write_detector(
+            _detector_path("blur-model"),
+            {
+                "name": "blur-model",
+                "text_query": "",
+                "media_type": "image",
+                "examples": [],
+                "labelset": {
+                    "labels": [
+                        {
+                            "md5": "e5" * 16,
+                            "label": "good",
+                            "origin": origin,
+                            "origin_name": "hot.png",
+                            "metadata": {"Porn:": "0.95"},
+                        },
+                        {
+                            "md5": "f6" * 16,
+                            "label": "good",
+                            "origin": origin,
+                            "origin_name": "mild.png",
+                            "metadata": {"Porn": 0.2},
+                        },
+                        {"md5": "a7" * 16, "label": "bad", "origin": origin, "origin_name": "bare.png"},
+                    ]
+                },
+            },
+        )
+        register_detector(name="blur-model", media_type="image")
+        settings_mod.set_blur_rules([{"field": "Porn", "op": ">=", "value": 0.8}])
+
+        body = client.get("/api/detectors/blur-model/labels-detail").get_json()
+        by_name = {e["origin_name"]: e for e in body["good"] + body["bad"]}
+        assert by_name["hot.png"]["blurred"] is True
+        assert by_name["mild.png"]["blurred"] is False
+        assert by_name["bare.png"]["blurred"] is False
+
+        settings_mod.set_blur_rules([])
+        body = client.get("/api/detectors/blur-model/labels-detail").get_json()
+        assert not any(e["blurred"] for e in body["good"] + body["bad"])
+
 
 # ---------------------------------------------------------------------------
 # resolve_current_dataset_cid: threaded lookups short-circuit the rebuild
