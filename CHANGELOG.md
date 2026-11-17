@@ -20,6 +20,8 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-11-17
+
 ### Added
 
 - **Blurred images** (issue #5689). A server can blur the images its ingest service marks as sensitive (nudity,
