@@ -6,11 +6,13 @@ import { Media } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 describe('LabelListComponent', () => {
   let component: LabelListComponent;
   let fixture: ComponentFixture<LabelListComponent>;
   let httpMock: HttpTestingController;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   const sampleMedias: Media[] = [
     { id: 1, media_type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
@@ -28,9 +30,10 @@ describe('LabelListComponent', () => {
   }
 
   beforeEach(async () => {
+    blur = provideBlurStateStub();
     await TestBed.configureTestingModule({
       imports: [LabelListComponent],
-      providers: [...provideZoneless(), ...provideHttpTesting(), ActiveContextService],
+      providers: [...provideZoneless(), ...provideHttpTesting(), ActiveContextService, blur.provider],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelListComponent);
@@ -177,16 +180,29 @@ describe('LabelListComponent', () => {
     });
   });
 
+  it("blurs a voted image its dataset says is blurred, and not a sharp one (#5696)", async () => {
+    TestBed.inject(ActiveContextService).setActivePair('ds-1', 'det-1');
+    blur.blurred.set(new Set([blurKey('ds-1', 2)]));
+    await setInputs({ ids: [2, 3], medias: sampleMedias });
+    expect(component.sortedEntries().map((e) => [e.blurId, e.blurDatasetId])).toEqual([
+      [2, 'ds-1'],
+      [3, 'ds-1'],
+    ]);
+    const imgs = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('img.vote-thumbnail'));
+    const blurred = Object.fromEntries(imgs.map((img) => [img.getAttribute('alt'), img.classList.contains('vt-blurred')]));
+    expect(blurred).toEqual({ 'photo.jpg': true, 'clip.mp4': false });
+  });
+
   it('should emit mediaSelected with a numeric id on grid selection', () => {
     vi.spyOn(component.mediaSelected, 'emit');
-    component.onEntrySelected({ key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false });
+    component.onEntrySelected({ key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false, blurId: 42, blurDatasetId: '' });
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
   });
 
   it('should forward grid votes with a numeric id', () => {
     vi.spyOn(component.mediaVote, 'emit');
     component.onEntryVote({
-      entry: { key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false },
+      entry: { key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false, blurId: 42, blurDatasetId: '' },
       vote: 'good',
     });
     expect(component.mediaVote.emit).toHaveBeenCalledWith({ id: 42, vote: 'good' });

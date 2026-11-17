@@ -124,7 +124,7 @@
                 (click)="choose(row.kind === 'person' ? row.person.id : 'unplaced')"
               >
                 @if (row.kind === 'person') {
-                  <img class="people-row-thumb" [src]="faceUrl(row.person.representative)" alt="" loading="lazy" />
+                  <img class="people-row-thumb" [src]="faceUrl(row.person.representative)" [vtBlur]="row.person.representative" alt="" loading="lazy" />
                   <span class="people-row-text">
                     <span class="people-row-name">{{ personName(row.person.id) }}</span>
                     <span class="people-row-counts">{{ countsText(row.person) }}</span>
@@ -169,7 +169,7 @@
             } @else {
               @if (shownFace(); as face) {
                 <div class="people-face">
-                  <img class="people-face-img" [src]="largeFaceUrl(face)" [alt]="faceMetadata()[0]?.value ?? ''" />
+                  <img class="people-face-img" [src]="largeFaceUrl(face)" [vtBlur]="face" [alt]="faceMetadata()[0]?.value ?? ''" />
                   <div class="people-face-meta">
                     @for (row of faceMetadata(); track row.label) {
                       <div class="people-face-meta-row">
@@ -238,7 +238,7 @@
                       (click)="chooseCoPerson(co)"
                       [title]="'Show the photos ' + personName(person.id) + ' and ' + personName(co.id) + ' share'"
                     >
-                      <img class="people-row-thumb" [src]="faceUrl(co.representative)" alt="" loading="lazy" />
+                      <img class="people-row-thumb" [src]="faceUrl(co.representative)" [vtBlur]="co.representative" alt="" loading="lazy" />
                       <span class="people-row-text">
                         <span class="people-row-name">{{ personName(co.id) }}</span>
                         <span class="people-row-counts">{{ sharedText(co) }}</span>
@@ -261,13 +261,22 @@
                     </p>
                     @for (photo of read.photos; track photo.photo) {
                       @if (photoUrl(photo); as url) {
+                        <!-- vt-blur-peek: the face outlines cover the photo, so
+                             resting on one still peeks at the photo under it. -->
                         <button
                           type="button"
-                          class="people-photo"
+                          class="people-photo vt-blur-peek"
                           [title]="photoTitle(photo)"
                           (click)="openPhoto(photo)"
                         >
-                          <img class="people-photo-img" [src]="url" alt="" loading="lazy" />
+                          <img
+                            class="people-photo-img"
+                            [src]="url"
+                            [vtBlur]="photo.source_media_id"
+                            [vtBlurDataset]="photo.source_dataset_id"
+                            alt=""
+                            loading="lazy"
+                          />
                           @for (face of facesByLayer(photo); track face.media_id) {
                             @if (boxStyle(face); as style) {
                               <span
@@ -284,7 +293,14 @@
                       } @else {
                         <div class="people-photo people-photo--orphan" title="This photo is not in a dataset you can read">
                           @for (face of photo.faces; track face.media_id) {
-                            <img class="people-photo-chip" [src]="faceUrl(face.media_id)" [alt]="faceTitle(face)" [title]="faceTitle(face)" loading="lazy" />
+                            <img
+                              class="people-photo-chip"
+                              [src]="faceUrl(face.media_id)"
+                              [vtBlur]="face.media_id"
+                              [alt]="faceTitle(face)"
+                              [title]="faceTitle(face)"
+                              loading="lazy"
+                            />
                           }
                           <span class="people-photo-orphan-note">photo not found</span>
                         </div>

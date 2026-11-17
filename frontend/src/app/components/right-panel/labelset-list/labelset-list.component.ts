@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output } f
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
+import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import { VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
@@ -21,6 +22,7 @@ interface SortedElement extends DetectorLabelView, VoteGridEntry {
 })
 export class LabelsetListComponent {
   private detectorsCrudApi = inject(DetectorsCrudApiService);
+  private activeDataset = inject(ActiveDatasetService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   readonly label = input<'good' | 'bad'>('good');
@@ -36,10 +38,13 @@ export class LabelsetListComponent {
 }>();
 
   // Recomputes when any of the inputs it reads change (elements, label,
-  // modelName, sortMode); signal inputs don't fire ngOnChanges.
+  // modelName, sortMode) or the active dataset does; signal inputs don't fire
+  // ngOnChanges.
   readonly sortedEntries = computed<SortedElement[]>(() => this.buildSorted());
 
   private buildSorted(): SortedElement[] {
+    // The dataset `cid` resolves into: the active one, which the server read.
+    const datasetId = this.activeDataset.activeId();
     const entries: SortedElement[] = this.elements().map((e) => ({
       ...e,
       key: e.id,
@@ -50,6 +55,12 @@ export class LabelsetListComponent {
       // Audio waveforms are theme-agnostic alpha masks (issue #2369); flag them
       // so vote-grid tints them via a CSS mask instead of a plain <img>.
       isAudio: e.media_type === 'audio',
+      // In the loaded dataset, `cid` is its media id there and its blur state
+      // decides; outside it, the server applied the blur rules to the label's
+      // own stored metadata.
+      blurId: e.cid ?? null,
+      blurDatasetId: datasetId,
+      blurredFallback: e.blurred ?? false,
     }));
     return sortListEntries(entries, this.sortMode());
   }

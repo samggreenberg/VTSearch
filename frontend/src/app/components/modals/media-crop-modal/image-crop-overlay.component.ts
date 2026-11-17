@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { BlurDirective } from '../../../directives/blur.directive';
 
 export interface ImageCropResult {
   /** Crop box in original-image pixel coordinates: [x1, y1, x2, y2]. */
@@ -22,12 +23,15 @@ const HANDLE_HIT_RADIUS = 12;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-image-crop-overlay',
   standalone: true,
-  imports: [],
+  imports: [BlurDirective],
   templateUrl: './image-crop-overlay.component.html',
   styleUrl: './image-crop-overlay.component.scss',
 })
 export class ImageCropOverlayComponent implements AfterViewInit {
   readonly imageUrl = input('');
+  /** The dataset item the image is, and its dataset, for its blur state; see `MediaCropModalComponent`. */
+  readonly mediaId = input<number | null>(null);
+  readonly datasetId = input<string | undefined>(undefined);
   readonly applied = output<ImageCropResult>();
   readonly cancelled = output<void>();
 

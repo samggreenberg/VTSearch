@@ -18,13 +18,16 @@ import type { AppSettings } from '../generated/api-client/models/app-settings';
   imports: [BlurDirective],
   template: `
     @if (shown()) {
-      <div class="frame"><img class="pic" alt="" [vtBlur]="id()" [vtBlurDataset]="datasetId()" /></div>
+      <div class="frame">
+        <img class="pic" alt="" [vtBlur]="id()" [vtBlurDataset]="datasetId()" [vtBlurFallback]="fallback()" />
+      </div>
     }
   `,
 })
 class HostComponent {
   readonly id = signal<number | null>(1);
   readonly datasetId = signal<string | undefined>(undefined);
+  readonly fallback = signal(false);
   readonly shown = signal(true);
 }
 
@@ -130,6 +133,19 @@ describe('BlurDirective', () => {
     await settleZoneless(fixture);
     expect(isBlurred()).toBe(false);
     expectRead('active-ds').flush({ ids: [] });
+  });
+
+  it('blurs an image that names no item when its fallback says so, and only then', async () => {
+    expectRead('active-ds').flush({ ids: [] });
+    host.id.set(null);
+    host.fallback.set(true);
+    await settleZoneless(fixture);
+    expect(isBlurred()).toBe(true);
+
+    // An item's own state wins over the fallback.
+    host.id.set(1);
+    await settleZoneless(fixture);
+    expect(isBlurred()).toBe(false);
   });
 
   it('reads a named dataset instead of the active one', async () => {
