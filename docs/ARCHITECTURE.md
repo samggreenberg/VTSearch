@@ -795,6 +795,15 @@ lands, as the detector writer's do. The logic is
 `vtscore/datasets/blur_state.py`; the routes are `GET /api/medias/blurred` and
 `PUT /api/medias/<id>/blur` ([medias.md](api/medias.md#blurred-items)).
 
+The blur is a **display shield, not access control**. It is drawn in the
+browser ([FRONTEND.md](FRONTEND.md#blurred-images)), and the server keeps
+serving every item's real bytes: the hover peek needs them, and a blurred
+variant served under the same URL would collide with the day-long image
+cache. Anyone who opens an image's URL directly sees it sharp, which is the
+intended trade; keeping an image from someone is the job of ingest filtering
+or dataset permissions. The operator's side is
+[Blurring sensitive images](DEPLOYMENT.md#blurring-sensitive-images).
+
 A sidecar is valid for exactly the file it sits beside, so the flows that make
 a new dataset from an old one carry the overrides across (#5693): a pickle
 export and its re-import, promote, combine. Each renumbers the media ids, often

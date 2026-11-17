@@ -37,11 +37,12 @@ when something goes wrong, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 2. [Running under gunicorn](#running-under-gunicorn)
 3. [Docker production notes](#docker-production-notes)
 4. [Data directory layout](#data-directory-layout)
-5. [Network dependencies](#network-dependencies)
-6. [Offline deployment](#offline-deployment)
-7. [Environment variables](#environment-variables)
-8. [Progress-bar estimates](#progress-bar-estimates)
-9. [Dependency structure](#dependency-structure)
+5. [Blurring sensitive images](#blurring-sensitive-images)
+6. [Network dependencies](#network-dependencies)
+7. [Offline deployment](#offline-deployment)
+8. [Environment variables](#environment-variables)
+9. [Progress-bar estimates](#progress-bar-estimates)
+10. [Dependency structure](#dependency-structure)
 
 ---
 
@@ -440,6 +441,111 @@ To stop recording, set `"enable_metrics": false` in `data/settings.json` and res
 [SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)). To send events somewhere other than this file, a deployment
 that builds its own frontend can replace the metrics provider; see
 [FRONTEND.md § Usage metrics](FRONTEND.md#usage-metrics).
+
+---
+
+## Blurring sensitive images
+
+When your images come from an ingest service that rates them (an NSFW
+classifier's score, a gore flag, a content rating), VTSearch can draw the ones
+it marks as sensitive blurred, so users do not come across them unprepared.
+You name the fields that mean "blur this" in `blur_rules`, in the server
+settings file. Users can then overrule any single image, in either direction,
+with its **Blur** / **Unblur** button. What they see is
+[Blurred images](user/USER_GUIDE.md#blurred-images) in the user guide; every
+rule operator and how values are read is under `blur_rules` in
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson).
+
+### Find the field names
+
+The service's fields reach VTSearch through the importer that brings its
+images in, which puts them in each item's `custom_metadata`. To see what they
+are called, import a few images, switch on **Show metadata panel** in the
+Settings modal's **Panels** tab, and open one: the panel lists them by name.
+A rule names a field case-insensitively, ignoring surrounding whitespace and a
+trailing colon, so `"nsfw_score"` also matches a field the service writes as
+`"NSFW_Score:"`.
+
+A face cut from a photo, a frame taken from a video and a page rendered from a
+document carry the fields of the item they came from, so rules written for the
+photos cover their faces too.
+
+### Write the rules
+
+Say the service adds an `nsfw_score` between 0 and 1 to every image, and a
+`gore` field that says whether it found any. These rules blur an image that
+scores 0.8 or more, or that has gore:
+
+```json
+{
+  "blur_rules": [
+    {"field": "nsfw_score", "op": ">=", "value": 0.8},
+    {"field": "gore", "op": "truthy"}
+  ]
+}
+```
+
+- **A score with a threshold** (`>=`, `>`, `<=` or `<` and a number) compares
+  the field as a number, and a score that arrives as the string `"0.93"` counts
+  as 0.93. An image with no `nsfw_score`, or one that is not a number (`"n/a"`),
+  is not caught by this rule.
+- **A flag** (`truthy`, with no `value`) catches every image whose `gore` is
+  set to anything but a "no": `true`, `1`, `"yes"` and `"found"` all count,
+  while `false`, `0`, `"no"`, `"false"`, `"off"`, the empty string and `null`
+  do not, and neither does an image with no `gore` field.
+- **An image is blurred when any rule matches.** There is no "and": rules only
+  add images. To blur on a category instead, `in` takes a list
+  (`{"field": "rating", "op": "in", "value": ["R", "X"]}`).
+
+Add the key to `data/settings.json`, keeping the keys already there, and
+restart: the rules are read at startup. The log then lists the rules it kept
+on a `Blur rules: …` line, and prints an `Ignoring blur_rules entry … : <why>`
+line for each one it dropped (an unknown `op`, a missing or wrong-typed
+`value`, a blank `field`); the good rules beside a bad one are kept. The
+Settings modal's **Server** tab lists the kept rules under **Blur rules**,
+read-only. Users cannot change the rules, and neither can
+`PUT /api/settings`. To see which items of a dataset show blurred, ask
+`GET /api/medias/blurred` with the dataset's id in `X-Dataset-Id`
+([medias.md](api/medias.md#blurred-items)).
+
+### When the rules change
+
+The rules are never written onto the images: they are applied to each image's
+metadata whenever the app asks. So when you restart with new rules, every
+image nobody has clicked on is decided again, at once, in every dataset. Raise
+the threshold to 0.9, and the images that scored between 0.8 and 0.9 come out
+sharp; add a rule, and the images it matches blur.
+
+An image a user has pressed **Blur** or **Unblur** on keeps the state they
+left it in, whatever the rules say then or later. The press is an
+**override**, and only overrides are stored:
+
+- **Per dataset, shared by everyone** who can read it. A dataset's overrides
+  are kept beside its pickle in `data/saved_datasets/`, `ds_<id>.blur.json`
+  next to `ds_<id>.pkl` (`dataset_registry.json` names each dataset's
+  pickle), as `{"<media id>": true | false}`. Back it up with the pickle: it
+  is the only record of what your users decided. It is deleted with the
+  dataset.
+- **Carried to the dataset's copies**: one exported and imported again, a
+  detector's matches kept with Tune's **To Dataset**, and datasets combined.
+- **Not undone from the app.** No button hands an image back to the rules. To
+  hand every image of a dataset back, stop the server, delete its
+  `.blur.json`, and start it again.
+
+Each press is also counted in the [usage metrics](#usage-metrics), as a
+`click` whose `target` is `imageBlur` or `videoBlur` (the direction is not
+recorded): many of them on one dataset suggest its rules catch the wrong
+images.
+
+### A display shield, not access control
+
+The blur is drawn by the browser. The server still serves every image's real
+bytes to anyone who may read the dataset: the peek needs them, and a blurred
+copy under the same address would fight the browser's image cache. So anyone
+who opens an image's address directly, or fetches it through the API, sees it
+sharp, and exports carry no blur. Use `blur_rules` to spare your users a
+surprise, not to keep an image from someone who must not see it. For that,
+leave the image out at ingest, or keep that person off the dataset.
 
 ---
 
