@@ -18,6 +18,9 @@
  * - **A tinted-mask cache.** Audio waveform thumbnails are theme-agnostic alpha
  *   masks (issue #2369); each is composited to the live accent colour once per
  *   (clip, theme) rather than once per frame.
+ * - **A blurred-copy cache.** A thumbnail whose item shows blurred (#5689) is
+ *   drawn from a blurred copy, built once on an offscreen canvas, never by a
+ *   canvas filter on every frame. Like a tint, it is evicted with its source.
  * - **Retryable failure records.** A load error is remembered with a backoff so
  *   a transient blip doesn't blank that bin for the rest of the session.
  * - **Batched fetching** (#5637). Capped-tier thumbnails asked for in one task go
@@ -78,6 +81,30 @@ const EVICT_RETAIN = 0.75;
  * flat-density fallback rather than retry forever.
  */
 export const THUMB_RETRY_BACKOFF_MS = [2_000, 8_000, 32_000];
+
+/**
+ * Longest side (px) of a blurred copy. A blur leaves no detail that a larger
+ * copy would keep, so the copy is stored small whatever its source's size: a
+ * full-res original of several thousand pixels costs no more than a capped
+ * thumbnail, and the copy is scaled up smoothly when a cell is drawn larger.
+ */
+export const BLURRED_COPY_MAX_DIM = 128;
+
+/**
+ * Longest side (px) of a blurred copy where the canvas has no `filter` (Safari
+ * before 18). There the copy is shrunk this far and the smoothing that scales
+ * it up to the cell does the blurring.
+ */
+export const UNFILTERED_COPY_MAX_DIM = 12;
+
+/**
+ * Most blurred copies one paint builds. Before a dataset's blurred set arrives,
+ * every image of it counts as blurred, so one frame can ask for a copy of
+ * every thumbnail on screen; spreading the builds over frames keeps that
+ * frame, and a pan into new ground, from stalling. A cell whose copy waits for
+ * a later frame is drawn as though its thumbnail had not landed.
+ */
+export const BLUR_BUILDS_PER_FRAME = 32;
 
 /** What the store needs from its host to fetch, repaint and tint. */
 export interface ThumbStoreDeps {
@@ -165,6 +192,15 @@ interface FailureRecord {
   retryAt: number;
 }
 
+/** A blurred copy of a thumbnail, and what it was built from. */
+interface BlurredCopy {
+  /** The image the copy blurs; a copy of any other is stale. */
+  src: HTMLImageElement;
+  /** The blur, as a share of the shorter side, the copy was built with. */
+  fraction: number;
+  canvas: HTMLCanvasElement;
+}
+
 export class ThumbStore {
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
   private readonly images = new Map<number, HTMLImageElement>();
@@ -174,6 +210,11 @@ export class ThumbStore {
   /** Waveform masks composited to the live accent, keyed like {@link images}
    *  and evicted alongside them so a tint can never outlive its source. */
   private readonly tintedImages = new Map<number, HTMLCanvasElement>();
+  /** Blurred copies of the thumbnails whose items show blurred, keyed like
+   *  {@link images} and evicted alongside them. */
+  private readonly blurredImages = new Map<number, BlurredCopy>();
+  /** Blurred copies the current paint may still build ({@link beginPaint}). */
+  private blurBudget = BLUR_BUILDS_PER_FRAME;
   /** Pending off-view warm-ups whose landing repaints nothing, because no cell
    *  on screen is waiting on them. A visible request for one of them
    *  ({@link get}) takes it out of this set, so it repaints when it lands
@@ -388,7 +429,7 @@ export class ThumbStore {
   private lost(id: number, img: HTMLImageElement, failure: FailureRecord | undefined): void {
     // A stale handle (the cache was cleared, or the id evicted and fetched
     // again since) must not drop the entry that replaced it.
-    if (this.images.get(id) === img) this.images.delete(id);
+    if (this.images.get(id) === img) this.forget(id);
     this.recordFailure(id, failure);
     // Repaint so the frame stops waiting on this cell (it now falls back to
     // flat density shading) and the loading count moves on. Warm-ups nobody
@@ -472,11 +513,19 @@ export class ThumbStore {
     let i = 0;
     for (const key of this.images.keys()) {
       if (i++ >= toRemove) break;
-      this.images.delete(key);
-      // Drop the matching tinted mask (issue #2369) so it can't outlive its raw
-      // source and leak; it re-tints on demand if the clip is revisited.
-      this.tintedImages.delete(key);
+      this.forget(key);
     }
+  }
+
+  /**
+   * Drop one id's thumbnail with everything derived from it: its tinted mask
+   * (issue #2369) and its blurred copy, so neither can outlive its source and
+   * leak. Both are rebuilt on demand if the id is painted again.
+   */
+  private forget(id: number): void {
+    this.images.delete(id);
+    this.tintedImages.delete(id);
+    this.blurredImages.delete(id);
   }
 
   /**
@@ -516,11 +565,58 @@ export class ThumbStore {
     this.tintedImages.clear();
   }
 
-  /** Drop everything: images, tints and failure history. Used on a projection
-   *  switch, a tier crossing and teardown. */
+  /** Start a paint: it may build up to {@link BLUR_BUILDS_PER_FRAME} blurred
+   *  copies ({@link blurred}). */
+  beginPaint(): void {
+    this.blurBudget = BLUR_BUILDS_PER_FRAME;
+  }
+
+  /**
+   * A blurred copy of thumbnail *src*, the one for *id*, built once and cached
+   * (#5689). *fraction* is the blur's radius as a share of the image's shorter
+   * side, so the copy blurs a cell to the same degree whatever size it is drawn
+   * at; a copy built from another image or with another share is rebuilt.
+   *
+   * The copy is at most {@link BLURRED_COPY_MAX_DIM} on its longest side, at
+   * the source's aspect ratio. `null` when this paint has built its share of
+   * copies already ({@link beginPaint}): the caller draws the cell as though
+   * its thumbnail had not landed, and paints again.
+   */
+  blurred(id: number, src: HTMLImageElement, fraction: number): HTMLCanvasElement | null {
+    const cached = this.blurredImages.get(id);
+    if (cached && cached.src === src && cached.fraction === fraction) return cached.canvas;
+    if (this.blurBudget <= 0) return null;
+    this.blurBudget--;
+
+    const iw = src.naturalWidth || 1;
+    const ih = src.naturalHeight || 1;
+    const off = document.createElement('canvas');
+    const octx = off.getContext('2d');
+    // Without canvas filters (Safari before 18), shrink the copy until
+    // smoothing it back up to the cell is itself the blur.
+    const filtered = typeof octx?.filter === 'string';
+    const scale = Math.min(1, (filtered ? BLURRED_COPY_MAX_DIM : UNFILTERED_COPY_MAX_DIM) / Math.max(iw, ih));
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+    // Sizing the canvas resets its context's state, so configure it after.
+    off.width = w;
+    off.height = h;
+    if (octx) {
+      octx.imageSmoothingEnabled = true;
+      octx.imageSmoothingQuality = 'high';
+      if (filtered) octx.filter = `blur(${fraction * Math.min(w, h)}px)`;
+      octx.drawImage(src, 0, 0, w, h);
+    }
+    this.blurredImages.set(id, { src, fraction, canvas: off });
+    return off;
+  }
+
+  /** Drop everything: images, tints, blurred copies and failure history. Used
+   *  on a projection switch, a tier crossing and teardown. */
   clear(): void {
     this.images.clear();
     this.tintedImages.clear();
+    this.blurredImages.clear();
     this.failures.clear();
   }
 }
