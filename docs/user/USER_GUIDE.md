@@ -1941,8 +1941,9 @@ blurred the next time it appears, for you and for everyone else.
 
 The centre viewer's toolbar ends with a **Blur** button, which reads
 **Unblur** while the image is blurred. A video has no toolbar, so its button
-sits under the player. **`b`** does the same as the button, and the **Show in
-photo** view of a face has it too.
+sits under the player. **`b`** does the same as the button. The **Show in
+photo** view of a face has both, and they blur the photo, in the photo's own
+dataset.
 
 One press changes the image **for good, everywhere it appears, and for
 everyone who uses the dataset**. Its thumbnail in the list, its place in the
@@ -1959,17 +1960,16 @@ blurred, every image someone has blurred or unblurred stays as they left it.
 - **Faces, frames and pages start from where they came from.** A face cut from
   a photo, a frame taken from a video and a page from a document start
   blurred when the item they came from would, but each has its own button:
-  unblurring a photo leaves its faces blurred, and the other way round. In
-  **Show in photo**, the button blurs the photo in the photo's own dataset.
+  unblurring a photo leaves its faces blurred, and the other way round.
 
 ### What stays sharp
 
 - **Audio and text**, which have no picture to hide.
 - **A document open in the centre viewer.** Its thumbnail is blurred with
   everything else, but the document itself is not.
-- **Your example**, when a face detector's reference shows the example you
-  made it from (**Your example** under the face): it is your own file, not an
-  item of the dataset, so it has no blur and no button.
+- **The example you made a face detector from**, while the reference beside
+  the face you vote on shows it (its caption reads **Your example**): it is
+  your own file, not an item of the dataset, so it has no blur and no button.
 
 When you open a dataset on a server that blurs, every image of it is drawn
 blurred for a moment, until VTSearch has heard which ones should be. If it
