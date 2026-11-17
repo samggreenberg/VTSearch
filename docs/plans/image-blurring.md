@@ -3,8 +3,8 @@
 Planned in #5689. The work is split into the issues under "Work items"; this
 file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
-overrides across dataset copies (#5693), and the frontend state service and
-`vtBlur` directive (#5694).
+overrides across dataset copies (#5693), the frontend state service and
+`vtBlur` directive (#5694), and the Browse canvas's blur and peek (#5697).
 
 ## Goal
 
@@ -99,15 +99,10 @@ What the remaining sites need from them:
 - **The focused viewer** adds a blur term to its existing `imageFilter` and
   gets the same hover rule. It cannot simply carry `.vt-blurred`: that class's
   `!important` filter would drop the viewer's tone map and greyscale.
-- **The Browse canvas** is a 2D canvas, so CSS cannot reach a cell. `ThumbStore`
-  caches a pre-blurred bitmap per blurred thumbnail (the way it already caches
-  tinted audio masks); `drawHex` draws that instead. Peek reuses the existing
-  `hoveredCell`: after one second on a blurred cell, cross-fade from the
-  blurred bitmap to the sharp one over the same duration, and drop back at once
-  when the hover ends. A blur-state change schedules a redraw. With no
-  directive to do it, the canvas retains its dataset itself
-  (`BlurStateService.retain`), reads `isBlurred` per cell, and sizes the blur
-  with `blurRadiusFor`.
+- **The Browse canvas** is built: pre-blurred copies in `ThumbStore` and a
+  cross-fading peek, described under "Blurred images" in `docs/FRONTEND.md`.
+  Its bin popup is a DOM site (#5696); its hover preview shows no image for a
+  still.
 
 ### The button
 

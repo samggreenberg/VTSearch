@@ -1178,6 +1178,22 @@ draws it.
 - **What a host owes the directive:** its container clips overflow, or the blur
   bleeds past the box, and the host takes the pointer (no
   `pointer-events: none`), or it can never be peeked at.
+- **The Browse canvas does it all itself**, because CSS cannot reach a cell of
+  a 2D canvas. It retains the active dataset while it paints thumbnails and
+  reads `blurredIn(datasetId)` once per frame: the same answer as `isBlurred`,
+  as a test over one read. A blurred cell is drawn from a blurred copy that
+  `ThumbStore.blurred` builds once on an offscreen canvas (at most 128px on a
+  side, since a blur keeps no detail a bigger copy would hold) and evicts with
+  its thumbnail; a per-frame `ctx.filter` would cost every pan. The copy is
+  blurred by a share of the image, sized by `blurRadiusFor` for the smallest
+  cell the thumbnail size draws (`canvas-blur.ts`), so one copy serves every
+  zoom. A paint builds at most 32 copies, and a cell still waiting for one is
+  drawn flat, never sharp, so the fail-closed first paint does not stall. The
+  peek follows the enlarged cell, hovered or pinned: `BlurPeek` holds it
+  blurred for one second, then cross-fades the sharp thumbnail in over 1.5s
+  (eased at both ends: a cross-fade gives the image away sooner than a
+  shrinking blur does), and drops back at once when the cell changes. Low-effects mode and reduced
+  motion skip the fade. Audio waveforms stay sharp, as in the DOM.
 
 ### Other primitives
 

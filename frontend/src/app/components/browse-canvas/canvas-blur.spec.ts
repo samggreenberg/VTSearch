@@ -63,12 +63,12 @@ describe('stillPaint', () => {
 });
 
 describe('BlurPeek', () => {
-  let repaint: ReturnType<typeof vi.fn>;
+  let repaint: ReturnType<typeof vi.fn<() => void>>;
   let peek: BlurPeek;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    repaint = vi.fn();
+    repaint = vi.fn<() => void>();
     peek = new BlurPeek({ now: () => Date.now(), repaint });
   });
 
@@ -88,10 +88,13 @@ describe('BlurPeek', () => {
     expect(peek.progress('a')).toBe(0);
     expect(peek.fading()).toBe(true);
 
-    vi.advanceTimersByTime(PEEK_FADE_MS / 2);
-    const mid = peek.progress('a');
-    expect(mid).toBeGreaterThan(0.5);
-    expect(mid).toBeLessThan(1);
+    // Gradual: still mostly blurred a quarter of the way in, half way at half time.
+    vi.advanceTimersByTime(PEEK_FADE_MS / 4);
+    const quarter = peek.progress('a');
+    expect(quarter).toBeGreaterThan(0);
+    expect(quarter).toBeLessThan(0.25);
+    vi.advanceTimersByTime(PEEK_FADE_MS / 4);
+    expect(peek.progress('a')).toBeCloseTo(0.5);
 
     vi.advanceTimersByTime(PEEK_FADE_MS / 2);
     expect(peek.progress('a')).toBe(1);

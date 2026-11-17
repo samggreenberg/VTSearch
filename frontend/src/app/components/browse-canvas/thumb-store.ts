@@ -604,7 +604,7 @@ export class ThumbStore {
     if (octx) {
       octx.imageSmoothingEnabled = true;
       octx.imageSmoothingQuality = 'high';
-      if (filtered) octx.filter = `blur(${fraction * Math.min(w, h)}px)`;
+      if (filtered) octx.filter = `blur(${Math.round(fraction * Math.min(w, h) * 100) / 100}px)`;
       octx.drawImage(src, 0, 0, w, h);
     }
     this.blurredImages.set(id, { src, fraction, canvas: off });

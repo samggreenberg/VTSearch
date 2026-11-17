@@ -80,9 +80,14 @@ export interface BlurPeekDeps {
   repaint(): void;
 }
 
-/** The peek's ease: quick at first, settling into sharp, like `ease-out`. */
-function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
+/**
+ * The peek's ease (smoothstep): slow at both ends. A cross-fade gives the
+ * image away far sooner than a shrinking blur radius does (half the sharp
+ * image over the blur already shows it), so the DOM peek's `ease-out`, which
+ * moves fastest at the start, would reveal it almost at once here.
+ */
+function ease(t: number): number {
+  return t * t * (3 - 2 * t);
 }
 
 /**
@@ -130,7 +135,7 @@ export class BlurPeek {
     if (key !== this.key || this.fadeFrom === null) return 0;
     if (instant) return 1;
     const t = (this.deps.now() - this.fadeFrom) / PEEK_FADE_MS;
-    return t >= 1 ? 1 : easeOut(Math.max(0, t));
+    return t >= 1 ? 1 : ease(Math.max(0, t));
   }
 
   /** Whether the fade is under way, so the host owes another frame. */
