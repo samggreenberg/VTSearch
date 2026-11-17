@@ -20,6 +20,18 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **Blurred images** (issue #5689). A server can blur the images its ingest service marks as sensitive (nudity,
+  gore, …): the new `blur_rules` server setting names the metadata fields that mean "blur this", as a score over a
+  threshold, a flag or a category. A blurred image is drawn blurred everywhere it appears (the media list, the vote
+  piles, the centre viewer, the Browse map, a video while it plays), and resting the pointer on it for a second
+  fades the blur away until the pointer leaves. The **Blur** / **Unblur** button at the end of the viewer's toolbar
+  (for a video, under the player), or `b`, changes one image for good, for everyone using the dataset, in either
+  direction, and outlasts later changes to the rules. It shields what users see; it does not stop anyone fetching
+  the image. See "Blurred images" in the user guide and "Blurring sensitive images" in `docs/DEPLOYMENT.md`. For
+  API users: `GET /api/medias/blurred` and `PUT /api/medias/<id>/blur`.
+
 ### Changed
 
 - **Face models may be called `.model`** (issue #5683). A folder of face models now finds a detector or embedder

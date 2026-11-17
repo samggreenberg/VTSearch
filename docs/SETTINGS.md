@@ -138,10 +138,9 @@ through their CLI flag or environment variable.
   asked, never stored on it, so a changed rule re-decides every image.
   Settings-file only (there is no flag or env var); shown read-only on the
   Settings dialog's **Server** tab and at `GET /api/settings`, not editable
-  via `PUT`. Read at startup, so restart after editing it. The setting ships
-  ahead of the blur itself, which is still being built
-  ([plan](plans/image-blurring.md)); until then the rules are validated and
-  listed but blur nothing.
+  via `PUT`. Read at startup, so restart after editing it. Worked examples,
+  what happens to the images users have overruled, and why this is no access
+  control: [Blurring sensitive images](DEPLOYMENT.md#blurring-sensitive-images).
 - `semantic_only`: locks the deployment to Semantic embedders, hiding the
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
