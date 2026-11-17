@@ -2,7 +2,7 @@
 
 ## Background
 
-Planned in #5689, and shipped but for the item below: images an ingest
+Planned in #5689, and shipped: images an ingest
 service marks as sensitive are drawn blurred until someone overrules them,
 with a hover peek and a Blur / Unblur button. The design now lives in the
 permanent docs: "Blur state" in `docs/ARCHITECTURE.md` (the state model,
@@ -10,32 +10,6 @@ where the overrides live, why it is no access control), "Blurred images" in
 `docs/FRONTEND.md` (the state service, `vtBlur`, the focused viewers, the
 Browse canvas), and "Blurring sensitive images" in `docs/DEPLOYMENT.md`
 (the rules, for operators).
-
-## Work items
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-- [ ] #5708 — Blur the "Use This Example?" preview's video (Sonnet)
-
-<!-- item-sep -->
-
-<!-- item-sep -->
 
 ## Open questions
 
