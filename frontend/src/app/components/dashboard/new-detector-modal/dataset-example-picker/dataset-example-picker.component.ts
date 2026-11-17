@@ -24,6 +24,7 @@ import { MediaTypeCapabilityService } from '../../../../services/media-type-capa
 import { SettingsStateService } from '../../../../services/settings-state.service';
 import type { MediaPickerListing } from '../../../../generated/api-client/models/media-picker-listing';
 import { ViewControlsComponent } from '../../../view-controls/view-controls.component';
+import { BlurDirective } from '../../../../directives/blur.directive';
 import { apiErrorMessage } from '../../../../utils/api-error';
 import { iconSizeToGoalWidth } from '../../../../utils/grid-icon-size';
 import { coerceNonEmptyString } from '../../../../utils/settings-coerce';
@@ -72,7 +73,7 @@ const FALLBACK_WIDTH_PX = 640;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-example-picker',
   standalone: true,
-  imports: [DecimalPipe, ScrollingModule, ViewControlsComponent],
+  imports: [DecimalPipe, ScrollingModule, ViewControlsComponent, BlurDirective],
   templateUrl: './dataset-example-picker.component.html',
   styleUrl: './dataset-example-picker.component.scss',
 })

@@ -69,12 +69,28 @@
             (contextmenu)="onFaceContextMenu(photo.faces[0].media_id, $event)"
             (mouseenter)="onFaceEnter(photo.faces[0].media_id)"
           >
-            <img class="photo" [src]="photoUrl(photo.row)" alt="" loading="lazy" />
+            <img
+              class="photo"
+              [src]="photoUrl(photo.row)"
+              [vtBlur]="photoBlurId(photo.row)"
+              [vtBlurDataset]="photoBlurDataset(photo.row)"
+              alt=""
+              loading="lazy"
+            />
           </button>
           <span class="photo-orphan-note">photo not found</span>
         } @else {
-          <div class="photo-wrap" [title]="photoTitle(photo)" (click)="onPhotoClick(photo)">
-            <img class="photo" [src]="photoUrl(photo.row)" alt="" loading="lazy" />
+          <!-- vt-blur-peek: the face boxes cover the photo, so resting on one
+               still peeks at the photo under it. -->
+          <div class="photo-wrap vt-blur-peek" [title]="photoTitle(photo)" (click)="onPhotoClick(photo)">
+            <img
+              class="photo"
+              [src]="photoUrl(photo.row)"
+              [vtBlur]="photoBlurId(photo.row)"
+              [vtBlurDataset]="photoBlurDataset(photo.row)"
+              alt=""
+              loading="lazy"
+            />
             @for (face of photo.faces; track face.media_id) {
               @if (boxStyle(face); as style) {
                 <button
@@ -112,7 +128,7 @@
                 (contextmenu)="onFaceContextMenu(face.media_id, $event)"
                 (mouseenter)="onFaceEnter(face.media_id)"
               >
-                <img [src]="faceUrl(face)" alt="" loading="lazy" />
+                <img [src]="faceUrl(face)" [vtBlur]="face.media_id" alt="" loading="lazy" />
               </button>
             }
           </div>

@@ -40,7 +40,6 @@ SPODS_URL = "https://facweb.iitkgp.ac.in/~jay/spods/spods.rar"
 KAGGLE = "https://www.kaggle.com/api/v1/datasets/download/"
 TOBACCO800_SLUG = "kaiquanmah/tobacco800-with-ground-truth"
 STAVER_SLUG = "rtatman/stamp-verification-staver-dataset"
-UCSF_PDF = "https://download.industrydocuments.ucsf.edu/{a}/{b}/{c}/{d}/{id}/{id}.pdf"
 
 #: UCSF letters, by document id: a spread of the four companies whose marks
 #: the roster holds. Pinned, so the card redraws the same pages.
@@ -121,10 +120,10 @@ def ucsf_page(doc_id: str, dpi: int = 150) -> Any:
     import fitz  # PyMuPDF, spelled the way the rest of the repo imports it
     from PIL import Image
 
-    pdf = _download(
-        UCSF_PDF.format(a=doc_id[0], b=doc_id[1], c=doc_id[2], d=doc_id[3], id=doc_id),
-        ROOT / "ucsf" / f"{doc_id}.pdf",
-    )
+    _modules()  # puts the corpus's source readers on sys.path
+    from sources import ucsf
+
+    pdf = _download(ucsf.pdf_url(doc_id), ROOT / "ucsf" / f"{doc_id}.pdf")
     pix = fitz.open(pdf)[0].get_pixmap(dpi=dpi)
     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 

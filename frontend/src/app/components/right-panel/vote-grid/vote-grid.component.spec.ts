@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VoteGridComponent, VoteGridEntry } from './vote-grid.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 function makeEntries(n: number, overrides: Partial<VoteGridEntry> = {}): VoteGridEntry[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -10,6 +11,8 @@ function makeEntries(n: number, overrides: Partial<VoteGridEntry> = {}): VoteGri
     thumbnailUrl: '',
     fallbackIcon: '□',
     missing: false,
+    blurId: i + 1,
+    blurDatasetId: 'ds-1',
     ...overrides,
   }));
 }
@@ -17,6 +20,7 @@ function makeEntries(n: number, overrides: Partial<VoteGridEntry> = {}): VoteGri
 describe('VoteGridComponent', () => {
   let component: VoteGridComponent;
   let fixture: ComponentFixture<VoteGridComponent>;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   async function setInputs(inputs: Record<string, unknown>): Promise<void> {
     for (const [k, v] of Object.entries(inputs)) {
@@ -26,9 +30,10 @@ describe('VoteGridComponent', () => {
   }
 
   beforeEach(async () => {
+    blur = provideBlurStateStub();
     await TestBed.configureTestingModule({
       imports: [VoteGridComponent],
-      providers: [...provideZoneless()],
+      providers: [...provideZoneless(), blur.provider],
     }).compileComponents();
 
     fixture = TestBed.createComponent(VoteGridComponent);
@@ -109,7 +114,15 @@ describe('VoteGridComponent', () => {
   });
 
   describe('event routing', () => {
-    const entry: VoteGridEntry = { key: '7', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false };
+    const entry: VoteGridEntry = {
+      key: '7',
+      name: 'x',
+      thumbnailUrl: '',
+      fallbackIcon: null,
+      missing: false,
+      blurId: 7,
+      blurDatasetId: 'ds-1',
+    };
 
     it('click selects in click mode', async () => {
       await setInputs({ focusMode: 'click' });
@@ -183,6 +196,36 @@ describe('VoteGridComponent', () => {
     const wave = el.querySelector('.vote-thumbnail-wave') as HTMLElement;
     expect(wave).toBeTruthy();
     expect(wave.style.maskImage || wave.style.webkitMaskImage).toContain('/api/medias/1/thumbnail');
+  });
+
+  describe('blur (#5696)', () => {
+    const thumbs = (): HTMLImageElement[] =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('img.vote-thumbnail'));
+
+    it("blurs a tile whose item its dataset says is blurred, and only that one", async () => {
+      blur.blurred.set(new Set([blurKey('ds-1', 2)]));
+      await setInputs({ entries: makeEntries(2, { thumbnailUrl: '/api/medias/x/thumbnail' }) });
+      expect(thumbs().map((img) => img.classList.contains('vt-blurred'))).toEqual([false, true]);
+    });
+
+    it("reads the entry's own dataset", async () => {
+      blur.blurred.set(new Set([blurKey('ds-2', 1)]));
+      await setInputs({ entries: makeEntries(1, { thumbnailUrl: '/api/medias/1/thumbnail' }) });
+      expect(thumbs()[0].classList.contains('vt-blurred')).toBe(false);
+
+      await setInputs({ entries: makeEntries(1, { thumbnailUrl: '/api/medias/1/thumbnail', blurDatasetId: 'ds-2' }) });
+      expect(thumbs()[0].classList.contains('vt-blurred')).toBe(true);
+    });
+
+    it('blurs a tile with no item by its fallback', async () => {
+      await setInputs({
+        entries: [
+          ...makeEntries(1, { key: 'a', thumbnailUrl: '/t/a', blurId: null, blurredFallback: true }),
+          ...makeEntries(1, { key: 'b', thumbnailUrl: '/t/b', blurId: null, blurredFallback: false }),
+        ],
+      });
+      expect(thumbs().map((img) => img.classList.contains('vt-blurred'))).toEqual([true, false]);
+    });
   });
 
   it('marks missing entries and labels them in the aria text', async () => {

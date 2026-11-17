@@ -1,0 +1,71 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-11-12-flip-sensitivity-3688.5fecf305027c.tar.gz",
+   "source_commit": null,
+   "files": {
+    "measurements/flip_3688_arm1_by_class.csv": {
+     "bytes": 3594,
+     "oid": "3f50170bf908d63a371956f00a6ab6d040292741"
+    },
+    "measurements/flip_3688_arm1_curves.csv": {
+     "bytes": 3876,
+     "oid": "fbb35539c0773becff0fa7372d49ab02875e84a7"
+    },
+    "measurements/flip_3688_arm1_exposure.csv": {
+     "bytes": 232,
+     "oid": "44253e25175aeed6f97863116afb774f062364d7"
+    },
+    "measurements/flip_3688_arm1_per_run.csv": {
+     "bytes": 86119,
+     "oid": "9b4793d1650daa8b5c82cc7ce3a2e9907a009291"
+    },
+    "measurements/flip_3688_arm1_summary.csv": {
+     "bytes": 4582,
+     "oid": "5d25fe2a57361f475f170b219368798b5cea995b"
+    },
+    "measurements/flip_3688_binary_by_class.csv": {
+     "bytes": 19481,
+     "oid": "4160f5a8958546db228b4d8b6a0a424c1305e247"
+    },
+    "measurements/flip_3688_binary_curves.csv": {
+     "bytes": 18689,
+     "oid": "608c25fddd9bcee903d95cefa720351d62a971ca"
+    },
+    "measurements/flip_3688_binary_per_run.csv": {
+     "bytes": 315878,
+     "oid": "5e5583b329113f8c75eded3483d783c5efd220b6"
+    },
+    "measurements/flip_3688_binary_phases.csv": {
+     "bytes": 262,
+     "oid": "5a4b7914a30fa0811057c073c842e3bba23aa64f"
+    },
+    "measurements/flip_3688_binary_summary.csv": {
+     "bytes": 16593,
+     "oid": "185b9fde71c7883e55562e500bd958e4125b648c"
+    },
+    "measurements/flip_3688_region_by_class.csv": {
+     "bytes": 9888,
+     "oid": "cf5aa479f77ee92bc2079a3ff6295fbd7db90547"
+    },
+    "measurements/flip_3688_region_curves.csv": {
+     "bytes": 9353,
+     "oid": "0c4db41b4b614916bc91219204f6cf53dcbb4da3"
+    },
+    "measurements/flip_3688_region_per_run.csv": {
+     "bytes": 181800,
+     "oid": "7518077bf3dc8ae7d58191afc85431dbe9ecced5"
+    },
+    "measurements/flip_3688_region_phases.csv": {
+     "bytes": 104,
+     "oid": "f8c5c3dcb3b0468627cc5f7756861eaac4fa58a6"
+    },
+    "measurements/flip_3688_region_summary.csv": {
+     "bytes": 9545,
+     "oid": "66102a722e0c564cd7c2f76807adef86ea433bc7"
+    }
+   }
+  }
+ ]
+}

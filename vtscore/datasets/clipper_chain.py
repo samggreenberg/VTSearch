@@ -418,8 +418,18 @@ def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[di
     target = conv.target_type
     n_out = len(outputs)
     trail_entries: list[ChainStep] = []
+    from vtscore.datasets.importers.base.specs import _fill_converter_output_fields  # noqa: PLC0415
+
     for idx, clip in enumerate(outputs):
         clip["media_type"] = target
+        # A converter returns content only.  What the source knew about itself
+        # (its category, the file it was read from) carries over, and the
+        # bookkeeping every stored media needs is filled in, so a converted
+        # unit saves like any other.
+        for key in ("category", "media_path"):
+            if media.get(key) and not clip.get(key):
+                clip[key] = media[key]
+        _fill_converter_output_fields(clip)
         entry: ChainStep = {
             "kind": "converter",
             "name": conv.name,

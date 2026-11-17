@@ -113,6 +113,16 @@
           [marqueeAriaLabel]="marqueeAriaLabel"
         />
       }
+
+      <!-- A video has no toolbar of its own, so its Blur / Unblur button
+           (#5698), the image toolbar's own, sits here in a strip like it. -->
+      @if (viewer === 'video' && videoPlayer(); as videoPlayer) {
+        @if (videoPlayer.blurrable()) {
+          <div class="video-tools">
+            <vt-blur-toggle [target]="videoPlayer" noun="video" />
+          </div>
+        }
+      }
     </ng-template>
 
     <!-- The stage holds the item alone, except in the Face compare layout

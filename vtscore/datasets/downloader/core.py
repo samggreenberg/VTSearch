@@ -202,7 +202,12 @@ PLACES365_URL = "http://data.csail.mit.edu/places/places365/val_256.tar"
 PLACES365_LABELS_FILELIST_URL = "http://data.csail.mit.edu/places/places365/filelist_places365-standard.tar"
 PLACES365_LABELS_FILELIST_SIZE_MB = 65
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
-UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
+# The Industry Documents Library serves its PDFs from a public S3 bucket, under
+# the same <a>/<b>/<c>/<d>/<id>/<id>.pdf path its own document viewer fetches.
+# The older download.industrydocuments.ucsf.edu host, which that viewer no
+# longer references, refused downloads with a CloudFront 403 (issue #5681).
+# scripts/experiments/fullmarks/sources/ucsf.py carries its own copy of both URLs.
+UCSF_IDL_DOWNLOAD_URL = "https://ucsf-idl-dataset.s3.us-east-1.amazonaws.com"
 
 # Revisited Oxford Buildings (ROxford5k): the canonical instance-retrieval
 # benchmark and the structural embedder's demo dataset.  The 5063-image set is

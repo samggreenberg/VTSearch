@@ -482,6 +482,7 @@ Global classes that any component can apply. All animations here are silenced by
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
 | `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Tune buttons, in-flight import/export submits). |
+| `.vt-blurred` | A blurred image, with the hover-to-peek: one second of hover fades the blur out, leaving snaps it back. Put on by the `vtBlur` directive, never by hand ([`FRONTEND.md`](FRONTEND.md#blurred-images)). Its fade honors reduced motion; its one-second delay does not, by design. |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 

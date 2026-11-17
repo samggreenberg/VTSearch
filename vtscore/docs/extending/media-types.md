@@ -131,6 +131,19 @@ importable (`importable = False`, empty `file_extensions`), because face
 crops only ever come from the `image2face` converter. A new type that fits
 either shape sets the same attributes; nothing else special-cases them.
 
+A convert-out type's media never reach the embed stage as they are. An
+import that names the conversion gets it (a `source_specs` row, a demo's
+`converter`). One that names none gets the type's **default** converter,
+`vtscore.converters.default_converter_for(type_id)`: the converter into
+`converts_to[0]`, or into the dataset's own type when the half type can
+become it. A folder scan adds that row itself
+(`vtscore.datasets.importers.base.with_default_conversions`), and whatever
+an importer still hands over unconverted, a plugin's `run()` listing PDFs
+for one, the load pipeline converts as a chain step ahead of embedding
+(`vtscore.datasets.stages.clipper.convert_unembeddable_medias`). Each output
+records the recipe on its origin, so a label on page 3 resolves back to the
+PDF and re-renders page 3.
+
 ### `image_response` vs. `media_response`
 
 `media_response` serves the media's **own** bytes, which for most types are

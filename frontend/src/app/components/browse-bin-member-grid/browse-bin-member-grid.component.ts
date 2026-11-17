@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, input, output, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { BlurDirective } from '../../directives/blur.directive';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
@@ -53,7 +54,7 @@ const FALLBACK_VIEWPORT_PX = 400;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-member-grid',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent],
+  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent, BlurDirective],
   templateUrl: './browse-bin-member-grid.component.html',
   styleUrl: './browse-bin-member-grid.component.scss',
   host: { '[class.docked]': 'docked()' },

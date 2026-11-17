@@ -82,7 +82,7 @@ from .dataset_importer import DatasetImporter
 from .naming import derive_display_name, strip_archive_suffix
 from .origin import DATASET_NAME_FIELD_KEY
 from .outputs import OutputSpec, output_dataset_name, parse_output_specs
-from .specs import MissingMediaTypeError, PickerView, SourceSpec
+from .specs import MissingMediaTypeError, PickerView, SourceSpec, with_default_conversions
 
 __all__ = [
     "DATASET_NAME_FIELD_KEY",
@@ -97,5 +97,6 @@ __all__ = [
     "derive_display_name",
     "output_dataset_name",
     "parse_output_specs",
+    "with_default_conversions",
     "strip_archive_suffix",
 ]

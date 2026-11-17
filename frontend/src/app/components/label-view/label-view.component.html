@@ -141,6 +141,8 @@
   <vt-media-crop-modal
     [file]="crop.file"
     [mediaType]="crop.mediaType"
+    [mediaId]="crop.mediaId"
+    [datasetId]="crop.datasetId"
     (confirmed)="onCropConfirmed($event)"
     (cancelled)="onCropCancelled()"
   />

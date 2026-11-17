@@ -55,6 +55,11 @@ through their CLI flag or environment variable.
     {"label": "Acme plugin guide", "url": "https://docs.example.org/acme-plugin"},
     {"label": "Lab data policy", "url": "/wiki/data-policy"}
   ],
+  "blur_rules": [
+    {"field": "Porn", "op": ">=", "value": 0.8},
+    {"field": "Gore", "op": "truthy"},
+    {"field": "Rating", "op": "in", "value": ["R", "X"]}
+  ],
   "semantic_only": false,
   "autopilot_only": false,
   "solo_media_type": null,
@@ -106,6 +111,36 @@ through their CLI flag or environment variable.
   Settings-file only (there is no flag or env var); surfaced read-only at
   `GET /api/settings`, not editable via `PUT`. Read at startup, so restart
   after editing it.
+- `blur_rules`: which metadata fields from your ingest service mark an image as
+  sensitive. An image whose `custom_metadata` matches **any** rule starts
+  blurred. Each rule is `{"field": ..., "op": ..., "value": ...}`:
+  - `op` is one of `truthy` (takes no `value`), `==`, `!=` (a string, number
+    or boolean), `>`, `>=`, `<`, `<=` (a number), or `in` (a non-empty list of
+    strings, numbers or booleans).
+  - `field` matches a metadata key case-insensitively, after trimming
+    whitespace and any trailing colon, so a rule on `porn` catches an ingest
+    field named `"Porn:"`.
+  - Values are read leniently. A threshold reads the string `"0.93"` as a
+    number. `truthy` reads `"false"`, `"no"`, `"off"`, `"none"`, `"null"`, a
+    string spelling zero, the empty string, `0`, `false`, `null` and an empty
+    list as false, and anything else as true. `==`, `!=` and `in` compare
+    strings case-insensitively, and read a value the rule's way (`"5"` equals
+    `5`; `"yes"` equals `true`).
+  - A missing field, or a value the rule cannot compare (a word against a
+    threshold, a list against `==`), does not match under any operator, `!=`
+    included.
+
+  A malformed rule (unknown `op`, missing or wrong-typed `value`, blank
+  `field`) is dropped, and the startup log prints an
+  `Ignoring blur_rules entry … : <why>` line for it; the good rules beside it
+  are kept and listed on a `Blur rules: …` line. Empty (the default) blurs
+  nothing. The rules are applied to each image's raw ingest metadata when
+  asked, never stored on it, so a changed rule re-decides every image.
+  Settings-file only (there is no flag or env var); shown read-only on the
+  Settings dialog's **Server** tab and at `GET /api/settings`, not editable
+  via `PUT`. Read at startup, so restart after editing it. Worked examples,
+  what happens to the images users have overruled, and why this is no access
+  control: [Blurring sensitive images](DEPLOYMENT.md#blurring-sensitive-images).
 - `semantic_only`: locks the deployment to Semantic embedders, hiding the
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with

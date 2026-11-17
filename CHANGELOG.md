@@ -20,6 +20,59 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-11-17
+
+### Added
+
+- **Blurred images** (issue #5689). A server can blur the images its ingest service marks as sensitive (nudity,
+  gore, …): the new `blur_rules` server setting names the metadata fields that mean "blur this", as a score over a
+  threshold, a flag or a category. A blurred image is drawn blurred everywhere it appears (the media list, the vote
+  piles, the centre viewer, the Browse map, a video while it plays), and resting the pointer on it for a second
+  fades the blur away until the pointer leaves. The **Blur** / **Unblur** button at the end of the viewer's toolbar
+  (for a video, under the player), or `b`, changes one image for good, for everyone using the dataset, in either
+  direction, and outlasts later changes to the rules. It shields what users see; it does not stop anyone fetching
+  the image. See "Blurred images" in the user guide and "Blurring sensitive images" in `docs/DEPLOYMENT.md`. For
+  API users: `GET /api/medias/blurred` and `PUT /api/medias/<id>/blur`.
+
+### Changed
+
+- **Face models may be called `.model`** (issue #5683). A folder of face models now finds a detector or embedder
+  named `.model` as well as `.onnx`; a model file named outright in `face.json` already loaded under any name,
+  since what counts is that it holds an ONNX model. A model saved in another format (a PyTorch file, a Keras
+  model, a TensorFlow SavedModel) is refused with a message naming the format and how to convert it, where it
+  used to fail on a protobuf parse error. See "Models in other formats" in `imagekit/README.md`.
+
+- **Gzip-compressed face models load as they are** (issue #5683). A detector or embedder shipped gzipped, as
+  some groups ship their `.model` files, is decompressed in memory as it loads, with no unpacking first. A gzip
+  file that holds something other than an ONNX model, or that is damaged, is refused with a message saying what
+  is inside it.
+
+### Fixed
+
+- **Importing a folder of PDFs gives each page once** (issue #5680). Adding a dataset from a folder of PDFs made
+  every page twice. Pages now come from one place, the Document → Images converter, and each one remembers which
+  page of which file it is. Page names change with it: `report.pdf→report_page_1.png`, where they were
+  `report.pdf-1`. An Image import you set up by hand with only the image row no longer pulls the folder's PDFs
+  in; tick Document as well to get them.
+
+- **Documents handed to the app unconverted are turned into pages before embedding** (issue #5680). A dataset
+  importer plugin that lists PDFs, or an import asked for the Document type with no conversion named, used to end
+  with nothing loaded, because no embedder reads a document. The load now converts them first (each page an
+  image, or the text when the dataset is a text one).
+
+- **Labels on converted pages show their thumbnails** (issue #5680). Browse Positives, and a label's thumbnail and
+  preview when its dataset is not loaded, showed nothing for a page rendered from a PDF: the app was handing the
+  whole PDF over as the picture. They now render the page the label is on.
+
+- **The UCSF Documents demo says why it could not load** (issue #5680). When the library's PDFs could not be
+  downloaded the import ended with "Import produced no medias". It now reports what failed, for example the
+  HTTP status the download was refused with. For API users: `POST /api/dataset/load-demo` with no `converter`
+  loads this demo as page images, where it loaded nothing.
+
+- **The UCSF Documents demo downloads again** (issue #5681). The Industry Documents Library now serves its PDFs
+  from a new address, and the old one refused the demo's downloads, so it could not fetch a single document. It
+  now downloads from the address the library's own document viewer uses.
+
 ## 2026-11-13
 
 ### Changed

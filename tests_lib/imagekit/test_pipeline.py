@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 import sys
@@ -230,6 +231,41 @@ class TestOssPipeline:
         ok, png = cv2.imencode(".png", BLACK)
         assert ok
         assert len(pipe.process_buffer(png.tobytes(), media_id="b")) == 2
+
+    def test_onnx_models_named_dot_model_run_the_same(self, tmp_path, pipe):
+        """An ONNX model loads under any name (#5683): named outright, or as the one ``.model`` in a bundle."""
+        paths = build_model_dir(tmp_path / "renamed", FACES)
+        det_dir = tmp_path / "renamed" / "det"
+        det_dir.mkdir()
+        paths["detector"].rename(det_dir / "det.model")
+        paths["detector_config"].rename(det_dir / "det.json")
+        emb = paths["embedder"].rename(paths["embedder"].with_suffix(".model"))  # its sidecar emb.json stays
+        renamed = OssFacePipeline()
+        renamed.initialize(
+            RuntimeOptions(), {"detector": {"model_bundle": str(det_dir)}, "embedder": {"model": str(emb)}}
+        )
+        want, got = pipe.process(BLACK), renamed.process(BLACK)
+        assert len(got) == 2 and [r.bbox for r in got] == [r.bbox for r in want]
+        assert all(np.array_equal(a.embedding, b.embedding) for a, b in zip(got, want, strict=True))
+        assert renamed.compatibility() == pipe.compatibility()
+
+    def test_gzip_compressed_models_run_the_same(self, tmp_path, pipe):
+        """Gzipped ONNX models, how one group ships its ``.model`` files (#5683), run without unpacking."""
+        paths = build_model_dir(tmp_path / "gzipped", FACES)
+        det_dir = tmp_path / "gzipped" / "det"
+        det_dir.mkdir()
+        (det_dir / "det.model").write_bytes(gzip.compress(paths["detector"].read_bytes()))
+        paths["detector_config"].rename(det_dir / "det.json")
+        emb = paths["embedder"].with_suffix(".model")  # its sidecar emb.json stays
+        emb.write_bytes(gzip.compress(paths["embedder"].read_bytes()))
+        gzipped = OssFacePipeline()
+        gzipped.initialize(
+            RuntimeOptions(), {"detector": {"model_bundle": str(det_dir)}, "embedder": {"model": str(emb)}}
+        )
+        want, got = pipe.process(BLACK), gzipped.process(BLACK)
+        assert len(got) == 2 and [r.bbox for r in got] == [r.bbox for r in want]
+        assert all(np.array_equal(a.embedding, b.embedding) for a, b in zip(got, want, strict=True))
+        assert gzipped.compatibility() == pipe.compatibility()
 
 
 # ---------------------------------------------------------------------------

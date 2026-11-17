@@ -301,9 +301,12 @@ def iter_archive_chunks(
 
     Mirrors the folder import pipeline against the extracted directory:
     direct (no-converter) rows stream through
-    :func:`~vtscore.datasets.loader.load_dataset_from_folder_chunked`, PDFs
-    expand into images when *output_type* is ``"image"``, and converter rows
-    run via :func:`~vtscore.converters.runner.run_converters_on_folder`.  All
+    :func:`~vtscore.datasets.loader.load_dataset_from_folder_chunked` and
+    converter rows run via
+    :func:`~vtscore.converters.runner.run_converters_on_folder` (a document
+    becomes page images through its ``document2image`` row, which the caller's
+    *specs* carry: see
+    :func:`~vtscore.datasets.importers.base.with_default_conversions`).  All
     media carry a ``local_archive`` origin pointing at *archive_path* so they
     re-derive on demand.  Each yielded chunk is a self-contained medias dict
     with IDs starting at 1.
@@ -347,13 +350,12 @@ def iter_archive_chunks_deferred(
     (:func:`~vtscore.datasets.loader_folder.iter_folder_chunks_deferred`).
     Its ``key`` is the archive's own ``[name, size, mtime_ns]`` with a
     ``[relative path, size]`` row per member: an extractor may or may not
-    keep the members' mtimes, so the archive's stands in for them.  The PDF
-    and converter chunks are built as they are reached, as they cannot be
-    counted without reading their sources.
+    keep the members' mtimes, so the archive's stands in for them.  The
+    converter chunk is built as it is reached, as it cannot be counted without
+    reading its sources.
     """
     from vtscore.converters.runner import run_converters_on_folder  # noqa: PLC0415
     from vtscore.datasets.loader import iter_folder_chunks_deferred  # noqa: PLC0415
-    from vtscore.datasets.pdf import load_pdf_images_into  # noqa: PLC0415
     from vtscore.media import get  # noqa: PLC0415
 
     cached_dir = extract_archive_cached(archive_path, on_progress)
@@ -381,14 +383,8 @@ def iter_archive_chunks_deferred(
                 yield _stamped(deferred, stamp)
         except ValueError:
             # No files of this source type inside the archive – keep going;
-            # PDF / converter rows may still produce output.
+            # converter rows may still produce output.
             pass
-
-    if output_type == "image":
-        pdf_chunk: dict[int, dict[str, Any]] = {}
-        load_pdf_images_into(cached_dir, pdf_chunk, thin=thin, recursive=True)
-        if pdf_chunk:
-            yield DeferredChunk.built(pdf_chunk)
 
     converter_specs = [s for s in specs if s.converter is not None]
     if converter_specs:

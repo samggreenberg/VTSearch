@@ -188,6 +188,7 @@ export class KeyboardHelpModalComponent implements OnInit {
             { keys: ['Space'], description: 'Play / pause audio or video' },
             { keys: ['Shift', '↑'], description: 'Volume up' },
             { keys: ['Shift', '↓'], description: 'Volume down' },
+            { keys: ['B'], description: 'Blur or unblur the video, everywhere it appears and for everyone' },
           ],
         },
         {
@@ -197,6 +198,7 @@ export class KeyboardHelpModalComponent implements OnInit {
             { keys: ['-'], description: 'Zoom out' },
             { keys: ['['], description: 'Rotate left' },
             { keys: [']'], description: 'Rotate right' },
+            { keys: ['B'], description: 'Blur or unblur the image, everywhere it appears and for everyone' },
             { keys: ['Double-click'], description: 'Zoom in on the spot you clicked (again at 5x returns to fit)' },
             { keys: ['Shift', 'drag'], description: 'Draw region box (or use the Marquee button)' },
             { keys: ['Esc'], description: 'Cancel armed vote / clear region box' },

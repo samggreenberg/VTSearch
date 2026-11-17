@@ -58,7 +58,10 @@ from . import _common
 from ._common import Mark, Page
 
 API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
-DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
+#: The library's PDF bucket; the same host as ``UCSF_IDL_DOWNLOAD_URL`` in
+#: ``vtscore/datasets/downloader/core.py``, where the move off
+#: ``download.industrydocuments.ucsf.edu`` is explained.
+DOWNLOAD_URL = "https://ucsf-idl-dataset.s3.us-east-1.amazonaws.com"
 
 #: Fields worth carrying into the manifest, as provenance for a page.  None of
 #: them decides a class: identity comes from adjudicating the mark itself.

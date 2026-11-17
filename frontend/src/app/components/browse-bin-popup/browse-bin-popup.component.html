@@ -177,6 +177,7 @@
             <img
               class="bin-popup-preview-img"
               [src]="previewUrl()"
+              [vtBlur]="previewId"
               [alt]="displayedId != null ? name(displayedId) : ''"
               (error)="onPreviewError()" />
           }

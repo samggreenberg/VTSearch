@@ -1304,6 +1304,38 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    id: 'blurred-image',
+    embeddedIn: `${GUIDE}#blurred-images`,
+    caption: 'A blurred drawing in the centre viewer and in the media list, with the Unblur button at the end of the viewer\'s toolbar',
+    themes: BOTH,
+    annotations: [
+      { target: '.panel-center .blur-toggle', kind: 'box', label: 'Unblur (B)' },
+      { target: '.media-item.active', kind: 'box', label: 'Blurred here too', at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await h.serveItem();
+      // Blurred the way a user blurs one: the Smiley example's drawings carry
+      // no ingest metadata, so no blur rule could pick one out.
+      await page.locator('.panel-center .blur-toggle', { hasText: 'Blur' }).first().click();
+      await page.locator('.panel-center .blur-toggle', { hasText: 'Unblur' }).first().waitFor();
+      // Off every picture, so neither the viewer nor the list starts a peek.
+      await page.mouse.move(1, 1);
+      await h.wait(1500);
+    },
+    async after(_page, h) {
+      // Sharp again for every later shot. An override of false on drawings no
+      // rule matches looks the same as none.
+      const dataset = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+      if (!dataset) return;
+      const { ids } = await h.app.api('/api/medias/blurred', { dataset: dataset.id });
+      for (const id of ids) {
+        await h.app.api(`/api/medias/${id}/blur`, { method: 'PUT', body: { blurred: false }, dataset: dataset.id });
+      }
+    },
+  },
+  {
     id: 'settings-general',
     embeddedIn: `${GUIDE}#settings-tabs`,
     caption: 'The Settings → General pane beside the tab rail (HuggingFace and Server below its divider): theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the achievements toggle, and the Hide All / Show All buttons for Toasty\'s hints',

@@ -180,6 +180,11 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             # No-op when the swap already happened mid-run.
             controller.swap_to_embed()
             tracker.update("embedding", "Embedding…", 0, 0, step=2, total_steps=_TOTAL_STAGE_STEPS)
+            # Media of a type nothing embeds (documents) become their default
+            # conversion first, as in the load pipeline's clipper stage.
+            from vtscore.datasets.stages.clipper import convert_unembeddable_medias  # noqa: PLC0415
+
+            convert_unembeddable_medias(temp_medias, staged_media_type)
             _check_named_vector_widths(temp_medias)
             embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=tracker.update)
             from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415

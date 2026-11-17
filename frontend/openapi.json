@@ -213,6 +213,13 @@
             },
             "type": "object"
           },
+          "blur_rules": {
+            "items": {
+              "$ref": "#/components/schemas/BlurRule"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
@@ -838,6 +845,33 @@
           "schedule",
           "shape",
           "status"
+        ],
+        "type": "object"
+      },
+      "BlurRule": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "truthy",
+              "==",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "in"
+            ],
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "field",
+          "op"
         ],
         "type": "object"
       },
@@ -6659,6 +6693,56 @@
         ],
         "type": "object"
       },
+      "MediaBlurRequest": {
+        "properties": {
+          "blurred": {
+            "description": "Whether the item shows blurred from now on. Idempotent.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "blurred"
+        ],
+        "type": "object"
+      },
+      "MediaBlurResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "blurred": {
+            "description": "The item's blur state after the call: its override, as just set.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The item's id.",
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "blurred",
+          "id",
+          "ok"
+        ],
+        "type": "object"
+      },
+      "MediaBlurredIdsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Ascending ids of the items whose effective blur state is blurred: the item's Blur / Unblur override when someone set one, else whether any ``blur_rules`` rule matches its ingest metadata.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
       "MediaIdsListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9351,6 +9435,11 @@
       "_DetectorLabelView": {
         "additionalProperties": false,
         "properties": {
+          "blurred": {
+            "description": "For an element outside the active dataset (``cid`` null): whether it shows blurred, i.e. whether any ``blur_rules`` rule matches its own stored metadata. Null when ``cid`` is set, where the dataset's blur state (``GET /api/medias/blurred``) decides.",
+            "nullable": true,
+            "type": "boolean"
+          },
           "cid": {
             "nullable": true,
             "type": "integer"
@@ -13913,7 +14002,7 @@
     },
     "/api/detectors/{name}/labels-detail": {
       "get": {
-        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and (when the\nelement resolves into the active dataset) its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score).\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
+        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and (when the\nelement resolves into the active dataset) its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score). An\nelement outside the active dataset also says whether it shows blurred:\nthe ``blur_rules`` applied to its own stored metadata.\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
         "operationId": "get_detector_labels_detail",
         "responses": {
           "200": {
@@ -16075,6 +16164,40 @@
         ]
       }
     },
+    "/api/medias/blurred": {
+      "get": {
+        "description": "One compact list for the whole dataset in ``X-Dataset-Id``, since most\nplaces an image is drawn hold a bare id and no metadata. An item is in it\nwhen its Blur / Unblur override says so, or, with no override, when any\n``blur_rules`` rule matches its raw ingest metadata. Changing the rules\nre-decides every item without an override at once.",
+        "operationId": "list_blurred_media",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaBlurredIdsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "403": {
+            "description": "The current user may not read this dataset."
+          },
+          "409": {
+            "description": "The dataset in ``X-Dataset-Id`` is not loaded."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List the ids of the dataset's items that show blurred.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/ids": {
       "get": {
         "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``media_type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call; a 10-20x larger payload that the cache + batch pattern\nmakes unnecessary.",
@@ -16360,6 +16483,67 @@
           }
         }
       ]
+    },
+    "/api/medias/{media_id}/blur": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "media_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ],
+      "put": {
+        "description": "Records ``blurred`` as the item's override, which wins over the\n``blur_rules`` from then on in either direction, so it corrects a wrong\n\"sensitive\" ruling and a missed one alike. There is one state per dataset,\nshared by everyone who reads it, kept in a sidecar beside the dataset's\nfile so it survives a restart. Sending the state the item already has is a\nno-op.",
+        "operationId": "set_media_blur",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaBlurRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaBlurResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
+          "403": {
+            "description": "The current user may not read this dataset."
+          },
+          "404": {
+            "description": "Media not found."
+          },
+          "409": {
+            "description": "The dataset in ``X-Dataset-Id`` is not loaded."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Set one item's blur state for good: the Blur / Unblur button.",
+        "tags": [
+          "medias"
+        ]
+      }
     },
     "/api/medias/{media_id}/image": {
       "get": {

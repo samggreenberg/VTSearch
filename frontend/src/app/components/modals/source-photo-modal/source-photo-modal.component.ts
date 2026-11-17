@@ -88,9 +88,9 @@ export class SourcePhotoModalComponent {
   }
 
   /**
-   * The centre panel's zoom and rotate keys, which its toolbar's tooltips name.
-   * `KeyboardService` holds every shortcut off while a modal is open, so the
-   * overlay answers these for its own photo.
+   * The centre panel's zoom, rotate and blur keys, which its toolbar's
+   * tooltips name. `KeyboardService` holds every shortcut off while a modal is
+   * open, so the overlay answers these for its own photo.
    */
   @HostListener('document:keydown', ['$event'])
   onKeydown(e: KeyboardEvent): void {
@@ -110,6 +110,12 @@ export class SourcePhotoModalComponent {
         break;
       case ']':
         viewer.rotateRight();
+        break;
+      // Blurs the photo in its own dataset, as the toolbar's button does.
+      case 'b':
+      case 'B':
+        if (e.repeat) return;
+        viewer.toggleBlur();
         break;
       default:
         return;

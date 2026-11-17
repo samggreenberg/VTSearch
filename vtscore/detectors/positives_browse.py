@@ -57,21 +57,34 @@ def _materialize_positive(
 ) -> dict[str, Any] | None:
     """Resolve + embed one positive into a media dict, or ``None`` to skip it.
 
-    Reads the origin file once: its bytes power the preview, and (when no
-    cached vector is supplied) the same path is embedded with *embedder_name*.
+    Resolves the origin to its file once.  The unit's bytes power the preview
+    (:func:`~vtscore.detectors.resolver.resolve_unit_payload`: the file's own,
+    or the output a converter recipe rebuilds from it), and when no cached
+    vector is supplied the same unit is embedded with *embedder_name*.
     """
-    from vtscore.detectors.resolver import embed_file, resolve_file_context
+    from vtscore.detectors.resolver import (
+        _apply_clip_and_embed,
+        _needs_clip_replay,
+        embed_file,
+        resolve_file_context,
+        resolve_unit_payload,
+    )
 
     emb = np.asarray(cached, dtype=np.float32) if cached is not None else None
     media_bytes: bytes | None = None
+    origin = elem.origin or {}
     with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
         if file_path is not None and file_path.is_file():
-            try:
-                media_bytes = file_path.read_bytes()
-            except OSError:
-                media_bytes = None
+            # The unit's own bytes, not the file's: a page a converter rendered
+            # resolves to its PDF, which nothing can paint as an image.
+            payload = resolve_unit_payload(file_path, origin)
+            media_bytes = payload[0] if payload is not None else None
             if emb is None and media_bytes is not None:
-                emb = embed_file(file_path, media_type, embedder_name)
+                if _needs_clip_replay(origin.get("params", {}) or {}):
+                    replayed = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
+                    emb = replayed[0] if replayed is not None else None
+                else:
+                    emb = embed_file(file_path, media_type, embedder_name)
 
     if emb is None or media_bytes is None:
         return None

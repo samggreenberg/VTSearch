@@ -292,7 +292,8 @@ def unregister_dataset(dataset_id: str) -> bool:
     """Remove a dataset from the registry and delete its pkl file plus any sidecars.
 
     Every file in the pkl's directory sharing its stem (e.g. an mmap embedding
-    sidecar) is deleted alongside it: the stem is a random uuid
+    sidecar, or the ``<stem>.blur.json`` blur overrides) is deleted alongside
+    it: the stem is a random uuid
     (``ds_<uuid>``), so this can never collide with another dataset's files,
     and any current or future sidecar convention is swept without needing a
     separate registry field to track it.
@@ -301,12 +302,18 @@ def unregister_dataset(dataset_id: str) -> bool:
     """
 
     def mutate(entries: list[dict[str, Any]]) -> bool:
+        from vtscore.datasets.blur_state import removing_blur_sidecar  # noqa: PLC0415
+
         for i, entry in enumerate(entries):
             if entry["id"] == dataset_id:
                 pkl = Path(entry.get("pkl_path", ""))
                 if pkl.is_file():
-                    for sibling in pkl.parent.glob(f"{pkl.stem}.*"):
-                        sibling.unlink(missing_ok=True)
+                    # The blur sidecar's writer queues off the request thread;
+                    # holding it off here keeps a click made just before the
+                    # delete from landing after it and leaving an orphan.
+                    with removing_blur_sidecar(pkl):
+                        for sibling in pkl.parent.glob(f"{pkl.stem}.*"):
+                            sibling.unlink(missing_ok=True)
                 entries.pop(i)
                 return True
         return False

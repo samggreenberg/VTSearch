@@ -453,6 +453,18 @@
             }
           </div>
           <div class="form-group">
+            <label class="form-label" title="Ingest metadata rules that mark an image as sensitive: an image whose metadata matches any of them starts blurred. Set with the blur_rules setting in the server's settings file.">Blur rules:<vt-field-hint-icon hint="Set by whoever runs this server, from the fields its ingest service adds to each image. A rule that matches no field of an image leaves it sharp."></vt-field-hint-icon></label>
+            @if (blurRulesDisplay.length > 0) {
+              <ul class="server-list">
+                @for (rule of blurRulesDisplay; track $index) {
+                  <li>{{ rule }}</li>
+                }
+              </ul>
+            } @else {
+              <div class="server-value server-value--empty">None</div>
+            }
+          </div>
+          <div class="form-group">
             <label class="form-label" title="Words this server uses to name the map's regions in Tags mode, replacing the built-in tag vocabulary (AudioSet for audio, Open Images for images). Set in the server's settings file; media types not listed use the built-in vocabulary.">Custom signpost tags:<vt-field-hint-icon hint="An instance-wide term list for naming map regions, set by whoever runs this server. Media types not listed here use the built-in vocabulary. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
             @if (signpostVocabDisplay.length > 0) {
               <ul class="server-list">

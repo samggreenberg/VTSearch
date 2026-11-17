@@ -127,7 +127,7 @@ frontend/
         ├── services/       API services, state services, coordination services (§4)
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
-        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
+        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`, `blur`)
         ├── models/         Hand-written types (§7): api.models.ts, projection.models.ts
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
@@ -421,7 +421,9 @@ file readable.
 The stores the views bind to: `MediaStateService` (the dataset-wide media stub
 list and current selection), `VoteStateService` (the per-pile vote sets, undo
 and redo), `SortStateService`, `SettingsStateService`, `DatasetStateService`
-(the registry listing), `LabelsetStateService`, `AutopilotStateService`.
+(the registry listing), `LabelsetStateService`, `AutopilotStateService`,
+`BlurStateService` (which images show blurred, per dataset; see
+[Blurred images](#blurred-images)).
 
 They own state and the reactive surface over it; they call API services for
 I/O. A component should almost never call an API service *and* keep the result
@@ -1139,6 +1141,125 @@ offers a Fork, and imports the sharing flows only when it is clicked (#5657):
 the static import had put ~6 kB of sharing code on the eager path. Any
 interceptor, guard or always-mounted service is eager, so reach a heavy service
 from one with `import()` at the moment it is needed.
+
+### Blurred images
+
+An image the server rules sensitive is drawn blurred until someone unblurs it
+(#5689). The server decides each item's state, its Blur / Unblur override or
+else the `blur_rules` ([medias.md](api/medias.md#blurred-items)); the SPA only
+draws it.
+
+- **`BlurStateService`** holds the answer per dataset id, not for the active
+  dataset alone, because some sites show a sibling dataset's items (a face's
+  source photo). `isBlurred(datasetId, id)` is a signal read.
+  `setBlurred(...)` is optimistic and rolls back on failure. A dataset's set
+  is loaded and polled while some site has `retain`ed it, and for ten seconds
+  after the last release, so a hover popup does not restart the poll.
+- **It fails closed.** While the instance may have blur rules (they are set,
+  or the settings have not arrived) and a dataset's set has not arrived, every
+  image of that dataset reads as blurred. Otherwise the first paint shows what
+  the rules are there to hide. A read that fails changes nothing, so a dataset
+  whose set cannot be read stays blurred.
+- **`vtBlur`** (`directives/blur.directive.ts`) is how a DOM site uses it:
+  `[vtBlur]="mediaId"`, plus `[vtBlurDataset]` for another dataset's item. It
+  retains the dataset while mounted, toggles `.vt-blurred`, and sets
+  `--vt-blur-radius` from the host's rendered size (`utils/blur-radius.ts`:
+  8% of the shorter side, 4 to 60px), measured by one `ResizeObserver` shared
+  by every blurred image, only while it is blurred. A host that draws no item
+  of a loaded dataset passes `vtBlur` null and is sharp, unless
+  `[vtBlurFallback]` says otherwise: a detector's stored label outside the
+  loaded dataset carries the server's answer for it (`blurred` in
+  [labels-detail](api/detectors.md#labels-detail), the `blur_rules` applied
+  to the label's own stored metadata).
+- **Every DOM image carries it.** There is no shared thumbnail component, so
+  each template's `<img>` of a dataset item has the directive, the item id
+  coming from wherever the template builds its URL (`VoteGridEntry` carries
+  `blurId` and `blurDatasetId` for the vote piles). `directives/blur-sites.spec.ts`
+  reads every template and fails on an `<img>` with a bound source, or a
+  bound `background-image`, that has no `vtBlur`, unless its `ALLOWED` list
+  names the element with a reason (a bundled asset, an uploaded example file,
+  the focused viewer). A new image site either blurs or says why it does not.
+  The Browse canvas is the one drawn without the DOM; it reads the service
+  itself.
+- **The hover peek is pure CSS** (`.vt-blurred` in `_components.scss`). After
+  one second of hover the blur fades out over 1.5s, and on leave it snaps back.
+  Both rules are `!important`, because a component's own `filter` or
+  `transition` on the element outranks a bare class and would unblur the image
+  or skip the delay. So the host's own transitions stop while it is blurred.
+  Under reduced motion the fade goes and the delay stays (`styles.scss`).
+- **The blur stays in the image's box.** `.vt-blurred` also sets
+  `clip-path: border-box`, which clips the filter's spill to the element's own
+  box, rounded corners included, so an image whose container does not clip
+  (a People row's face) does not smear onto its neighbours. The cost is that
+  anything the image itself paints outside its box (an outline, a shadow) is
+  clipped while it is blurred.
+- **What a host owes the directive:** the image takes the pointer (no
+  `pointer-events: none`), or it can never be peeked at. Where other elements
+  are drawn over it (the face boxes on a photo) or the image deliberately
+  ignores the pointer (the crop target, under its drag surface), put
+  `vt-blur-peek` on the ancestor that takes the pointer instead: hovering it
+  peeks every blurred image inside.
+- **The focused viewer blurs itself** (`vt-image-viewer`), without the
+  directive, for three reasons:
+  - **Its tone map and greyscale** (`imageFilter`) would be dropped by the
+    class's `!important` filter. They are drawn on a layer round the image
+    (`.image-tone`), and the image's own `filter` holds the blur alone. One
+    list holding both would not do: a filter list with a `url()` in it does not
+    interpolate, so the peek would jump to sharp instead of fading.
+  - **Its blur is drawn under the zoom**, so it grows with the picture: 5× hides
+    as much as fit, and the wrap clips it at every zoom. The radius is the
+    shared share of the image's size as laid out unzoomed.
+  - **It times its own peek** (`peeking`, with `.image-peek` for the fade).
+    The image changes under a pointer that stays put while the user votes with
+    the arrow keys, and under a hover rule each next image would arrive
+    already peeked, sharp. So the second's wait starts again for every new
+    image and every re-blur, and leaving the pane drops the peek at once.
+    The pane, not the image, is what is hovered, so the boxes drawn over it
+    do not end a peek.
+
+  The state, the retain, the peek's timer and the button's action come from
+  `focusedBlur()` (`utils/focused-blur.ts`), which the video player shares;
+  the viewer draws the blur. An item shown through `srcOverride` (a
+  detector's example) is no dataset item, so nothing blurs it. Every other
+  viewer has a **Blur / Unblur** button (`vt-blur-toggle`) at the end of its
+  toolbar (`vt-image-view-controls`) and answers `b` (the centre panel
+  through `KeyboardService`, the Show in photo overlay through its own key
+  handler). Each calls `toggleBlur()`, which writes the override into the
+  dataset the item is in: the viewer's `datasetId`, or else the active
+  dataset. So the overlay's photo is blurred in its sibling, never in the
+  active dataset.
+- **The focused video blurs itself too** (`vt-video-player`, #5698), with the
+  same `focusedBlur()`: the blur is the `<video>`'s own `filter`, clipped to
+  its box, and the peek is timed the same way, its wait starting at each new
+  video's first frame (`loadeddata`). Hovering the frame round the video,
+  its control bar included, keeps a peek going. A filter on a `<video>`
+  blurs its native controls with the picture, so while the video is blurred
+  they are hidden and `vt-video-controls` is drawn over the bottom of the
+  frame, outside the blur: play / pause, a seek bar over the clip window
+  when the item has one, the time, mute and volume. It drives the element as
+  the native controls do, so the player hears the same events; a click on
+  the picture plays or pauses it. Picture-in-picture is turned off and
+  fullscreen left while blurred, since one would show the video sharp and
+  the other without its controls. The player has no toolbar, so the centre
+  panel puts its `vt-blur-toggle` in the item tools (`.video-tools`), and
+  `b` blurs the video as it does an image.
+- **The Browse canvas does it all itself**, because CSS cannot reach a cell of
+  a 2D canvas. It retains the active dataset while it paints thumbnails and
+  reads `blurredIn(datasetId)` once per frame: the same answer as `isBlurred`,
+  as a test over one read. A blurred cell is drawn from a blurred copy that
+  `ThumbStore.blurred` builds once on an offscreen canvas (at most 128px on a
+  side, since a blur keeps no detail a bigger copy would hold) and evicts with
+  its thumbnail; a per-frame `ctx.filter` would cost every pan. The copy is
+  blurred by a share of the image, sized by `blurRadiusFor` for the smallest
+  cell the thumbnail size draws (`canvas-blur.ts`), so one copy serves every
+  zoom. A paint builds at most 32 copies, and a cell still waiting for one is
+  drawn flat, never sharp, so the fail-closed first paint does not stall. The
+  peek follows the enlarged cell, hovered or pinned: `BlurPeek` holds it
+  blurred for one second, then cross-fades the sharp thumbnail in over 1.5s
+  (eased at both ends: a cross-fade gives the image away sooner than a
+  shrinking blur does), and drops back at once when the cell changes.
+  Low-effects mode and reduced motion skip the fade. Audio waveforms stay
+  sharp, as in the DOM.
 
 ### Other primitives
 

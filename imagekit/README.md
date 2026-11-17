@@ -24,6 +24,7 @@ Inference only: there is no training code here. Python 3.10+.
 - [Quick start](#quick-start)
 - [Models: where to get them](#models-where-to-get-them)
 - [ONNX export notes](#onnx-export-notes)
+- [Models in other formats](#models-in-other-formats)
 - [The image tensor](#the-image-tensor)
 - [JSON config schema](#json-config-schema)
 - [Core types](#core-types)
@@ -151,6 +152,48 @@ To run on a GPU, install `onnxruntime-gpu` in place of `onnxruntime` and pass
 `RuntimeOptions(use_gpu=True, gpu_device_id=N)`; a request for CUDA on a build
 without it raises at `initialize()` rather than silently running on the CPU.
 
+## Models in other formats
+
+The `oss` detector and embedder run on ONNX Runtime, which reads a model by
+what is in it, not by its name: an ONNX model called `det.model` loads exactly
+as `det.onnx` does, named outright or as the one `.onnx` or `.model` file in
+a bundle directory. A gzip-compressed ONNX model (`gzip -c det.onnx >
+det.model`, a common way to ship one) loads as it is: it is decompressed in
+memory, never written back to disk. A model saved in another format does not
+load whatever it is called, and there are two ways to run one:
+
+- **Convert it to ONNX once**, offline, and change nothing else: a PyTorch
+  model with `torch.onnx.export` ([above](#onnx-export-notes)), a Keras or
+  TensorFlow one with [`tf2onnx`](https://github.com/onnx/tensorflow-onnx).
+  A detector must still be one this package decodes (SCRFD or RetinaFace,
+  [Detector](#detector)); an embedder, one that maps the config's crop to a
+  vector.
+- **Run it through a provider that reads it.** Nothing outside `oss` needs
+  ONNX. The `ext` provider hands the config's paths to its backend untouched,
+  so a backend module wrapping the format's own runtime (a vendor SDK, say)
+  loads whatever file it is given, and so does a provider registered under a
+  name of its own ([Registering an external provider](#registering-an-external-provider)).
+  Its vectors are a new embedding space with a compat tag of their own.
+
+`initialize()` names the format when a model's first bytes give it away (a
+PyTorch file, a Keras model, a TensorFlow SavedModel directory, a pickle, a
+zip or tar archive, an empty file, any of those gzip-compressed, or a damaged
+gzip file) and refuses it with `imagekit.util.NotOnnxModelError` before
+loading anything, saying how to convert it. A file ONNX Runtime cannot parse
+at all raises the same error. `imagekit.util.describe_model_format(path)` is
+the check on its own.
+
+An ONNX model exported from PyTorch can pass for a PyTorch file: ONNX is a
+protobuf, and the export records `pytorch` and its version as the model's
+producer, so `pytorch 1.8` in `strings det.model` is no sign of a PyTorch file.
+To tell, gunzip the file first if `file det.model` says it is gzip, then load
+it with `onnx`, which prints an ONNX model's producer and fails to parse
+anything else:
+
+```bash
+python -c "import onnx, sys; m = onnx.load(sys.argv[1]); print(m.producer_name, m.producer_version)" det.onnx
+```
+
 ## The image tensor
 
 Every API takes and returns one image representation: a `numpy` array of
@@ -274,7 +317,8 @@ trained on. `fallback` says what a detection without landmarks gets:
 `provider` and `runtime` are optional (the environment's provider and the
 runtime defaults otherwise). Relative paths resolve against the config file's
 own directory, so a models directory moves as one unit. `model_bundle` is the
-`.onnx` file or a directory holding exactly one. The `ext` provider reads
+model file, under any name, or a directory holding exactly one `.onnx` or
+`.model` file. The `ext` provider reads
 the same keys and passes `model_bundle` / `model` / `config` to its backend's
 classes; it also reads an optional top-level `ext_backend`, the module to
 import (`IMAGEKIT_EXT_BACKEND` wins over it; `ext_backend` when neither is
@@ -417,8 +461,8 @@ python scripts/data/detect_faces.py <detect_model> <output> (--dir DIR | --list 
     [--use-gpu] [--gpu-device-id N] [--num-threads N] [--confidence-threshold T] [--model-config PATH]
 ```
 
-Detection only. `<detect_model>` is the `.onnx` or a directory holding it and
-its JSON config; `<output>` is the detections CSV. Prints `Total Detects: N`.
+Detection only. `<detect_model>` is the detector model file (`.onnx`, `.model`,
+...) or a directory holding it and its JSON config; `<output>` is the detections CSV. Prints `Total Detects: N`.
 
 ```
 python scripts/data/process_faces.py <config> <output_prefix> (--dir DIR | --list FILE | --img PATH)
@@ -474,7 +518,7 @@ server's provider through `vtscore/media/face/imagekit_bridge.py`.
 ```
 imagekit/
     __init__.py            # read_image_tensor, decode_image_buffer, RuntimeOptions
-    util.py                # the image tensor, letterbox/NMS, the transform registry, config lookup
+    util.py                # the image tensor, letterbox/NMS, the transform registry, model files and configs
     runtime.py             # RuntimeOptions -> onnxruntime providers and session options
     cli.py                 # detect_faces_main / process_faces_main (behind scripts/)
     face/

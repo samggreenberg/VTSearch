@@ -12,8 +12,10 @@ from typing import Any, Iterator
 
 from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.config import DATA_DIR
+from vtscore.datasets.blur_state import read_blur_overrides, stamp_blur_overrides
 from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_dataset_from_pickle, load_dataset_from_pickle_chunked
+from vtscore.plugins.uploads import CliUploadedFile
 
 
 class PickleDatasetImporter(ImporterBase):
@@ -58,6 +60,12 @@ class PickleDatasetImporter(ImporterBase):
             # the pickle is the whole import, so without the callback the
             # dashboard row shows one static message until it finishes.
             load_dataset_from_pickle(temp_path, medias, thin=thin, on_progress=progress)
+            # A file named by its server path (a reload from origin, the CLI)
+            # may have a blur sidecar beside it, the live state of that file:
+            # it wins over the overrides the container carries (#5693).  The
+            # loader keeps the file's ids, which the sidecar is keyed by.
+            if isinstance(file_obj, CliUploadedFile):
+                stamp_blur_overrides(medias, read_blur_overrides(file_obj.path))
         finally:
             temp_path.unlink(missing_ok=True)
         progress("idle", f"Loaded {len(medias)} medias from file", 0, 0)

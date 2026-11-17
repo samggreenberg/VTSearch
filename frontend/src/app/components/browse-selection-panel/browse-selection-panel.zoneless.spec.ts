@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
 
@@ -10,6 +11,9 @@ import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../testing/blur-state-stub';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 
 /**
  * Zoneless staleness canary for the browse selection panel.
@@ -250,5 +254,37 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
       expect(photoButton()!.disabled).toBe(true);
       expect(photoButton()!.title).toContain('exactly one');
     });
+  });
+});
+
+/** Each selected item's thumbnail shows its blur state (#5696). */
+describe('BrowseSelectionPanelComponent (blur)', () => {
+  it('blurs a selected item its dataset says is blurred, and only that one', async () => {
+    const metadataStub: Partial<MediaMetadataCacheService> = {
+      version$: new BehaviorSubject<number>(0).asObservable(),
+      ensureLoaded: () => {},
+      get: ((id: number) => ({ id, filename: `${id}.png`, media_type: 'image' })) as MediaMetadataCacheService['get'],
+    };
+    await configureZoneless({
+      imports: [BrowseSelectionPanelComponent],
+      providers: [
+        BrowseSelectionService,
+        { provide: MediaMetadataCacheService, useValue: metadataStub },
+        { provide: ActiveContextService, useValue: makeActiveContextStub() },
+        { provide: ActiveDatasetService, useValue: { activeId: signal('ds-1') } },
+        { provide: SettingsStateService, useValue: makeSettingsStateStub().stub },
+        { provide: MediaTypeCapabilityService, useValue: { usesThumbnails: () => true } },
+        provideBlurStateStub([blurKey('ds-1', 9)]).provider,
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(BrowseSelectionPanelComponent);
+    fixture.componentRef.setInput('mediaType', 'image');
+    TestBed.inject(BrowseSelectionService).addAll([8, 9]);
+    await settleZoneless(fixture);
+
+    const imgs = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('img.bsp-thumb'));
+    const blurred = Object.fromEntries(imgs.map((img) => [img.getAttribute('alt'), img.classList.contains('vt-blurred')]));
+    expect(blurred).toEqual({ '8.png': false, '9.png': true });
+    fixture.destroy();
   });
 });

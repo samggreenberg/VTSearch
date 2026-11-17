@@ -1277,6 +1277,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly cropPending = signal<{
     file: File;
     mediaId: number;
+    /** The dataset the bytes were read from, for the item's blur state. */
+    datasetId: string;
     mediaType: string;
     /** What to do after the crop is confirmed. */
     action: 'sort' | 'seed';
@@ -1334,6 +1336,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const media = this.mediaState.getMedia(mediaId);
     if (!media) return;
     const mediaType = media.media_type;
+    const datasetId = this.activeContext.datasetId;
     const url =
       mediaType === 'audio'
         ? this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`)
@@ -1349,7 +1352,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .then((blob) => {
         const name = media.filename || `media_${mediaId}`;
         const file = new File([blob], name, { type: blob.type });
-        this.cropPending.set({ file, mediaId, mediaType, action });
+        this.cropPending.set({ file, mediaId, datasetId, mediaType, action });
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
       })

@@ -14,7 +14,9 @@ imports after this one:
   or text;
 * :mod:`vtsearch.routes.media.vote` - set one media's vote, or many at once;
 * :mod:`vtsearch.routes.media.pile` - upload a file straight into the Good or
-  Bad pile.
+  Bad pile;
+* :mod:`vtsearch.routes.media.blur` - which items show blurred, and the Blur /
+  Unblur override.
 
 The helpers the content routes share live in
 :mod:`vtsearch.routes.media._serving`.

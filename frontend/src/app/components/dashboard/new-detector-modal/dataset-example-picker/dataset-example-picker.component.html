@@ -58,6 +58,8 @@
                     <img
                       class="pick-thumb"
                       [src]="thumbnailUrl(id)"
+                      [vtBlur]="id"
+                      [vtBlurDataset]="datasetId()"
                       alt=""
                       decoding="async"
                       (error)="onThumbnailError(id)" />

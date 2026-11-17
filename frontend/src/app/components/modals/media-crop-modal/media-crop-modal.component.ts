@@ -5,6 +5,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
 import { AudioCropOverlayComponent, AudioCropResult } from './audio-crop-overlay.component';
+import { BlurDirective } from '../../../directives/blur.directive';
 
 export type CropParams = { start: number; end: number } | { box: [number, number, number, number] };
 
@@ -19,13 +20,21 @@ type View = 'confirm' | 'cropping';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-media-crop-modal',
   standalone: true,
-  imports: [ModalComponent, ToastyHintComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],
+  imports: [ModalComponent, ToastyHintComponent, ImageCropOverlayComponent, AudioCropOverlayComponent, BlurDirective],
   templateUrl: './media-crop-modal.component.html',
   styleUrl: './media-crop-modal.component.scss',
 })
 export class MediaCropModalComponent implements OnInit, OnDestroy {
   readonly file = input.required<File>();
   readonly mediaType = input('');
+  /**
+   * The dataset item *file* was read from, when it was one (Crop and Sort on a
+   * Train/Tune item), and its dataset (the active one when left out): the
+   * image then shows that item's blur state (#5689). An uploaded file is no
+   * dataset item and stays sharp.
+   */
+  readonly mediaId = input<number | null>(null);
+  readonly datasetId = input<string | undefined>(undefined);
   readonly confirmed = output<MediaCropResult>();
   readonly cancelled = output<void>();
 

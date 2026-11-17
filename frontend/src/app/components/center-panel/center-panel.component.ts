@@ -26,6 +26,7 @@ import { ImageViewControlsComponent } from './image-view-controls/image-view-con
 import { FaceChecklistComponent } from './face-checklist/face-checklist.component';
 import { FaceReferenceComponent } from './face-reference/face-reference.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
+import { BlurToggleComponent } from './blur-toggle/blur-toggle.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
 import { VoteHintId, VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
@@ -55,6 +56,7 @@ const OWN_VIEWER_TYPES: ReadonlySet<string> = new Set<CenterViewer>(['audio', 'i
     FaceReferenceComponent,
     FaceChecklistComponent,
     VideoPlayerComponent,
+    BlurToggleComponent,
     TextViewerComponent,
     DocumentViewerComponent,
     VotingOverlayComponent,
@@ -454,6 +456,11 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'blur':
+          // The item being voted on, never the reference beside it: its
+          // image, or its video (#5698).
+          (this.imageViewer() ?? this.videoPlayer())?.toggleBlur();
+          break;
         case 'reference':
           this.faceReference()?.next();
           break;

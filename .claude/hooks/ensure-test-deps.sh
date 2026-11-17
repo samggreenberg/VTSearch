@@ -83,6 +83,12 @@ python -m pip install --upgrade "pypdf>=6.19.0" -q
 # not use it. 1.45.0 carries CVE-2026-114603, patched in 1.45.1.
 python -m pip install --upgrade "opentelemetry-api>=1.45.1" -q
 
+# soupsieve ships pre-installed in the cloud container as well (in /usr/local,
+# pulled in by the image's markitdown -> markdownify -> beautifulsoup4);
+# VTSearch does not use it. 2.9.2 carries CVE-2026-126190 and CVE-2026-126192,
+# both patched by 4.0.0.
+python -m pip install --upgrade "soupsieve>=4.0.0" -q
+
 # The container also carries a per-user site (/root/.local/lib/python3.X/
 # site-packages, home of the preinstalled MCP tooling) that sits AHEAD of
 # /usr/local on sys.path, with its own urllib3 / pyjwt / anyio. Those copies

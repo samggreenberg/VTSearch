@@ -10,6 +10,15 @@ from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
+def _describe(exc: Exception) -> str:
+    """A download failure in a few words: the HTTP status when there is one, else the exception."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is not None:
+        return f"HTTP {status}"
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}"[:200] if text else type(exc).__name__
+
+
 def download_ucsf_documents(  # noqa: C901
     categories: list[str],
     docs_per_category: int = 25,
@@ -22,9 +31,9 @@ def download_ucsf_documents(  # noqa: C901
     PDFs, and organises them into category subdirectories under
     ``DATA_DIR / "ucsf_documents"``.
 
-    Each PDF can later be rendered to page images with
-    :func:`~vtscore.datasets.pdf.render_pdf_pages` for use as an image demo
-    dataset.
+    The PDFs are the ``ucsf_documents`` demo's source media: documents, which
+    the demo load converts to page images (``document2image``) or extracted
+    text (``document2text``) before embedding.
 
     Args:
         categories: Industry names recognised by the UCSF IDL Solr index
@@ -36,6 +45,13 @@ def download_ucsf_documents(  # noqa: C901
     Returns:
         Path to the ``ucsf_documents/`` directory containing category
         subdirectories with ``.pdf`` files (e.g. ``data/ucsf_documents``).
+
+    Raises:
+        RuntimeError: When not one PDF is on disk afterwards, naming what the
+            library answered.  A category that comes up short is tolerated
+            (the demo is then smaller); nothing at all used to come back as an
+            empty folder, and the load ended as "Import produced no medias"
+            with no word on why (#5680).
     """
     if on_progress is None:
         on_progress = resolve_progress_callback()
@@ -58,6 +74,8 @@ def download_ucsf_documents(  # noqa: C901
 
     total_docs = len(categories) * docs_per_category
     downloaded = 0
+    # The first failure of each kind, for the error raised when nothing lands.
+    failures: dict[str, str] = {}
 
     # Every PDF is a separate transfer, but they all run back-to-back under one
     # continuous "downloading" phase. If each PDF reported its own byte fraction
@@ -100,7 +118,8 @@ def download_ucsf_documents(  # noqa: C901
             resp.raise_for_status()
             data = resp.json()
             docs = data.get("response", {}).get("docs", [])
-        except Exception:
+        except Exception as exc:
+            failures.setdefault("query", f"the index query for {cat!r} failed ({_describe(exc)})")
             docs = []
 
         # The UCSF IDL Solr endpoint ignores the ``rows`` limit and returns up
@@ -131,8 +150,17 @@ def download_ucsf_documents(  # noqa: C901
                 _core.download_file_atomic(url, pdf_path, 0, _cumulative_progress)
                 downloaded += 1
                 on_progress("downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs)
-            except Exception:
-                # Skip failed downloads silently.
+            except Exception as exc:
+                # One PDF that will not download costs the demo one document.
+                failures.setdefault("download", f"downloading {doc_id}.pdf failed ({_describe(exc)})")
                 pdf_path.unlink(missing_ok=True)
+
+    if not any(extract_dir.glob("*/*.pdf")):
+        why = "; ".join(failures.values()) or "the index listed no documents"
+        raise RuntimeError(
+            f"No UCSF Industry Documents could be downloaded: {why}. "
+            f"The library ({_core.UCSF_IDL_DOWNLOAD_URL}) may be unreachable from this machine or refusing "
+            f"automated downloads; PDFs placed under {extract_dir}/<category>/ are used as they are."
+        )
 
     return extract_dir

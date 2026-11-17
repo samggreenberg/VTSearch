@@ -81,7 +81,10 @@ def _detect_parser() -> argparse.ArgumentParser:
         prog="detect_faces.py",
         description="Detect faces (SCRFD / RetinaFace on ONNX Runtime) and write a detections CSV.",
     )
-    parser.add_argument("detect_model", help="the detector .onnx file, or a directory holding it and its JSON config")
+    parser.add_argument(
+        "detect_model",
+        help="the detector model file (.onnx, .model, ...), or a directory holding it and its JSON config",
+    )
     parser.add_argument("output", help="the detections CSV to write")
     _add_input_args(parser)
     _add_runtime_args(parser)

@@ -1,0 +1,36 @@
+// A strip in the image toolbar's surface treatment, so it reads as the app's
+// own controls. The player places it over the bottom of the video's frame.
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.vc-btn {
+  padding: var(--space-2xs) var(--space-sm);
+  flex-shrink: 0;
+}
+
+.vc-time {
+  flex-shrink: 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vc-seek {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.vc-volume {
+  width: 80px;
+  flex-shrink: 0;
+  cursor: pointer;
+}

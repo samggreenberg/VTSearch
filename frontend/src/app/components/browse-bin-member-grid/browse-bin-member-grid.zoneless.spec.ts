@@ -7,6 +7,10 @@ import { BrowseBinMemberGridComponent } from './browse-bin-member-grid.component
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { blurKey, provideBlurStateStub } from '../../testing/blur-state-stub';
+import { ActiveContextService } from '../../services/active-context.service';
+import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 
 /**
  * Contracts the member grid took over from ``BrowseBinPopupComponent`` when it
@@ -195,6 +199,37 @@ describe('BrowseBinMemberGridComponent (not selectable)', () => {
     expect(grid.isSelected(1)).toBe(false);
     expect(grid.selectionState).toBe('none');
     expect(grid.entryLabel(1)).toBe('Clip #1 (click to show it large)');
+    fixture.destroy();
+  });
+});
+
+/** Each member's thumbnail shows its blur state (#5696). */
+describe('BrowseBinMemberGridComponent (blur)', () => {
+  it("blurs a member the active dataset says is blurred, and only that one", async () => {
+    const blur = provideBlurStateStub([blurKey('ds-1', 2), blurKey('other-ds', 1)]);
+    configureZoneless({
+      imports: [BrowseBinMemberGridComponent],
+      providers: [
+        ...provideHttpTesting(),
+        blur.provider,
+        { provide: MediaTypeCapabilityService, useValue: { usesThumbnails: () => true } },
+      ],
+    });
+    TestBed.inject(ActiveContextService).setActivePair('ds-1', 'det-1');
+    const cache = TestBed.inject(MediaMetadataCacheService);
+    vi.spyOn(cache, 'get').mockImplementation((id: number) => ({ id, media_type: 'image', filename: `${id}.png`, md5: '', custom_metadata: {} }));
+    vi.spyOn(cache, 'ensureLoaded').mockImplementation(() => {});
+    const fixture = TestBed.createComponent(BrowseBinMemberGridComponent);
+    fixture.componentRef.setInput('ids', [1, 2, 3]);
+    fixture.componentRef.setInput('rows', [[1, 2, 3]]);
+    fixture.componentRef.setInput('columns', 3);
+    fixture.componentRef.setInput('selectable', false);
+    fixture.componentRef.setInput('mediaType', 'image');
+    await settleResource();
+
+    const imgs = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('img.bin-popup-thumb'));
+    expect(imgs.map((img) => img.getAttribute('alt'))).toEqual(['1.png', '2.png', '3.png']);
+    expect(imgs.map((img) => img.classList.contains('vt-blurred'))).toEqual([false, true, false]);
     fixture.destroy();
   });
 });

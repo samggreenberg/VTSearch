@@ -74,6 +74,18 @@ negative pool is stratified on it (#3670). Here the distinction is empty: COCO
 answered for all eighty classes on every image in the corpus, so the pool is
 provable by construction and ``coco_fraction`` is 1.0 rather than a composition
 to choose.
+
+**What a study may conclude about one run (#3688).** One wrong vote among a
+run's first ten moves F at the stop by more than its cell's seed-to-seed SD in
+41-49% of runs, on Binary and Region alike; a new seed does that in 55-58%. It
+also pulls the mean down, by 0.02-0.045, and which error costs more depends on
+the path: a Good voted Bad costs Binary -0.040 and Region -0.017, a negative
+voted Good costs Binary -0.026 and Region -0.045 (-0.077 at ``@small``). The
+20th Good voted Bad moves 12% of runs. The owner's record of COCO's residual
+errors (``COCO_BETTER__label_review_4179.json``), left in, costs -0.003 +- 0.002
+and moves 19%. So a single run is one draw: compare arms paired over cells and
+seeds, and do not read a result that rests on a few runs or one class
+(``docs/experiments/2026-11-12-flip-sensitivity-3688``).
 """
 
 from __future__ import annotations

@@ -1101,7 +1101,7 @@ boundaries, as `run_chunked_cli()`; yield a chunk you cannot list without
 reading its sources with `DeferredChunk.built(medias)`. The built-in
 `server_folder` importer does this for its folder and archive chunks
 (`vtscore.datasets.loader.iter_folder_chunks_deferred` walks a folder this way),
-and yields its PDF-page and converter chunks built:
+and yields its converter chunk (a PDF's pages among them) built:
 
 ```python
 from vtscore.datasets.importers.base import DeferredChunk

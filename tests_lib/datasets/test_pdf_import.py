@@ -2,11 +2,11 @@
 
 These tests verify:
 - render_pdf_pages converts PDF pages into PIL Images with correct naming
-- Folder importer picks up PDFs when media_type is "image"
-- PDF-derived medias have origin {"importer": "pdf", ...}
+- Folder importer renders PDFs through ``document2image`` when media_type is
+  "image", once per page, with the converter's recipe as each page's origin
 - PDF-only folders work (no regular image files present)
 - PDFs are ignored when media_type is not "image"
-- Thin mode stores no media_bytes for PDF pages
+- ``load_pdf_images_into`` (the library helper) still follows symlinks
 """
 
 from __future__ import annotations
@@ -103,124 +103,120 @@ class TestRenderPdfPages:
 # ---------------------------------------------------------------------------
 
 
+def _write_photo(path) -> None:
+    """A real, tiny PNG at *path* (the folder loader decodes what it scans)."""
+    from PIL import Image
+
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(path)
+
+
+def _run_folder(tmp_path, *, thin: bool = False, **field_values) -> dict:
+    from vtscore.datasets.importers.server_folder import IMPORTER
+
+    medias: dict = {}
+    IMPORTER.run({"path": str(tmp_path), **field_values}, medias, thin=thin)
+    return medias
+
+
+def _pages(medias: dict) -> list[dict]:
+    return [m for m in medias.values() if (m.get("origin") or {}).get("importer") == "converter"]
+
+
+_DOCUMENT_ROW = [{"source_type": "document", "converter": "document2image", "params": {}}]
+
+
 class TestFolderImporterPdf:
-    def _make_fake_image_media_type(self):
-        mt = mock.MagicMock()
-        mt.type_id = "image"
-        mt.folder_import_name = "image"
-        mt.file_extensions = ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"]
-        mt.load_media_data.return_value = {"media_bytes": b"fake", "duration": 0, "width": 100, "height": 100}
-        return mt
-
-    def _make_fake_embedder(self):
-        emb = mock.MagicMock()
-        emb.name = "siglip"
-        emb.media_type_id = "image"
-        emb._model = True
-        emb.embed_media.return_value = np.zeros(768)
-        emb.embed_pil_image.return_value = np.zeros(768)
-        emb.embed_media_bulk.side_effect = lambda medias: [emb.embed_media(m) for m in medias]
-        return emb
-
-    def _patch_media_registry(self, mt, emb):
-        from contextlib import ExitStack
-
-        stack = ExitStack()
-        stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
-        stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[emb]))
-        return stack
+    """A folder's PDFs become page images through ``document2image``, and through nothing else."""
 
     def test_pdf_pages_added_to_medias(self, tmp_path):
-        """PDFs in an image folder should produce per-page medias."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
+        """An image import that names no source rows renders the folder's PDFs beside its photos."""
+        _create_test_pdf(tmp_path / "doc.pdf", num_pages=2)
+        _write_photo(tmp_path / "photo.png")
 
-        pdf = tmp_path / "doc.pdf"
-        _create_test_pdf(pdf, num_pages=2)
-        # Also create a regular image so load_dataset_from_folder doesn't raise
-        (tmp_path / "photo.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
+        medias = _run_folder(tmp_path, media_type="image")
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        # 1 regular image + 2 PDF pages = 3 total
         assert len(medias) == 3
+        assert len(_pages(medias)) == 2
 
-    def test_pdf_origin_is_pdf_importer(self, tmp_path):
-        """PDF-derived medias should have origin importer='pdf'."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
+    def test_pdf_origin_is_the_converter_recipe(self, tmp_path):
+        """Each page records which page of which file it is, so a label on it can be resolved."""
         pdf = tmp_path / "report.pdf"
-        _create_test_pdf(pdf, num_pages=1)
-        (tmp_path / "photo.png").write_bytes(b"\x89PNG" + b"\x00" * 100)
+        _create_test_pdf(pdf, num_pages=2)
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
+        pages = _pages(_run_folder(tmp_path, media_type="image"))
 
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        pdf_medias = [m for m in medias.values() if m["origin"] and m["origin"]["importer"] == "pdf"]
-        assert len(pdf_medias) == 1
-        assert pdf_medias[0]["origin"]["params"]["path"] == str(pdf)
+        assert [p["origin"]["params"]["converter"] for p in pages] == ["document2image"] * 2
+        assert [p["origin"]["params"]["converter_out_index"] for p in pages] == ["0", "1"]
+        assert all(p["origin"]["params"]["source_path"] == str(pdf.resolve()) for p in pages)
+        assert all(p["origin"]["params"]["parent_importer"] == "server_folder" for p in pages)
 
     def test_pdf_page_filenames(self, tmp_path):
-        """PDF page filenames should follow the name-N pattern."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
+        _create_test_pdf(tmp_path / "slides.pdf", num_pages=3)
 
-        pdf = tmp_path / "slides.pdf"
-        _create_test_pdf(pdf, num_pages=3)
-        (tmp_path / "img.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
+        names = sorted(p["filename"] for p in _pages(_run_folder(tmp_path, media_type="image")))
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        pdf_names = sorted(m["filename"] for m in medias.values() if m["filename"].startswith("slides.pdf-"))
-        assert pdf_names == ["slides.pdf-1", "slides.pdf-2", "slides.pdf-3"]
+        assert names == [f"slides.pdf\u2192slides_page_{n}.png" for n in (1, 2, 3)]
 
     def test_pdf_only_folder(self, tmp_path):
         """A folder with only PDFs (no regular images) should still work."""
+        _create_test_pdf(tmp_path / "only.pdf", num_pages=2)
+
+        assert len(_run_folder(tmp_path, media_type="image")) == 2
+
+    def test_named_document_row_gives_each_page_once(self, tmp_path):
+        """#5680: the row the Add Dataset dialog sends for a PDF folder used to double every page.
+
+        The importer rendered the PDFs itself *and* ran the row's converter over them.
+        """
+        _create_test_pdf(tmp_path / "a.pdf", num_pages=2)
+        _create_test_pdf(tmp_path / "b.pdf", num_pages=3)
+
+        medias = _run_folder(tmp_path, media_type="image", source_specs=_DOCUMENT_ROW)
+
+        assert len(medias) == 5
+        seen = {
+            (m["origin"]["params"]["source_file"], m["origin"]["params"]["converter_out_index"])
+            for m in medias.values()
+        }
+        assert len(seen) == 5
+
+    def test_named_rows_are_the_whole_scan(self, tmp_path):
+        """A request that names only the image row asked for the photos, not the PDFs."""
+        _create_test_pdf(tmp_path / "doc.pdf", num_pages=2)
+        _write_photo(tmp_path / "photo.png")
+
+        medias = _run_folder(
+            tmp_path, media_type="image", source_specs=[{"source_type": "image", "converter": None, "params": {}}]
+        )
+
+        assert [m["filename"] for m in medias.values()] == ["photo.png"]
+
+    def test_chunked_scan_matches_the_whole_one(self, tmp_path):
         from vtscore.datasets.importers.server_folder import IMPORTER
 
-        pdf = tmp_path / "only.pdf"
-        _create_test_pdf(pdf, num_pages=2)
+        _create_test_pdf(tmp_path / "doc.pdf", num_pages=2)
+        _write_photo(tmp_path / "photo.png")
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
+        chunks = list(IMPORTER.run_chunked({"path": str(tmp_path), "media_type": "image"}, 100))
 
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
+        assert sum(len(c) for c in chunks) == 3
+        assert sum(len(_pages(c)) for c in chunks) == 2
 
-        assert len(medias) == 2
+    def test_document_scan_hands_over_the_files(self, tmp_path):
+        """Asked for documents, the scan lists the PDFs; the load pipeline converts them before embedding."""
+        _create_test_pdf(tmp_path / "doc.pdf", num_pages=2)
+
+        medias = _run_folder(tmp_path, media_type="document")
+
+        assert [m["media_type"] for m in medias.values()] == ["document"]
 
     def test_pdf_ignored_for_non_image_types(self, tmp_path):
-        """PDFs should not be processed when media_type is not 'images'."""
-        pdf = tmp_path / "doc.pdf"
-        _create_test_pdf(pdf, num_pages=1)
-
-        # _load_pdf_images is only called when media_type == "image",
-        # so verify the folder importer run method doesn't call it for sounds
-        mt = mock.MagicMock()
-        mt.type_id = "audio"
-        mt.folder_import_name = "audio"
-        mt.file_extensions = ["*.wav"]
-        mt.embed_media.return_value = np.zeros(512)
-        mt.load_media_data.return_value = {"duration": 1.0}
-
-        # Write a WAV so load_dataset_from_folder succeeds
+        """An audio import leaves the folder's PDFs alone: documents do not become audio by default."""
         import io
         import struct
         import wave
 
+        _create_test_pdf(tmp_path / "doc.pdf", num_pages=1)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(1)
@@ -229,125 +225,30 @@ class TestFolderImporterPdf:
             wf.writeframes(struct.pack("<" + "h" * 100, *([0] * 100)))
         (tmp_path / "tone.wav").write_bytes(buf.getvalue())
 
-        from vtscore.datasets.importers.server_folder import IMPORTER
+        medias = _run_folder(tmp_path, media_type="audio")
 
-        medias: dict = {}
-        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
+        assert [m["media_type"] for m in medias.values()] == ["audio"]
 
-        # Only the WAV should be loaded, not the PDF
-        assert len(medias) == 1
-        assert medias[1]["media_type"] == "audio"
-
-    def test_pdf_thin_mode_no_media_bytes(self, tmp_path):
-        """In thin mode, PDF-derived medias should have media_bytes=None."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
+    def test_pdf_thin_mode_is_a_reference_to_the_source(self, tmp_path):
+        """Reference mode tags each page with the file it re-renders from; its bytes go after the embed stage."""
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
+        (page,) = _pages(_run_folder(tmp_path, thin=True, media_type="image"))
 
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias, thin=True)
+        assert page["_lazy_source"] == str(pdf.resolve())
+        assert page["media_path"] == str(pdf.resolve())
 
-        pdf_medias = [m for m in medias.values() if m["filename"].endswith(".pdf-1")]
-        assert len(pdf_medias) == 1
-        assert pdf_medias[0]["media_bytes"] is None
-
-    def test_pdf_media_has_image_type(self, tmp_path):
-        """PDF-derived medias should have type='image'."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
-        pdf = tmp_path / "doc.pdf"
-        _create_test_pdf(pdf, num_pages=1)
-        (tmp_path / "img.png").write_bytes(b"\x89PNG" + b"\x00" * 100)
-
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
-        assert len(pdf_medias) >= 1
-        assert all(m["media_type"] == "image" for m in pdf_medias)
-
-    def test_pdf_media_has_width_height(self, tmp_path):
-        """PDF-derived medias should have non-None width and height."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
-        pdf = tmp_path / "doc.pdf"
-        _create_test_pdf(pdf, num_pages=1)
-
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
-        assert len(pdf_medias) == 1
-        assert pdf_medias[0]["width"] is not None
-        assert pdf_medias[0]["height"] is not None
-        assert pdf_medias[0]["width"] > 0
-        assert pdf_medias[0]["height"] > 0
-
-    def test_pdf_media_has_md5(self, tmp_path):
-        """PDF-derived medias should have a valid MD5 hash."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
-        pdf = tmp_path / "doc.pdf"
-        _create_test_pdf(pdf, num_pages=1)
-
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
-        assert len(pdf_medias) == 1
-        assert len(pdf_medias[0]["md5"]) == 32
-
-    def test_multiple_pdfs_in_folder(self, tmp_path):
-        """Multiple PDFs should all be expanded."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
-        _create_test_pdf(tmp_path / "a.pdf", num_pages=2)
-        _create_test_pdf(tmp_path / "b.pdf", num_pages=3)
-
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
-
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        # 2 + 3 = 5 pages total
-        assert len(medias) == 5
-
-    def test_pdf_origin_name_matches_filename(self, tmp_path):
-        """origin_name should equal the page filename."""
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
+    def test_pdf_media_fields(self, tmp_path):
         _create_test_pdf(tmp_path / "doc.pdf", num_pages=1)
 
-        mt = self._make_fake_image_media_type()
-        emb = self._make_fake_embedder()
-        medias: dict = {}
+        (page,) = _pages(_run_folder(tmp_path, media_type="image"))
 
-        with self._patch_media_registry(mt, emb):
-            IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-
-        m = list(medias.values())[0]
-        assert m["origin_name"] == m["filename"]
-        assert m["origin_name"] == "doc.pdf-1"
+        assert page["media_type"] == "image"
+        assert page["width"] > 0 and page["height"] > 0
+        assert len(page["md5"]) == 32
+        assert page["origin_name"] == page["filename"]
+        assert page["media_bytes"][:8] == b"\x89PNG\r\n\x1a\n"
 
 
 class TestPdfSymlinkDiscovery:

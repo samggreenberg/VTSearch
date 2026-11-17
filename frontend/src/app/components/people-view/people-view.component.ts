@@ -17,6 +17,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { map } from 'rxjs';
 
+import { BlurDirective } from '../../directives/blur.directive';
+
 import type { CoPerson } from '../../generated/api-client/models/co-person';
 import type { PeopleList } from '../../generated/api-client/models/people-list';
 import type { PersonSummary } from '../../generated/api-client/models/person-summary';
@@ -96,6 +98,7 @@ const FACE_TYPE = 'face';
     IconComponent,
     ProgressBarComponent,
     SourcePhotoModalComponent,
+    BlurDirective,
   ],
   providers: [PeopleViewStateService, SiblingLoadService],
   templateUrl: './people-view.component.html',

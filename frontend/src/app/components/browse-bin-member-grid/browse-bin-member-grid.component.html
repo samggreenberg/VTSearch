@@ -67,6 +67,7 @@
                 <img
                   class="bin-popup-thumb"
                   [src]="thumbnailUrl(id)"
+                  [vtBlur]="id"
                   [alt]="name(id)"
                   loading="lazy"
                   (error)="onThumbnailError(thumbnailUrl(id))" />

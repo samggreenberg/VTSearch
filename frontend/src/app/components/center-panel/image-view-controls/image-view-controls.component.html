@@ -47,3 +47,7 @@
 />
 <span class="ivc-zoom-label">{{ viewer().zoomLabel() }}</span>
 <button class="btn btn--toolbar ivc-btn" data-metric="imageResetView" (click)="viewer().resetView()" title="Reset view" aria-label="Reset image view"><vt-icon type="zoom-fit" [size]="16"></vt-icon></button>
+@if (viewer().blurrable()) {
+  <span class="ivc-sep" aria-hidden="true"></span>
+  <vt-blur-toggle [target]="viewer()" />
+}

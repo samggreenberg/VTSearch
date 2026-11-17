@@ -11,6 +11,8 @@ import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.compone
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { BlurStateService } from '../../services/blur-state.service';
 import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -151,6 +153,9 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: ProjectionApiService, useValue: projectionStub },
         { provide: TileCacheService, useValue: tileCacheStub },
         { provide: ActiveContextService, useValue: activeContextStub },
+        // The canvas's blur wiring (#5689) has its own specs; nothing here is blurred.
+        { provide: ActiveDatasetService, useValue: { activeId: signal('') } },
+        { provide: BlurStateService, useValue: { retain: () => noop, blurredIn: () => () => false } },
         { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         ...(realSettingsStore

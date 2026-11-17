@@ -90,7 +90,9 @@ class DatasetContext:
 
     Vote-related state (``good_votes``, ``bad_votes``, ``label_history``, etc.)
     lives in :class:`DetectorContext`, not here.  ``DatasetContext`` holds only
-    dataset-intrinsic state: the media items, coverage atlas, and display name.
+    dataset-intrinsic state: the media items, coverage atlas, and display name,
+    plus the one piece of per-item user state that belongs to the dataset
+    rather than a detector, the Blur / Unblur overrides.
     """
 
     __slots__ = (
@@ -221,6 +223,17 @@ class DatasetContext:
         "_people",
         # The in-flight people fit a request is waiting on.
         "_people_job_id",
+        # Blur state (#5692; vtscore.datasets.blur_state).  ``_blur_overrides``
+        # is the ``{media_id: bool}`` a user set with Blur / Unblur, read from
+        # the ``<stem>.blur.json`` sidecar on first use (``None`` until then)
+        # and replaced, never mutated, on each write; ``_blur_overrides_revision``
+        # counts those writes.  ``_blurred_ids`` caches the ids whose effective
+        # state is blurred (override, else the blur rules), with the media
+        # revision, overrides revision and rules it was computed at.  Ids and
+        # booleans only, no vectors.
+        "_blur_overrides",
+        "_blur_overrides_revision",
+        "_blurred_ids",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/ARCHITECTURE.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -313,6 +326,8 @@ class DatasetContext:
         # A Face dataset's people, persisted beside it as the order is, and the
         # id of the fit a request is waiting on.
         "people": frozenset({"_people", "_people_job_id"}),
+        # The blurred-id set, recomputed from the overrides and the blur rules.
+        "blur": frozenset({"_blurred_ids"}),
     }
 
     #: Slots that are state, not cache - never touched by
@@ -326,6 +341,9 @@ class DatasetContext:
     #:   pickle and restored by the load pipeline, which owns its lifetime.
     #: * ``_emb_sidecar_disabled`` is a one-way latch, not a cache: it records
     #:   that an in-place vector rewrite happened, which no rebuild undoes.
+    #: * ``_blur_overrides`` / ``_blur_overrides_revision`` are user state: the
+    #:   Blur / Unblur clicks, which nothing can rederive.  The sidecar holds
+    #:   the durable copy.
     _NON_DERIVED_SLOTS: frozenset[str] = frozenset(
         {
             "dataset_id",
@@ -334,6 +352,8 @@ class DatasetContext:
             "coverage_atlas",
             "dataset_display_name",
             "_emb_sidecar_disabled",
+            "_blur_overrides",
+            "_blur_overrides_revision",
             "_text_embedder",
             "_patch_embedder",
             "_structural_embedder",
@@ -388,6 +408,10 @@ class DatasetContext:
         self._order_job_id: str | None = None  # fit a Similarity sort waits on (#5464)
         self._people: Any = None  # PeoplePartition | None (#5586)
         self._people_job_id: str | None = None  # people fit a request waits on (#5586)
+        # Blur state (#5692); see the __slots__ comment.
+        self._blur_overrides: dict[int, bool] | None = None  # read from the sidecar on first use
+        self._blur_overrides_revision: int = 0  # bumped on each override write
+        self._blurred_ids: Any = None  # _BlurredIds | None (key + frozenset of ids)
         # Role-typed embedder binding (see __slots__ comment).  ``None``
         # until either explicitly bound or derived from the medias.
         self._text_embedder: str | None = None
@@ -453,6 +477,7 @@ class DatasetContext:
         subset: bool = True,
         order: bool = True,
         people: bool = True,
+        blur: bool = True,
     ) -> None:
         """Drop this context's derived caches, by family.
 
@@ -512,6 +537,8 @@ class DatasetContext:
             if people:
                 self._people = None
                 self._people_job_id = None
+            if blur:
+                self._blurred_ids = None
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding

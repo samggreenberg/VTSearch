@@ -618,6 +618,74 @@ def _needs_clip_replay(params: dict[str, Any]) -> bool:
     return bool(params.get("clipper") or params.get("clipper_chain") or params.get("converter"))
 
 
+def _converter_led_steps(params: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """The steps that rebuild a unit a converter made, from its ``origin.params``.
+
+    ``None`` when no converter is recorded: the unit is its file, or a same-type
+    cut of it.  An empty list when one is recorded but its recipe cannot be
+    replayed (a flat converter origin with no sub-output disambiguator).
+    """
+    from vtscore.datasets.clipper_chain import parse_trail  # noqa: PLC0415
+
+    if params.get("converter"):
+        return _converter_origin_to_chain(params) or []
+    trail = parse_trail(params.get("clipper_chain")) if params.get("clipper_chain") else None
+    if trail and any(step.get("kind") == "converter" for step in trail):
+        return trail
+    return None
+
+
+def resolve_unit_payload(file_path: Path, origin: dict[str, Any] | None) -> tuple[bytes, str] | None:
+    """Return ``(bytes, suffix)`` of the unit *origin* names, given the file it resolved to.
+
+    For most origins the unit *is* the file, and this reads it.  A unit a
+    converter made is not: the origin of page 3 of a PDF resolves to the PDF,
+    whose bytes are a document where the label is an image.  Serving those as
+    the label left every thumbnail of a converted dataset's labels blank
+    (#5680).  For such an origin, a flat ``converter`` recipe or a
+    ``clipper_chain`` with a converter step, the recipe is replayed on the
+    file and the output it recorded is returned, with the suffix of the type
+    the chain ends in (text comes back UTF-8 encoded).
+
+    ``None`` when the file cannot be read, or when a converter recipe no
+    longer reproduces its output: the source's bytes are not a stand-in for it.
+    A same-type clip (an audio window, an image crop) still reads the whole
+    file here, as its callers always have.
+    """
+    from vtscore.datasets.clipper_chain import (  # noqa: PLC0415
+        _FINAL_EXT_BY_TYPE,
+        _load_source_as_media,
+        _step_io_types,
+        replay_chain_on_media,
+    )
+
+    steps = _converter_led_steps((origin or {}).get("params", {}) or {})
+    if steps is None:
+        try:
+            return file_path.read_bytes(), file_path.suffix.lower()
+        except OSError:
+            return None
+    if not steps:
+        return None
+
+    first, last = _step_io_types(steps[0]), _step_io_types(steps[-1])
+    if first is None or last is None:
+        return None
+    try:
+        unit = replay_chain_on_media(_load_source_as_media(file_path, first[0]), steps)
+    except Exception:
+        log.debug("resolve_unit_payload: replay failed for %s", file_path, exc_info=True)
+        return None
+    if unit is None:
+        return None
+    suffix = _FINAL_EXT_BY_TYPE.get(last[1], "")
+    if last[1] == "text":
+        text = unit.get("media_string")
+        return (text.encode("utf-8"), suffix) if isinstance(text, str) else None
+    payload = unit.get("media_bytes")
+    return (bytes(payload), suffix) if isinstance(payload, (bytes, bytearray)) else None
+
+
 def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,

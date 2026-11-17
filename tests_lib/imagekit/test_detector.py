@@ -11,6 +11,7 @@ import pytest
 from imagekit import RuntimeOptions
 from imagekit.face.detection import DEFAULT_CONFIG_PATH, DetectorConfig, FaceDetector
 from imagekit.runtime import CUDA_PROVIDER
+from imagekit.util import NotOnnxModelError
 from tests_lib.imagekit._real_models import FACE_IMAGE as _FACE_IMAGE
 from tests_lib.imagekit._real_models import MODEL_DIR as _MODEL_DIR
 from tests_lib.imagekit._real_models import detector_path
@@ -58,7 +59,7 @@ class TestLifecycle:
         with pytest.raises(FileNotFoundError):
             det.initialize(RuntimeOptions(), tmp_path / "nope.onnx")
         (tmp_path / "bad.onnx").write_bytes(b"not a model")
-        with pytest.raises(Exception):
+        with pytest.raises(NotOnnxModelError, match="cannot read .*bad.onnx as an ONNX model"):
             det.initialize(RuntimeOptions(), tmp_path / "bad.onnx")
         assert not det.is_initialized
 

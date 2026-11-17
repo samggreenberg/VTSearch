@@ -348,6 +348,14 @@ def _recall_knob(run: "float | str | None", app: "float | None") -> "float | str
     return "off" if v is None or v == "off" else float(v)
 
 
+def held_out_ids(path: "str | None", cat: str) -> "set[int] | None":
+    """#3688: the media ids *path*'s ``{class: [ids]}`` holds out of a cell of category *cat* (``class@band``)."""
+    if path is None:
+        return None
+    record = json.loads(Path(path).read_text())
+    return {int(i) for i in record.get(cat.split("@", 1)[0], [])} or None
+
+
 def cell_file(path: Path) -> Path:
     """*path*, gzipped when ``CALIB_CELLS_GZIP=1`` (#4184).  pandas picks the codec off the suffix."""
     return path.with_name(path.name + ".gz") if cfg.CELLS_GZIP else path
@@ -413,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} smart_signal={cfg.SMART_SIGNAL}{'+readings' if cfg.SMART_READINGS else ''} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} span_green={cfg.SPAN_GREEN if cfg.SPAN_GREEN is not None else 'app'} min_good={cfg.MIN_GOOD or 'app'} hard_dry_run={cfg.HARD_DRY_RUN if cfg.HARD_DRY_RUN is not None else 'app'} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} span_green={cfg.SPAN_GREEN if cfg.SPAN_GREEN is not None else 'app'} min_good={cfg.MIN_GOOD or 'app'} hard_dry_run={cfg.HARD_DRY_RUN if cfg.HARD_DRY_RUN is not None else 'app'} band_share={cfg.BAND_SHARE or 'off'} flip_vote={cfg.FLIP_VOTE or 'off'} hold_out={cfg.HOLD_OUT or 'off'}:{cfg.HOLD_OUT_SCOPE} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -641,6 +649,9 @@ def main(argv: list[str] | None = None) -> int:
                 **({"min_good": cfg.MIN_GOOD} if cfg.MIN_GOOD is not None else {}),
                 **({"hard_dry_run": cfg.HARD_DRY_RUN} if cfg.HARD_DRY_RUN is not None else {}),
                 band_share=cfg.BAND_SHARE,
+                flip_vote=cfg.FLIP_VOTE,
+                hold_out=held_out_ids(cfg.HOLD_OUT, cat),
+                hold_out_voting=cfg.HOLD_OUT is not None and cfg.HOLD_OUT_SCOPE == "both",
                 pick_sink=picks_local,
                 precision_frame_sink=pframes_local,
                 precision_frame_steps=cfg.PFRAME_STEPS or None,

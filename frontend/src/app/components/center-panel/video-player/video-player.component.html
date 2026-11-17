@@ -1,18 +1,35 @@
-<video
-  #videoEl
-  controls
-  loop
-  [src]="videoSrc()"
-  [attr.aria-label]="media().filename || 'Video media'"
-  class="video-element"
+<!-- The frame is the video's box, so the blurred video's control bar sits
+     over its bottom edge, and hovering the bar keeps a peek going. -->
+<div
+  class="video-frame"
   [class.hidden]="videoError()"
-  [style.object-view-box]="viewBox()"
-  (loadedmetadata)="onLoadedMetadata()"
-  (timeupdate)="onTimeUpdate()"
-  (play)="onPlay()"
-  (pause)="onPause()"
-  (error)="onError()"
-></video>
+  (mouseenter)="onPointerEnter()"
+  (mouseleave)="onPointerLeave()"
+>
+  <video
+    #videoEl
+    [attr.controls]="blurred() ? null : ''"
+    [attr.disablepictureinpicture]="blurred() ? '' : null"
+    loop
+    [src]="videoSrc()"
+    [attr.aria-label]="media().filename || 'Video media'"
+    class="video-element"
+    [class.video-blurred]="blurred()"
+    [class.video-peek]="peeking()"
+    [style.--video-blur-radius]="blurRadiusCss()"
+    [style.object-view-box]="viewBox()"
+    (loadedmetadata)="onLoadedMetadata()"
+    (loadeddata)="onLoadedData()"
+    (timeupdate)="onTimeUpdate()"
+    (play)="onPlay()"
+    (pause)="onPause()"
+    (click)="onVideoClick()"
+    (error)="onError()"
+  ></video>
+  @if (blurred()) {
+    <vt-video-controls class="video-controls-bar" [video]="videoEl" [clip]="clipWindow()" />
+  }
+</div>
 @if (videoError()) {
   <div class="video-error">
     <span class="error-icon" title="Video format error">&#9888;</span>

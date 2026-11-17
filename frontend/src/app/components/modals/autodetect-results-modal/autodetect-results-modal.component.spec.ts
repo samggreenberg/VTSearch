@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
-import { AUTOFIND_TAB, AutoDetectResultsModalComponent } from './autodetect-results-modal.component';
+import { AUTOFIND_TAB, AutoDetectResultsModalComponent, THUMB_SETTLE_MS } from './autodetect-results-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -16,6 +16,7 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
 import { makeSettingsStateStub } from '../../../testing/mocks';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 /** The media-type registry, answered without a request: audio and image have
  *  thumbnails, and each type's icon is its own name. */
@@ -33,6 +34,7 @@ describe('AutoDetectResultsModalComponent', () => {
   let httpMock: HttpTestingController;
   let toast: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let settings: WritableSignal<AppSettings | null>;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   const mockData = {
     media_type: 'audio',
@@ -56,11 +58,13 @@ describe('AutoDetectResultsModalComponent', () => {
     localStorage.clear();
     const settingsState = makeSettingsStateStub();
     settings = settingsState.settings;
+    blur = provideBlurStateStub();
     await TestBed.configureTestingModule({
       imports: [AutoDetectResultsModalComponent],
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
+        blur.provider,
         { provide: MediaTypeCapabilityService, useFactory: mediaTypeCapsStub },
         { provide: ToastService, useFactory: () => (toast = { success: vi.fn(), error: vi.fn() }) },
         { provide: SettingsStateService, useValue: settingsState.stub },
@@ -721,6 +725,16 @@ describe('AutoDetectResultsModalComponent', () => {
     const keys = () => component.columns().map((c) => c.key);
 
     beforeEach(() => fixture.componentRef.setInput('data', scored as any));
+
+    it("blurs a thumbnail by the run dataset's blur state, not the active one's (#5696)", async () => {
+      blur.blurred.set(new Set([blurKey('ds1', 2), blurKey('', 4)]));
+      await flushInit();
+      await new Promise<void>((resolve) => setTimeout(resolve, THUMB_SETTLE_MS + 30));
+      await settleZoneless(fixture);
+      const imgs = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.results-thumb img'));
+      // Rows in score order: 2, 4, 1.
+      expect(imgs.map((img) => img.classList.contains('vt-blurred'))).toEqual([true, false, false]);
+    });
 
     it('orders the rows by score across every detector', async () => {
       await flushInit();

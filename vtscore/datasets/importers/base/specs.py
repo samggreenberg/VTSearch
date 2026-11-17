@@ -118,6 +118,36 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
     return specs
 
 
+def with_default_conversions(
+    field_values: dict[str, Any], specs: list[SourceSpec], output_type: str
+) -> list[SourceSpec]:
+    """*specs* for a folder scan, with the half types that become *output_type* by default.
+
+    A request that names its own ``source_specs`` rows is taken at its word:
+    those rows are the scan.  One that names none asked only for a dataset of
+    *output_type*, and a folder's documents are part of an image dataset (each
+    page an image) as its photos are, so every *convert-out* half type whose
+    default conversion is *output_type* gets a converter row.  This is the one
+    way a folder's PDFs become pages: the importers no longer render them
+    beside the converter, which gave every page twice when a request also
+    named the document row (#5680).
+    """
+    if field_values.get("source_specs"):
+        return specs
+    from vtscore.converters import default_converter_for  # noqa: PLC0415
+    from vtscore.media import all_types  # noqa: PLC0415
+
+    have = {(s.source_type, s.converter) for s in specs}
+    extra: list[SourceSpec] = []
+    for mt in all_types():
+        converter = default_converter_for(mt.type_id)
+        if converter is None or converter.target_type != output_type:
+            continue
+        if (mt.type_id, converter.name) not in have:
+            extra.append(SourceSpec(source_type=mt.type_id, converter=converter.name))
+    return [*specs, *extra]
+
+
 def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) -> None:
     """Validate that *spec*'s converter (if any) bridges source→output.
 

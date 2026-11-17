@@ -173,6 +173,20 @@ def get_rejected_docs_links() -> list[Any]:
     return partition_docs_links(raw)[1] if isinstance(raw, list) else []
 
 
+def get_rejected_blur_rules() -> list[tuple[Any, str]]:
+    """Return the persisted ``blur_rules`` entries that ``settings.get_blur_rules()`` drops, each with why.
+
+    The accessor quietly keeps only the well-formed rules (see
+    :func:`vtscore.datasets.blur_rules.partition_blur_rules`), so an operator
+    whose rule blurs nothing would otherwise have nothing to go on. ``app.py``
+    names each of these, and its reason, in the startup log instead.
+    """
+    from vtscore.datasets.blur_rules import partition_blur_rules  # heavy package; see models._normalize_blur_rules
+
+    raw = tiers._read_value("blur_rules")
+    return partition_blur_rules(raw)[1] if isinstance(raw, list) else []
+
+
 def set_cli_semantic_only(value: bool | None) -> None:
     """Set the process-level override for the ``semantic_only`` setting.
 
