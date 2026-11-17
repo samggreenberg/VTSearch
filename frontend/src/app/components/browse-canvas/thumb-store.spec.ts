@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  BLUR_BUILDS_PER_FRAME,
+  BLURRED_COPY_MAX_DIM,
   MAX_THUMBS,
   MAX_THUMBS_FULL_RES,
   THUMB_BATCH_SIZE,
+  UNFILTERED_COPY_MAX_DIM,
   THUMB_NATIVE_MAX_DIM,
   THUMB_RETRY_BACKOFF_MS,
   ThumbStore,
@@ -559,6 +562,142 @@ describe('ThumbStore waveform tinting', () => {
     const tinted = store.tinted(1, { naturalWidth: 0, naturalHeight: 0 } as HTMLImageElement);
     expect(tinted.width).toBe(1);
     expect(tinted.height).toBe(1);
+  });
+});
+
+describe('ThumbStore blurred copies', () => {
+  /** A 2D-context stub recording the filter and draw of each copy built. */
+  function stubBlurCanvas(opts: { filter?: boolean; context?: boolean } = {}) {
+    const builds: { canvas: { width: number; height: number }; filter: string | undefined; draws: unknown[][] }[] = [];
+    vi.spyOn(document, 'createElement').mockImplementation(() => {
+      const ctx: Record<string, unknown> = {
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: 'low',
+        drawImage: (...args: unknown[]) => build.draws.push(args),
+      };
+      if (opts.filter !== false) ctx['filter'] = 'none';
+      const canvas = { width: 300, height: 150, getContext: () => (opts.context === false ? null : ctx) };
+      const build = {
+        canvas,
+        get filter() {
+          return ctx['filter'] as string | undefined;
+        },
+        draws: [] as unknown[][],
+      };
+      builds.push(build);
+      return canvas as unknown as HTMLCanvasElement;
+    });
+    return builds;
+  }
+
+  /** A thumbnail the store has loaded for *id*, as `get` hands it to the canvas. */
+  function loaded(store: ThumbStore, id: number, w = 384, h = 288): HTMLImageElement {
+    store.get(id);
+    finishLoad(last(), w, h);
+    return store.get(id)!;
+  }
+
+  it('builds a copy once and reuses it', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    const img = loaded(store, 1);
+    const copy = store.blurred(1, img, 0.1);
+    expect(store.blurred(1, img, 0.1)).toBe(copy);
+    expect(builds).toHaveLength(1);
+  });
+
+  it('stores the copy small, at the source’s aspect, blurred by the share of its shorter side', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    store.blurred(1, loaded(store, 1, 384, 288), 0.1);
+    const { canvas, filter, draws } = builds[0];
+    expect([canvas.width, canvas.height]).toEqual([BLURRED_COPY_MAX_DIM, 96]);
+    expect(filter).toBe('blur(9.6px)');
+    expect(draws[0].slice(1)).toEqual([0, 0, BLURRED_COPY_MAX_DIM, 96]);
+  });
+
+  it('does not scale a small source up', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    store.blurred(1, loaded(store, 1, 64, 40), 0.1);
+    expect([builds[0].canvas.width, builds[0].canvas.height]).toEqual([64, 40]);
+  });
+
+  it('rebuilds for another blur share, or another image under the same id', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    const img = loaded(store, 1);
+    store.blurred(1, img, 0.1);
+    store.blurred(1, img, 0.2);
+    expect(builds).toHaveLength(2);
+    store.blurred(1, { naturalWidth: 10, naturalHeight: 10 } as HTMLImageElement, 0.2);
+    expect(builds).toHaveLength(3);
+  });
+
+  it('is evicted with its source', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    const img = loaded(store, 1);
+    store.blurred(1, img, 0.1);
+    store.trim(0);
+    // The source is gone, so is the copy: painting the id again builds afresh.
+    store.blurred(1, img, 0.1);
+    expect(builds).toHaveLength(2);
+  });
+
+  it('is dropped on a clear (a projection switch or a tier crossing)', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    const img = loaded(store, 1);
+    store.blurred(1, img, 0.1);
+    store.clear();
+    store.blurred(1, img, 0.1);
+    expect(builds).toHaveLength(2);
+  });
+
+  it('keeps the copies of thumbnails that survive a trim', () => {
+    const builds = stubBlurCanvas();
+    const { store } = makeStore();
+    const old = loaded(store, 1);
+    const recent = loaded(store, 2);
+    store.blurred(1, old, 0.1);
+    store.blurred(2, recent, 0.1);
+    store.trim(1);
+    store.blurred(2, recent, 0.1);
+    expect(builds).toHaveLength(2);
+    store.blurred(1, old, 0.1);
+    expect(builds).toHaveLength(3);
+  });
+
+  it('builds a paint’s share of copies, then answers null until the next paint', () => {
+    stubBlurCanvas();
+    const { store } = makeStore();
+    const src = { naturalWidth: 32, naturalHeight: 32 } as HTMLImageElement;
+    store.beginPaint();
+    for (let id = 0; id < BLUR_BUILDS_PER_FRAME; id++) expect(store.blurred(id, src, 0.1)).not.toBeNull();
+    expect(store.blurred(BLUR_BUILDS_PER_FRAME, src, 0.1)).toBeNull();
+    // A copy already built is still handed back.
+    expect(store.blurred(0, src, 0.1)).not.toBeNull();
+
+    store.beginPaint();
+    expect(store.blurred(BLUR_BUILDS_PER_FRAME, src, 0.1)).not.toBeNull();
+  });
+
+  it('shrinks the copy until smoothing blurs it where the canvas has no filter', () => {
+    const builds = stubBlurCanvas({ filter: false });
+    const { store } = makeStore();
+    store.blurred(1, loaded(store, 1, 384, 288), 0.1);
+    expect([builds[0].canvas.width, builds[0].canvas.height]).toEqual([UNFILTERED_COPY_MAX_DIM, 9]);
+    expect(builds[0].filter).toBeUndefined();
+  });
+
+  it('hands back a blank copy, never the sharp image, where no 2D context is available', () => {
+    stubBlurCanvas({ context: false });
+    const { store } = makeStore();
+    const img = loaded(store, 1);
+    const copy = store.blurred(1, img, 0.1);
+    expect(copy).not.toBeNull();
+    expect(copy).not.toBe(img);
   });
 });
 

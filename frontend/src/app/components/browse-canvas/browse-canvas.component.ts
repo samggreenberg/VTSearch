@@ -1,7 +1,9 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { BlurStateService } from '../../services/blur-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
@@ -49,6 +51,7 @@ import {
 } from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { MAX_THUMBS, THUMB_NATIVE_MAX_DIM, ThumbStore } from './thumb-store';
+import { BlurPeek, cellBlurFraction, stillPaint, type StillPaint } from './canvas-blur';
 import { BrowseThumbsService, type ThumbHost } from '../../services/browse-thumbs.service';
 import {
   finerTilesForZoom,
@@ -114,6 +117,8 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private selection = inject(BrowseSelectionService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private destroyRef = inject(DestroyRef);
+  private blurState = inject(BlurStateService);
+  private activeDataset = inject(ActiveDatasetService);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionLayout | null>(null);
@@ -495,6 +500,50 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    *  cells and nothing is enlarged — rather than the wrong bin being enlarged
    *  while the details panel still describes the original. */
   private pinnedLevel = -1;
+
+  // --- Blurred cells and the hover peek (#5689) -----------------------------
+  // CSS cannot reach a cell on a 2D canvas, so a blurred item's cell is drawn
+  // from a pre-blurred copy of its thumbnail (`ThumbStore.blurred`). Resting
+  // the pointer on such a cell — the enlarged one, hovered or pinned — for a
+  // second cross-fades it to sharp, and leaving puts it straight back, as the
+  // DOM peek does. See `canvas-blur.ts`.
+
+  /** Which of the active dataset's items draw blurred: one read of the blur
+   *  state, taken once per frame rather than once per cell. */
+  private readonly blurTest = computed(() => this.blurState.blurredIn(this.activeDataset.activeId()));
+
+  /** Keep the active dataset's blurred set loaded, and polled, while the map
+   *  paints thumbnails. Until it arrives the test fails closed: on an
+   *  instance with blur rules, every cell draws blurred. */
+  private readonly blurRetained = effect((onCleanup) => {
+    if (!this.thumbnailMode) return;
+    const datasetId = this.activeDataset.activeId();
+    onCleanup(untracked(() => this.blurState.retain(datasetId)));
+  });
+
+  /** Repaint when the answer changes: the set arriving, a Blur / Unblur click,
+   *  or another client's change coming in with the poll. */
+  private readonly blurChanged = effect(() => {
+    this.blurTest();
+    untracked(() => this.requestRedraw());
+  });
+
+  /** The peek's clock; told every frame which blurred cell is enlarged. */
+  private readonly peek = new BlurPeek({
+    now: () => performance.now(),
+    repaint: () => this.requestRedraw(),
+  });
+
+  // Per-paint blur inputs, set at the top of {@link draw} and read by
+  // {@link drawHex} (and by {@link renderSnapshotBorder}, which paints between
+  // frames with the last frame's). `frameBlur` is null where no cell blurs:
+  // text, which has no thumbnail, and audio, whose waveform is not a picture
+  // and is left sharp by the DOM sites too.
+  private frameBlur: ((id: number) => boolean) | null = null;
+  private frameBlurFraction = 0;
+  /** Set when a cell's blurred copy was left for a later paint, which is owed. */
+  private blurDeferred = false;
+
   private hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   // Last known cursor position over the canvas (canvas-relative mx/my plus the
   // viewport clientX/clientY) and whether the pointer is currently inside.
@@ -808,6 +857,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.settleTimer) clearTimeout(this.settleTimer);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
+    this.peek.stop();
     if (this.thumbPrefetchHandle !== null) {
       if (this.thumbPrefetchIsTimeout) clearTimeout(this.thumbPrefetchHandle);
       else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
@@ -1166,6 +1216,9 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
     this.selAccent = this.themeColor('--accent') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
+    // Its own budget of blurred copies; a cell left without one stays flat in
+    // the snapshot, which only shows for the length of the transition.
+    this.beginBlurPaint();
     const cull = screenRadius * 2;
     // The frozen viewport copy is dropped into the centre afterwards, so a cell
     // whose whole silhouette lands inside that centred rect is overwritten anyway
@@ -1452,6 +1505,9 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     }
     this.imageTiles = this.mediaType() === 'image';
     const selectionActive = this.selection.size > 0;
+    this.beginBlurPaint();
+    this.frameBlur = this.thumbnailMode && !this.waveformTint ? this.blurTest() : null;
+    this.frameBlurFraction = cellBlurFraction(this.targetRadius);
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)
     // so the read-out is a size bump rather than a border — leaving the border
@@ -1482,6 +1538,16 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         if (this.thumbs.settled(cell.rep_id)) thumbsLoaded++;
       }
     }
+    // The peek follows the enlarged cell, whether hovered or pinned, while its
+    // item is blurred. Told every frame, so a hover that moved on, ended, or
+    // whose item was just unblurred restarts the clock or stops it.
+    const peekKey =
+      hovered && this.frameBlur?.(hovered.cell.rep_id)
+        ? `${level}:${hovered.cell.q}:${hovered.cell.r}:${hovered.cell.rep_id}`
+        : null;
+    this.peek.rest(peekKey);
+    // Low-effects mode and reduced motion skip the fade, but keep the delay.
+    const peekInstant = this.lowFx || prefersReducedMotion();
     if (hovered) {
       this.drawHoveredHex(
         ctx,
@@ -1491,6 +1557,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         hovered.cell,
         cmap,
         selectionActive,
+        peekKey ? this.peek.progress(peekKey, peekInstant) : 0,
       );
       if (paintsThumbs) {
         thumbsTotal++;
@@ -1523,6 +1590,16 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
     this.recordFrameCost(frameStart);
     this.maybeReportFirstView();
+
+    // A peek mid-fade paints every frame until it lands, and blurred copies
+    // this paint left for later are built by the next.
+    if (this.blurDeferred || this.peek.fading(peekInstant)) this.requestRedraw();
+  }
+
+  /** Start a paint's blurred-copy budget (see `ThumbStore.beginPaint`). */
+  private beginBlurPaint(): void {
+    this.thumbs.beginPaint();
+    this.blurDeferred = false;
   }
 
   /**
@@ -1770,6 +1847,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cmap: ResolvedColormap,
     selectionActive: boolean,
     trim: { hw: number; hh: number } | null = null,
+    peek = 0,
   ): void {
     // A multi-item ("pile") cell is drawn with a soft rounded shape — a disc in
     // hex mode, a rounded-corner rectangle in square mode — while a one-item cell
@@ -1795,7 +1873,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // inside the bin's border. The hovered cell (either type) instead draws the
     // whole thumbnail to fill `trim`, whose rectangle already carries the
     // image's aspect ratio, so it shows undistorted and uncropped.
-    const thumb = this.thumbnailMode ? this.thumbs.get(cell.rep_id) : null;
+    let thumb = this.thumbnailMode ? this.thumbs.get(cell.rep_id) : null;
+    // A still (image, video frame, document poster) paints through
+    // `stillPaint`: a blurred item draws its blurred copy, with the sharp image
+    // fading in over it while the pointer peeks (#5689). A copy this paint had
+    // no budget left to build leaves the cell flat, as though its thumbnail
+    // had not landed, and asks for another frame: never the sharp image.
+    let still: StillPaint<HTMLImageElement | HTMLCanvasElement> | null = null;
+    if (thumb && !this.waveformTint) {
+      still = this.stillFor(cell.rep_id, thumb, peek);
+      if (!still) {
+        thumb = null;
+        this.blurDeferred = true;
+      }
+    }
     if (thumb) {
       ctx.save();
       ctx.clip();
@@ -1812,19 +1903,18 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         } else {
           this.drawImageFit(ctx, tinted, cx, cy, radius);
         }
-      } else if (trim) {
-        ctx.drawImage(thumb, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
-      } else if (this.imageTiles) {
-        // Image grid cell: "half crop, half pad". Fill the bin with the body
-        // background first so the padded gap reads as background between the
-        // image content and the bin's border, then draw the image at the
-        // balanced (geometric-mean) scale — cropped less than cover would be and
-        // padded less than contain would be, with equal crop and pad fractions.
-        ctx.fillStyle = this.themeColor('--bg-body');
-        ctx.fill();
-        this.drawImageFit(ctx, thumb, cx, cy, radius, 'balanced');
-      } else {
-        this.drawImageFit(ctx, thumb, cx, cy, radius);
+      } else if (still) {
+        if (!trim && this.imageTiles) {
+          // Image grid cell: "half crop, half pad". Fill the bin with the body
+          // background first so the padded gap reads as background between the
+          // image content and the bin's border; `drawStill` then draws the image
+          // at the balanced (geometric-mean) scale — cropped less than cover
+          // would be and padded less than contain would be, with equal crop and
+          // pad fractions.
+          ctx.fillStyle = this.themeColor('--bg-body');
+          ctx.fill();
+        }
+        this.drawStill(ctx, still, thumb, cx, cy, radius, trim);
       }
       ctx.restore();
     } else if (single) {
@@ -1901,6 +1991,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cell: HexCell,
     cmap: ResolvedColormap,
     selectionActive: boolean,
+    peek = 0,
   ): void {
     // A hovered thumbnail breaks out of its bin: it's shown whole at its native
     // aspect ratio as a rectangle (no silhouette), sized to grow until its edge
@@ -1935,7 +2026,55 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
     // `radius` is unused for the shape when `trim` is set (the rectangle drives
     // it), so the un-bumped radius is fine there; flat-density cells use the bump.
-    this.drawHex(ctx, cx, cy, trim ? radius : bumped, cell, cmap, selectionActive, trim);
+    this.drawHex(ctx, cx, cy, trim ? radius : bumped, cell, cmap, selectionActive, trim, peek);
+  }
+
+  /** What a still's cell paints with: its thumbnail, or, for a blurred item,
+   *  its blurred copy (see `stillPaint`). */
+  private stillFor(
+    id: number,
+    thumb: HTMLImageElement,
+    peek: number,
+  ): StillPaint<HTMLImageElement | HTMLCanvasElement> | null {
+    const blurred = this.frameBlur?.(id) ?? false;
+    return stillPaint<HTMLImageElement | HTMLCanvasElement>(thumb, blurred, peek, () =>
+      this.thumbs.blurred(id, thumb, this.frameBlurFraction),
+    );
+  }
+
+  /**
+   * Paint a still's layers into the clipped cell: over the hovered cell's
+   * break-out rectangle `trim`, or fitted to the bin (cover, or the balanced
+   * fit for images; see {@link drawImageFit}). Every layer lands on the one
+   * rectangle, sized from the sharp `thumb`, so a peek's cross-fade lines up
+   * however small the blurred copy is stored. The caller's `restore` resets
+   * the alpha.
+   */
+  private drawStill(
+    ctx: CanvasRenderingContext2D,
+    still: StillPaint<HTMLImageElement | HTMLCanvasElement>,
+    thumb: HTMLImageElement,
+    cx: number,
+    cy: number,
+    radius: number,
+    trim: { hw: number; hh: number } | null,
+  ): void {
+    let hw: number;
+    let hh: number;
+    if (trim) {
+      hw = trim.hw;
+      hh = trim.hh;
+    } else {
+      const fit: TileFit = this.imageTiles ? 'balanced' : 'cover';
+      const { dw, dh } = imageTileFitDimensions(thumb.naturalWidth, thumb.naturalHeight, radius, fit);
+      hw = dw / 2;
+      hh = dh / 2;
+    }
+    ctx.drawImage(still.base, cx - hw, cy - hh, hw * 2, hh * 2);
+    if (still.over) {
+      ctx.globalAlpha = still.overAlpha;
+      ctx.drawImage(still.over, cx - hw, cy - hh, hw * 2, hh * 2);
+    }
   }
 
   /**
