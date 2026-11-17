@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
 import pickle
+import tarfile
 import zipfile
 
 import cv2
@@ -23,6 +26,7 @@ from imagekit.util import (
     letterbox,
     load_model_config,
     nms,
+    read_model_source,
     resize_within,
     resolve_model_file,
     resolve_onnx_model,
@@ -306,3 +310,87 @@ class TestModelFormats:
             RuntimeOptions().make_session(str(tmp_path / "vendor.model"))
         assert type(err.value.__cause__).__name__ == "InvalidProtobuf"
         assert "Models in other formats" in str(err.value)
+
+
+class TestGzipModels:
+    """A gzip-compressed model is described, and loaded, by what it decompresses to (#5683)."""
+
+    @staticmethod
+    def _gzip(path, payload: bytes):
+        path.write_bytes(gzip.compress(payload))
+        return path
+
+    @staticmethod
+    def _tar(*names) -> bytes:
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            for name in names:
+                info = tarfile.TarInfo(name)
+                info.size = 1
+                tf.addfile(info, io.BytesIO(b"x"))
+        return buf.getvalue()
+
+    @staticmethod
+    def _zip(*names) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for name in names:
+                zf.writestr(name, b"x")
+        return buf.getvalue()
+
+    def test_a_gzip_compressed_onnx_model_loads_as_the_plain_one_does(self, tmp_path):
+        (tmp_path / "plain").mkdir()
+        plain = build_embedder_model(tmp_path / "plain" / "emb.onnx")
+        packed = self._gzip(tmp_path / "emb.model", plain.read_bytes())
+        assert describe_model_format(packed) is None
+        assert resolve_onnx_model(packed) == packed == resolve_onnx_model(tmp_path)
+        assert read_model_source(packed) == plain.read_bytes() and read_model_source(plain) == str(plain)
+        want, got = RuntimeOptions().make_session(str(plain)), RuntimeOptions().make_session(str(packed))
+        shape = lambda args: [(a.name, a.shape) for a in args]  # noqa: E731
+        assert shape(got.get_inputs()) == shape(want.get_inputs())
+        assert shape(got.get_outputs()) == shape(want.get_outputs())
+
+    def test_formats_inside_a_gzip_are_named_as_compressed(self, tmp_path):
+        payloads = {
+            "pickled.model": pickle.dumps({"a": 1}, protocol=5),
+            "h5.model": b"\x89HDF\r\n\x1a\n" + bytes(64),
+            "torch.model": self._zip("archive/data.pkl", "archive/version"),
+            "tarball.model": self._tar("det.onnx", "det.json"),
+            "nothing.model": b"",
+        }
+        found = {name: describe_model_format(self._gzip(tmp_path / name, data)) for name, data in payloads.items()}
+        assert {name: fmt.what for name, fmt in found.items() if fmt} == {
+            "pickled.model": "a Python pickle (an old-style torch.save, joblib or similar), gzip-compressed",
+            "h5.model": "an HDF5 file (a Keras .h5 model), gzip-compressed",
+            "torch.model": "a PyTorch file (torch.save or TorchScript), gzip-compressed",
+            "tarball.model": "a gzip-compressed tar archive",
+            "nothing.model": "a gzip file holding nothing",
+        }
+        pickled, tarball = found["pickled.model"], found["tarball.model"]
+        assert pickled is not None and pickled.convert.startswith("decompress it with gunzip, then load it")
+        assert tarball is not None and "tar -xzf" in tarball.convert
+        with pytest.raises(NotOnnxModelError, match="torch.model is a PyTorch file .*gzip-compressed.*gunzip"):
+            resolve_onnx_model(tmp_path / "torch.model")
+
+    def test_a_plain_tar_archive_is_named(self, tmp_path):
+        (tmp_path / "det.model").write_bytes(self._tar("det.onnx"))
+        found = describe_model_format(tmp_path / "det.model")
+        assert found is not None and found.what == "a tar archive"
+
+    def test_a_damaged_gzip_is_refused_when_described_or_loaded(self, tmp_path):
+        whole = gzip.compress(np.random.default_rng(42).bytes(1 << 16))
+        (tmp_path / "short.model").write_bytes(whole[:16])
+        found = describe_model_format(tmp_path / "short.model")
+        assert found is not None and found.what == "a damaged gzip file"
+        # Cut past the head describe_model_format reads, the damage only shows once the whole stream is read.
+        (tmp_path / "cut.model").write_bytes(whole[: len(whole) // 2])
+        assert describe_model_format(tmp_path / "cut.model") is None
+        with pytest.raises(NotOnnxModelError, match="cut.model is a damaged gzip file .*copy the model again"):
+            RuntimeOptions().make_session(str(tmp_path / "cut.model"))
+
+    def test_a_gzip_onnx_runtime_cannot_parse_says_it_was_gunzipped(self, tmp_path):
+        self._gzip(tmp_path / "vendor.model", b"\x01\x02vendor format")
+        assert describe_model_format(tmp_path / "vendor.model") is None
+        with pytest.raises(NotOnnxModelError, match=r"cannot read .*vendor.model \(once gunzipped\) as an ONNX") as err:
+            RuntimeOptions().make_session(str(tmp_path / "vendor.model"))
+        assert type(err.value.__cause__).__name__ == "InvalidProtobuf"

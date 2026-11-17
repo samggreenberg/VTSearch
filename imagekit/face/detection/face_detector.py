@@ -337,8 +337,9 @@ class FaceDetector:
     ) -> None:
         """Load the model and its config; raises on any failure.
 
-        *model_bundle_filepath* is the ONNX model file, under any name, or a
-        directory holding one ``.onnx`` or ``.model`` file.  The config is
+        *model_bundle_filepath* is the ONNX model file, under any name and
+        gzip-compressed or not, or a directory holding one ``.onnx`` or
+        ``.model`` file.  The config is
         ``<model>.json`` beside it, or *model_config_path*, or the packaged
         SCRFD default.
         """

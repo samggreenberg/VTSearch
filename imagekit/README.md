@@ -157,8 +157,10 @@ without it raises at `initialize()` rather than silently running on the CPU.
 The `oss` detector and embedder run on ONNX Runtime, which reads a model by
 what is in it, not by its name: an ONNX model called `det.model` loads exactly
 as `det.onnx` does, named outright or as the one `.onnx` or `.model` file in
-a bundle directory. A model saved in another format does not load whatever it
-is called, and there are two ways to run one:
+a bundle directory. A gzip-compressed ONNX model (`gzip -c det.onnx >
+det.model`, a common way to ship one) loads as it is: it is decompressed in
+memory, never written back to disk. A model saved in another format does not
+load whatever it is called, and there are two ways to run one:
 
 - **Convert it to ONNX once**, offline, and change nothing else: a PyTorch
   model with `torch.onnx.export` ([above](#onnx-export-notes)), a Keras or
@@ -174,11 +176,23 @@ is called, and there are two ways to run one:
   Its vectors are a new embedding space with a compat tag of their own.
 
 `initialize()` names the format when a model's first bytes give it away (a
-PyTorch file, a Keras model, a TensorFlow SavedModel directory, a pickle, an
-empty file) and refuses it with `imagekit.util.NotOnnxModelError` before
+PyTorch file, a Keras model, a TensorFlow SavedModel directory, a pickle, a
+zip or tar archive, an empty file, any of those gzip-compressed, or a damaged
+gzip file) and refuses it with `imagekit.util.NotOnnxModelError` before
 loading anything, saying how to convert it. A file ONNX Runtime cannot parse
 at all raises the same error. `imagekit.util.describe_model_format(path)` is
 the check on its own.
+
+An ONNX model exported from PyTorch can pass for a PyTorch file: ONNX is a
+protobuf, and the export records `pytorch` and its version as the model's
+producer, so `pytorch 1.8` in `strings det.model` is no sign of a PyTorch file.
+To tell, gunzip the file first if `file det.model` says it is gzip, then load
+it with `onnx`, which prints an ONNX model's producer and fails to parse
+anything else:
+
+```bash
+python -c "import onnx, sys; m = onnx.load(sys.argv[1]); print(m.producer_name, m.producer_version)" det.onnx
+```
 
 ## The image tensor
 

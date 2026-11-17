@@ -28,6 +28,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   model, a TensorFlow SavedModel) is refused with a message naming the format and how to convert it, where it
   used to fail on a protobuf parse error. See "Models in other formats" in `imagekit/README.md`.
 
+- **Gzip-compressed face models load as they are** (issue #5683). A detector or embedder shipped gzipped, as
+  some groups ship their `.model` files, is decompressed in memory as it loads, with no unpacking first. A gzip
+  file that holds something other than an ONNX model, or that is damaged, is refused with a message saying what
+  is inside it.
+
 ### Fixed
 
 - **Importing a folder of PDFs gives each page once** (issue #5680). Adding a dataset from a folder of PDFs made
