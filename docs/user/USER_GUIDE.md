@@ -19,13 +19,14 @@
 9. [Creating a detector](#creating-a-detector)
 10. [Tuning a detector](#tuning-a-detector)
 11. [View options](#view-options)
-12. [Settings tabs](#settings-tabs)
-13. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
-14. [Browse: exploring a dataset spatially](#browse-exploring-a-dataset-spatially)
-15. [Exporting your work](#exporting-your-work)
-16. [Importing pre-trained detectors](#importing-pre-trained-detectors)
-17. [Achievements](#achievements)
-18. [Tips and shortcuts](#tips-and-shortcuts)
+12. [Blurred images](#blurred-images)
+13. [Settings tabs](#settings-tabs)
+14. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
+15. [Browse: exploring a dataset spatially](#browse-exploring-a-dataset-spatially)
+16. [Exporting your work](#exporting-your-work)
+17. [Importing pre-trained detectors](#importing-pre-trained-detectors)
+18. [Achievements](#achievements)
+19. [Tips and shortcuts](#tips-and-shortcuts)
 
 ---
 
@@ -1901,6 +1902,90 @@ Settings modal's **Server** tab. Once set:
 Operators set it when starting the server (see `solo_media_type` in the
 deployment guide, `docs/DEPLOYMENT.md`). It
 applies to every user, and there is no per-user override.
+
+---
+
+## Blurred images
+
+Some servers blur the images that the service supplying them has marked as
+sensitive (nudity or gore, say), so that nobody comes across one unprepared. A
+blurred image is drawn as a smear of its colours everywhere it appears: the
+media list, the vote piles, the centre viewer, the Browse map, and a video
+while it plays. Whoever runs your server decides which images start blurred
+(see [Which images start blurred](#which-images-start-blurred) below), and
+anyone can change it for one image with the **Blur** / **Unblur** button.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/blurred-image.dark.webp" />
+  <img src="assets/blurred-image.light.webp" alt="A blurred drawing in the centre viewer and in the media list, with the Unblur button at the end of the viewer's toolbar" width="720" />
+</picture>
+
+### Peeking at a blurred image
+
+Rest the pointer on a blurred image. After a second the blur fades away, and
+the image stays sharp for as long as the pointer is on it; move off and it is
+blurred again straight away. A peek changes nothing: the image is still
+blurred the next time it appears, for you and for everyone else.
+
+- **In the centre viewer** the second's wait starts again for every new image,
+  so voting with the arrow keys while the pointer rests on the viewer does not
+  show you the next image sharp.
+- **On the Browse map**, an enlarged tile peeks the same way: the one under
+  the pointer, or the one whose items you opened with a right-click.
+- **A video** peeks the same way while it plays. While it is blurred, it plays
+  under VTSearch's own control bar (play / pause, the seek bar, the time, mute
+  and volume) instead of the browser's, and it cannot go picture-in-picture or
+  full screen, since either would show it sharp.
+
+### Blurring or unblurring an image
+
+The centre viewer's toolbar ends with a **Blur** button, which reads
+**Unblur** while the image is blurred. A video has no toolbar, so its button
+sits under the player. **`b`** does the same as the button. The **Show in
+photo** view of a face has both, and they blur the photo, in the photo's own
+dataset.
+
+One press changes the image **for good, everywhere it appears, and for
+everyone who uses the dataset**. Its thumbnail in the list, its place in the
+vote piles and its tile on the Browse map follow at once, and other people's
+screens catch up within half a minute. It works both ways, so the same button
+fixes an image the server blurred by mistake and one it missed. Your choice
+also outlasts the server's: if whoever runs it changes which images start
+blurred, every image someone has blurred or unblurred stays as they left it.
+
+- **It belongs to the dataset, not a detector.** Switching detectors changes
+  nothing, and a copy of the dataset (one you export and import again, a
+  detector's matches kept with **To Dataset**, datasets you combine) keeps
+  every choice made on it.
+- **Faces, frames and pages start from where they came from.** A face cut from
+  a photo, a frame taken from a video and a page from a document start
+  blurred when the item they came from would, but each has its own button:
+  unblurring a photo leaves its faces blurred, and the other way round.
+
+### What stays sharp
+
+- **Audio and text**, which have no picture to hide.
+- **A document open in the centre viewer.** Its thumbnail is blurred with
+  everything else, but the document itself is not.
+- **The example you made a face detector from**, while the reference beside
+  the face you vote on shows it (its caption reads **Your example**): it is
+  your own file, not an item of the dataset, so it has no blur and no button.
+
+When you open a dataset on a server that blurs, every image of it is drawn
+blurred for a moment, until VTSearch has heard which ones should be. If it
+cannot find out, they stay blurred.
+
+### Which images start blurred
+
+The service that supplies a server's images can mark each one, in fields you
+can read in the item's metadata. Whoever runs the server names the fields that
+mean "blur this", such as a score over a threshold or a yes / no flag. The
+Settings modal's **Server** tab lists their rules under **Blur rules**; if it
+says **None**, nothing starts blurred, and an image is only blurred when
+someone presses **Blur** on it.
+
+The blur is a courtesy, not a lock. Your browser still receives the image
+itself, so anyone who opens the image's address directly sees it sharp.
 
 ---
 
