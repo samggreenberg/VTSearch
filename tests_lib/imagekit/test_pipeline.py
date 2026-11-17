@@ -43,7 +43,13 @@ from imagekit.face.providers.ext import (
     import_backend,
 )
 from imagekit.face.providers.oss import OssFacePipeline
-from tests_lib.imagekit._synthetic_models import build_model_dir, pipeline_config, scrfd_expected, scrfd_face
+from tests_lib.imagekit._synthetic_models import (
+    build_model_dir,
+    pipeline_config,
+    scrfd_expected,
+    scrfd_face,
+    wrap_in_bundle,
+)
 
 KPS = ((-5, -5), (5, -5), (0, 0), (-4, 6), (4, 6))
 FACES = [scrfd_face(0, 20, 30, 0.9, (16, 16, 16, 16), kps=KPS), scrfd_face(2, 10, 5, 0.7, (40, 40, 40, 40), kps=KPS)]
@@ -266,6 +272,24 @@ class TestOssPipeline:
         assert len(got) == 2 and [r.bbox for r in got] == [r.bbox for r in want]
         assert all(np.array_equal(a.embedding, b.embedding) for a, b in zip(got, want, strict=True))
         assert gzipped.compatibility() == pipe.compatibility()
+
+    def test_models_nested_in_a_protobuf_wrapper_run_the_same(self, tmp_path, pipe):
+        """ONNX models nested in a wrapper, gzipped as #5683's ``.model`` files are or not, run as they are."""
+        paths = build_model_dir(tmp_path / "wrapped", FACES)
+        det_dir = tmp_path / "wrapped" / "det"
+        det_dir.mkdir()
+        (det_dir / "det.model").write_bytes(gzip.compress(wrap_in_bundle(paths["detector"].read_bytes())))
+        paths["detector_config"].rename(det_dir / "det.json")
+        emb = paths["embedder"].with_suffix(".model")  # its sidecar emb.json stays
+        emb.write_bytes(wrap_in_bundle(paths["embedder"].read_bytes()))
+        wrapped = OssFacePipeline()
+        wrapped.initialize(
+            RuntimeOptions(), {"detector": {"model_bundle": str(det_dir)}, "embedder": {"model": str(emb)}}
+        )
+        want, got = pipe.process(BLACK), wrapped.process(BLACK)
+        assert len(got) == 2 and [r.bbox for r in got] == [r.bbox for r in want]
+        assert all(np.array_equal(a.embedding, b.embedding) for a, b in zip(got, want, strict=True))
+        assert wrapped.compatibility() == pipe.compatibility()
 
 
 # ---------------------------------------------------------------------------

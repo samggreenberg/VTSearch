@@ -15,6 +15,8 @@ that maps model coordinates back onto the input image.
 
 from __future__ import annotations
 
+import logging
+import mmap
 from collections.abc import Callable, Iterable, Mapping
 from io import BufferedIOBase
 from dataclasses import dataclass, field
@@ -23,6 +25,8 @@ from typing import Any
 
 import cv2
 import numpy as np
+
+_log = logging.getLogger(__name__)
 
 #: ``(H, W, 3)`` ``uint8`` RGB.  A type alias for documentation; it is a plain array.
 ImageTensor = np.ndarray
@@ -511,9 +515,27 @@ def read_model_source(path: str | Path) -> str | bytes:
     one, its decompressed bytes, held in memory and never written back to disk;
     a damaged gzip stream raises :class:`NotOnnxModelError`, since there is no
     model to read in it.
+
+    A model nested in a protobuf wrapper, gzipped or not, is unwrapped too: a
+    file that parses as a protobuf message with no graph of its own (what ONNX
+    Runtime reports as "No graph was found in the protobuf") is searched for the
+    one nested message shaped like an ONNX model, and that message's bytes are
+    returned.  A wrapper holding no ONNX model, or several different ones,
+    raises :class:`NotOnnxModelError` (:func:`find_nested_onnx_models`).
     """
-    if not is_gzip(path):
+    if is_gzip(path):
+        data = _gunzip(path)
+        return _unwrap_nested_onnx(data, f"{path} (once gunzipped)") or data
+    try:
+        with open(path, "rb") as fh:
+            mapped = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
+    except (OSError, ValueError):  # missing, unreadable or empty: ONNX Runtime says which
         return str(path)
+    with mapped:
+        return _unwrap_nested_onnx(mapped, str(path)) or str(path)
+
+
+def _gunzip(path: str | Path) -> bytes:
     import gzip  # noqa: PLC0415
     import zlib  # noqa: PLC0415
 
@@ -524,6 +546,188 @@ def read_model_source(path: str | Path) -> str | bytes:
         raise NotOnnxModelError(
             f"{path} is {_DAMAGED_GZ.what} ({exc}), so it holds no model to run: {_DAMAGED_GZ.convert}"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# ONNX models nested in a protobuf wrapper
+# ---------------------------------------------------------------------------
+#
+# Some model stores ship an ONNX model as one field of a message of their own,
+# beside its name and version (#5683: a gzipped ``BundleProto``).  ONNX is a
+# protobuf too, so the nested model is found by walking the wrapper's wire
+# format, which needs no schema for it: no ``.proto`` file, and no ``onnx``
+# package either.
+
+#: Protobuf wire types (protobuf.dev/programming-guides/encoding).  Groups (3,
+#: 4) are long deprecated and no wrapper of a model uses them; 6 and 7 do not exist.
+_VARINT, _I64, _LEN, _I32 = 0, 1, 2, 5
+
+#: The wire type of every ``onnx.ModelProto`` field (onnx/onnx.proto): IR
+#: version, producer name and version, domain, model version, doc string,
+#: graph, opset imports, metadata, training info, functions.  A message whose
+#: fields disagree with any of these is not an ONNX model.
+_MODEL_PROTO_FIELDS = {1: _VARINT, 5: _VARINT} | {n: _LEN for n in (2, 3, 4, 6, 7, 8, 14, 20, 25)}
+_IR_VERSION, _GRAPH, _OPSET_IMPORT = 1, 7, 8
+
+#: ``GraphProto.output``.  Every ``GraphProto`` field is a string or a message,
+#: and a graph that runs has at least one output.
+_GRAPH_OUTPUT = 12
+
+#: How many messages deep the search looks.  A wrapper puts its model a level
+#: or three down (an ``Any`` around a bundle around the model).
+_MAX_NESTING = 8
+
+#: How many protobuf fields the search reads before it gives up and hands the
+#: file to ONNX Runtime as it is.  Far above what any wrapper, or the graph of
+#: any face model, holds; it bounds the search on a pathological blob.
+_FIELD_BUDGET = 1 << 21
+
+#: A field: its number, its wire type, and where its value lies in the buffer.
+_Field = tuple[int, int, int, int]
+
+
+class _NotAMessage(Exception):
+    """The bytes are not one protobuf message."""
+
+
+class _OutOfBudget(Exception):
+    """The search read :data:`_FIELD_BUDGET` fields without finishing."""
+
+
+def _read_varint(buf: bytes | mmap.mmap, pos: int, end: int) -> tuple[int, int]:
+    """The varint at *pos*, and the position just past it."""
+    value = shift = 0
+    while pos < end and shift < 64:
+        byte = buf[pos]
+        pos += 1
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            return value, pos
+        shift += 7
+    raise _NotAMessage
+
+
+@dataclass
+class _WireWalk:
+    """One search of *buf* for nested ONNX models, within one :data:`_FIELD_BUDGET`."""
+
+    buf: bytes | mmap.mmap
+    budget: int
+
+    def fields(self, start: int, end: int) -> list[_Field] | None:
+        """The fields of the message in ``buf[start:end]``, or ``None`` when those bytes are not one."""
+        out: list[_Field] = []
+        pos = start
+        try:
+            while pos < end:
+                self.budget -= 1
+                if self.budget < 0:
+                    raise _OutOfBudget
+                key, pos = _read_varint(self.buf, pos, end)
+                number, wire = key >> 3, key & 7
+                if number == 0:
+                    return None
+                if wire == _VARINT:
+                    value_start = pos
+                    _, pos = _read_varint(self.buf, pos, end)
+                elif wire == _LEN:
+                    length, value_start = _read_varint(self.buf, pos, end)
+                    pos = value_start + length
+                elif wire in (_I64, _I32):
+                    value_start = pos
+                    pos += 8 if wire == _I64 else 4
+                else:
+                    return None
+                if pos > end:
+                    return None
+                out.append((number, wire, value_start, pos))
+        except _NotAMessage:
+            return None
+        return out
+
+    def is_onnx_model(self, fields: list[_Field]) -> bool:
+        """Whether *fields* have an ONNX model's shape: an IR version, an opset, and a graph with outputs."""
+        if any(_MODEL_PROTO_FIELDS.get(number, wire) != wire for number, wire, _, _ in fields):
+            return False
+        by_number: dict[int, list[_Field]] = {}
+        for f in fields:
+            by_number.setdefault(f[0], []).append(f)
+        if _OPSET_IMPORT not in by_number or len(by_number.get(_GRAPH, ())) != 1 or _IR_VERSION not in by_number:
+            return False
+        _, _, ir_start, ir_end = by_number[_IR_VERSION][-1]
+        if _read_varint(self.buf, ir_start, ir_end)[0] == 0:
+            return False
+        _, _, graph_start, graph_end = by_number[_GRAPH][0]
+        graph = self.fields(graph_start, graph_end)
+        return (
+            graph is not None
+            and all(wire == _LEN for _, wire, _, _ in graph)
+            and any(number == _GRAPH_OUTPUT for number, _, _, _ in graph)
+        )
+
+    def nested_models(self, fields: list[_Field], depth: int = 1) -> list[tuple[int, int]]:
+        """Where each ONNX model nested in a message with *fields* lies, outermost first."""
+        found: list[tuple[int, int]] = []
+        for _, wire, start, end in fields:
+            if wire != _LEN or start == end:
+                continue
+            inner = self.fields(start, end)
+            if inner is None:
+                continue
+            if self.is_onnx_model(inner):
+                found.append((start, end))
+            elif depth < _MAX_NESTING:
+                found.extend(self.nested_models(inner, depth + 1))
+        return found
+
+
+def find_nested_onnx_models(buf: bytes | mmap.mmap) -> list[bytes] | None:
+    """The different ONNX models nested in the protobuf wrapper *buf*.
+
+    ``None`` when *buf* is not a wrapper to look inside: no bytes at all, bytes
+    that do not parse as one protobuf message, a message with a graph of its own
+    (an ONNX model, which ONNX Runtime judges for itself), or a search cut short
+    by :data:`_FIELD_BUDGET`.  Otherwise the list, possibly empty, of the nested
+    messages shaped like an ONNX model (an IR version, an opset, and a graph with
+    outputs), outermost first, each once however often it is repeated.
+    """
+    if not len(buf):
+        return None
+    walk = _WireWalk(buf, _FIELD_BUDGET)
+    try:
+        top = walk.fields(0, len(buf))
+        if top is None or any(number == _GRAPH and wire == _LEN for number, wire, _, _ in top):
+            return None
+        spans = walk.nested_models(top)
+    except _OutOfBudget:
+        return None
+    models: list[bytes] = []
+    for start, end in spans:
+        model = buf[start:end]
+        if model not in models:
+            models.append(model)
+    return models
+
+
+def _unwrap_nested_onnx(buf: bytes | mmap.mmap, what: str) -> bytes | None:
+    """The one ONNX model nested in *buf*, or ``None`` when *buf* is no wrapper; raises when it holds no one model."""
+    models = find_nested_onnx_models(buf)
+    if models is None:
+        return None
+    if len(models) == 1:
+        _log.info("%s: loading the ONNX model nested in its protobuf wrapper (%d bytes)", what, len(models[0]))
+        return models[0]
+    if models:
+        raise NotOnnxModelError(
+            f"{what} holds {len(models)} different ONNX models nested in a protobuf wrapper, and imagekit cannot "
+            "tell which one to run: save the one you want as a file of its own (imagekit.util."
+            f"find_nested_onnx_models lists them); see {OTHER_FORMATS_DOC}"
+        )
+    raise NotOnnxModelError(
+        f"{what} is a protobuf message but not an ONNX model: it has no graph, and none of the messages nested in "
+        "it is an ONNX model either. imagekit's own detector and embedder run ONNX models only: convert the model "
+        f"to ONNX, or run it through a face provider that reads its format; see {OTHER_FORMATS_DOC}"
+    )
 
 
 def load_model_config(
