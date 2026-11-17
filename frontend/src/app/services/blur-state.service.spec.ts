@@ -265,4 +265,44 @@ describe('BlurStateService', () => {
     expectRead('ds').flush({ ids: [] });
     expect(service.isBlurred('ds', 4)).toBe(false);
   });
+
+  describe('blurredIn (a test over one read, for the Browse canvas)', () => {
+    it('answers as isBlurred does: closed before the set arrives, then the set with clicks over it', () => {
+      settings.set(WITH_RULES);
+      service.retain('ds');
+      const before = service.blurredIn('ds');
+      expect([before(1), before(2)]).toEqual([true, true]);
+
+      expectRead('ds').flush({ ids: [2] });
+      service.setBlurred('ds', 3, true);
+      const after = service.blurredIn('ds');
+      expect([after(1), after(2), after(3)]).toEqual([false, true, true]);
+      // The test answers for the state it was made from, not the live one.
+      expect(before(1)).toBe(true);
+      expectWrite('ds', 3).flush({ ok: true, id: 3, blurred: true });
+    });
+
+    it('answers for no dataset as the fail-closed rule says', () => {
+      settings.set(WITH_RULES);
+      expect(service.blurredIn('')(1)).toBe(true);
+      settings.set(NO_RULES);
+      expect(service.blurredIn('')(1)).toBe(false);
+    });
+
+    it('is a signal read: a computed over it follows the set arriving and each click', () => {
+      settings.set(WITH_RULES);
+      service.retain('ds');
+      const test = computed(() => service.blurredIn('ds'));
+      const first = test();
+      expect(first(1)).toBe(true);
+
+      expectRead('ds').flush({ ids: [] });
+      expect(test()).not.toBe(first);
+      expect(test()(1)).toBe(false);
+
+      service.setBlurred('ds', 1, true);
+      expect(test()(1)).toBe(true);
+      expectWrite('ds', 1).flush({ ok: true, id: 1, blurred: true });
+    });
+  });
 });

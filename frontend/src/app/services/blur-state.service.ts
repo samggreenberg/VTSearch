@@ -78,7 +78,7 @@ function sameIds(a: ReadonlySet<number> | null, b: readonly number[]): boolean {
  *
  * Sites read it through the `vtBlur` directive, which retains for them; a
  * site that cannot carry the directive (the Browse canvas) calls
- * {@link retain} and {@link isBlurred} itself.
+ * {@link retain} and {@link blurredIn} itself.
  */
 @Injectable({ providedIn: 'root' })
 export class BlurStateService {
@@ -117,12 +117,31 @@ export class BlurStateService {
    * dataset reads as wholly blurred.
    */
   isBlurred(datasetId: string, id: number): boolean {
-    if (!datasetId) return this.failClosed();
+    return this.blurredIn(datasetId)(id);
+  }
+
+  /**
+   * Which of *datasetId*'s items show blurred, as a test over one read of the
+   * dataset's state: for a site that asks about many items at once, such as
+   * the Browse canvas once per frame. The call is the signal read, so a
+   * `computed` or `effect` that makes it follows every change to the answer;
+   * the test it returns reads nothing, and answers for the state it was made
+   * from. The same rules as {@link isBlurred}, which uses it.
+   */
+  blurredIn(datasetId: string): (id: number) => boolean {
+    if (!datasetId) {
+      const closed = this.failClosed();
+      return () => closed;
+    }
     const view = this.entry(datasetId).view();
-    const overlay = view.overlays.get(id);
-    if (overlay) return overlay.blurred;
-    if (view.ids === null) return this.failClosed();
-    return view.ids.has(id);
+    const { ids, overlays } = view;
+    // Unknown until the first read lands: blurred when the instance may have rules.
+    const unknown = ids === null && this.failClosed();
+    return (id) => {
+      const overlay = overlays.get(id);
+      if (overlay) return overlay.blurred;
+      return ids === null ? unknown : ids.has(id);
+    };
   }
 
   /**

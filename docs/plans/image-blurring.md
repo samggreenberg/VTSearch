@@ -5,7 +5,8 @@ file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
 overrides across dataset copies (#5693), the frontend state service and
 `vtBlur` directive (#5694), the Blur / Unblur button with the focused
-viewer's blur (#5695), and the directive on every DOM image site (#5696).
+viewer's blur (#5695), the directive on every DOM image site (#5696), and
+the Browse canvas's blur and peek (#5697).
 
 ## Goal
 
@@ -40,9 +41,9 @@ gore, …). Three behaviours:
   `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.ts`.
 
 What does **not** exist: any shared thumbnail component (about twenty sites
-each write their own `<img>`). Every DOM image site carries `vtBlur`, and the
-focused viewer blurs itself (see "Blurred images" in `docs/FRONTEND.md`); the
-Browse canvas is the one left.
+each write their own `<img>`). Every DOM image site carries `vtBlur`, the
+focused viewer blurs itself, and the Browse canvas draws pre-blurred cells
+(see "Blurred images" in `docs/FRONTEND.md`).
 
 ## Design
 
@@ -92,19 +93,10 @@ directly sees the image. That is the intended trade for this feature.
 
 Built: `BlurStateService` (per-dataset blurred sets, optimistic
 `setBlurred`, a poll, fail-closed while loading), the `vtBlur` directive
-with the CSS peek, and the directive on every DOM site, described under
-"Blurred images" in `docs/FRONTEND.md`. What the remaining sites need from
-them:
-
-- **The Browse canvas** is a 2D canvas, so CSS cannot reach a cell. `ThumbStore`
-  caches a pre-blurred bitmap per blurred thumbnail (the way it already caches
-  tinted audio masks); `drawHex` draws that instead. Peek reuses the existing
-  `hoveredCell`: after one second on a blurred cell, cross-fade from the
-  blurred bitmap to the sharp one over the same duration, and drop back at once
-  when the hover ends. A blur-state change schedules a redraw. With no
-  directive to do it, the canvas retains its dataset itself
-  (`BlurStateService.retain`), reads `isBlurred` per cell, and sizes the blur
-  with `blurRadiusFor`.
+with the CSS peek, the directive on every DOM site, and the Browse canvas's
+pre-blurred copies in `ThumbStore` with a cross-fading peek, all described
+under "Blurred images" in `docs/FRONTEND.md`. The canvas's hover preview
+shows no image for a still.
 
 ### The button
 
