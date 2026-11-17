@@ -4,6 +4,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 describe('MediaItemComponent', () => {
   let component: MediaItemComponent;
@@ -20,7 +21,7 @@ describe('MediaItemComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaItemComponent],
-      providers: [...provideZoneless(), ActiveContextService],
+      providers: [...provideZoneless(), ActiveContextService, provideBlurStateStub([blurKey('ds-1', 2)]).provider],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaItemComponent);
@@ -98,6 +99,17 @@ describe('MediaItemComponent', () => {
     expect(component.isAudioThumbnail).toBe(false);
     expect(el.querySelector('img.media-thumbnail')).toBeTruthy();
     expect(el.querySelector('.media-thumbnail-wave')).toBeNull();
+  });
+
+  it('blurs an image thumbnail its dataset says is blurred, and not a sharp one (#5696)', async () => {
+    TestBed.inject(ActiveContextService).setActivePair('ds-1', 'det-1');
+    const img = (): HTMLImageElement => fixture.nativeElement.querySelector('img.media-thumbnail');
+    fixture.componentRef.setInput('media', { ...mockMedia, id: 1, media_type: 'image' });
+    await settleZoneless(fixture);
+    expect(img().classList.contains('vt-blurred')).toBe(false);
+    fixture.componentRef.setInput('media', { ...mockMedia, id: 2, media_type: 'image' });
+    await settleZoneless(fixture);
+    expect(img().classList.contains('vt-blurred')).toBe(true);
   });
 
   it('should not show thumbnail for text type', () => {

@@ -12,6 +12,7 @@ import { activeContextInterceptor } from '../../../../interceptors/active-contex
 import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../testing/test-providers';
 import { settleResource, settleZoneless } from '../../../../testing/settle-resource';
+import { blurKey, provideBlurStateStub } from '../../../../testing/blur-state-stub';
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -20,6 +21,7 @@ describe('DatasetExamplePickerComponent', () => {
   let fixture: ComponentFixture<DatasetExamplePickerComponent>;
   let httpMock: HttpTestingController;
   let el: HTMLElement;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
   const listing = (ids: number[], order = 'dataset', total = ids.length) => ({ ids, total, order });
@@ -81,9 +83,10 @@ describe('DatasetExamplePickerComponent', () => {
     if (!Element.prototype.scrollTo) {
       (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
     }
+    blur = provideBlurStateStub();
     await TestBed.configureTestingModule({
       imports: [DatasetExamplePickerComponent],
-      providers: [...provideZoneless(), ...provideHttpTesting(activeContextInterceptor)],
+      providers: [...provideZoneless(), ...provideHttpTesting(activeContextInterceptor), blur.provider],
     }).compileComponents();
     // Some other pair is active: the grid must read the dataset it was given,
     // and never send the active detector along with it.
@@ -136,6 +139,19 @@ describe('DatasetExamplePickerComponent', () => {
     expect(img.getAttribute('src')).toBe('/api/medias/1/thumbnail?dataset_id=faces-ds');
     expect(tiles()[0].getAttribute('title')).toBe('face_1.png');
     expect(el.textContent).not.toContain('Look-alikes');
+  });
+
+  it('blurs a tile by the blur state of the dataset it lists, not the active one (#5696)', async () => {
+    blur.blurred.set(new Set([blurKey('faces-ds', 2), blurKey('other-ds', 1)]));
+    await open('face', listing(range(3)));
+    await rest();
+    flushNames();
+    await settleZoneless(fixture);
+    expect(tiles().map((tile) => tile.querySelector('img')!.classList.contains('vt-blurred'))).toEqual([
+      false,
+      true,
+      false,
+    ]);
   });
 
   it('sizes the tiles from the picker’s own thumbnail-size setting', async () => {

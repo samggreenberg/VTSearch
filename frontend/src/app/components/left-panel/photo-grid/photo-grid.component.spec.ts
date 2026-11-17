@@ -9,6 +9,7 @@ import { DatasetStateService } from '../../../services/dataset-state.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { blurKey, provideBlurStateStub } from '../../../testing/blur-state-stub';
 
 /**
  * Collapse to photos' grid (#4751): the ranking's faces, grouped by photo on
@@ -22,6 +23,7 @@ const NO_VOTE = null as unknown as CollapsedFace['vote'];
 describe('PhotoGridComponent', () => {
   let fixture: ComponentFixture<PhotoGridComponent>;
   let httpMock: HttpTestingController;
+  let blur: ReturnType<typeof provideBlurStateStub>;
 
   /** Photo 10 holds faces 1 and 3, photo 11 face 2; face 4's photo is not in the dataset. */
   const PAGE: SortCollapsedResponse = {
@@ -56,9 +58,10 @@ describe('PhotoGridComponent', () => {
   };
 
   beforeEach(async () => {
+    blur = provideBlurStateStub();
     configureZoneless({
       imports: [PhotoGridComponent],
-      providers: [...provideHttpTesting()],
+      providers: [...provideHttpTesting(), blur.provider],
     });
     httpMock = TestBed.inject(HttpTestingController);
     TestBed.inject(ActiveContextService).setActivePair('faces', 'face-det');
@@ -109,6 +112,25 @@ describe('PhotoGridComponent', () => {
   function boxes(card: HTMLElement): HTMLButtonElement[] {
     return Array.from(card.querySelectorAll<HTMLButtonElement>('.face-box'));
   }
+
+  it("blurs each photo by the photo dataset's state, and each face by the face dataset's (#5696)", async () => {
+    // Photo 10 and face 3 blurred in their own datasets; the same ids in the
+    // other dataset must not count.
+    blur.blurred.set(new Set([blurKey('photos', 10), blurKey('faces', 3), blurKey('faces', 11), blurKey('photos', 4)]));
+    await open();
+    const blurred = (img: Element | null | undefined): boolean => !!img?.classList.contains('vt-blurred');
+    const [first, second, orphan] = cards();
+    expect(blurred(first.querySelector('img.photo'))).toBe(true);
+    expect(blurred(second.querySelector('img.photo'))).toBe(false);
+    expect(Array.from(first.querySelectorAll('.face-chip img')).map(blurred)).toEqual([false, true]);
+    // A face standing in for its missing photo reads the face dataset.
+    expect(blurred(orphan.querySelector('img.photo'))).toBe(false);
+    blur.blurred.set(new Set([blurKey('faces', 4)]));
+    await settleResource();
+    expect(blurred(orphan.querySelector('img.photo'))).toBe(true);
+    // The face boxes cover the photo, so its card peeks it as a whole.
+    expect(first.querySelector('.photo-wrap')?.classList.contains('vt-blur-peek')).toBe(true);
+  });
 
   it('asks for nothing before there is a ranking', async () => {
     await settleResource();
