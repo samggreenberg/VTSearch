@@ -1,9 +1,18 @@
 // In the centre panel the strip sits outside the swipe wrapper, so it stays
 // fixed during a vote's swipe.
+//
+// It wraps, rows centred, rather than outgrow its panel (#5713). A toolbar
+// that cannot wrap is as wide as all its controls, and the centre panel, a
+// flex item, will not shrink below the widest thing in it: so with both side
+// panels open the panel ran out under the right one, and took Blur / Unblur,
+// the toolbar's last control, with it.
 :host {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-md);
+  justify-content: center;
+  gap: var(--space-xs) var(--space-md);
+  max-width: 100%;
   padding: var(--space-sm) var(--space-lg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -52,8 +61,19 @@
   display: inline-block;
 }
 
+// A separator a wrap left at the start or end of a row (see `edgeSeps`).
+// `visibility`, not `display`, so hiding it moves nothing, and cannot change
+// the rows it was measured on.
+.ivc-sep--edge {
+  visibility: hidden;
+}
+
+// The slider gives up width before anything wraps: it counts as 48px when the
+// rows are laid out, then grows into what its row has left, up to its 100px.
 .ivc-zoom-slider {
-  width: 100px;
+  flex: 1 1 48px;
+  min-width: 48px;
+  max-width: 100px;
   // Every other control down here carries its own `cursor: pointer`, and a rule
   // matching an element directly beats a value inherited from an ancestor - so
   // the `.center-panel.region-draw` crosshair leaves them alone for free. The
