@@ -1170,14 +1170,37 @@ draws it.
   one second of hover the blur fades out over 1.5s, and on leave it snaps back.
   Both rules are `!important`, because a component's own `filter` or
   `transition` on the element outranks a bare class and would unblur the image
-  or skip the delay. So the host's own transitions stop while it is blurred,
-  and a host that needs its own `filter` (the focused viewer's tone map and
-  greyscale, `imageFilter`) composes the blur into it rather than carrying the
-  directive. Under reduced motion the fade goes and the delay stays
-  (`styles.scss`).
+  or skip the delay. So the host's own transitions stop while it is blurred.
+  Under reduced motion the fade goes and the delay stays (`styles.scss`).
 - **What a host owes the directive:** its container clips overflow, or the blur
   bleeds past the box, and the host takes the pointer (no
   `pointer-events: none`), or it can never be peeked at.
+- **The focused viewer blurs itself** (`vt-image-viewer`), without the
+  directive, for three reasons:
+  - **Its tone map and greyscale** (`imageFilter`) would be dropped by the
+    class's `!important` filter. They are drawn on a layer round the image
+    (`.image-tone`), and the image's own `filter` holds the blur alone. One
+    list holding both would not do: a filter list with a `url()` in it does not
+    interpolate, so the peek would jump to sharp instead of fading.
+  - **Its blur is drawn under the zoom**, so it grows with the picture: 5× hides
+    as much as fit, and the wrap clips it at every zoom. The radius is the
+    shared share of the image's size as laid out unzoomed.
+  - **It times its own peek** (`peeking`, with `.image-peek` for the fade).
+    The image changes under a pointer that stays put while the user votes with
+    the arrow keys, and under a hover rule each next image would arrive
+    already peeked, sharp. So the second's wait starts again for every new
+    image and every re-blur, and leaving the pane drops the peek at once.
+    The pane, not the image, is what is hovered, so the boxes drawn over it
+    do not end a peek.
+
+  An item shown through `srcOverride` (a detector's example) is no dataset
+  item, so nothing blurs it. Every other viewer has a **Blur / Unblur** button
+  at the end of its toolbar (`vt-image-view-controls`) and answers `b` (the
+  centre panel through `KeyboardService`, the Show in photo overlay through
+  its own key handler). Each calls `toggleBlur()`, which writes the override
+  into the dataset the item is in: the viewer's `datasetId`, or else the
+  active dataset. So the overlay's photo is blurred in its sibling, never in
+  the active dataset.
 - **The Browse canvas does it all itself**, because CSS cannot reach a cell of
   a 2D canvas. It retains the active dataset while it paints thumbnails and
   reads `blurredIn(datasetId)` once per frame: the same answer as `isBlurred`,
@@ -1192,8 +1215,9 @@ draws it.
   peek follows the enlarged cell, hovered or pinned: `BlurPeek` holds it
   blurred for one second, then cross-fades the sharp thumbnail in over 1.5s
   (eased at both ends: a cross-fade gives the image away sooner than a
-  shrinking blur does), and drops back at once when the cell changes. Low-effects mode and reduced
-  motion skip the fade. Audio waveforms stay sharp, as in the DOM.
+  shrinking blur does), and drops back at once when the cell changes.
+  Low-effects mode and reduced motion skip the fade. Audio waveforms stay
+  sharp, as in the DOM.
 
 ### Other primitives
 

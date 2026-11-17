@@ -454,6 +454,10 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'blur':
+          // The item being voted on, never the reference beside it.
+          this.imageViewer()?.toggleBlur();
+          break;
         case 'reference':
           this.faceReference()?.next();
           break;
