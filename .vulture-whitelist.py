@@ -238,6 +238,7 @@ queried  # noqa: F821 - captures the queries a paired embedder issues
 converged_training  # noqa: F821 - pins training hyperparameters to convergence
 degenerate_gmm  # noqa: F821 - forces the GMM to degenerate
 restore_resolvers  # noqa: F821 - re-binds the resolver globals via monkeypatch so teardown restores them
+parked_writes  # noqa: F821 - holds queued blur-sidecar writes until a test flushes them
 clean_paths  # noqa: F821 - saves/restores sys.path and sys.meta_path around setup_env
 restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via monkeypatch for the test
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
