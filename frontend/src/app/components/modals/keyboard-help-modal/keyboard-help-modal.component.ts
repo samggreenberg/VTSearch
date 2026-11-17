@@ -188,6 +188,7 @@ export class KeyboardHelpModalComponent implements OnInit {
             { keys: ['Space'], description: 'Play / pause audio or video' },
             { keys: ['Shift', '↑'], description: 'Volume up' },
             { keys: ['Shift', '↓'], description: 'Volume down' },
+            { keys: ['B'], description: 'Blur or unblur the video, everywhere it appears and for everyone' },
           ],
         },
         {

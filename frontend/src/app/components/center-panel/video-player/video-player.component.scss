@@ -7,18 +7,57 @@
   min-height: 0;
 }
 
-.video-element {
-  max-width: 100%;
-  max-height: 100%;
+// The video's box: as wide as the panel, and as tall as the picture at that
+// width or the panel, whichever is less. A column, so the video shrinks to the
+// frame's height when the panel caps it, and the frame hugs the video either
+// way, which puts the blurred video's control bar on its bottom edge.
+.video-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-width: 0;
+  max-height: 100%;
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.video-element {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
 
-  &.hidden {
-    display: none;
+  // A blurred video (#5698), the player's own form of the shared `.vt-blurred`
+  // (`scss/_components.scss`), clipped to the element's box. The peek is the
+  // same fade, but the second's wait before it is the player's (`peeking`), and
+  // leaving drops `.video-peek`, whose resting rule has no transition, so the
+  // blur snaps back. Neither rule is `!important`, so the app's motion settings
+  // (`styles.scss`) cut the fade and leave the wait.
+  &.video-blurred {
+    filter: blur(var(--video-blur-radius, 60px));
+    clip-path: border-box;
+    transition: none;
+
+    &.video-peek {
+      filter: blur(0);
+      transition: filter 1.5s ease-out;
+    }
   }
+}
+
+// In place of the native controls while the video is blurred: over the bottom
+// of the frame, outside the blur, so they stay sharp.
+.video-controls-bar {
+  position: absolute;
+  left: var(--space-sm);
+  right: var(--space-sm);
+  bottom: var(--space-sm);
 }
 
 .video-error {

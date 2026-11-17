@@ -5,8 +5,9 @@ file holds the design they share. Built so far: the rules setting and its
 evaluator (#5691), the override store and its routes (#5692), carrying
 overrides across dataset copies (#5693), the frontend state service and
 `vtBlur` directive (#5694), the Blur / Unblur button with the focused
-viewer's blur (#5695), the directive on every DOM image site (#5696), and
-the Browse canvas's blur and peek (#5697).
+viewer's blur (#5695), the directive on every DOM image site (#5696), the
+Browse canvas's blur and peek (#5697), and video playback's blur and its
+button (#5698).
 
 ## Goal
 
@@ -100,12 +101,10 @@ shows no image for a still.
 
 ### The button
 
-Built for stills: Blur / Unblur ends the image viewer's toolbar, and `b`
-toggles it; both are described under "Blurred images" in `docs/FRONTEND.md`.
-
-Video playback is blurred too. The video player has no toolbar of its own, so
-the same button is placed in the centre panel's shared item tools for a video,
-and the blur must leave the player's controls sharp and usable.
+Built: Blur / Unblur ends the image viewer's toolbar, sits in the centre
+panel's item tools under a video, and `b` toggles either; a blurred video
+plays under the app's own control bar. All of it is described under
+"Blurred images" in `docs/FRONTEND.md`.
 
 ## Work items
 
@@ -126,6 +125,7 @@ An arrow points from an issue to one that needs it merged first.
 ```
 
 - #5698 needs both #5694 and #5695: it reuses the button #5695 adds.
+- #5708 needs #5698: it reuses the control bar and peek #5698 adds.
 - #5693, #5695, #5696 and #5697 do not depend on one another and can run in
   parallel once their parent has merged.
 - The longest chain is #5691 → #5692 → #5694 → #5695 → #5698 → #5699.
@@ -161,6 +161,10 @@ An arrow points from an issue to one that needs it merged first.
 <!-- item-sep -->
 
 - [ ] #5698 — Video playback blur and its button (Sonnet)
+
+<!-- item-sep -->
+
+- [ ] #5708 — Blur the "Use This Example?" preview's video (Sonnet)
 
 <!-- item-sep -->
 

@@ -13,6 +13,7 @@ import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
 
 /**
  * Zoneless staleness canary for the center panel.
@@ -222,6 +223,22 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush({});
     expect(component.volume()).toBeCloseTo(start, 5);
   });
+
+  it('blurs the video on the B key, as it does an image (#5698)', async () => {
+    TestBed.inject(ActiveContextService).setActivePair('ds', 'det');
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'video', filename: 'clip.mp4' });
+    await settleZoneless(fixture);
+    httpMock.match('/api/medias/blurred').forEach((req) => req.flush({ ids: [] }));
+    await settleZoneless(fixture);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }));
+    await settleZoneless(fixture);
+    const write = httpMock.expectOne((r) => r.method === 'PUT' && r.url === `/api/medias/${mockMedia.id}/blur`);
+    expect(write.request.body).toEqual({ blurred: true });
+    write.flush({ ok: true, id: mockMedia.id, blurred: true });
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('video').classList).toContain('video-blurred');
+  });
 });
 
 describe('CenterPanelComponent', () => {
@@ -294,6 +311,37 @@ describe('CenterPanelComponent', () => {
     fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'document' });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
+  });
+
+  // Blur / Unblur on a video (#5698): the player has no toolbar, so the item
+  // tools carry its button (the B key is in the canary above).
+  it('gives a video its Blur button under it', async () => {
+    TestBed.inject(ActiveContextService).setActivePair('ds', 'det');
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'video', filename: 'clip.mp4' });
+    await settleZoneless(fixture);
+    httpMock.match('/api/medias/blurred').forEach((req) => req.flush({ ids: [] }));
+    await settleZoneless(fixture);
+    const button = fixture.nativeElement.querySelector('.video-tools [data-metric="videoBlur"]') as HTMLButtonElement;
+    expect(button.textContent!.trim()).toBe('Blur');
+
+    button.click();
+    await settleZoneless(fixture);
+    const write = httpMock.expectOne((r) => r.method === 'PUT' && r.url === '/api/medias/1/blur');
+    expect(write.request.body).toEqual({ blurred: true });
+    write.flush({ ok: true, id: 1, blurred: true });
+    await settleZoneless(fixture);
+    expect(button.textContent!.trim()).toBe('Unblur');
+    expect(fixture.nativeElement.querySelector('video').classList).toContain('video-blurred');
+  });
+
+  it('gives an image no second Blur button in the item tools', async () => {
+    TestBed.inject(ActiveContextService).setActivePair('ds', 'det');
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image', filename: 'a.jpg' });
+    await settleZoneless(fixture);
+    httpMock.match('/api/medias/blurred').forEach((req) => req.flush({ ids: [] }));
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('.video-tools')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[data-metric="imageBlur"]').length).toBe(1);
   });
 
   /**

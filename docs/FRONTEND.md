@@ -1217,14 +1217,32 @@ draws it.
     The pane, not the image, is what is hovered, so the boxes drawn over it
     do not end a peek.
 
-  An item shown through `srcOverride` (a detector's example) is no dataset
-  item, so nothing blurs it. Every other viewer has a **Blur / Unblur** button
-  at the end of its toolbar (`vt-image-view-controls`) and answers `b` (the
-  centre panel through `KeyboardService`, the Show in photo overlay through
-  its own key handler). Each calls `toggleBlur()`, which writes the override
-  into the dataset the item is in: the viewer's `datasetId`, or else the
-  active dataset. So the overlay's photo is blurred in its sibling, never in
-  the active dataset.
+  The state, the retain, the peek's timer and the button's action come from
+  `focusedBlur()` (`utils/focused-blur.ts`), which the video player shares;
+  the viewer draws the blur. An item shown through `srcOverride` (a
+  detector's example) is no dataset item, so nothing blurs it. Every other
+  viewer has a **Blur / Unblur** button (`vt-blur-toggle`) at the end of its
+  toolbar (`vt-image-view-controls`) and answers `b` (the centre panel
+  through `KeyboardService`, the Show in photo overlay through its own key
+  handler). Each calls `toggleBlur()`, which writes the override into the
+  dataset the item is in: the viewer's `datasetId`, or else the active
+  dataset. So the overlay's photo is blurred in its sibling, never in the
+  active dataset.
+- **The focused video blurs itself too** (`vt-video-player`, #5698), with the
+  same `focusedBlur()`: the blur is the `<video>`'s own `filter`, clipped to
+  its box, and the peek is timed the same way, its wait starting at each new
+  video's first frame (`loadeddata`). Hovering the frame round the video,
+  its control bar included, keeps a peek going. A filter on a `<video>`
+  blurs its native controls with the picture, so while the video is blurred
+  they are hidden and `vt-video-controls` is drawn over the bottom of the
+  frame, outside the blur: play / pause, a seek bar over the clip window
+  when the item has one, the time, mute and volume. It drives the element as
+  the native controls do, so the player hears the same events; a click on
+  the picture plays or pauses it. Picture-in-picture is turned off and
+  fullscreen left while blurred, since one would show the video sharp and
+  the other without its controls. The player has no toolbar, so the centre
+  panel puts its `vt-blur-toggle` in the item tools (`.video-tools`), and
+  `b` blurs the video as it does an image.
 - **The Browse canvas does it all itself**, because CSS cannot reach a cell of
   a 2D canvas. It retains the active dataset while it paints thumbnails and
   reads `blurredIn(datasetId)` once per frame: the same answer as `isBlurred`,
