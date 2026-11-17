@@ -10,58 +10,6 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
-### Added
-
-- **Blur overrides follow their items into a new dataset** (issue #5693). `export_dataset_to_file` takes
-  `blur_overrides={media_id: blurred}` and folds each into its item's entry as `blur_override`; given, it alone
-  decides, and omitted, an override an item already carries in that field is written. `load_dataset_from_pickle`
-  (and the chunked loader) put the field back on each loaded media, so every id renumbering on the way to a new
-  dataset carries it. In `vtscore.datasets.blur_state`: `BLUR_OVERRIDE_FIELD`; `stamp_blur_overrides(medias,
-  overrides)` and `take_blur_overrides(medias)` put the field on and take it off; `carry_blur_overrides(ctx)` makes
-  the overrides a context's items carry its own; `write_blur_sidecar(pkl_path, overrides)` writes a new file's
-  sidecar now. The load pipeline's save writes the sidecar before registering a dataset and leaves no field on its
-  medias; the combine importer, and the pickle importer given a server path, read the sidecar beside each source
-  file, which wins over the file's own fields. `CliUploadedFile` gains a read-only `path`.
-
-- **`vtscore.datasets.blur_state`**, the per-dataset blur state (issue #5692). An item's effective state is its
-  Blur / Unblur override if one was set, else whether a blur rule matches its raw `custom_metadata`
-  (`effective_blurred(override, rules, custom_metadata)`). `set_blur_override(ctx, media_id, blurred)` records an
-  override on the `DatasetContext` and queues it to a `<stem>.blur.json` sidecar beside the dataset's container
-  (`blur_sidecar_path`), written atomically and coalesced after `WRITE_DELAY_SECONDS`; `read_blur_overrides`,
-  `blur_overrides(ctx)`, `flush_blur_writes` and `pending_blur_writes` read and land it, and
-  `removing_blur_sidecar(pkl_path)` holds the writer off while a dataset's files are deleted (as
-  `registry.unregister_dataset` now does). `blurred_ids(ctx, rules)` is the set of blurred ids, cached on the context
-  until its medias, overrides or the rules change. `DatasetContext.reset_derived_caches` gains a `blur` family
-  keyword, defaulting to `True` like the others.
-
-- **`vtscore.datasets.blur_rules`**, the pure half of image blurring (issue #5691): which ingest metadata marks an
-  image as worth blurring. A rule is `{"field", "op", "value"}` with `op` in `BLUR_RULE_OPS` (`truthy`, `==`, `!=`,
-  `>`, `>=`, `<`, `<=`, `in`). `partition_blur_rules(entries)` returns `(rules, rejected)`, the rules normalized and
-  each rejected entry paired with its problem (`blur_rule_problem(entry)`); `matches_blur_rules(rules,
-  custom_metadata)` and `rule_matches(rule, custom_metadata)` say whether any rule, or one, matches a media's raw
-  `custom_metadata`; `field_key(name)` is the case-, whitespace- and trailing-colon-blind form fields are matched in;
-  `describe_blur_rule(rule)` is a one-line phrase for logs.
-
-- **Media of a type nothing embeds are converted before the embed stage** (issue #5680). A *convert-out* half
-  type (`document`) has files to ingest and no embedder, and an importer that handed such media over as they
-  were (a `run()` override listing PDFs, a folder scan asked for `document`) had every one dropped for want of a
-  vector. New `vtscore.converters.default_converter_for(source_type, preferred_target="")` names the converter
-  such a type takes: into `preferred_target` when its `converts_to` lists it, else into `converts_to[0]`; `None`
-  for a type that embeds. New `vtscore.datasets.stages.clipper.convert_unembeddable_medias(medias,
-  preferred_target="", *, clipper_name="", clipper_params=None, chain_steps=None, on_progress=None)` runs it as
-  the leading step of a chain over those media, in place, and returns the ids it produced; the load pipeline's
-  clipper stage and the staging import call it. Outputs leave unembedded, with the recipe in
-  `origin.params["clipper_chain"]`. An importer that converts its own media is unaffected.
-
-- **`vtscore.detectors.resolver.resolve_unit_payload(file_path, origin)`** returns `(bytes, suffix)` of the unit
-  an origin names, given the file it resolved to: the file's own bytes, or, for an origin a converter made (a flat
-  `converter` recipe, or a `clipper_chain` with a converter step), the output the recipe rebuilds. `None` when
-  the recipe no longer reproduces it.
-
-- **`vtscore.datasets.importers.base.with_default_conversions(field_values, specs, output_type)`** adds, for a
-  request that names no `source_specs`, a converter row for every half type whose default conversion is
-  `output_type`.
-
 ### Changed
 
 - **A folder's PDFs become pages through `document2image` only** (issue #5680). The `server_folder` importer and
@@ -1748,6 +1696,56 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **Blur overrides follow their items into a new dataset** (issue #5693). `export_dataset_to_file` takes
+  `blur_overrides={media_id: blurred}` and folds each into its item's entry as `blur_override`; given, it alone
+  decides, and omitted, an override an item already carries in that field is written. `load_dataset_from_pickle`
+  (and the chunked loader) put the field back on each loaded media, so every id renumbering on the way to a new
+  dataset carries it. In `vtscore.datasets.blur_state`: `BLUR_OVERRIDE_FIELD`; `stamp_blur_overrides(medias,
+  overrides)` and `take_blur_overrides(medias)` put the field on and take it off; `carry_blur_overrides(ctx)` makes
+  the overrides a context's items carry its own; `write_blur_sidecar(pkl_path, overrides)` writes a new file's
+  sidecar now. The load pipeline's save writes the sidecar before registering a dataset and leaves no field on its
+  medias; the combine importer, and the pickle importer given a server path, read the sidecar beside each source
+  file, which wins over the file's own fields. `CliUploadedFile` gains a read-only `path`.
+
+- **`vtscore.datasets.blur_state`**, the per-dataset blur state (issue #5692). An item's effective state is its
+  Blur / Unblur override if one was set, else whether a blur rule matches its raw `custom_metadata`
+  (`effective_blurred(override, rules, custom_metadata)`). `set_blur_override(ctx, media_id, blurred)` records an
+  override on the `DatasetContext` and queues it to a `<stem>.blur.json` sidecar beside the dataset's container
+  (`blur_sidecar_path`), written atomically and coalesced after `WRITE_DELAY_SECONDS`; `read_blur_overrides`,
+  `blur_overrides(ctx)`, `flush_blur_writes` and `pending_blur_writes` read and land it, and
+  `removing_blur_sidecar(pkl_path)` holds the writer off while a dataset's files are deleted (as
+  `registry.unregister_dataset` now does). `blurred_ids(ctx, rules)` is the set of blurred ids, cached on the context
+  until its medias, overrides or the rules change. `DatasetContext.reset_derived_caches` gains a `blur` family
+  keyword, defaulting to `True` like the others.
+
+- **`vtscore.datasets.blur_rules`**, the pure half of image blurring (issue #5691): which ingest metadata marks an
+  image as worth blurring. A rule is `{"field", "op", "value"}` with `op` in `BLUR_RULE_OPS` (`truthy`, `==`, `!=`,
+  `>`, `>=`, `<`, `<=`, `in`). `partition_blur_rules(entries)` returns `(rules, rejected)`, the rules normalized and
+  each rejected entry paired with its problem (`blur_rule_problem(entry)`); `matches_blur_rules(rules,
+  custom_metadata)` and `rule_matches(rule, custom_metadata)` say whether any rule, or one, matches a media's raw
+  `custom_metadata`; `field_key(name)` is the case-, whitespace- and trailing-colon-blind form fields are matched in;
+  `describe_blur_rule(rule)` is a one-line phrase for logs.
+
+- **Media of a type nothing embeds are converted before the embed stage** (issue #5680). A *convert-out* half
+  type (`document`) has files to ingest and no embedder, and an importer that handed such media over as they
+  were (a `run()` override listing PDFs, a folder scan asked for `document`) had every one dropped for want of a
+  vector. New `vtscore.converters.default_converter_for(source_type, preferred_target="")` names the converter
+  such a type takes: into `preferred_target` when its `converts_to` lists it, else into `converts_to[0]`; `None`
+  for a type that embeds. New `vtscore.datasets.stages.clipper.convert_unembeddable_medias(medias,
+  preferred_target="", *, clipper_name="", clipper_params=None, chain_steps=None, on_progress=None)` runs it as
+  the leading step of a chain over those media, in place, and returns the ids it produced; the load pipeline's
+  clipper stage and the staging import call it. Outputs leave unembedded, with the recipe in
+  `origin.params["clipper_chain"]`. An importer that converts its own media is unaffected.
+
+- **`vtscore.detectors.resolver.resolve_unit_payload(file_path, origin)`** returns `(bytes, suffix)` of the unit
+  an origin names, given the file it resolved to: the file's own bytes, or, for an origin a converter made (a flat
+  `converter` recipe, or a `clipper_chain` with a converter step), the output the recipe rebuilds. `None` when
+  the recipe no longer reproduces it.
+
+- **`vtscore.datasets.importers.base.with_default_conversions(field_values, specs, output_type)`** adds, for a
+  request that names no `source_specs`, a converter row for every half type whose default conversion is
+  `output_type`.
 
 - **`LabelImporter.describe_origin_param(key, value)`, `vtscore.plugins.origin_rows`, and
   `vtscore.detectors.import_record.import_rows`** (issue #5620). The row builder behind the dataset Stats window
