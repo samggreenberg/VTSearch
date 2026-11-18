@@ -106,8 +106,14 @@ def build_scrfd_model(
     num_anchors: int = 2,
     use_kps: bool = True,
     batch_dim: bool = False,
+    dynamic_hw: bool = False,
 ) -> Path:
-    """Write an SCRFD-shaped ONNX model whose heads encode *faces*; returns *path*."""
+    """Write an SCRFD-shaped ONNX model whose heads encode *faces*; returns *path*.
+
+    *dynamic_hw* declares the input's height and width dynamic, as a real SCRFD
+    export does, so the model runs on an input of any size (its constant heads
+    stay sized for *input_hw*).
+    """
     height, width = input_hw
     arrays: dict[str, np.ndarray] = {}
     for li, stride in enumerate(feat_stride):
@@ -129,7 +135,8 @@ def build_scrfd_model(
     nodes: list[onnx.NodeProto] = []
     zero = _zero_from_input(nodes)
     outputs = _constant_outputs(nodes, {k: arrays[k] for k in order}, zero, batch_dim)
-    inputs = [helper.make_tensor_value_info(INPUT_NAME, TensorProto.FLOAT, [1, 3, height, width])]
+    hw: list[Any] = ["H", "W"] if dynamic_hw else [height, width]
+    inputs = [helper.make_tensor_value_info(INPUT_NAME, TensorProto.FLOAT, [1, 3, *hw])]
     return _save(nodes, inputs, outputs, path, "scrfd_synthetic")
 
 
@@ -201,8 +208,19 @@ def embedder_weight(dim: int = 512, seed: int = 0) -> np.ndarray:
     return np.random.default_rng(seed).standard_normal((3, dim)).astype(np.float32)
 
 
-def build_embedder_model(path: Path, dim: int = 512, *, fixed_batch: int | None = None, side: int = 112) -> Path:
-    """Write ``mean over pixels -> linear(3 -> dim)``; input ``(N, 3, side, side)`` (dynamic N unless *fixed_batch*)."""
+def build_embedder_model(
+    path: Path,
+    dim: int = 512,
+    *,
+    fixed_batch: int | None = None,
+    side: int = 112,
+    norm_output: bool = False,
+) -> Path:
+    """Write ``mean over pixels -> linear(3 -> dim)``; input ``(N, 3, side, side)`` (dynamic N unless *fixed_batch*).
+
+    *norm_output* adds a second output, ``norm`` ``(N, 1)``, the way some
+    embedder exports return the vector's norm beside it.
+    """
     batch: Any = fixed_batch if fixed_batch is not None else "N"
     nodes: list[onnx.NodeProto] = [
         helper.make_node("GlobalAveragePool", [INPUT_NAME], ["pooled"]),
@@ -212,6 +230,9 @@ def build_embedder_model(path: Path, dim: int = 512, *, fixed_batch: int | None 
     ]
     inputs = [helper.make_tensor_value_info(INPUT_NAME, TensorProto.FLOAT, [batch, 3, side, side])]
     outputs = [helper.make_tensor_value_info("emb", TensorProto.FLOAT, [batch, dim])]
+    if norm_output:
+        nodes.append(helper.make_node("ReduceL2", ["emb"], ["norm"], axes=[1], keepdims=1))
+        outputs.append(helper.make_tensor_value_info("norm", TensorProto.FLOAT, [batch, 1]))
     return _save(nodes, inputs, outputs, path, "embedder_synthetic")
 
 

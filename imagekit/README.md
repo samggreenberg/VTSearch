@@ -206,6 +206,13 @@ python -c "import sys; from imagekit import RuntimeOptions; s = RuntimeOptions()
 `onnx.load` is no test of a wrapper. Protobuf parsing is lenient, so it reads
 one as a model with a garbled producer and no graph.
 
+The same one-liner tells a model store's detector from its recognition model.
+The detector prints its score, box and keypoint maps (9 for SCRFD with
+keypoints). A recognition model prints one output, the embedding, typically
+shaped `['?', 512]`, where the last number is the `embedding_dim` its config
+gives. The extractor refuses a model with more than one output when it loads,
+and says when the outputs are a face detector's.
+
 ## The image tensor
 
 Every API takes and returns one image representation: a `numpy` array of

@@ -22,7 +22,12 @@ from imagekit.face.records import FaceDetection
 from tests_lib.imagekit._real_models import FACE_IMAGE as _FACE_IMAGE
 from tests_lib.imagekit._real_models import MODEL_DIR as _MODEL_DIR
 from tests_lib.imagekit._real_models import detector_path, embedder_paths, expected_compat
-from tests_lib.imagekit._synthetic_models import build_embedder_model, expected_embedding, write_embedder_config
+from tests_lib.imagekit._synthetic_models import (
+    build_embedder_model,
+    build_scrfd_model,
+    expected_embedding,
+    write_embedder_config,
+)
 
 LM = np.array([[200, 150], [260, 150], [230, 190], [205, 220], [255, 220]], np.float32)
 BOX = (170.0, 110.0, 290.0, 250.0)
@@ -76,6 +81,27 @@ class TestLifecycle:
         ext = FaceEmbeddingExtractor()
         ext.initialize(RuntimeOptions(), tmp_path / "emb.onnx", tmp_path / "x.json")
         assert ext.get_compatibility() == "explicit:1"
+
+    def test_a_face_detector_as_the_embedder_is_refused_at_load(self, tmp_path):
+        """#5683: a renamed copy of the detector in the embedder slot used to load, then fail on every face."""
+        build_scrfd_model(tmp_path / "rec.model", dynamic_hw=True)
+        write_embedder_config(tmp_path / "rec.json")
+        ext = FaceEmbeddingExtractor()
+        with pytest.raises(ValueError, match="one output") as err:
+            ext.initialize(RuntimeOptions(), tmp_path / "rec.model")
+        message = str(err.value)
+        assert "has 9: score0, score1, score2, bbox0, bbox1, bbox2, kps0, kps1, kps2" in message
+        assert "face detector" in message and "recognition model as the embedder" in message
+        assert not ext.is_initialized
+
+    def test_a_second_output_is_refused_without_the_detector_hint(self, tmp_path):
+        build_embedder_model(tmp_path / "emb.onnx", norm_output=True)
+        write_embedder_config(tmp_path / "emb.json")
+        ext = FaceEmbeddingExtractor()
+        with pytest.raises(ValueError, match="has 2: emb, norm") as err:
+            ext.initialize(RuntimeOptions(), tmp_path / "emb.onnx")
+        assert "detector" not in str(err.value)
+        assert not ext.is_initialized
 
     def test_packaged_reference_configs_parse(self):
         for path in (MAGFACE_CONFIG_PATH, ARCFACE_CONFIG_PATH, ARCFACE_MBF_CONFIG_PATH):

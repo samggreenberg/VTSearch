@@ -29,6 +29,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   wrapper that holds no ONNX model, or more than one, is refused with a message saying so. See "Models in other
   formats" in `imagekit/README.md`.
 
+### Fixed
+
+- **A face detector named as the embedder is refused when the face models load** (issue #5683). A face pipeline
+  config whose embedder is a copy of the detector used to load without complaint. Every image then failed with
+  `too many values to unpack (expected 1)`, and the run ended with `Total Faces: 0`. An embedder must have one
+  output, the embedding, and a model with several outputs is now refused before any image is read. The message
+  names the model's outputs and, when they are a face detector's score, box and keypoint maps, says so.
+
 ## 2026-11-17
 
 ### Added
