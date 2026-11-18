@@ -150,6 +150,16 @@ class TestProcessFaces:
         )
         assert calls[0] == "init threads=5"
 
+    def test_the_detector_in_the_embedder_slot_is_fatal(self, models, images, tmp_path, capsys):
+        """#5683: this used to warn on every image and finish with ``Total Faces: 0``."""
+        cfg = _config_file(tmp_path, models)
+        raw = json.loads(cfg.read_text())
+        raw["embedder"]["model"] = raw["detector"]["model_bundle"]
+        cfg.write_text(json.dumps(raw))
+        with pytest.raises(ValueError, match="face detector"):
+            process_faces_main([str(cfg), str(tmp_path / "p"), "--img", str(images / "a.png")])
+        assert "Total Faces" not in capsys.readouterr().out
+
     def test_an_unknown_provider_is_fatal(self, models, images, tmp_path):
         cfg = _config_file(tmp_path, models)
         with pytest.raises(KeyError):

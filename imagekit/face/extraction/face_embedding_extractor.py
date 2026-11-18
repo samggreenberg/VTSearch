@@ -94,6 +94,31 @@ class ExtractorConfig:
         )
 
 
+#: The last dimension of each head of a face detector: a score (1), RetinaFace's
+#: two-class confidence (2), a box (4), five keypoints (10).
+_DETECTOR_HEAD_WIDTHS = frozenset({1, 2, 4, 10})
+
+
+def _require_one_output(model: Path, outputs: Sequence[Any]) -> None:
+    """Refuse a model without exactly one output, calling out a face detector's output list.
+
+    A detector named as the embedder otherwise loads (SCRFD takes any input
+    size, a 112 x 112 crop included) and fails on its first face with
+    ``too many values to unpack``.
+    """
+    if len(outputs) == 1:
+        return
+    names = ", ".join(o.name for o in outputs)
+    message = f"{model}: an embedder has one output, the embedding; this model has {len(outputs)}: {names}"
+    widths = {o.shape[-1] if o.shape else None for o in outputs}
+    if len(outputs) > 1 and widths <= _DETECTOR_HEAD_WIDTHS:
+        message += (
+            ". Those are a face detector's score, box and keypoint maps: name this model as the detector,"
+            " and the recognition model as the embedder"
+        )
+    raise ValueError(message)
+
+
 class FaceEmbeddingExtractor:
     """An ONNX face embedder; see the module docstring for the contract."""
 
@@ -126,7 +151,12 @@ class FaceEmbeddingExtractor:
         model_filepath: str | Path,
         model_config_path: str | Path | None = None,
     ) -> None:
-        """Load the model and the config naming its embedding space; raises on any failure."""
+        """Load the model and the config naming its embedding space; raises on any failure.
+
+        The model must have one input and one output, the embedding.  A model
+        with several outputs is refused here, naming them, rather than on its
+        first face (:func:`_require_one_output`).
+        """
         model = resolve_onnx_model(model_filepath)
         raw = load_model_config(model, model_config_path)
         config = ExtractorConfig.from_dict(raw, source=str(model_config_path or model.with_suffix(".json")))
@@ -135,6 +165,7 @@ class FaceEmbeddingExtractor:
         inputs = session.get_inputs()
         if len(inputs) != 1:
             raise ValueError(f"{model}: expected one model input, found {[i.name for i in inputs]}")
+        _require_one_output(model, session.get_outputs())
         batch = inputs[0].shape[0] if inputs[0].shape else None
         self._fixed_batch = int(batch) if isinstance(batch, int) else None
         self._session = session
