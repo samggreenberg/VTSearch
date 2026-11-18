@@ -11,7 +11,7 @@ import pytest
 
 from imagekit.cli import detect_faces_main, process_faces_main
 from imagekit.face import load_detections_csv, load_face_records, register_provider
-from tests_lib.imagekit._synthetic_models import build_model_dir, scrfd_face
+from tests_lib.imagekit._synthetic_models import build_model_dir, build_scrfd_model, scrfd_face
 
 KPS = ((-5, -5), (5, -5), (0, 0), (-4, 6), (4, 6))
 FACES = [scrfd_face(0, 20, 30, 0.9, (16, 16, 16, 16), kps=KPS), scrfd_face(2, 10, 5, 0.7, (40, 40, 40, 40), kps=KPS)]
@@ -151,11 +151,21 @@ class TestProcessFaces:
         assert calls[0] == "init threads=5"
 
     def test_the_detector_in_the_embedder_slot_is_fatal(self, models, images, tmp_path, capsys):
-        """#5683: this used to warn on every image and finish with ``Total Faces: 0``."""
-        cfg = _config_file(tmp_path, models)
-        raw = json.loads(cfg.read_text())
-        raw["embedder"]["model"] = raw["detector"]["model_bundle"]
-        cfg.write_text(json.dumps(raw))
+        """#5683: a renamed copy of the detector in both slots used to fail on every image.
+
+        Each image warned ``too many values to unpack (expected 1)`` and the run
+        ended ``Total Faces: 0``; now the pipeline refuses to load.
+        """
+        rec = build_scrfd_model(models["detector"].with_name("rec.model"), FACES, dynamic_hw=True)
+        cfg = tmp_path / "face.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "detector": {"model_bundle": str(rec)},
+                    "embedder": {"model": str(rec), "config": str(models["embedder_config"])},
+                }
+            )
+        )
         with pytest.raises(ValueError, match="face detector"):
             process_faces_main([str(cfg), str(tmp_path / "p"), "--img", str(images / "a.png")])
         assert "Total Faces" not in capsys.readouterr().out

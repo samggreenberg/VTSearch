@@ -106,8 +106,14 @@ def build_scrfd_model(
     num_anchors: int = 2,
     use_kps: bool = True,
     batch_dim: bool = False,
+    dynamic_hw: bool = False,
 ) -> Path:
-    """Write an SCRFD-shaped ONNX model whose heads encode *faces*; returns *path*."""
+    """Write an SCRFD-shaped ONNX model whose heads encode *faces*; returns *path*.
+
+    *dynamic_hw* declares the input's height and width dynamic, as a real SCRFD
+    export does, so the model runs on an input of any size (its constant heads
+    stay sized for *input_hw*).
+    """
     height, width = input_hw
     arrays: dict[str, np.ndarray] = {}
     for li, stride in enumerate(feat_stride):
@@ -129,7 +135,8 @@ def build_scrfd_model(
     nodes: list[onnx.NodeProto] = []
     zero = _zero_from_input(nodes)
     outputs = _constant_outputs(nodes, {k: arrays[k] for k in order}, zero, batch_dim)
-    inputs = [helper.make_tensor_value_info(INPUT_NAME, TensorProto.FLOAT, [1, 3, height, width])]
+    hw: list[Any] = ["H", "W"] if dynamic_hw else [height, width]
+    inputs = [helper.make_tensor_value_info(INPUT_NAME, TensorProto.FLOAT, [1, 3, *hw])]
     return _save(nodes, inputs, outputs, path, "scrfd_synthetic")
 
 

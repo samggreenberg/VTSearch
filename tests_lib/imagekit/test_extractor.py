@@ -84,7 +84,7 @@ class TestLifecycle:
 
     def test_a_face_detector_as_the_embedder_is_refused_at_load(self, tmp_path):
         """#5683: a renamed copy of the detector in the embedder slot used to load, then fail on every face."""
-        build_scrfd_model(tmp_path / "rec.model")
+        build_scrfd_model(tmp_path / "rec.model", dynamic_hw=True)
         write_embedder_config(tmp_path / "rec.json")
         ext = FaceEmbeddingExtractor()
         with pytest.raises(ValueError, match="one output") as err:
