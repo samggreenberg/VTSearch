@@ -608,6 +608,42 @@ class TestLabelImportMediaType:
         )
         assert self._resolve("New", spec) == "video"
 
+    def test_chain_converter_overrides_the_importer_field(self):
+        """#5718: PDFs read as ``document`` and rendered by the chain make an image dataset."""
+        from vtscore.cli.sources import _SourceSpec
+
+        chain = [{"kind": "converter", "name": "document2image", "params": {}}]
+        spec = _SourceSpec(
+            kind="importer",
+            importer_name="server_folder",
+            field_values={"path": "/x", "media_type": "document", "clipper_chain": json.dumps(chain)},
+        )
+        assert self._resolve("New", spec) == "image"
+
+    def test_chain_converter_types_each_output(self):
+        from vtscore.cli.sources import _SourceSpec
+        from vtscore.datasets.importers.base import OutputSpec
+
+        chain = [{"kind": "converter", "name": "document2image", "params": {}}]
+        spec = _SourceSpec(
+            kind="importer",
+            importer_name="server_folder",
+            outputs=(OutputSpec(media_type="document", clipper_chain=chain), OutputSpec(media_type="image")),
+        )
+        assert self._resolve("New", spec) == "image"
+
+    def test_unknown_chain_converter_asks_for_the_flag(self):
+        from vtscore.cli.sources import _SourceSpec
+
+        chain = [{"kind": "converter", "name": "no_such_converter", "params": {}}]
+        spec = _SourceSpec(
+            kind="importer",
+            importer_name="server_folder",
+            field_values={"path": "/x", "media_type": "document", "clipper_chain": chain},
+        )
+        with pytest.raises(ValueError, match="--detector-media-type"):
+            self._resolve("New", spec)
+
     def test_importer_field_default_applies(self):
         from vtscore.cli.sources import _SourceSpec
 

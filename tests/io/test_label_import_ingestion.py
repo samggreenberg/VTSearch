@@ -7,6 +7,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from vtscore.embedding.media_vectors import media_embedding
@@ -162,6 +163,78 @@ class TestIngestMissingClips:
 
         origin = {"importer": "unknown_xyz", "params": {}}
         assert _media_type_from_origin(origin) == ""
+
+    @staticmethod
+    def _chain(*steps):
+        return json.dumps([{"kind": kind, "name": name, "params": {}} for kind, name in steps])
+
+    def test_media_type_from_origin_chain_converter(self):
+        """A converter step in the chain types the unit, not the source's ``media_type`` (#5718).
+
+        A plugin importer of PDFs that renders them through the chain records
+        ``media_type: "document"`` (the files it read) beside a
+        ``document2image`` step; the detector its labels make is an image one.
+        """
+        from vtscore.datasets.ingest import _media_type_from_origin
+
+        origin = {
+            "importer": "my_pdf_plugin",
+            "params": {
+                "media_type": "document",
+                "clipper_chain": self._chain(("converter", "document2image"), ("clipper", "image_tiling")),
+            },
+        }
+        assert _media_type_from_origin(origin) == "image"
+
+    def test_media_type_from_origin_chain_converter_follows_a_flat_one(self):
+        """A chain runs on a flat converter's output, so its own converter decides."""
+        from vtscore.datasets.ingest import _media_type_from_origin
+
+        origin = {
+            "importer": "server_folder",
+            "params": {
+                "media_type": "video",
+                "converter": "video2image",
+                "clipper_chain": self._chain(("converter", "image2text")),
+            },
+        }
+        assert _media_type_from_origin(origin) == "text"
+
+    def test_media_type_from_origin_chain_without_converter_keeps_the_source_type(self):
+        """Clippers and cleaners keep their input's type: the folder's ``media_type`` stands."""
+        from vtscore.datasets.ingest import _media_type_from_origin
+
+        origin = {
+            "importer": "server_folder",
+            "params": {"media_type": "text", "clipper_chain": self._chain(("clipper", "text_sentence"))},
+        }
+        assert _media_type_from_origin(origin) == "text"
+
+    def test_media_type_from_origin_unknown_chain_converter(self):
+        """An unregistered chain converter leaves the type unknown, never the source's."""
+        from vtscore.datasets.ingest import _media_type_from_origin
+
+        origin = {
+            "importer": "server_folder",
+            "params": {"media_type": "document", "clipper_chain": self._chain(("converter", "no_such_converter"))},
+        }
+        assert _media_type_from_origin(origin) == ""
+
+    def test_unreplayable_chain_converter_never_stores_the_source(self, tmp_path):
+        """A chain converter that could not rebuild its unit is not stood in for by the PDF it read."""
+        import numpy as np
+
+        from vtscore.datasets.ingest import _resolve_clip_content_and_embedding
+
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-1.4 not really")
+        origin = {
+            "importer": "my_pdf_plugin",
+            "params": {"media_type": "document", "clipper_chain": self._chain(("converter", "document2image"))},
+        }
+        # The replay fell through to embedding the source whole: no unit bytes.
+        with patch("vtscore.detectors.resolver._apply_clip_and_embed", return_value=(np.zeros(4), None)):
+            assert _resolve_clip_content_and_embedding(pdf, "image", origin, "") is None
 
     def test_ingest_via_resolver_with_demo_origin(self, tmp_path):
         """_ingest_via_resolver resolves demo origin files item-by-item."""

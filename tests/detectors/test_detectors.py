@@ -2962,6 +2962,35 @@ class TestRegisterModelFromLabelset:
         err = res.get_json()["message"]
         assert "audio" in err and "image" in err
 
+    def test_documents_converted_in_the_chain_make_an_image_detector(self, client, tmp_path):
+        """#5718: a PDF dataset rendered to pages by a chain step yields an image detector.
+
+        The origins of such labels, as a CSV export carries them, record the
+        importer's ``media_type: "document"`` (the files it read) beside the
+        ``document2image`` step that made the units.  The detector is for the
+        units: typed ``document`` it could not browse its own positives.
+        """
+        import csv
+
+        chain = json.dumps([{"kind": "converter", "name": "document2image", "params": {}, "out_index": 0, "n_out": 2}])
+        origin = json.dumps(
+            {"importer": "my_pdf_plugin", "params": {"media_type": "document", "clipper_chain": chain}}
+        )
+        labels_path = tmp_path / "labels.csv"
+        with labels_path.open("w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["md5", "label", "origin_name", "origin"])
+            writer.writerow([medias[1]["md5"], "good", "a.pdf", origin])
+            writer.writerow([medias[2]["md5"], "bad", "b.pdf", origin])
+
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_csv_file",
+            json={"name": "Rendered pages", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        assert res.get_json()["detector"]["media_type"] == "image"
+        assert client.get("/api/detectors/Rendered%20pages").get_json()["media_type"] == "image"
+
     def test_unknown_importer_returns_404(self, client):
         res = client.post(
             "/api/detectors/registry/from-labelset/no_such_importer",
