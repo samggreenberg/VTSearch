@@ -859,6 +859,34 @@ def _step_io_types(step: ChainStep) -> tuple[str, str] | None:
     return conv.source_type, conv.target_type
 
 
+def _chain_converted_type(steps: list[ChainStep] | None) -> str | None:
+    """The media type a chain's units end as, when a converter step in it changed their type.
+
+    Clippers and cleaners keep their input's type, so the *last* converter step
+    decides: its target type is the type of every unit the chain ends in, a PDF
+    rendered by ``document2image`` and then tiled is an image (#5718).
+
+    ``None`` when *steps* holds no converter step: the units are of the type
+    the chain started from, which the caller knows and this does not.  ``""``
+    when that converter is not registered (an uninstalled plugin), so the type
+    cannot be told; a caller falling back to the chain's *source* type would
+    name the wrong one.
+    """
+    from vtscore.converters import get_converter  # noqa: PLC0415
+
+    for step in reversed(steps or []):
+        if step.get("kind") != "converter":
+            continue
+        conv = get_converter(step.get("name", ""))
+        if conv is None:
+            return ""
+        try:
+            return conv.target_type or ""
+        except Exception:  # an entry-point tombstone re-raises its import error here
+            return ""
+    return None
+
+
 #: A function that runs one recorded non-cleaner step on a media and returns
 #: every output, or ``None`` when the step cannot run.  Called with the step's
 #: index in the trail, so a caller can memoise outputs shared by sibling units.

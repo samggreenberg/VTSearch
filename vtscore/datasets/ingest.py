@@ -51,13 +51,27 @@ def _group_by_origin(
 def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
     """Determine the media type ID from an origin dict.
 
-    A converter output is of its converter's target type.  Otherwise checks
-    origin params (``media_type`` for folder origins) and falls back to the
-    ``DEMO_DATASETS`` config for demo origins.  Returns an empty string if the
-    media type cannot be determined.
+    A converter output is of its converter's target type, whether the
+    converter ran as a step of the recorded ``clipper_chain`` or is recorded
+    flat under ``converter``.  Otherwise checks origin params (``media_type``
+    for folder origins) and falls back to the ``DEMO_DATASETS`` config for demo
+    origins.  Returns an empty string if the media type cannot be determined.
     """
     params = origin_dict.get("params", {})
     importer_name = origin_dict.get("importer", "")
+
+    # A converter step in the chain trail: the source's ``media_type`` below
+    # names the files it read (the PDFs), not the units it made (the rendered
+    # pages), so answering it would type an image detector "document" (#5718).
+    # The chain runs on a flat converter's output, so its own converter, when
+    # it has one, has the last word.
+    raw_chain = params.get("clipper_chain")
+    if raw_chain:
+        from vtscore.datasets.clipper_chain import _chain_converted_type, parse_trail
+
+        chained = _chain_converted_type(parse_trail(raw_chain))
+        if chained is not None:
+            return chained
 
     # A flat converter origin records the converter but not the media type it
     # produced (the parent's ``media_type`` names the *source* files, and only
@@ -207,7 +221,7 @@ def _resolve_clip_content_and_embedding(
     Returns ``None`` when embedding fails, and when a converter output could
     not be rebuilt from its source.
     """
-    from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
+    from vtscore.detectors.resolver import _apply_clip_and_embed, _converter_led_steps, embed_file
 
     if _has_clip_params(origin_dict):
         result = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
@@ -216,7 +230,7 @@ def _resolve_clip_content_and_embedding(
         embedding, clip_bytes = result
         if clip_bytes is not None:
             return embedding, clip_bytes, content_md5(clip_bytes)
-        if origin_dict.get("params", {}).get("converter"):
+        if _converter_led_steps(origin_dict.get("params", {})) is not None:
             # No output bytes: the converter could not be replayed and the
             # source file (the PDF, the video) was embedded whole.  The only
             # bytes left are the source's, and storing them would make the

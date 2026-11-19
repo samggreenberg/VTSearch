@@ -212,8 +212,9 @@ def _source_media_type(spec: _SourceSpec) -> str:
 
     A dataset pickle records it in its container's ``meta.json``; an importer
     that asks for one (``server_folder``, ``http_archive``, ...) has it in its
-    ``media_type`` field.  ``""`` when the source declares none - a legacy
-    pickle, or an importer with no such field.
+    ``media_type`` field, unless a converter step in its ``clipper_chain``
+    turns what it reads into another type (#5718).  ``""`` when the source
+    declares none - a legacy pickle, or an importer with no such field.
     """
     if spec.kind == "pickle":
         path = Path(spec.dataset_path)
@@ -225,15 +226,28 @@ def _source_media_type(spec: _SourceSpec) -> str:
     if spec.outputs:
         # Several datasets declare one type only when they all share it; a
         # mixed run leaves the caller to say which type it means.
-        types = {output.media_type for output in spec.outputs}
+        types = {_chained_media_type(output.clipper_chain, output.media_type) for output in spec.outputs}
         return next(iter(types)) if len(types) == 1 else ""
     from vtscore.datasets.importers import get_importer
 
     importer = get_importer(spec.importer_name)
     field_def = next((f for f in importer.fields if f.key == "media_type"), None) if importer else None
-    if field_def is None:
-        return ""
-    return str(spec.field_values.get("media_type") or field_def.default or "")
+    declared = str(spec.field_values.get("media_type") or field_def.default or "") if field_def else ""
+    return _chained_media_type(spec.field_values.get("clipper_chain"), declared)
+
+
+def _chained_media_type(raw_chain: Any, declared: str) -> str:
+    """The type of the units a load ends in: *declared*, unless *raw_chain* converts them.
+
+    *declared* is what the source reads (the PDFs); a converter step in the
+    chain the load runs on it makes the dataset of its target type instead
+    (the rendered pages).  A chain whose converter is not registered gives
+    ``""``, so the caller asks for the type rather than taking the source's.
+    """
+    from vtscore.datasets.clipper_chain import _chain_converted_type, parse_trail
+
+    chained = _chain_converted_type(parse_trail(raw_chain))
+    return declared if chained is None else chained
 
 
 def _label_import_media_type(
