@@ -2973,9 +2973,7 @@ class TestRegisterModelFromLabelset:
         import csv
 
         chain = json.dumps([{"kind": "converter", "name": "document2image", "params": {}, "out_index": 0, "n_out": 2}])
-        origin = json.dumps(
-            {"importer": "my_pdf_plugin", "params": {"media_type": "document", "clipper_chain": chain}}
-        )
+        origin = json.dumps({"importer": "my_pdf_plugin", "params": {"media_type": "document", "clipper_chain": chain}})
         labels_path = tmp_path / "labels.csv"
         with labels_path.open("w", newline="") as fh:
             writer = csv.writer(fh)
