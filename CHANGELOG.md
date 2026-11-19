@@ -31,6 +31,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Labels from documents rendered to images make an image detector** (issue #5718). A dataset importer that reads
+  PDFs as `document` and renders them through a `document2image` step in its clipper chain records the source type
+  beside that step. A new detector made from its exported labels took the source type and was created as a Document
+  detector, so its Browse Positives did not work. The detector now takes the type the chain ends in, `image`, as it
+  already did when the converter was recorded on its own. A CLI `--create-detector` or pipeline `import_labels:` run
+  whose importer converts through its chain picks the converted type too. Detectors made before this fix keep their
+  `document` type; delete one and import its labels again to retype it.
+
 - **A face detector named as the embedder is refused when the face models load** (issue #5683). A face pipeline
   config whose embedder is a copy of the detector used to load without complaint. Every image then failed with
   `too many values to unpack (expected 1)`, and the run ended with `Total Faces: 0`. An embedder must have one
