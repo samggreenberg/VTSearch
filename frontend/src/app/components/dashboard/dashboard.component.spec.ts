@@ -370,7 +370,7 @@ describe('DashboardComponent', () => {
         [{ id: 'd1', name: 'Data', media_type: 'audio' }],
         [{ id: 'm9', name: 'Dog barks', media_type: 'audio', num_training: 5, sync_mode: 'linked' }],
       );
-      component.toggleDetectorSelection('m9', new MouseEvent('click'));
+      selection.selectOnly('detector', ['m9']);
       expect(component.selectedDetectorIds.has('m9')).toBe(true);
       expect(component.labelEnabled).toBe(false);
       expect(component.labelHint).toBe('Read-only: fork to edit');
