@@ -30,6 +30,10 @@ export interface SharingEntry {
 /** The words of the read-only hint, wherever a received detector refuses an edit. */
 export const READ_ONLY_HINT = 'Read-only: fork to edit';
 
+/** Why Tune's Add Corrections is off on a received detector (#5721): the one
+ *  Tune action that writes its labelset. */
+export const CORRECTIONS_READ_ONLY_HINT = `${READ_ONLY_HINT}: this detector's labels are its owner's, so corrections can't be added to it`;
+
 /** Integrity `status` of a container nobody but its owner has written to. */
 const INTEGRITY_CLEAN = 'clean';
 

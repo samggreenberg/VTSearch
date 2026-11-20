@@ -112,9 +112,9 @@
     <div class="corrections-row">
       <button
         class="btn btn--toolbar corrections-btn"
-        [disabled]="disabled()"
+        [disabled]="disabled() || readOnly()"
         (click)="onAddCorrections()"
-        [title]="waitReason || 'Add the corrections you\'ve made (items you changed from the detector\'s call) into this detector\'s labelset and retrain it. This changes the detector, so the current evaluation no longer applies.'"
+        [title]="correctionsBlocker || 'Add the corrections you\'ve made (items you changed from the detector\'s call) into this detector\'s labelset and retrain it. This changes the detector, so the current evaluation no longer applies.'"
       >
         <vt-icon type="graduation" [size]="16"></vt-icon>
         Add Corrections to Detector

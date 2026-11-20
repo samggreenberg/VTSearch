@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 
 import { RightPanelComponent } from './right-panel.component';
 import { VoteStateService } from '../../services/vote-state.service';
+import { CORRECTIONS_READ_ONLY_HINT } from '../../utils/detector-sharing';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -250,6 +251,24 @@ describe('RightPanelComponent', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-label-sort')).toBeTruthy();
+    cleanup();
+  });
+
+  it("turns Add Corrections off for a received detector, saying why (#5721)", async () => {
+    fixture.componentRef.setInput('mode', 'find');
+    await flushInit();
+    TestBed.tick();
+    const button = () => (fixture.nativeElement as HTMLElement).querySelector('.corrections-btn') as HTMLButtonElement;
+    expect(button().disabled).toBe(false);
+
+    fixture.componentRef.setInput('readOnly', true);
+    TestBed.tick();
+    expect(button().disabled).toBe(true);
+    expect(button().title).toBe(CORRECTIONS_READ_ONLY_HINT);
+    const emitted = vi.fn();
+    component.addCorrections.subscribe(emitted);
+    component.onAddCorrections();
+    expect(emitted).not.toHaveBeenCalled();
     cleanup();
   });
 });

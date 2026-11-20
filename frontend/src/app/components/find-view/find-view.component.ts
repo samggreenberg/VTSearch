@@ -272,6 +272,13 @@ export class FindViewComponent implements OnInit, OnDestroy {
       ? 'test-vote'
       : null,
   );
+  /**
+   * The detector is a received, read-only copy (#5721). Tune works on it as on
+   * any other (its line and test verdicts are the user's own), except Add
+   * Corrections, which writes its labelset and is off; the server's 409
+   * `detector_read_only` stays the backstop.
+   */
+  readonly readOnly = this.activeDetector.readOnly;
   /** The server's Autopilot-only lock (#4666): Tune shows no Review tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /**
@@ -1061,7 +1068,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
    * next time the dataset is scored.
    */
   onAddCorrections(): void {
-    if (this.sortState.sortBusy) return;
+    if (this.sortState.sortBusy || this.readOnly()) return;
     this.dialog
       .confirmDestructive(
         'Add your corrections to this detector?',

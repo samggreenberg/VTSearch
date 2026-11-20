@@ -42,8 +42,9 @@
             <button
               type="button"
               class="btn btn--secondary exit-btn"
+              [disabled]="readOnly()"
               (click)="addCorrections.emit()"
-              title="The line is not good enough yet: hand the picks you disagreed with to the detector and retrain it. This result is then out of date, since the detector has seen the test set."
+              [title]="readOnly() ? correctionsReadOnlyHint : 'The line is not good enough yet: hand the picks you disagreed with to the detector and retrain it. This result is then out of date, since the detector has seen the test set.'"
             >Add Corrections and retrain</button>
           </div>
 

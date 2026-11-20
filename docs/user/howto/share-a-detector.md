@@ -106,9 +106,10 @@ when you have what you want.
 
 A received detector is read-only: its answers and its name are its owner's.
 You can find with it, browse its matches, and put it on the **AutoFind** tab,
-but you can't rename it or import labels into it, and in **Train** its
-**Good** and **Bad** buttons are off, with **Read-only: fork to edit** and a
-**Fork** button beside them.
+but you can't rename it, import labels into it or train it: with it selected,
+**Train** is off, with **Read-only: fork to edit** under it. You can still
+**Tune** it, testing its line on your own data and moving its Threshold,
+except that **Add Corrections** is off, since it would change the answers.
 
 It doesn't change unless you ask it to. **Check for updates** replaces your
 copy's answers with the shared copy's as they are now, and says what changed

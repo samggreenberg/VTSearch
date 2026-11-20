@@ -6,6 +6,7 @@ import { LineTestSessionService } from '../../../services/line-test-session.serv
 import { PairScopeService } from '../../../services/pair-scope.service';
 import { KeyboardService, type KeyboardAction } from '../../../services/keyboard.service';
 import { VoteStateService } from '../../../services/vote-state.service';
+import { CORRECTIONS_READ_ONLY_HINT } from '../../../utils/detector-sharing';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -115,6 +116,20 @@ describe('LineTestStageComponent (#4524)', () => {
     (card.querySelector('.exit-btn.btn--primary') as HTMLButtonElement).click();
     (card.querySelector('.exit-btn.btn--secondary') as HTMLButtonElement).click();
     expect(said).toEqual(['lean 4', 'autofind', 'corrections']);
+  });
+
+  it("at Done on a received detector, turns Add Corrections off and keeps the other exits (#5721)", async () => {
+    fixture.componentRef.setInput('readOnly', true);
+    await done(wireLineTest(wireDone()));
+    const card = el().querySelector('.verdict-card') as HTMLElement;
+    const corrections = card.querySelector('.exit-btn.btn--secondary') as HTMLButtonElement;
+    expect(corrections.disabled).toBe(true);
+    expect(corrections.title).toBe(CORRECTIONS_READ_ONLY_HINT);
+    expect((card.querySelector('.exit-btn.btn--primary') as HTMLButtonElement).disabled).toBe(false);
+    const said: string[] = [];
+    fixture.componentInstance.addCorrections.subscribe(() => said.push('corrections'));
+    corrections.click();
+    expect(said).toEqual([]);
   });
 
   it('with no class model reads Fraction Found in the verdict in words only (#4542)', async () => {
