@@ -31,6 +31,10 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Train is off for a received detector** (issue #5721). With a detector someone shared with you selected, Train
+  opened a view where nothing could be done, since its labels are its owner's. It is now disabled on the Dashboard,
+  with "Read-only: fork to edit" under it; Fork in the detector's ⋯ menu makes a copy you can train. Tune stays on,
+  for testing its line on your data, but its Add Corrections buttons are off, since they would change its labels.
 - **Labels from documents rendered to images make an image detector** (issue #5718). A dataset importer that reads
   PDFs as `document` and renders them through a `document2image` step in its clipper chain records the source type
   beside that step. A new detector made from its exported labels took the source type and was created as a Document

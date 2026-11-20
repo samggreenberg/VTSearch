@@ -136,6 +136,7 @@
       <!-- No pick to vote: the verdict with its exits at Done (#5100), or a
            word on what the pane waits for. -->
       <vt-line-test-stage
+        [readOnly]="readOnly()"
         (moveToAutoFind)="onMoveToAutoFind()"
         (lean)="onLean($event)"
         (addCorrections)="onAddCorrections()"
@@ -183,6 +184,7 @@
           [unverifiedGoodCount]="unverifiedCounts().good"
           [unverifiedBadCount]="unverifiedCounts().bad"
           mode="find"
+          [readOnly]="readOnly()"
           (mediaSelected)="onMediaSelect($event)"
           (mediaVoted)="onHoverVote($event)"
           (browse)="onBrowse()"

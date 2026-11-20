@@ -73,6 +73,7 @@ import { HintId, HintsService } from '../../services/hints.service';
 import { datasetMediaWords } from '../../utils/media-words';
 import { allSoloMediaType } from '../../utils/solo-media-type';
 import { typedQuery } from '../../utils/label-quota';
+import { READ_ONLY_HINT, isLinked } from '../../utils/detector-sharing';
 import { apiErrorMessage } from '../../utils/api-error';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
@@ -1469,9 +1470,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.autofindEnabled) return 'find';
     // Nothing runs: a ticked detector has nothing to score with (#4758). One
     // detector under several datasets needs the datasets narrowed to train it;
-    // otherwise the untrained one is in the way of the others.
-    if (pickedDetectors.length === 1 && pickedDatasets.length > 1) return 'train-one-dataset';
-    return this.hasUntrainedModel() ? 'untrained-detector' : null;
+    // otherwise the untrained one is in the way of the others. Neither says
+    // Train for a received detector, which Train is off for (#5721): its
+    // reason under the button says to fork it.
+    if (pickedDetectors.length === 1 && pickedDatasets.length > 1) {
+      return isLinked(pickedDetectors[0]) ? null : 'train-one-dataset';
+    }
+    return this.untrainedModel() ? 'untrained-detector' : null;
   }
 
   /**
@@ -1521,8 +1526,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** The first ticked detector with nothing to score with (#4758), for Toasty. */
   get untrainedDetectorName(): string {
-    const model = this.resolvedSelectedModels.find((m) => (m.num_training ?? 0) === 0 && !typedQuery(m));
-    return model?.name ?? 'This detector';
+    return this.untrainedModel()?.name ?? 'This detector';
+  }
+
+  /** The first ticked detector with nothing to score with that Train can
+   *  fix (#4758): not a received one, which is read-only (#5721). */
+  private untrainedModel(): DetectorRegistryEntry | undefined {
+    return this.resolvedSelectedModels.find((m) => (m.num_training ?? 0) === 0 && !typedQuery(m) && !isLinked(m));
   }
 
   /** Whether Toasty points at Train (#4227, #4680): exactly one detector is
@@ -1555,6 +1565,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
     if (model.media_type !== selectedDatasets[0].media_type) return false;
+    // A received detector's labels are its owner's: Train would open on a
+    // view with nothing to do (#5721). Tune stays on, since testing its line
+    // and setting the threshold are the user's own.
+    if (isLinked(model)) return false;
     // AutoFind detectors are frozen: move back to Drafts before retraining.
     if (model.autofind) return false;
     return true;
@@ -1648,6 +1662,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
+    // Ahead of the AutoFind reason: moving a received detector to Drafts
+    // would not make it trainable, forking it would.
+    if (isLinked(model)) return READ_ONLY_HINT;
     if (model?.autofind) {
       // AutoFind detectors are frozen against edits.
       return 'Frozen: move to Drafts to retrain';

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, output } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 
 import { IconComponent } from '../../icon/icon.component';
@@ -6,6 +6,7 @@ import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { KeyboardService } from '../../../services/keyboard.service';
 import { LineTestSessionService } from '../../../services/line-test-session.service';
 import { BALANCE_PRESETS } from '../../../utils/line-balance';
+import { CORRECTIONS_READ_ONLY_HINT } from '../../../utils/detector-sharing';
 import { estimatePercent } from '../../../utils/line-test';
 
 /** One row of the verdict's form: a label and the value measured for it. */
@@ -49,6 +50,14 @@ export class LineTestStageComponent {
   readonly session = inject(LineTestSessionService);
   private readonly keyboard = inject(KeyboardService);
   private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * The detector is a received, read-only copy (#5721): Add Corrections, which
+   * writes its labelset, is off and says why. Move to AutoFind and Lean the
+   * Threshold stay, since that flag and the line are the user's own.
+   */
+  readonly readOnly = input(false);
+  readonly correctionsReadOnlyHint = CORRECTIONS_READ_ONLY_HINT;
 
   /** Move the detector to AutoFind. */
   readonly moveToAutoFind = output<void>();

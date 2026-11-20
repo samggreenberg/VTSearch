@@ -238,6 +238,10 @@ line, the balance), `VoteStateService`, `AutopilotStateService` (the phase
 machine) and `PanelHideStateService` (the side-panel folds, shared with Tune).
 
 **A received detector is read-only up front** (#5578).
+The Dashboard's Train is off for one, with `READ_ONLY_HINT` as its reason
+(#5721); Tune stays on, since its line and test verdicts are the user's own,
+and only its two Add Corrections buttons are off. A Train view reached anyway
+(a recent session, a typed URL) is read-only:
 `ActiveDetectorService.readOnly` turns off the centre's Good / Bad (with a
 Fork in their place), the vote keys, undo and redo, a vote from a grid or the
 Labels panel, and Autopilot. The server's 409 `detector_read_only` stays the

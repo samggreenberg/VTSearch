@@ -17,6 +17,7 @@ import { ExportModalComponent } from '../modals/export-modal/export-modal.compon
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
+import { CORRECTIONS_READ_ONLY_HINT } from '../../utils/detector-sharing';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -60,6 +61,12 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   readonly trainableModelName = input<string | null>(null);
   /** Disable interactive buttons (used during Find scoring). */
   readonly disabled = input(false);
+  /**
+   * Find mode: the active detector is a received, read-only copy (#5721).
+   * Add Corrections writes to its labelset, so it is off, saying why; the
+   * server's 409 `detector_read_only` stays the backstop.
+   */
+  readonly readOnly = input(false);
   /**
    * Find mode: how many unverified items sit above / below the cutoff, the
    * two faces of the left work queue. The Find view counts them over its
@@ -185,6 +192,11 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     return this.disabled() ? 'Wait for the current run to finish' : '';
   }
 
+  /** Why Add Corrections is disabled, or ``''``. */
+  get correctionsBlocker(): string {
+    return this.waitReason || (this.readOnly() ? CORRECTIONS_READ_ONLY_HINT : '');
+  }
+
   /** Why the Good pile's Browse / To Dataset / Export buttons are disabled, or ``''``. */
   get goodActionsBlocker(): string {
     return this.waitReason || (this.findGoodTotal === 0 ? 'No Good items yet' : '');
@@ -258,6 +270,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
 
   onAddCorrections(): void {
+    if (this.readOnly()) return;
     this.addCorrections.emit();
   }
 

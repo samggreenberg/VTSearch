@@ -365,6 +365,30 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(true);
     });
 
+    it('disables Train for a received detector, saying to fork it, and leaves Tune on (#5721)', () => {
+      flushInitialRequests(
+        [{ id: 'd1', name: 'Data', media_type: 'audio' }],
+        [{ id: 'm9', name: 'Dog barks', media_type: 'audio', num_training: 5, sync_mode: 'linked' }],
+      );
+      selection.selectOnly('detector', ['m9']);
+      expect(component.selectedDetectorIds.has('m9')).toBe(true);
+      expect(component.labelEnabled).toBe(false);
+      expect(component.labelHint).toBe('Read-only: fork to edit');
+      // Testing its line and setting its threshold are the user's own.
+      expect(component.findEnabled).toBe(true);
+    });
+
+    it('tells a received AutoFind detector to fork, not to move to Drafts (#5721)', () => {
+      flushInitialRequests(
+        [{ id: 'd1', name: 'Data', media_type: 'audio' }],
+        [{ id: 'm9', name: 'Dog barks', media_type: 'audio', num_training: 5, autofind: true, sync_mode: 'linked' }],
+      );
+      component.setDetectorTab('autofind');
+      component.toggleDetectorSelection('m9', new MouseEvent('click'));
+      expect(component.labelEnabled).toBe(false);
+      expect(component.labelHint).toBe('Read-only: fork to edit');
+    });
+
     describe('Tune follows the visible tab only (#4228)', () => {
       const dataset = [{ id: 'd1', name: 'Data', media_type: 'audio' }];
       const loneAutofind = [
@@ -1687,6 +1711,41 @@ describe('DashboardComponent', () => {
       expect(hintTexts(el)).toEqual([
         'Blank has no training labels yet. Select it and one dataset to Train.',
       ]);
+    });
+
+    it('never points a received detector with no labels at Train (#5721)', () => {
+      renderWith(
+        [
+          { id: 'd1', name: 'A', media_type: 'image' },
+          { id: 'd2', name: 'B', media_type: 'image' },
+        ],
+        [{ id: 'm1', name: 'Empty share', media_type: 'image', num_training: 0, sync_mode: 'linked' }],
+      );
+      selection.selectOnly('dataset', ['d1']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      // Train is off, and its reason says to fork; Toasty does not say Train.
+      expect(component.labelEnabled).toBe(false);
+      expect(component.dashboardHint).toBeNull();
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.dashboardHint).toBeNull();
+    });
+
+    it('names a draft with nothing to search with, not a received one, among several (#5721)', () => {
+      renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [
+          { id: 'm1', name: 'Empty share', media_type: 'image', num_training: 0, sync_mode: 'linked' },
+          { id: 'm2', name: 'Blank', media_type: 'image', num_training: 0 },
+        ],
+      );
+      selection.selectOnly('detector', ['m1', 'm2']);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.dashboardHint).toBe('untrained-detector');
+      expect(component.untrainedDetectorName).toBe('Blank');
     });
 
     it('hides the reason under a disabled button while Toasty is on show, and brings it back when the hints are hidden (#4807)', async () => {
